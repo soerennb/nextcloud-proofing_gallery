@@ -1,0 +1,47 @@
+{
+	"name": "soeren/proofing-gallery",
+	"description": "Branded client galleries and collaborative photo proofing for Nextcloud",
+	"type": "project",
+	"license": "AGPL-3.0-or-later",
+	"authors": [
+		{
+			"name": "soeren",
+			"email": "soerennb@users.noreply.github.com"
+		}
+	],
+	"autoload": {
+		"psr-4": {
+			"OCA\\ProofingGallery\\": "lib/"
+		}
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"OCA\\ProofingGallery\\Tests\\": "tests/"
+		}
+	},
+	"scripts": {
+		"lint": "find appinfo lib templates tests -name '*.php' -print0 | xargs -0 -n1 php -l",
+		"test": "phpunit -c tests/phpunit.xml --colors=always",
+		"test:unit": "@test"
+	},
+	"require": {
+		"php": "^8.1"
+	},
+	"require-dev": {
+		"nextcloud/ocp": "dev-stable31",
+		"phpunit/phpunit": "^10.5",
+		"roave/security-advisories": "dev-latest"
+	},
+	"config": {
+		"allow-plugins": {
+			"composer/package-versions-deprecated": true
+		},
+		"optimize-autoloader": true,
+		"platform": {
+			"php": "8.1"
+		},
+		"sort-packages": true
+	},
+	"minimum-stability": "dev",
+	"prefer-stable": true
+}

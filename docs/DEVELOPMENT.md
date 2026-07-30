@@ -1,0 +1,51 @@
+# Development guide
+
+## Setup
+
+Copy `.env.example`, install Node and Composer dependencies, then run
+`make dev-up`. Compose starts Nextcloud 34, MariaDB, Redis, cron, and Mailpit.
+The repository is mounted as `custom_apps/proofing_gallery`.
+
+Build assets after changing Vue or CSS:
+
+```bash
+npm run build:l10n
+npm run build
+```
+
+The localization build extracts every `t()`/`n()` source key and fails when a
+German translation is missing. Edit `scripts/build-l10n.mjs`; generated files in
+`l10n/` are release inputs.
+
+## Quality checks
+
+```bash
+npm run lint
+npm test
+composer lint
+composer test
+npm run test:e2e
+make test-compat
+```
+
+Playwright global setup creates and later supersedes its own E2E gallery.
+Snapshots are intentionally versioned. Update them only after reviewing the
+rendered change with `npm run test:e2e:update`.
+
+The compatibility harness uses isolated Compose project names and deletes only
+containers, networks, and volumes it created. Restrict a local run with, for
+example, `NEXTCLOUD_VERSIONS=34 DATABASES=sqlite`.
+
+## Database changes
+
+Add a new monotonically increasing migration; do not modify released
+migrations. Use Nextcloud's schema abstraction exclusively and rerun all three
+database engines. Keep controllers thin and put authorization and domain rules
+in services or dedicated domain objects.
+
+## Release
+
+Set the same semantic version in `appinfo/info.xml`, `package.json`, and
+`package-lock.json`, update the changelog, then run `make verify-package`.
+Signing is performed afterward with the maintainer's Nextcloud certificate and
+private key outside this repository.

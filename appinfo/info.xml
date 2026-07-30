@@ -1,0 +1,41 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	  xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
+	<id>proofing_gallery</id>
+	<name>Proofing Gallery</name>
+	<summary>Branded client galleries and collaborative photo proofing</summary>
+	<description><![CDATA[
+Publish existing Nextcloud folders as customizable client galleries.
+Collect likes, workflow states, comments, annotations, and named selections
+without copying or changing original files.
+	]]></description>
+	<version>0.1.0-beta.2</version>
+	<licence>AGPL-3.0-or-later</licence>
+	<author mail="soerennb@users.noreply.github.com">soeren</author>
+	<namespace>ProofingGallery</namespace>
+	<category>files</category>
+	<category>multimedia</category>
+	<bugs>https://github.com/soeren/proofing-gallery/issues</bugs>
+	<dependencies>
+		<php min-version="8.1" max-version="8.6"/>
+		<database>sqlite</database>
+		<database>mysql</database>
+		<database>pgsql</database>
+		<nextcloud min-version="31" max-version="34"/>
+	</dependencies>
+	<navigations>
+		<navigation>
+			<id>proofing_gallery</id>
+			<name>Proofing Gallery</name>
+			<route>proofing_gallery.page.index</route>
+			<icon>app.svg</icon>
+			<order>10</order>
+			<type>link</type>
+		</navigation>
+	</navigations>
+	<activity>
+		<providers>
+			<provider>OCA\ProofingGallery\Activity\Provider</provider>
+		</providers>
+	</activity>
+</info>

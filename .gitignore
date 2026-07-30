@@ -4,3 +4,26 @@
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Application dependencies and build output
+/node_modules/
+/vendor/
+/vendor-bin/*/vendor/
+/css/
+/js/
+/dist/
+/build/
+/coverage/
+/playwright-report/
+/test-results/
+/test-results-e2e-state.json
+/.phpunit.cache/
+/tests/.phpunit.cache/
+/.eslintcache
+
+# Local development state
+/.env
+/.env.local
+/.idea/
+/.vscode/
+*.log

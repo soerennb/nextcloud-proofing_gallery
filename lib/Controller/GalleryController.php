@@ -1,0 +1,146 @@
+<?php
+
+declare(strict_types=1);
+
+namespace OCA\ProofingGallery\Controller;
+
+use InvalidArgumentException;
+use OCA\ProofingGallery\AppInfo\Application;
+use OCA\ProofingGallery\Exception\FolderAccessException;
+use OCA\ProofingGallery\Exception\AuthorizationException;
+use OCA\ProofingGallery\Service\FolderService;
+use OCA\ProofingGallery\Service\GalleryService;
+use OCP\AppFramework\Controller;
+use OCP\AppFramework\Db\DoesNotExistException;
+use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\ApiRoute;
+use OCP\AppFramework\Http\Attribute\FrontpageRoute;
+use OCP\AppFramework\Http\Attribute\NoAdminRequired;
+use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
+use OCP\AppFramework\Http\DataResponse;
+use OCP\AppFramework\Http\DataDisplayResponse;
+use OCP\IPreview;
+use OCP\IRequest;
+use OCP\IUserSession;
+
+final class GalleryController extends Controller {
+	public function __construct(
+		IRequest $request,
+		private GalleryService $galleries,
+		private FolderService $folders,
+		private IPreview $preview,
+		private IUserSession $userSession,
+	) {
+		parent::__construct(Application::APP_ID, $request);
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/v1/galleries')]
+	public function index(int $limit = 25, int $offset = 0, bool $archived = false, string $search = ''): DataResponse {
+		return new DataResponse($this->galleries->list($this->userId(), $limit, $offset, $archived, $search));
+	}
+
+	/** @param array<string, mixed> $settings */
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'POST', url: '/api/v1/galleries')]
+	public function create(int $folderId, string $title, array $settings = []): DataResponse {
+		try {
+			$userId = $this->userId();
+			$gallery = $this->galleries->create($userId, $folderId, $title, $settings);
+			return new DataResponse($this->galleries->present($userId, $gallery), Http::STATUS_CREATED);
+		} catch (InvalidArgumentException|FolderAccessException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/v1/galleries/{id}')]
+	public function show(int $id): DataResponse {
+		try {
+			$userId = $this->userId();
+			return new DataResponse($this->galleries->present($userId, $this->galleries->view($userId, $id)));
+		} catch (DoesNotExistException|AuthorizationException) {
+			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		}
+	}
+
+	/** @param array<string, mixed>|null $settings */
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'PUT', url: '/api/v1/galleries/{id}')]
+	public function update(int $id, ?string $title = null, ?array $settings = null): DataResponse {
+		try {
+			$userId = $this->userId();
+			return new DataResponse($this->galleries->present(
+				$userId,
+				$this->galleries->update($userId, $id, $title, $settings),
+			));
+		} catch (DoesNotExistException|AuthorizationException) {
+			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		} catch (InvalidArgumentException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'DELETE', url: '/api/v1/galleries/{id}')]
+	public function archive(int $id): DataResponse {
+		try {
+			$userId = $this->userId();
+			return new DataResponse($this->galleries->present($userId, $this->galleries->archive($userId, $id)));
+		} catch (DoesNotExistException|AuthorizationException) {
+			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		}
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'POST', url: '/api/v1/galleries/{id}/restore')]
+	public function restore(int $id): DataResponse {
+		try {
+			$userId = $this->userId();
+			return new DataResponse($this->galleries->present($userId, $this->galleries->restore($userId, $id)));
+		} catch (DoesNotExistException|AuthorizationException) {
+			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		} catch (InvalidArgumentException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/v1/galleries/{id}/media')]
+	public function media(int $id, int $limit = 60, int $offset = 0): DataResponse {
+		try {
+			$gallery = $this->galleries->view($this->userId(), $id);
+			return new DataResponse($this->folders->listMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $limit, $offset));
+		} catch (DoesNotExistException|FolderAccessException|AuthorizationException) {
+			return new DataResponse(['message' => 'Gallery or folder not found'], Http::STATUS_NOT_FOUND);
+		}
+	}
+
+	#[NoAdminRequired]
+	#[NoCSRFRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/media/{id}/{fileId}/preview')]
+	public function preview(int $id, int $fileId, int $x = 560, int $y = 360): DataDisplayResponse {
+		try {
+			$gallery = $this->galleries->view($this->userId(), $id);
+			$file = $this->folders->resolveMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $fileId);
+			$x = max(64, min(1200, $x));
+			$y = max(64, min(1200, $y));
+			$preview = $this->preview->getPreview($file, $x, $y, true, IPreview::MODE_COVER);
+			return new DataDisplayResponse($preview->getContent(), Http::STATUS_OK, [
+				'Content-Type' => $preview->getMimeType(),
+				'Cache-Control' => 'private, max-age=3600',
+				'ETag' => '"' . $file->getEtag() . '"',
+			]);
+		} catch (DoesNotExistException|FolderAccessException|AuthorizationException|\OCP\Files\NotFoundException) {
+			return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
+		}
+	}
+
+	private function userId(): string {
+		$user = $this->userSession->getUser();
+		if ($user === null) {
+			throw new \RuntimeException('Authenticated user required');
+		}
+		return $user->getUID();
+	}
+}
