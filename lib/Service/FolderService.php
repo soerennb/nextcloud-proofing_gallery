@@ -42,11 +42,23 @@ final class FolderService {
 		throw new FolderAccessException('Media file was not found in the gallery');
 	}
 
-	public function listMedia(string $userId, int $folderId, int $limit = 60, int $offset = 0): MediaPage {
+	public function resolveOwnerImage(string $userId, int $fileId): File {
+		foreach ($this->rootFolder->getUserFolder($userId)->getById($fileId) as $node) {
+			if ($node instanceof File && $node->isReadable() && str_starts_with($node->getMimeType(), 'image/')) {
+				return $node;
+			}
+		}
+
+		throw new FolderAccessException('Image file was not found or is not readable');
+	}
+
+	public function listMedia(string $userId, int $folderId, int $limit = 60, int $offset = 0, string $path = ''): MediaPage {
 		$limit = max(1, min(200, $limit));
 		$offset = max(0, $offset);
+		$root = $this->resolveFolder($userId, $folderId);
+		$current = $this->folderAt($root, trim($path, '/'));
 		$nodes = array_values(array_filter(
-			$this->resolveFolder($userId, $folderId)->getDirectoryListing(),
+			$current->getDirectoryListing(),
 			fn (Node $node): bool => !str_starts_with($node->getName(), '.')
 				&& ($node instanceof Folder || ($node instanceof File && $this->isSupported($node))),
 		));
@@ -66,6 +78,24 @@ final class FolderService {
 		);
 
 		return new MediaPage($items, count($nodes), $limit, $offset);
+	}
+
+	private function folderAt(Folder $root, string $path): Folder {
+		if ($path === '') {
+			return $root;
+		}
+		if (in_array('..', explode('/', $path), true)) {
+			throw new FolderAccessException('Invalid gallery path');
+		}
+		try {
+			$node = $root->get($path);
+		} catch (\OCP\Files\NotFoundException) {
+			throw new FolderAccessException('Gallery folder was not found');
+		}
+		if (!$node instanceof Folder || !$root->isSubNode($node) || !$node->isReadable()) {
+			throw new FolderAccessException('Gallery folder was not found');
+		}
+		return $node;
 	}
 
 	/** @return array{folderId: int, displayPath: ?string, state: 'readable'} */

@@ -19,6 +19,7 @@ final class CollaborationService {
 		private IDBConnection $db,
 		private ITimeFactory $clock,
 		private FolderService $folders,
+		private CollectionService $collections,
 	) {
 	}
 
@@ -29,6 +30,18 @@ final class CollaborationService {
 		$feedback = $this->rows('proofing_feedback', $gallery->getId(), $visibleGuestId);
 		$comments = $this->rows('proofing_comments', $gallery->getId(), $visibleGuestId, 'created_at');
 		$selections = $this->selectionRows($gallery->getId(), $visibleGuestId);
+		if ($gallery->getSourceType() === 'collection') {
+			$available = array_fill_keys(array_column($this->collections->availableItems($gallery), 'id'), true);
+			$feedback = array_values(array_filter($feedback, static fn (array $row): bool => isset($available[(int)$row['file_id']])));
+			$comments = array_values(array_filter($comments, static fn (array $row): bool => isset($available[(int)$row['file_id']])));
+			foreach ($selections as &$selection) {
+				$selection['fileIds'] = array_values(array_filter(
+					$selection['fileIds'],
+					static fn (int $fileId): bool => isset($available[$fileId]),
+				));
+			}
+			unset($selection);
+		}
 		$events = $this->events($gallery->getId(), $visibleGuestId, $cursor);
 		$nextCursor = $cursor;
 		foreach ($events as $event) {
@@ -189,7 +202,7 @@ final class CollaborationService {
 			throw new InvalidArgumentException('Selection is too large');
 		}
 		foreach ($fileIds as $fileId) {
-			$this->folders->resolveMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $fileId);
+			$this->resolveMedia($gallery, $fileId);
 		}
 		$publicId = $this->uuid();
 		$now = $this->clock->getTime();
@@ -243,11 +256,7 @@ final class CollaborationService {
 		$names = [];
 		foreach ($qb->executeQuery()->fetchFirstColumn() as $fileId) {
 			try {
-				$names[] = $this->folders->resolveMedia(
-					$gallery->getOwnerUid(),
-					$gallery->getFolderId(),
-					(int)$fileId,
-				)->getName();
+				$names[] = $this->resolveMedia($gallery, (int)$fileId)->getName();
 			} catch (\Throwable) {
 				// Files removed after selection creation are intentionally omitted.
 			}
@@ -285,8 +294,18 @@ final class CollaborationService {
 
 	private function assertCollaboration(Gallery $gallery, int $fileId): GallerySettings {
 		$settings = $this->assertCollaborationMode($gallery);
-		$this->folders->resolveMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $fileId);
+		$this->resolveMedia($gallery, $fileId);
 		return $settings;
+	}
+
+	private function resolveMedia(Gallery $gallery, int $fileId): \OCP\Files\File {
+		try {
+			return $gallery->getSourceType() === 'collection'
+				? $this->collections->resolveMedia($gallery, $fileId)
+				: $this->folders->resolveMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $fileId);
+		} catch (\Throwable) {
+			throw new InvalidArgumentException('Media file is unavailable');
+		}
 	}
 
 	private function assertCollaborationMode(Gallery $gallery): GallerySettings {

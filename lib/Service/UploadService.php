@@ -192,6 +192,9 @@ final class UploadService {
 	}
 
 	private function assertEnabled(Gallery $gallery): void {
+		if ($gallery->getSourceType() === 'collection') {
+			throw new InvalidArgumentException('Guest uploads are unavailable for collections');
+		}
 		$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
 		if (!$settings->allowGuestUploads) {
 			throw new InvalidArgumentException('Guest uploads are disabled');

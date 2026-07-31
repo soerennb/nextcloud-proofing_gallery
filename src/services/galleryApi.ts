@@ -1,25 +1,27 @@
 import axios from '@nextcloud/axios'
 import { generateOcsUrl, generateUrl } from '@nextcloud/router'
 
-import type { Gallery, GalleryManager, GalleryPage, MediaPage } from '../types'
+import type { CollectionDocument, Gallery, GalleryManager, GalleryPage, MediaPage } from '../types'
 
 const galleriesUrl = generateOcsUrl('/apps/proofing_gallery/api/v1/galleries')
 
 export async function fetchGalleries(archived = false, search = ''): Promise<GalleryPage> {
 	const { data } = await axios.get<GalleryPage>(galleriesUrl, {
-		params: { archived, search, format: 'json' },
+		params: { archived, search, limit: 100, format: 'json' },
 	})
 	return data
 }
 
 export async function createGallery(payload: {
-	folderId: number
+	folderId: number | null
 	title: string
 	mode: 'presentation' | 'collaboration'
+	sourceType: 'folder' | 'collection'
 }): Promise<Gallery> {
 	const { data } = await axios.post<Gallery>(galleriesUrl, {
 		folderId: payload.folderId,
 		title: payload.title,
+		sourceType: payload.sourceType,
 		settings: { mode: payload.mode },
 	})
 	return data
@@ -38,10 +40,24 @@ export async function updateGallerySource(id: number, folderId: number): Promise
 	return data
 }
 
-export async function fetchGalleryMedia(id: number, limit = 8, offset = 0): Promise<MediaPage> {
+export async function fetchGalleryMedia(id: number, limit = 8, offset = 0, path = ''): Promise<MediaPage> {
 	const { data } = await axios.get<MediaPage>(`${galleriesUrl}/${id}/media`, {
-		params: { limit, offset },
+		params: { limit, offset, path },
 	})
+	return data
+}
+
+export async function fetchCollection(id: number): Promise<CollectionDocument> {
+	const { data } = await axios.get<CollectionDocument>(`${galleriesUrl}/${id}/collection`)
+	return data
+}
+
+export async function saveCollection(
+	id: number,
+	revision: number,
+	items: Array<{ sourceGalleryId: number; fileId: number }>,
+): Promise<CollectionDocument> {
+	const { data } = await axios.put<CollectionDocument>(`${galleriesUrl}/${id}/collection`, { revision, items })
 	return data
 }
 

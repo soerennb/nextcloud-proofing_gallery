@@ -36,6 +36,7 @@ function previewUrl(gallery: Gallery): string {
 				<span class="gallery-row__identity">
 					<strong>{{ gallery.title }}</strong>
 					<small>
+						{{ gallery.sourceType === 'collection' ? t('proofing_gallery', 'Collection') + ' · ' : '' }}
 						{{ gallery.settings.mode === 'collaboration'
 							? t('proofing_gallery', 'Proofing')
 							: t('proofing_gallery', 'Presentation') }}

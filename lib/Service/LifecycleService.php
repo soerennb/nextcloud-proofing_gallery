@@ -111,7 +111,7 @@ final class LifecycleService {
 
 	private function cleanupOrphanMetadata(): int {
 		$deleted = 0;
-		foreach (['proofing_events', 'proofing_uploads'] as $table) {
+		foreach (['proofing_events', 'proofing_uploads', 'proofing_collections'] as $table) {
 			$qb = $this->db->getQueryBuilder();
 			$qb->selectDistinct('gallery_id')->from($table)->setMaxResults(100);
 			foreach ($qb->executeQuery()->fetchFirstColumn() as $galleryId) {
@@ -126,6 +126,21 @@ final class LifecycleService {
 					->where($delete->expr()->eq('gallery_id', $delete->createNamedParameter((int)$galleryId, IQueryBuilder::PARAM_INT)));
 				$deleted += $delete->executeStatement();
 			}
+		}
+
+		$qb = $this->db->getQueryBuilder();
+		$qb->selectDistinct('collection_id')->from('proofing_collection_items')->setMaxResults(100);
+		foreach ($qb->executeQuery()->fetchFirstColumn() as $collectionId) {
+			$check = $this->db->getQueryBuilder();
+			$check->select('gallery_id')->from('proofing_collections')
+				->where($check->expr()->eq('gallery_id', $check->createNamedParameter((int)$collectionId, IQueryBuilder::PARAM_INT)));
+			if ($check->executeQuery()->fetchOne() !== false) {
+				continue;
+			}
+			$delete = $this->db->getQueryBuilder();
+			$delete->delete('proofing_collection_items')
+				->where($delete->expr()->eq('collection_id', $delete->createNamedParameter((int)$collectionId, IQueryBuilder::PARAM_INT)));
+			$deleted += $delete->executeStatement();
 		}
 		return $deleted;
 	}

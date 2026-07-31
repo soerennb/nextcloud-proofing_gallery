@@ -28,6 +28,8 @@ const recipient = ref('')
 const invitationMessage = ref('')
 const sending = ref(false)
 const published = computed(() => publicUrl.value !== '')
+const publishDisabled = computed(() => publishing.value
+	|| (!published.value && props.gallery.sourceType === 'collection' && props.gallery.mediaSummary.total === 0))
 
 watch(() => props.gallery, gallery => {
 	publicUrl.value = gallery.shareToken ? absoluteShareUrl(gallery.shareToken) : ''
@@ -119,7 +121,9 @@ function updateOpen(open: boolean) {
 					</NcButton>
 				</div>
 				<p v-else class="sharing-dialog__hint">
-					{{ t('proofing_gallery', 'Publishing creates a standard Nextcloud link share for the source folder.') }}
+					{{ gallery.sourceType === 'collection'
+						? t('proofing_gallery', 'Publishing creates a standard Nextcloud link protected by an empty collection anchor.')
+						: t('proofing_gallery', 'Publishing creates a standard Nextcloud link share for the source folder.') }}
 				</p>
 			</section>
 
@@ -153,7 +157,10 @@ function updateOpen(open: boolean) {
 				<NcCheckboxRadioSwitch v-model="allowDownloads" type="switch">
 					{{ t('proofing_gallery', 'Allow original downloads') }}
 				</NcCheckboxRadioSwitch>
-				<NcButton variant="primary" :disabled="publishing" @click="publish">
+				<p v-if="!published && gallery.sourceType === 'collection' && gallery.mediaSummary.total === 0" class="sharing-dialog__hint">
+					{{ t('proofing_gallery', 'Add at least one available file before publishing this collection.') }}
+				</p>
+				<NcButton variant="primary" :disabled="publishDisabled" @click="publish">
 					{{ publishing
 						? t('proofing_gallery', 'Updating…')
 						: published

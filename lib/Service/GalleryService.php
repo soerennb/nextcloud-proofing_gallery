@@ -16,6 +16,7 @@ final class GalleryService {
 		private GalleryMapper $mapper,
 		private FolderService $folders,
 		private MediaSummaryService $summaries,
+		private CollectionService $collections,
 		private GalleryAccessService $access,
 		private PublicShareService $shares,
 		private ITimeFactory $clock,
@@ -23,14 +24,34 @@ final class GalleryService {
 	}
 
 	/** @param array<string, mixed> $settings */
-	public function create(string $ownerUid, int $folderId, string $title, array $settings = []): Gallery {
-		$this->folders->resolveFolder($ownerUid, $folderId);
+	public function create(
+		string $ownerUid,
+		string $title,
+		?int $folderId,
+		array $settings = [],
+		string $sourceType = 'folder',
+	): Gallery {
+		if (!in_array($sourceType, ['folder', 'collection'], true)) {
+			throw new InvalidArgumentException('Unknown gallery source type');
+		}
+		$anchor = null;
+		if ($sourceType === 'folder') {
+			if ($folderId === null) {
+				throw new InvalidArgumentException('A source folder is required');
+			}
+			$this->folders->resolveFolder($ownerUid, $folderId);
+		} else {
+			$anchor = $this->collections->createAnchor($ownerUid);
+			$folderId = $anchor->getId();
+			$settings['allowGuestUploads'] = false;
+		}
 		$title = $this->validateTitle($title);
 		$now = $this->clock->getTime();
 
 		$gallery = new Gallery();
 		$gallery->setOwnerUid($ownerUid);
 		$gallery->setFolderId($folderId);
+		$gallery->setSourceType($sourceType);
 		$gallery->setTitle($title);
 		$gallery->setSlug($this->uniqueSlug($ownerUid, $title));
 		$gallery->setStatus(GalleryStatus::Draft->value);
@@ -38,7 +59,27 @@ final class GalleryService {
 		$gallery->setCreatedAt($now);
 		$gallery->setUpdatedAt($now);
 
-		return $this->mapper->insert($gallery);
+		try {
+			$gallery = $this->mapper->insert($gallery);
+			if ($sourceType === 'collection') {
+				$this->collections->initialize($gallery);
+			}
+			return $gallery;
+		} catch (\Throwable $exception) {
+			if ($gallery->getId() !== null) {
+				try {
+					$this->mapper->delete($gallery);
+				} catch (\Throwable) {
+				}
+			}
+			if ($anchor !== null) {
+				try {
+					$this->collections->deleteAnchor($anchor);
+				} catch (\Throwable) {
+				}
+			}
+			throw $exception;
+		}
 	}
 
 	/** @return array{items: list<array<string, mixed>>, total: int, limit: int, offset: int} */
@@ -70,6 +111,14 @@ final class GalleryService {
 	/** @return array<string, mixed> */
 	public function present(string $userId, Gallery $gallery): array {
 		$permissions = $this->access->permissions($userId, $gallery);
+		if ($gallery->getSourceType() === 'collection') {
+			return [
+				...$gallery->jsonSerialize(),
+				'source' => $this->collections->sourceStatus($gallery),
+				'mediaSummary' => $this->collections->summary($gallery),
+				'permissions' => $permissions,
+			];
+		}
 		try {
 			$folder = $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId());
 			$source = $this->folders->describeSource(
@@ -78,6 +127,7 @@ final class GalleryService {
 				$folder,
 				$permissions['role'] === 'owner',
 			);
+			$source['type'] = 'folder';
 			$mediaSummary = $this->summaries->forFolder(
 				$gallery->getId(),
 				$gallery->getFolderId(),
@@ -85,6 +135,7 @@ final class GalleryService {
 			);
 		} catch (\OCA\ProofingGallery\Exception\FolderAccessException) {
 			$source = [
+					'type' => 'folder',
 					'folderId' => $gallery->getFolderId(),
 					'displayPath' => null,
 					'state' => 'missing',
@@ -106,6 +157,9 @@ final class GalleryService {
 
 	public function rebindSource(string $ownerUid, int $id, int $folderId): Gallery {
 		$gallery = $this->access->owner($ownerUid, $id);
+		if ($gallery->getSourceType() !== 'folder') {
+			throw new InvalidArgumentException('Collections do not have a replaceable source folder');
+		}
 		$this->folders->resolveFolder($ownerUid, $folderId);
 		return $this->shares->rebindSource($gallery, $folderId);
 	}
@@ -117,6 +171,9 @@ final class GalleryService {
 			$gallery->setTitle($this->validateTitle($title));
 		}
 		if ($settings !== null) {
+			if ($gallery->getSourceType() === 'collection' && ($settings['allowGuestUploads'] ?? false) === true) {
+				throw new InvalidArgumentException('Guest uploads are unavailable for collections');
+			}
 			$current = json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR);
 			$gallery->setSettings(json_encode(GallerySettings::fromArray(array_merge($current, $settings)), JSON_THROW_ON_ERROR));
 		}

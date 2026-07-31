@@ -109,7 +109,7 @@ onMounted(load)
 	<NcContent app-name="proofing_gallery">
 		<NcAppNavigation>
 			<template #list>
-				<nav class="gallery-nav" :aria-label="t('proofing_gallery', 'Gallery navigation')">
+				<li class="gallery-nav__entry">
 					<button
 						class="gallery-nav__item"
 						:class="{ 'gallery-nav__item--active': !archived }"
@@ -117,6 +117,8 @@ onMounted(load)
 						@click="archived = false">
 						<span>{{ t('proofing_gallery', 'Galleries') }}</span>
 					</button>
+				</li>
+				<li class="gallery-nav__entry">
 					<button
 						class="gallery-nav__item"
 						:class="{ 'gallery-nav__item--active': archived }"
@@ -124,7 +126,7 @@ onMounted(load)
 						@click="archived = true">
 						<span>{{ t('proofing_gallery', 'Archive') }}</span>
 					</button>
-				</nav>
+				</li>
 			</template>
 		</NcAppNavigation>
 
@@ -197,13 +199,22 @@ onMounted(load)
 </template>
 
 <style scoped>
-.gallery-nav {
-	display: flex;
-	flex-direction: column;
-	padding: 8px;
+.gallery-nav__entry {
+	display: block;
+	padding: 0 8px;
+}
+
+.gallery-nav__entry:first-child {
+	padding-top: 8px;
+}
+
+.gallery-nav__entry:last-child {
+	padding-bottom: 8px;
 }
 
 .gallery-nav__item {
+	display: block;
+	width: 100%;
 	min-height: 44px;
 	padding: 11px 12px;
 	border: 0;

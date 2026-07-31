@@ -3,8 +3,8 @@
 ## Create and publish a gallery
 
 1. Put the deliverable images and supported videos in a Nextcloud folder.
-2. Open **Proofing Gallery**, choose **Create gallery**, select the folder, and
-   choose Presentation or Proofing.
+2. Open **Proofing Gallery**, choose **Create gallery**, select **Folder
+   gallery**, select the folder, and choose Presentation or Proofing.
 3. Open the gallery and use the focused workspaces:
    - **Overview** shows the source folder, media count, gallery mode, and a
      preview of the files clients will see.
@@ -23,6 +23,26 @@
 Revoking the public link immediately removes guest access. Archiving a gallery
 removes it from the active list without touching its source folder. The archive
 view can restore it; a restored published gallery keeps its link.
+
+## Build a collection across galleries
+
+1. Create the folder galleries that contain the source files. They must belong
+   to the same owner; shared-in galleries and other collections cannot be used
+   as sources.
+2. Choose **Create gallery → Collection** and enter a title and mode.
+3. Open **Content**, choose a source gallery, browse its subfolders, select
+   files, and add them to the collection.
+4. Reorder files by dragging them or with the keyboard-friendly arrow buttons,
+   then save. Saving checks the revision so a stale browser tab cannot silently
+   overwrite newer changes.
+5. Configure design and feedback as usual, then publish from **Access**. An
+   empty collection cannot be published.
+
+Collections reference originals by file ID and never copy them. If a source
+gallery or file becomes unreadable, the owner sees an unavailable item in the
+Content workspace. Guests see only currently available items, and direct media
+requests for missing or unrelated files return not found. Guest uploads are not
+available for collections because there is no single destination folder.
 
 ## Presentation and proofing
 

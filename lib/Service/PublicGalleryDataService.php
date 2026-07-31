@@ -11,11 +11,21 @@ use OCP\Files\Folder;
 use OCP\Files\Node;
 
 final class PublicGalleryDataService {
+	public function __construct(private CollectionService $collections) {
+	}
+
 	/** @return array<string, mixed> */
 	public function page(Gallery $gallery, Folder $root, int $limit = 60, int $offset = 0, string $path = ''): array {
 		$limit = max(1, min(200, $limit));
 		$offset = max(0, $offset);
 		$path = trim($path, '/');
+		if ($gallery->getSourceType() === 'collection') {
+			if ($path !== '') {
+				throw new \OCP\Files\NotFoundException('Collections do not contain folders');
+			}
+			$nodes = $this->collections->availableItems($gallery);
+			return $this->response($gallery, array_slice($nodes, $offset, $limit), count($nodes), $limit, $offset, '');
+		}
 		$currentFolder = $this->folderAt($root, $path);
 		$nodes = array_values(array_filter(
 			$currentFolder->getDirectoryListing(),
@@ -34,6 +44,13 @@ final class PublicGalleryDataService {
 			'folder' => $node instanceof Folder,
 		], array_slice($nodes, $offset, $limit));
 
+		return $this->response($gallery, $items, count($nodes), $limit, $offset, $path);
+	}
+
+	/** @param list<array<string, mixed>> $items
+	 * @return array<string, mixed>
+	 */
+	private function response(Gallery $gallery, array $items, int $total, int $limit, int $offset, string $path): array {
 		return [
 			'gallery' => [
 				'id' => $gallery->getId(),
@@ -45,7 +62,7 @@ final class PublicGalleryDataService {
 				)),
 			],
 			'items' => $items,
-			'total' => count($nodes),
+			'total' => $total,
 			'limit' => $limit,
 			'offset' => $offset,
 			'path' => $path,

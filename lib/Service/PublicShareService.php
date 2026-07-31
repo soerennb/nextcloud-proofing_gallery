@@ -21,6 +21,7 @@ final class PublicShareService {
 		private GalleryMapper $galleries,
 		private FolderService $folders,
 		private MediaSummaryService $summaries,
+		private CollectionService $collections,
 		private ITimeFactory $clock,
 	) {
 	}
@@ -33,6 +34,9 @@ final class PublicShareService {
 	): Gallery {
 		if ($gallery->getStatus() === GalleryStatus::Archived->value) {
 			throw new InvalidArgumentException('Archived galleries cannot be published');
+		}
+		if ($gallery->getSourceType() === 'collection' && $this->collections->availableItems($gallery) === []) {
+			throw new InvalidArgumentException('A collection needs at least one available file before publishing');
 		}
 
 		$share = $gallery->getShareToken() === null

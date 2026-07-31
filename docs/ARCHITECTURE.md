@@ -11,6 +11,13 @@ share, manager, inbox, and activity operations. Public pages resolve the native
 Nextcloud share token and verify that its node ID still matches the gallery's
 folder ID before returning data.
 
+Folder galleries validate media below their shared source folder. Collection
+galleries instead share a generated, permanently empty folder below
+`.proofing-gallery/collections`; the app stores an ordered list of source-gallery
+and file IDs. Every delivery request revalidates collection membership, source
+ownership, source type, file containment, and current readability. The anchor is
+only a native token/password/expiry authority and cannot expose the originals.
+
 Public mutations require both a hashed guest-session secret in an HttpOnly
 cookie and a separately hashed nonce in `X-Proofing-Nonce`. Media endpoints
 resolve requested file IDs beneath the shared folder, preventing path and
@@ -18,10 +25,16 @@ cross-gallery access.
 
 ## Data
 
-Doctrine migrations create tables for galleries, managers, guests, feedback,
-comments/annotations, selections, uploads, and activity. Foreign identifiers
+Doctrine migrations create tables for galleries, collection revisions and
+memberships, managers, guests, feedback, comments/annotations, selections,
+uploads, and activity. Foreign identifiers
 are app-local UUIDs or Nextcloud file IDs. Optional guest email addresses are
 encrypted; cookie secrets and mutation nonces are stored only as hashes.
+
+Collection updates replace the complete ordered membership in one transaction.
+An optimistic revision check returns a conflict instead of overwriting a newer
+browser session. Missing or moved source files remain in the owner document as
+unavailable references, but are omitted from all guest delivery paths.
 
 Original media is never copied into app tables. Derived watermarked previews and
 resumable upload chunks live in Nextcloud appdata. Accepted uploads move into

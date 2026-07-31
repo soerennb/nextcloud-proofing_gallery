@@ -1,11 +1,12 @@
 # Proofing Gallery
 
 Proofing Gallery is a native Nextcloud app for branded client delivery and
-collaborative photo proofing. A gallery references an existing Nextcloud folder:
-originals remain in Files while the app adds a customizable public presentation,
+collaborative photo proofing. A gallery either references an existing Nextcloud
+folder or assembles an ordered virtual collection from several owned galleries.
+Originals remain in Files while the app adds a customizable public presentation,
 guest feedback, selections, secure downloads, and an upload inbox.
 
-## Included in 0.1
+## Included in 0.2
 
 - presentation and collaborative proofing modes
 - standard Nextcloud public-link protection, password, and expiry
@@ -19,6 +20,8 @@ guest feedback, selections, secure downloads, and an upload inbox.
 - resumable guest uploads to a hidden moderation inbox
 - user/group gallery managers, activity filters, and email notifications
 - German and English interfaces
+- ordered, copy-free collections spanning the owner's folder galleries, with
+  unavailable-source diagnostics and conflict-safe editing
 
 ## Local development
 

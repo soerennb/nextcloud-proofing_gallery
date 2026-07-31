@@ -40,6 +40,14 @@ failed Nextcloud background jobs. Cleanup is eventual, so allow headroom for int
 uploads. Native Nextcloud retention, backup, encryption, and object-storage
 policies still apply to gallery source folders.
 
+Collection galleries create empty native share anchors below each owner's
+`.proofing-gallery/collections` directory. The application database contains the
+ordered source references; anchors must stay empty and are not media storage.
+The lifecycle job removes orphaned collection rows and memberships. If a
+collection creation is interrupted before its gallery row is persisted, an
+empty orphan anchor may remain and can be removed after confirming that no
+gallery references its node ID. Never place user files in these directories.
+
 ## Recovery and removal
 
 Gallery originals remain ordinary Nextcloud files and can be restored with the
@@ -50,6 +58,11 @@ If a source folder is missing or no longer readable, the gallery Overview shows
 “Folder unavailable”. Its owner can choose a replacement folder without
 changing the public URL; the app updates the native Nextcloud share node and
 keeps gallery activity and reviewer feedback intact.
+
+For collections, missing source galleries or files are reported as unavailable
+in the owner's Content workspace. Restore the original node/source gallery or
+remove the reference and save a new collection revision. Unavailable entries
+are never served to guests.
 
 Disabling the app stops access but preserves data. Before uninstalling, export
 needed selections and feedback and decide how pending inbox uploads should be

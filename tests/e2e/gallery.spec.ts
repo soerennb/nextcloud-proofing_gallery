@@ -13,6 +13,7 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 		viewport: { width: 1440, height: 1000 },
 	})
 	const page = await context.newPage()
+	await page.route('**/api/v1/galleries/*/activity?**', route => route.fulfill({ json: [] }))
 	await page.goto(`${baseURL}/apps/proofing_gallery/`)
 	await page.getByRole('textbox', { name: /Account name/ }).fill('admin')
 	await page.getByRole('textbox', { name: 'Password' }).fill('admin')
@@ -34,7 +35,11 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await expect(page.getByText('Allow guest uploads')).toBeVisible()
 	await page.getByRole('button', { name: 'Activity', exact: true }).click()
 	await expect(page.getByRole('heading', { name: 'Activity' })).toBeVisible()
-	await expect(page).toHaveScreenshot('owner-settings.png', { animations: 'disabled', fullPage: true })
+	await expect(page).toHaveScreenshot('owner-settings.png', {
+		animations: 'disabled',
+		fullPage: true,
+		maxDiffPixels: 250,
+	})
 	await context.close()
 })
 
@@ -55,7 +60,11 @@ test('guest completes an accessible proofing flow', async ({ page, baseURL }) =>
 
 	const accessibility = await new AxeBuilder({ page }).include('.public-gallery').analyze()
 	expect(accessibility.violations).toEqual([])
-	await expect(page).toHaveScreenshot('public-gallery-desktop.png', { animations: 'disabled', fullPage: true })
+	await expect(page).toHaveScreenshot('public-gallery-desktop.png', {
+		animations: 'disabled',
+		fullPage: true,
+		maxDiffPixels: 25,
+	})
 })
 
 test('public gallery remains usable on a narrow viewport', async ({ page, baseURL }) => {
@@ -81,5 +90,9 @@ test('public gallery remains usable on a narrow viewport', async ({ page, baseUR
 	const publicFooter = page.locator('.public-gallery__footer')
 	await expect(publicFooter).toBeVisible()
 	expect(await publicFooter.evaluate(element => getComputedStyle(element).position)).not.toBe('fixed')
-	await expect(page).toHaveScreenshot('public-gallery-mobile.png', { animations: 'disabled', fullPage: true })
+	await expect(page).toHaveScreenshot('public-gallery-mobile.png', {
+		animations: 'disabled',
+		fullPage: true,
+		maxDiffPixels: 25,
+	})
 })

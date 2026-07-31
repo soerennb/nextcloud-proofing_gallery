@@ -13,6 +13,8 @@ use OCP\DB\Types;
  * @method void setOwnerUid(string $ownerUid)
  * @method int getFolderId()
  * @method void setFolderId(int $folderId)
+ * @method string getSourceType()
+ * @method void setSourceType(string $sourceType)
  * @method string getTitle()
  * @method void setTitle(string $title)
  * @method string getSlug()
@@ -33,6 +35,7 @@ use OCP\DB\Types;
 final class Gallery extends Entity implements \JsonSerializable {
 	protected string $ownerUid = '';
 	protected int $folderId = 0;
+	protected string $sourceType = 'folder';
 	protected string $title = '';
 	protected string $slug = '';
 	protected string $status = 'draft';
@@ -55,6 +58,7 @@ final class Gallery extends Entity implements \JsonSerializable {
 			'id' => $this->getId(),
 			'ownerUid' => $this->getOwnerUid(),
 			'folderId' => $this->getFolderId(),
+			'sourceType' => $this->getSourceType(),
 			'title' => $this->getTitle(),
 			'slug' => $this->getSlug(),
 			'status' => $this->getStatus(),

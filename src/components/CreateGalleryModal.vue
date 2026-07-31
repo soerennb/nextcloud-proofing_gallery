@@ -20,8 +20,11 @@ const title = ref('')
 const folderId = ref<number | null>(null)
 const folderName = ref('')
 const mode = ref<'presentation' | 'collaboration'>('presentation')
+const sourceType = ref<'folder' | 'collection'>('folder')
 const saving = ref(false)
-const canSubmit = computed(() => title.value.trim() !== '' && folderId.value !== null && !saving.value)
+const canSubmit = computed(() => title.value.trim() !== ''
+	&& (sourceType.value === 'collection' || folderId.value !== null)
+	&& !saving.value)
 
 async function chooseFolder() {
 	try {
@@ -48,15 +51,16 @@ async function chooseFolder() {
 }
 
 async function submit() {
-	if (!canSubmit.value || folderId.value === null) {
+	if (!canSubmit.value) {
 		return
 	}
 	saving.value = true
 	try {
 		const gallery = await createGallery({
-			folderId: folderId.value,
+			folderId: sourceType.value === 'folder' ? folderId.value : null,
 			title: title.value.trim(),
 			mode: mode.value,
+			sourceType: sourceType.value,
 		})
 		emit('created', gallery)
 		reset()
@@ -72,6 +76,7 @@ function reset() {
 	folderId.value = null
 	folderName.value = ''
 	mode.value = 'presentation'
+	sourceType.value = 'folder'
 }
 
 function updateOpen(open: boolean) {
@@ -92,7 +97,21 @@ function updateOpen(open: boolean) {
 				</p>
 			</div>
 
-			<section class="create-gallery__section">
+			<fieldset class="create-gallery__section">
+				<legend>{{ t('proofing_gallery', 'Gallery source') }}</legend>
+				<div class="source-options">
+					<label :class="{ 'source-option--selected': sourceType === 'folder' }">
+						<input v-model="sourceType" type="radio" value="folder">
+						<span><strong>{{ t('proofing_gallery', 'Folder gallery') }}</strong>{{ t('proofing_gallery', 'Show one Nextcloud folder and its subfolders.') }}</span>
+					</label>
+					<label :class="{ 'source-option--selected': sourceType === 'collection' }">
+						<input v-model="sourceType" type="radio" value="collection">
+						<span><strong>{{ t('proofing_gallery', 'Collection') }}</strong>{{ t('proofing_gallery', 'Curate files from several of your galleries.') }}</span>
+					</label>
+				</div>
+			</fieldset>
+
+			<section v-if="sourceType === 'folder'" class="create-gallery__section">
 				<h3>{{ t('proofing_gallery', 'Source folder') }}</h3>
 				<button class="folder-choice" type="button" @click="chooseFolder">
 					<span class="folder-choice__mark" aria-hidden="true" />
@@ -143,7 +162,9 @@ function updateOpen(open: boolean) {
 				</NcButton>
 			</footer>
 			<p v-if="!canSubmit && !saving" class="create-gallery__requirement">
-				{{ t('proofing_gallery', 'Choose a folder and enter a title to create the draft.') }}
+				{{ sourceType === 'folder'
+					? t('proofing_gallery', 'Choose a folder and enter a title to create the draft.')
+					: t('proofing_gallery', 'Enter a title to create the collection.') }}
 			</p>
 		</form>
 	</NcDialog>
@@ -221,6 +242,39 @@ function updateOpen(open: boolean) {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
 	gap: 8px;
+}
+
+.source-options {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 8px;
+}
+
+.source-options label {
+	display: flex;
+	gap: 10px;
+	padding: 14px;
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	cursor: pointer;
+}
+
+.source-options label.source-option--selected {
+	border-color: var(--color-primary-element);
+}
+
+.source-options span,
+.source-options strong {
+	display: block;
+}
+
+.source-options span {
+	color: var(--color-text-maxcontrast);
+}
+
+.source-options strong {
+	margin-bottom: 2px;
+	color: var(--color-main-text);
 }
 
 .mode-options label {

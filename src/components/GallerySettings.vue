@@ -7,13 +7,14 @@ import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
-import { fetchGalleryMedia, ownerPreviewUrl, updateGallery, updateGallerySource } from '../services/galleryApi.ts'
+import { fetchCollection, fetchGalleryMedia, ownerPreviewUrl, updateGallery, updateGallerySource } from '../services/galleryApi.ts'
 import type { Gallery, MediaItem } from '../types.ts'
 import GalleryActivity from './GalleryActivity.vue'
+import CollectionContent from './CollectionContent.vue'
 import ManagerPanel from './ManagerPanel.vue'
 import SharingModal from './SharingModal.vue'
 
-type SettingsTab = 'overview' | 'design' | 'access' | 'feedback' | 'activity'
+type SettingsTab = 'overview' | 'content' | 'design' | 'access' | 'feedback' | 'activity'
 
 const props = defineProps<{ gallery: Gallery }>()
 const emit = defineEmits<{
@@ -23,12 +24,14 @@ const emit = defineEmits<{
 
 const allTabs: Array<{ id: SettingsTab; label: string }> = [
 	{ id: 'overview', label: t('proofing_gallery', 'Overview') },
+	{ id: 'content', label: t('proofing_gallery', 'Content') },
 	{ id: 'design', label: t('proofing_gallery', 'Design') },
 	{ id: 'access', label: t('proofing_gallery', 'Access') },
 	{ id: 'feedback', label: t('proofing_gallery', 'Feedback') },
 	{ id: 'activity', label: t('proofing_gallery', 'Activity') },
 ]
 const availableTabs = computed(() => allTabs.filter(tab => {
+	if (tab.id === 'content') return props.gallery.sourceType === 'collection' && props.gallery.permissions.role === 'owner'
 	if (props.gallery.permissions.canManageAccess) return true
 	if (props.gallery.permissions.canEdit) return tab.id !== 'access'
 	return tab.id === 'overview' || tab.id === 'activity'
@@ -88,6 +91,22 @@ function beforeUnload(event: BeforeUnloadEvent) {
 async function loadMedia() {
 	mediaLoading.value = true
 	try {
+		if (props.gallery.sourceType === 'collection') {
+			const collection = await fetchCollection(props.gallery.id)
+			media.value = collection.items.filter(item => item.state === 'available').map(item => ({
+				id: item.fileId,
+				name: item.name!,
+				mimeType: item.mimeType!,
+				size: item.size!,
+				modifiedAt: item.modifiedAt!,
+				etag: item.etag!,
+				folder: false,
+				sourceGalleryId: item.sourceGalleryId,
+				sourceGalleryTitle: item.sourceGalleryTitle ?? undefined,
+			}))
+			mediaTotal.value = collection.items.length
+			return
+		}
 		const page = await fetchGalleryMedia(props.gallery.id, 12)
 		media.value = page.items
 		mediaTotal.value = page.total
@@ -101,6 +120,10 @@ async function loadMedia() {
 
 function previewUrl(fileId: number, width = 560, height = 360): string {
 	return ownerPreviewUrl(props.gallery.id, fileId, width, height)
+}
+
+function collectionChanged() {
+	loadMedia()
 }
 
 async function chooseImage(kind: 'heroFileId' | 'logoFileId') {
@@ -244,7 +267,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 					</label>
 				</fieldset>
 				<dl class="gallery-facts">
-					<div>
+					<div v-if="gallery.source.type === 'folder'">
 						<dt>{{ t('proofing_gallery', 'Source folder') }}</dt>
 						<dd>
 							<span :class="{ 'source-missing': gallery.source.state === 'missing' }">
@@ -263,6 +286,19 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 							</NcButton>
 						</dd>
 					</div>
+					<div v-else>
+						<dt>{{ t('proofing_gallery', 'Collection') }}</dt>
+						<dd>
+							<span :class="{ 'source-missing': gallery.source.state === 'degraded' }">
+								{{ gallery.source.state === 'degraded'
+									? t('proofing_gallery', '{count} unavailable', { count: gallery.source.unavailableCount })
+									: t('proofing_gallery', 'All source files available') }}
+							</span>
+							<NcButton v-if="gallery.permissions.role === 'owner'" variant="tertiary" @click="setTab('content')">
+								{{ t('proofing_gallery', 'Manage content') }}
+							</NcButton>
+						</dd>
+					</div>
 					<div><dt>{{ t('proofing_gallery', 'Files shown') }}</dt><dd>{{ mediaLoading ? gallery.mediaSummary.total : mediaTotal }}</dd></div>
 					<div><dt>{{ t('proofing_gallery', 'Last changed') }}</dt><dd>{{ new Date(gallery.updatedAt * 1000).toLocaleString() }}</dd></div>
 				</dl>
@@ -274,6 +310,11 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 						:alt="item.name">
 				</div>
 			</section>
+
+			<CollectionContent
+				v-else-if="activeTab === 'content' && gallery.sourceType === 'collection'"
+				:gallery="gallery"
+				@changed="collectionChanged" />
 
 			<section v-else-if="activeTab === 'design'" class="design-layout">
 				<div class="settings-section design-fields">
@@ -418,7 +459,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 					@update:model-value="draft.settings.feedbackVisibility = $event ? 'collaborative' : 'private'">
 					{{ t('proofing_gallery', 'Reviewers see each other’s feedback') }}
 				</NcCheckboxRadioSwitch>
-				<NcCheckboxRadioSwitch v-model="draft.settings.allowGuestUploads" type="switch">
+				<NcCheckboxRadioSwitch v-if="gallery.sourceType === 'folder'" v-model="draft.settings.allowGuestUploads" type="switch">
 					{{ t('proofing_gallery', 'Allow guest uploads to an inbox') }}
 				</NcCheckboxRadioSwitch>
 				<div v-if="draft.settings.mode === 'collaboration'" class="color-labels">

@@ -4,6 +4,7 @@ export interface Gallery {
 	id: number
 	ownerUid: string
 	folderId: number
+	sourceType: 'folder' | 'collection'
 	title: string
 	slug: string
 	status: 'draft' | 'published' | 'archived'
@@ -13,9 +14,15 @@ export interface Gallery {
 	updatedAt: number
 	archivedAt: number | null
 	source: {
+		type: 'folder'
 		folderId: number
 		displayPath: string | null
 		state: 'readable' | 'missing'
+	} | {
+		type: 'collection'
+		state: 'readable' | 'degraded'
+		itemCount: number
+		unavailableCount: number
 	}
 	mediaSummary: {
 		total: number
@@ -38,6 +45,26 @@ export interface MediaItem {
 	modifiedAt: number
 	etag: string
 	folder: boolean
+	sourceGalleryId?: number
+	sourceGalleryTitle?: string
+}
+
+export interface CollectionItem {
+	sourceGalleryId: number
+	sourceGalleryTitle: string | null
+	fileId: number
+	name: string | null
+	mimeType: string | null
+	size: number | null
+	modifiedAt: number | null
+	etag: string | null
+	state: 'available' | 'unavailable'
+}
+
+export interface CollectionDocument {
+	revision: number
+	items: CollectionItem[]
+	unavailableCount: number
 }
 
 export interface MediaPage {

@@ -12,6 +12,7 @@ use OCA\ProofingGallery\Http\TemporaryFileResponse;
 use OCA\ProofingGallery\Service\PolicyService;
 use OCA\ProofingGallery\Service\PublicGalleryDataService;
 use OCA\ProofingGallery\Service\WatermarkPreviewService;
+use OCA\ProofingGallery\Service\CollectionService;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
@@ -45,6 +46,7 @@ final class PublicGalleryController extends PublicShareController {
 		private IPreview $preview,
 		private WatermarkPreviewService $watermarks,
 		private PublicGalleryDataService $galleryData,
+		private CollectionService $collections,
 		private PolicyService $policies,
 	) {
 		parent::__construct(Application::APP_ID, $request, $session);
@@ -159,7 +161,10 @@ final class PublicGalleryController extends PublicShareController {
 			return new DataDisplayResponse('', Http::STATUS_INTERNAL_SERVER_ERROR);
 		}
 		foreach ($files as $file) {
-			$archive->addFromString($file->getName(), $file->getContent());
+			$name = $this->resolvedGallery()->getSourceType() === 'collection'
+				? $this->collections->downloadPath($this->resolvedGallery(), $file)
+				: $file->getName();
+			$archive->addFromString($name, $file->getContent());
 		}
 		$archive->close();
 		$filename = preg_replace('/[^a-z0-9._-]+/i', '-', $this->resolvedGallery()->getTitle()) ?: 'gallery';
@@ -262,6 +267,13 @@ final class PublicGalleryController extends PublicShareController {
 	}
 
 	private function fileInShare(int $fileId): File {
+		if ($this->resolvedGallery()->getSourceType() === 'collection') {
+			try {
+				return $this->collections->resolveMedia($this->resolvedGallery(), $fileId);
+			} catch (\Throwable) {
+				throw new \OCP\Files\NotFoundException('Media file not found');
+			}
+		}
 		foreach ($this->folder()->getById($fileId) as $node) {
 			if ($node instanceof File && $this->folder()->isSubNode($node) && $this->isSupported($node)) {
 				return $node;

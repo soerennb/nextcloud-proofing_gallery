@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.0-beta.1 — 2026-07-31
+
+- Add ordered virtual collections across the owner's existing galleries
+  without copying original media.
+- Keep collection delivery behind an empty native Nextcloud link-share anchor
+  and revalidate membership and source readability for every media request.
+- Add an owner collection builder with optimistic revision protection and
+  explicit unavailable-source recovery.
+
 ## 0.1.0-beta.4 — 2026-07-31
 
 - Cache gallery media summaries by source-folder ETag so unchanged owner

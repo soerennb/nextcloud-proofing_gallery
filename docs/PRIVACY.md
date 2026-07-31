@@ -5,7 +5,8 @@ tracking pixels, or external media services.
 
 ## Processed data
 
-- gallery configuration and the Nextcloud file IDs it references
+- gallery configuration and the Nextcloud file IDs it references, including
+  ordered collection membership and source-gallery IDs
 - optional guest display name and encrypted email address
 - likes, color states, comments, normalized point annotations, and selections
 - pending upload metadata and temporary chunks
@@ -31,10 +32,12 @@ logs, database retention, and legal deletion requests.
 ## Security model
 
 Every public request first validates a native Nextcloud share token against the
-gallery folder. Media file IDs must resolve below that folder. Hidden paths are
-excluded. Public writes additionally require the guest cookie and mutation
-nonce. Authenticated owner endpoints retain Nextcloud's session, permission,
-and CSRF/OCS protections.
+gallery folder. Folder-gallery media IDs must resolve below that folder. A
+collection token points to an empty hidden anchor; requested media must instead
+be an explicit collection member and still resolve inside an owned, readable
+folder gallery. Hidden paths are excluded. Public writes additionally require
+the guest cookie and mutation nonce. Authenticated owner endpoints retain
+Nextcloud's session, permission, and CSRF/OCS protections.
 
 Report vulnerabilities privately to the repository maintainer; do not include
 real share tokens, guest data, or images in a public issue.
