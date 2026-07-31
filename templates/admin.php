@@ -8,7 +8,7 @@ $cleanupHealth = $health['cleanup'];
 $cleanup = json_decode((string)$cleanupHealth['lastResult'], true);
 $cleanupSummary = is_array($cleanup)
 	? sprintf(
-		'%s: %d · %s: %d · %s: %d · %s: %d',
+		'%s: %d · %s: %d · %s: %d · %s: %d · %s: %d',
 		$l->t('events'),
 		(int)($cleanup['events'] ?? 0),
 		$l->t('uploads'),
@@ -17,6 +17,8 @@ $cleanupSummary = is_array($cleanup)
 		(int)($cleanup['previews'] ?? 0),
 		$l->t('orphan records'),
 		(int)($cleanup['orphans'] ?? 0),
+		$l->t('collection anchors'),
+		(int)($cleanup['collectionAnchors'] ?? 0),
 	)
 	: $l->t('Not run yet');
 $cleanupState = match ($cleanupHealth['state']) {

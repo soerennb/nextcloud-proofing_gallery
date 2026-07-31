@@ -8,6 +8,7 @@ export interface GallerySettings {
 	allowGuestUploads: boolean
 	showFilenames: boolean
 	colorLabels: [string, string, string, string]
+	publicLocale: 'auto' | 'en' | 'de'
 	appearance: {
 		accentColor: string
 		welcomeMessage: string
@@ -37,6 +38,7 @@ export function createDefaultGallerySettings(): GallerySettings {
 		allowGuestUploads: false,
 		showFilenames: true,
 		colorLabels: [...DEFAULT_COLOR_LABELS],
+		publicLocale: 'auto',
 		appearance: {
 			accentColor: '#1f6f8b',
 			welcomeMessage: '',

@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.2.0-beta.3 — 2026-07-31
+
+- Add owner-scoped gallery presets with validated design, access, feedback,
+  and public-language defaults while preserving source folders and share links.
+- Let owners explicitly deliver public galleries and invitation mail in English
+  or German, independent of the owner's current interface language.
+- Add reusable plain-text invitation templates with bounded, server-rendered
+  gallery, owner, and URL placeholders and an editable final message.
+- Add opt-in event subscriptions for owners and individual managers with
+  immediate or daily delivery, locale controls, deduplicated worker retries,
+  and scoped unsubscribe links.
+- Cover reusable workflows, mail delivery, accessibility, mobile layout,
+  upgrades, packaging, and supported Nextcloud/database combinations.
+
+## 0.2.0-beta.2 — 2026-07-31
+
+- Scale collection assembly with owner-only source filtering, gallery and
+  current-folder search, bounded pagination, stable selections, and stale
+  response protection.
+- Reconcile only empty, unreferenced collection anchors older than 24 hours
+  through bounded daily cleanup and an administrator dry-run endpoint.
+- Lazy-load public lightbox, feedback, and upload code, defer collaboration
+  bootstrap beyond first paint, and enforce a 55 KiB eager public JS budget.
+- Add deterministic collection, anchor-safety, browser, accessibility,
+  security, bundle, and throttled Chrome DevTools performance regressions.
+
 ## 0.2.0-beta.1 — 2026-07-31
 
 - Add ordered virtual collections across the owner's existing galleries

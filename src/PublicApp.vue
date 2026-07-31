@@ -1,39 +1,13 @@
 <script setup lang="ts">
 import { n, t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import type { GallerySettings } from './domain/gallerySettings.ts'
-import {
-	missingChunkIndexes,
-	normalizeAnnotationPoint,
-	toggleOptimisticLike,
-} from './domain/collaboration.ts'
+import type { CollaborationState, GuestIdentity, MediaItem, PublicGallery } from './publicTypes.ts'
 
-interface MediaItem {
-	id: number
-	name: string
-	mimeType: string
-	size: number
-	modifiedAt: number
-	etag: string
-	folder: boolean
-}
-
-interface PublicGallery {
-	id: number
-	title: string
-	token: string
-	settings: GallerySettings
-	initialPage?: {
-		gallery: { id: number; title: string; settings: GallerySettings }
-		items: MediaItem[]
-		total: number
-		limit: number
-		offset: number
-		path: string
-	}
-}
+const PublicLightbox = defineAsyncComponent(() => import('./components/PublicLightbox.vue'))
+const PublicUploadAction = defineAsyncComponent(() => import('./components/PublicUploadAction.vue'))
 
 interface GalleryResponse {
 	gallery: { id: number; title: string; settings: GallerySettings }
@@ -42,37 +16,6 @@ interface GalleryResponse {
 	limit: number
 	offset: number
 	path: string
-}
-
-interface GuestIdentity {
-	id: string
-	displayName: string
-	createdAt: number
-}
-
-interface CollaborationState {
-	policy: {
-		enabled: boolean
-		visibility: 'private' | 'collaborative'
-		colorLabels: string[]
-		requiresSession: boolean
-	}
-	guest: GuestIdentity | null
-	likes: Record<number, { count: number, mine: boolean }>
-	colors: Record<number, string>
-	colorStates: Record<number, Record<string, number>>
-	comments: Array<{
-		id: number
-		fileId: number
-		body: string
-		author: string
-		mine: boolean
-		createdAt: number
-		deletedAt: number | null
-		annotations: Array<{ x: number, y: number, width: number, height: number }>
-	}>
-	selections: Array<{ id: string, name: string, message: string, fileIds: number[], author: string, mine: boolean }>
-	cursor: number
 }
 
 const props = defineProps<{ gallery: PublicGallery }>()
@@ -92,52 +35,35 @@ const pageStyle = computed(() => ({
 const cinematicOpener = computed(() => settings.value.appearance.openerStyle === 'cinematic')
 const mediaItems = computed(() => items.value.filter(item => !item.folder))
 const activeIndex = ref<number | null>(null)
-const activeItem = computed(() => activeIndex.value === null ? null : mediaItems.value[activeIndex.value])
-const activeComments = computed(() => collaboration.value?.comments.filter(
-	comment => comment.fileId === activeItem.value?.id && comment.deletedAt === null,
-) ?? [])
-const slideshow = ref(false)
-const zoom = ref(1)
-const panX = ref(0)
-const panY = ref(0)
 const selectedIds = ref<number[]>([])
-let slideshowTimer: number | undefined
 let collaborationTimer: number | undefined
-let pointerStart: { x: number, y: number, panX: number, panY: number } | null = null
 const guest = ref<GuestIdentity | null>(null)
 const guestName = ref('')
 const guestEmail = ref('')
 const joining = ref(false)
 const collaboration = ref<CollaborationState | null>(null)
 const collaborationError = ref('')
-const commentBody = ref('')
 const selectionName = ref('')
 const selectionMessage = ref('')
 const savingSelection = ref(false)
-const marking = ref(false)
-const annotationDraft = ref<{ x: number, y: number, width: number, height: number } | null>(null)
-const editingCommentId = ref<number | null>(null)
-const editingCommentBody = ref('')
-const feedbackOpen = ref(false)
-const uploading = ref(false)
-const uploadProgress = ref<Record<string, number>>({})
 const nonce = ref(sessionStorage.getItem(`proofing-gallery-nonce:${props.gallery.token}`) ?? '')
 
 onMounted(() => {
 	if (props.gallery.initialPage) {
-		initializeCollaboration()
+		deferCollaborationInitialization()
 	} else {
-		loadPage(0).then(() => initializeCollaboration())
+		loadPage(0).then(() => deferCollaborationInitialization())
 	}
-	window.addEventListener('keydown', onKeydown)
 	document.addEventListener('visibilitychange', onVisibilityChange)
 })
 onBeforeUnmount(() => {
-	window.removeEventListener('keydown', onKeydown)
 	document.removeEventListener('visibilitychange', onVisibilityChange)
-	window.clearInterval(slideshowTimer)
 	window.clearInterval(collaborationTimer)
 })
+
+function deferCollaborationInitialization() {
+	requestAnimationFrame(() => requestAnimationFrame(() => initializeCollaboration()))
+}
 
 async function loadPage(offset: number) {
 	offset === 0 ? loading.value = true : loadingMore.value = true
@@ -258,53 +184,6 @@ async function mutateCollaboration(path: string, method: 'POST' | 'PUT' | 'DELET
 	return true
 }
 
-async function toggleLike(item: MediaItem) {
-	if (!collaboration.value) return
-	collaboration.value.likes[item.id] = toggleOptimisticLike(collaboration.value.likes[item.id])
-	if (!await mutateCollaboration(`media/${item.id}/like`, 'POST')) await loadCollaboration()
-}
-
-async function setColor(item: MediaItem, value: string) {
-	if (!collaboration.value) return
-	collaboration.value.colors[item.id] = value
-	if (!await mutateCollaboration(`media/${item.id}/color`, 'PUT', { value: value || null })) await loadCollaboration()
-}
-
-async function addComment() {
-	if (!activeItem.value || !commentBody.value.trim()) return
-	if (await mutateCollaboration(`media/${activeItem.value.id}/comments`, 'POST', {
-		body: commentBody.value,
-		annotation: annotationDraft.value,
-	})) {
-		commentBody.value = ''
-		annotationDraft.value = null
-		marking.value = false
-	}
-}
-
-async function deleteComment(commentId: number) {
-	await mutateCollaboration(`comments/${commentId}`, 'DELETE')
-}
-
-function editComment(comment: CollaborationState['comments'][number]) {
-	editingCommentId.value = comment.id
-	editingCommentBody.value = comment.body
-}
-
-async function saveEditedComment(commentId: number) {
-	if (editingCommentBody.value.trim()
-		&& await mutateCollaboration(`comments/${commentId}`, 'PUT', { body: editingCommentBody.value })) {
-		editingCommentId.value = null
-		editingCommentBody.value = ''
-	}
-}
-
-function placeAnnotation(event: MouseEvent) {
-	if (!marking.value || !activeItem.value?.mimeType.startsWith('image/')) return
-	const bounds = (event.currentTarget as HTMLElement).getBoundingClientRect()
-	annotationDraft.value = normalizeAnnotationPoint(event.clientX, event.clientY, bounds)
-}
-
 async function saveSelection() {
 	if (!selectionName.value.trim() || selectedIds.value.length === 0) return
 	savingSelection.value = true
@@ -318,82 +197,6 @@ async function saveSelection() {
 		selectedIds.value = []
 	}
 	savingSelection.value = false
-}
-
-async function uploadFiles(event: Event) {
-	const input = event.target as HTMLInputElement
-	const files = [...(input.files ?? [])]
-	if (!guest.value || !nonce.value || files.length === 0) return
-	uploading.value = true
-	for (const file of files) {
-		try {
-			await uploadFile(file)
-		} catch (exception) {
-			collaborationError.value = exception instanceof Error ? exception.message : String(exception)
-		}
-	}
-	input.value = ''
-	uploading.value = false
-}
-
-async function uploadFile(file: File) {
-	const storageKey = `proofing-gallery-upload:${props.gallery.token}:${file.name}:${file.size}:${file.lastModified}`
-	let uploadId = localStorage.getItem(storageKey)
-	let chunkSize = 5 * 1024 * 1024
-	let uploadedChunks: number[] = []
-	if (uploadId) {
-		const status = await uploadRequest(`uploads/${uploadId}`, 'GET')
-		if (status?.status === 'pending') {
-			chunkSize = status.chunkSize as number
-			uploadedChunks = status.uploadedChunks as number[]
-		} else {
-			localStorage.removeItem(storageKey)
-			uploadId = null
-		}
-	}
-	if (!uploadId) {
-		const initiated = await uploadRequest('uploads', 'POST', {
-			filename: file.name,
-			mimeType: file.type || 'application/octet-stream',
-			size: file.size,
-		})
-		uploadId = initiated.id as string
-		chunkSize = initiated.chunkSize as number
-		localStorage.setItem(storageKey, uploadId)
-	}
-	const totalChunks = Math.ceil(file.size / chunkSize)
-	for (const index of missingChunkIndexes(file.size, chunkSize, uploadedChunks)) {
-		const response = await fetch(publicEndpoint(`uploads/${uploadId}/chunks/${index}`), {
-			method: 'PUT',
-			credentials: 'same-origin',
-			headers: {
-				'Content-Type': 'application/octet-stream',
-				'X-Proofing-Nonce': nonce.value,
-			},
-			body: file.slice(index * chunkSize, Math.min(file.size, (index + 1) * chunkSize)),
-		})
-		if (!response.ok) throw new Error(t('proofing_gallery', 'A file chunk could not be uploaded.'))
-		uploadProgress.value[file.name] = Math.round(((index + 1) / totalChunks) * 100)
-	}
-	await uploadRequest(`uploads/${uploadId}/finalize`, 'POST')
-	localStorage.removeItem(storageKey)
-	uploadProgress.value[file.name] = 100
-}
-
-async function uploadRequest(path: string, method: 'GET' | 'POST', body?: unknown): Promise<Record<string, unknown>> {
-	const response = await fetch(publicEndpoint(path), {
-		method,
-		credentials: 'same-origin',
-		headers: {
-			'Content-Type': 'application/json',
-			Accept: 'application/json',
-			'X-Proofing-Nonce': nonce.value,
-		},
-		body: body === undefined ? undefined : JSON.stringify(body),
-	})
-	const payload = await response.json() as Record<string, unknown> & { message?: string }
-	if (!response.ok) throw new Error(payload.message || t('proofing_gallery', 'Upload failed'))
-	return payload
 }
 
 function previewUrl(item: MediaItem, width = 900, height = 900): string {
@@ -433,74 +236,11 @@ function publicEndpoint(path: string): string {
 function openItem(item: MediaItem) {
 	if (!item.folder) {
 		activeIndex.value = mediaItems.value.findIndex(media => media.id === item.id)
-		feedbackOpen.value = false
-		resetViewport()
 		return
 	}
 	currentPath.value = [currentPath.value, item.name].filter(Boolean).join('/')
 	error.value = false
 	loadPage(0)
-}
-
-function closeLightbox() {
-	activeIndex.value = null
-	feedbackOpen.value = false
-	setSlideshow(false)
-	resetViewport()
-}
-
-function step(direction: number) {
-	if (activeIndex.value === null || mediaItems.value.length === 0) {
-		return
-	}
-	activeIndex.value = (activeIndex.value + direction + mediaItems.value.length) % mediaItems.value.length
-	resetViewport()
-}
-
-function setSlideshow(enabled: boolean) {
-	slideshow.value = enabled
-	window.clearInterval(slideshowTimer)
-	slideshowTimer = enabled ? window.setInterval(() => step(1), 4500) : undefined
-}
-
-function resetViewport() {
-	zoom.value = 1
-	panX.value = 0
-	panY.value = 0
-}
-
-function toggleMarking() {
-	marking.value = !marking.value
-	if (marking.value) feedbackOpen.value = false
-}
-
-function onKeydown(event: KeyboardEvent) {
-	if (activeIndex.value === null) {
-		return
-	}
-	if (event.key === 'Escape') closeLightbox()
-	if (event.key === 'ArrowLeft') step(-1)
-	if (event.key === 'ArrowRight') step(1)
-	if (event.key === ' ') {
-		event.preventDefault()
-		setSlideshow(!slideshow.value)
-	}
-}
-
-function beginPan(event: PointerEvent) {
-	if (zoom.value <= 1) return
-	;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
-	pointerStart = { x: event.clientX, y: event.clientY, panX: panX.value, panY: panY.value }
-}
-
-function movePan(event: PointerEvent) {
-	if (!pointerStart) return
-	panX.value = pointerStart.panX + event.clientX - pointerStart.x
-	panY.value = pointerStart.panY + event.clientY - pointerStart.y
-}
-
-function endPan() {
-	pointerStart = null
 }
 
 function upOneLevel() {
@@ -582,26 +322,12 @@ function upOneLevel() {
 							: t('proofing_gallery', 'Feedback is shared with reviewers') }}
 					</small>
 				</div>
-				<label v-if="settings.allowGuestUploads" class="upload-action">
-					{{ uploading ? t('proofing_gallery', 'Uploading…') : t('proofing_gallery', 'Send files') }}
-					<input
-						id="proofing-gallery-upload"
-						name="guestFiles"
-						type="file"
-						multiple
-						accept="image/*,video/mp4,video/webm"
-						:disabled="uploading"
-						@change="uploadFiles">
-				</label>
+				<PublicUploadAction
+					v-if="settings.allowGuestUploads"
+					:token="gallery.token"
+					:nonce="nonce"
+					@error="collaborationError = $event" />
 			</div>
-			<ul v-if="Object.keys(uploadProgress).length" class="upload-progress">
-				<li v-for="(progress, filename) in uploadProgress" :key="filename">
-					<span>{{ filename }}</span>
-					<progress :value="progress" max="100">
-						{{ progress }}%
-					</progress>
-				</li>
-			</ul>
 			<p v-if="collaborationError" class="collaboration-error" role="status">
 				{{ collaborationError }}
 			</p>
@@ -715,221 +441,19 @@ function upOneLevel() {
 			<span>{{ t('proofing_gallery', 'Shared securely with Nextcloud') }}</span>
 		</div>
 
-		<div
-			v-if="activeItem"
-			class="lightbox"
-			role="dialog"
-			aria-modal="true"
-			:aria-label="activeItem.name">
-			<header class="lightbox__bar">
-				<span class="lightbox__filename">{{ activeItem.name }}</span>
-				<div class="lightbox__tools">
-					<button
-						v-if="activeItem.mimeType.startsWith('image/')"
-						type="button"
-						:aria-label="t('proofing_gallery', 'Zoom out')"
-						@click="zoom = Math.max(1, zoom - 0.5)">
-						−
-					</button>
-					<button
-						v-if="activeItem.mimeType.startsWith('image/')"
-						type="button"
-						:aria-label="t('proofing_gallery', 'Zoom in')"
-						@click="zoom = Math.min(4, zoom + 0.5)">
-						+
-					</button>
-					<button class="lightbox__slideshow" type="button" @click="setSlideshow(!slideshow)">
-						{{ slideshow ? t('proofing_gallery', 'Pause') : t('proofing_gallery', 'Slideshow') }}
-					</button>
-					<a
-						v-if="settings.allowDownloads"
-						class="lightbox__download"
-						:href="downloadUrl(activeItem)">
-						{{ t('proofing_gallery', 'Download') }}
-					</a>
-					<button
-						v-if="settings.mode === 'collaboration'"
-						class="lightbox__feedback-toggle"
-						type="button"
-						:aria-expanded="feedbackOpen"
-						@click="feedbackOpen = !feedbackOpen">
-						{{ t('proofing_gallery', 'Feedback') }}
-					</button>
-					<button type="button" :aria-label="t('proofing_gallery', 'Close')" @click="closeLightbox">
-						×
-					</button>
-				</div>
-			</header>
-			<button
-				class="lightbox__previous"
-				type="button"
-				:aria-label="t('proofing_gallery', 'Previous')"
-				@click="step(-1)">
-				←
-			</button>
-			<div
-				class="lightbox__stage"
-				@pointerdown="beginPan"
-				@pointermove="movePan"
-				@pointerup="endPan"
-				@pointercancel="endPan"
-				@click="placeAnnotation">
-				<img
-					v-if="activeItem.mimeType.startsWith('image/')"
-					:key="activeItem.id"
-					:src="previewUrl(activeItem, 2400, 1800)"
-					:alt="activeItem.name"
-					:style="{ transform: `translate(${panX}px, ${panY}px) scale(${zoom})` }">
-				<video
-					v-else
-					:key="activeItem.id"
-					:src="streamUrl(activeItem)"
-					controls
-					autoplay
-					playsinline />
-				<template v-if="activeItem.mimeType.startsWith('image/')">
-					<span
-						v-for="comment in activeComments"
-						:key="`annotations-${comment.id}`">
-						<i
-							v-for="(annotation, index) in comment.annotations"
-							:key="index"
-							class="annotation-marker"
-							:style="{
-								left: `${annotation.x / 100}%`,
-								top: `${annotation.y / 100}%`,
-								width: `${annotation.width / 100}%`,
-								height: `${annotation.height / 100}%`,
-							}" />
-					</span>
-					<i
-						v-if="annotationDraft"
-						class="annotation-marker annotation-marker--draft"
-						:style="{
-							left: `${annotationDraft.x / 100}%`,
-							top: `${annotationDraft.y / 100}%`,
-							width: `${annotationDraft.width / 100}%`,
-							height: `${annotationDraft.height / 100}%`,
-						}" />
-				</template>
-			</div>
-			<aside
-				v-if="settings.mode === 'collaboration' && activeItem"
-				class="lightbox__feedback"
-				:class="{ 'lightbox__feedback--open': feedbackOpen }">
-				<div class="lightbox__feedback-header">
-					<strong>{{ t('proofing_gallery', 'Feedback') }}</strong>
-					<button type="button" :aria-label="t('proofing_gallery', 'Close feedback')" @click="feedbackOpen = false">
-						×
-					</button>
-				</div>
-				<template v-if="guest">
-					<div class="feedback-actions">
-						<button type="button" @click="toggleLike(activeItem)">
-							{{ collaboration?.likes[activeItem.id]?.mine ? '♥' : '♡' }}
-							{{ t('proofing_gallery', 'Like') }}
-							{{ collaboration?.likes[activeItem.id]?.count || '' }}
-						</button>
-						<label>
-							<span>{{ t('proofing_gallery', 'Color state') }}</span>
-							<select
-								id="proofing-gallery-color-state"
-								name="colorState"
-								:value="collaboration?.colors[activeItem.id] || ''"
-								@change="setColor(activeItem, ($event.target as HTMLSelectElement).value)">
-								<option value="">{{ t('proofing_gallery', 'No state') }}</option>
-								<option
-									v-for="label in settings.colorLabels"
-									:key="label"
-									:value="label">
-									{{ label }}
-								</option>
-							</select>
-						</label>
-					</div>
-					<form class="comment-form" @submit.prevent="addComment">
-						<button
-							v-if="activeItem.mimeType.startsWith('image/')"
-							type="button"
-							:aria-pressed="marking"
-							@click="toggleMarking">
-							{{ marking
-								? t('proofing_gallery', 'Click the image to place a marker')
-								: t('proofing_gallery', 'Mark image') }}
-						</button>
-						<textarea
-							id="proofing-gallery-comment"
-							v-model="commentBody"
-							name="comment"
-							required
-							maxlength="5000"
-							:placeholder="t('proofing_gallery', 'Write a comment…')"
-							:aria-label="t('proofing_gallery', 'Comment')" />
-						<button type="submit">
-							{{ t('proofing_gallery', 'Comment') }}
-						</button>
-					</form>
-				</template>
-				<p v-else>
-					{{ t('proofing_gallery', 'Join the review to leave feedback.') }}
-				</p>
-				<ul class="comment-list">
-					<li v-for="comment in activeComments" :key="comment.id">
-						<form
-							v-if="editingCommentId === comment.id"
-							class="comment-edit"
-							@submit.prevent="saveEditedComment(comment.id)">
-							<textarea v-model="editingCommentBody" required maxlength="5000" />
-							<button type="submit">
-								{{ t('proofing_gallery', 'Save') }}
-							</button>
-							<button type="button" @click="editingCommentId = null">
-								{{ t('proofing_gallery', 'Cancel') }}
-							</button>
-						</form>
-						<p v-else>
-							{{ comment.body }}
-						</p>
-						<small>
-							{{ comment.author }} · {{ new Date(comment.createdAt * 1000).toLocaleString() }}
-						</small>
-						<div v-if="comment.mine && editingCommentId !== comment.id" class="comment-actions">
-							<button type="button" @click="editComment(comment)">
-								{{ t('proofing_gallery', 'Edit') }}
-							</button>
-							<button type="button" @click="deleteComment(comment.id)">
-								{{ t('proofing_gallery', 'Delete') }}
-							</button>
-						</div>
-					</li>
-				</ul>
-				<section v-if="collaboration?.selections.length" class="saved-selections">
-					<h2>{{ t('proofing_gallery', 'Saved selections') }}</h2>
-					<article v-for="selection in collaboration.selections" :key="selection.id">
-						<strong>{{ selection.name }}</strong>
-						<small>
-							{{ selection.author }} ·
-							{{ n('proofing_gallery', '%n image', '%n images', selection.fileIds.length) }}
-						</small>
-						<p v-if="selection.message">
-							{{ selection.message }}
-						</p>
-						<div>
-							<a :href="selectionExportUrl(selection.id, 'csv')">CSV</a>
-							<a :href="selectionExportUrl(selection.id, 'plain')">{{ t('proofing_gallery', 'List') }}</a>
-							<a :href="selectionExportUrl(selection.id, 'search')">{{ t('proofing_gallery', 'Search') }}</a>
-						</div>
-					</article>
-				</section>
-			</aside>
-			<button
-				class="lightbox__next"
-				type="button"
-				:aria-label="t('proofing_gallery', 'Next')"
-				@click="step(1)">
-				→
-			</button>
-		</div>
+		<PublicLightbox
+			v-if="activeIndex !== null"
+			:media-items="mediaItems"
+			:initial-index="activeIndex"
+			:settings="settings"
+			:collaboration="collaboration"
+			:guest="guest"
+			:mutate="mutateCollaboration"
+			:preview-url="previewUrl"
+			:stream-url="streamUrl"
+			:download-url="downloadUrl"
+			:selection-export-url="selectionExportUrl"
+			@close="activeIndex = null" />
 	</main>
 </template>
 
@@ -943,10 +467,6 @@ function upOneLevel() {
 
 :global(body.proofing-gallery-public-page > footer.guest-box) {
 	display: none;
-}
-
-:global(body:has(.public-gallery .lightbox) #content.app-proofing_gallery) {
-	z-index: 3000;
 }
 
 .public-gallery {
@@ -1098,44 +618,6 @@ function upOneLevel() {
 
 .guest-identity > div {
 	display: grid;
-}
-
-.upload-action {
-	padding: 9px 14px;
-	border: 1px solid #555;
-	border-radius: 4px;
-	background: #222;
-	color: #fff;
-	cursor: pointer;
-}
-
-.upload-action input {
-	position: absolute;
-	width: 1px;
-	height: 1px;
-	clip-path: inset(50%);
-}
-
-.upload-progress {
-	display: grid;
-	gap: 8px;
-	margin: -12px 4px 24px;
-	padding: 12px;
-	background: #191919;
-	list-style: none;
-}
-
-.upload-progress li {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(120px, 30%);
-	align-items: center;
-	gap: 12px;
-	font-size: 12px;
-}
-
-.upload-progress progress {
-	width: 100%;
-	accent-color: var(--gallery-accent);
 }
 
 .collaboration-error {
@@ -1337,246 +819,6 @@ function upOneLevel() {
 	font-size: 12px;
 }
 
-.lightbox {
-	position: fixed;
-	z-index: 2000;
-	inset: 0;
-	display: grid;
-	grid-template: 60px 1fr / 64px 1fr 64px;
-	background: rgb(8 8 8 / 97%);
-	color: #fff;
-}
-
-.lightbox__bar {
-	z-index: 1;
-	grid-column: 1 / -1;
-	display: flex;
-	min-width: 0;
-	align-items: center;
-	justify-content: space-between;
-	padding: 0 18px;
-	border-bottom: 1px solid #292929;
-}
-
-.lightbox__filename {
-	overflow: hidden;
-	min-width: 0;
-	margin-inline-end: 12px;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.lightbox__tools {
-	display: flex;
-	min-width: 0;
-	flex: 0 0 auto;
-	gap: 6px;
-}
-
-.lightbox__feedback-toggle,
-.lightbox__feedback-header {
-	display: none;
-}
-
-.lightbox button,
-.lightbox__download {
-	display: inline-grid;
-	min-width: 40px;
-	min-height: 40px;
-	align-items: center;
-	padding: 0 12px;
-	border: 1px solid #444;
-	border-radius: 4px;
-	background: #161616;
-	color: #fff;
-	cursor: pointer;
-	text-decoration: none;
-}
-
-.lightbox__previous,
-.lightbox__next {
-	align-self: center;
-	margin: 8px;
-}
-
-.lightbox__stage {
-	position: relative;
-	overflow: hidden;
-	display: grid;
-	align-items: center;
-	justify-items: center;
-	touch-action: none;
-}
-
-.annotation-marker {
-	position: absolute;
-	z-index: 2;
-	min-width: 22px;
-	min-height: 22px;
-	border: 2px solid #fff;
-	border-radius: 50%;
-	box-shadow: 0 0 0 2px rgb(0 0 0 / 55%);
-	pointer-events: none;
-	transform: translate(-50%, -50%);
-}
-
-.annotation-marker--draft {
-	border-color: var(--gallery-accent);
-}
-
-.lightbox:has(.lightbox__feedback) .lightbox__stage {
-	padding-inline-end: 340px;
-}
-
-.lightbox__stage img,
-.lightbox__stage video {
-	width: 100%;
-	height: 100%;
-	max-height: calc(100vh - 60px);
-	object-fit: contain;
-	transition: transform 120ms ease;
-	user-select: none;
-}
-
-.lightbox__feedback {
-	position: absolute;
-	inset: 60px 0 0 auto;
-	overflow-y: auto;
-	width: 340px;
-	padding: 18px;
-	border-inline-start: 1px solid #292929;
-	background: #111;
-}
-
-.lightbox__feedback-header {
-	align-items: center;
-	justify-content: space-between;
-	padding: 0 16px 10px;
-	border-bottom: 1px solid #292929;
-}
-
-.lightbox__feedback-header button {
-	border: 0;
-	background: transparent;
-}
-
-.feedback-actions {
-	display: grid;
-	gap: 12px;
-}
-
-.feedback-actions label {
-	display: grid;
-	gap: 5px;
-	color: #aaa;
-	font-size: 12px;
-}
-
-.feedback-actions select,
-.comment-form textarea {
-	width: 100%;
-	padding: 8px;
-	border: 1px solid #444;
-	border-radius: 4px;
-	background: #191919;
-	color: #fff;
-}
-
-.comment-form {
-	display: grid;
-	gap: 8px;
-	margin-top: 20px;
-}
-
-.comment-form textarea {
-	min-height: 90px;
-	resize: vertical;
-}
-
-.comment-list {
-	padding: 0;
-	list-style: none;
-}
-
-.comment-list li {
-	padding: 12px 0;
-	border-bottom: 1px solid #292929;
-}
-
-.comment-list p {
-	margin: 0 0 6px;
-	white-space: pre-wrap;
-}
-
-.comment-list small {
-	color: #888;
-}
-
-.comment-actions {
-	display: flex;
-	gap: 6px;
-	margin-top: 8px;
-}
-
-.comment-actions button {
-	min-height: 30px;
-	padding: 0 8px;
-	color: #aaa;
-	font-size: 11px;
-}
-
-.comment-edit {
-	display: grid;
-	grid-template-columns: 1fr auto auto;
-	gap: 6px;
-}
-
-.comment-edit textarea {
-	grid-column: 1 / -1;
-	min-height: 80px;
-	padding: 8px;
-	border: 1px solid #444;
-	background: #191919;
-	color: #fff;
-	resize: vertical;
-}
-
-.saved-selections {
-	margin-top: 26px;
-	border-top: 1px solid #292929;
-}
-
-.saved-selections h2 {
-	margin: 18px 0 8px;
-	font-size: 15px;
-}
-
-.saved-selections article {
-	display: grid;
-	gap: 5px;
-	padding: 12px 0;
-	border-bottom: 1px solid #292929;
-}
-
-.saved-selections small {
-	color: #888;
-}
-
-.saved-selections p {
-	margin: 2px 0;
-	white-space: pre-wrap;
-}
-
-.saved-selections article div {
-	display: flex;
-	gap: 12px;
-}
-
-.saved-selections a {
-	color: var(--gallery-accent-readable);
-	font-size: 12px;
-}
-
 @media (max-width: 640px) {
 	.public-gallery__hero {
 		min-height: 144px;
@@ -1621,75 +863,6 @@ function upOneLevel() {
 		flex-direction: column;
 	}
 
-	.lightbox {
-		grid-template: 60px 1fr 52px / 1fr 1fr;
-	}
-
-	.lightbox__bar {
-		padding: 0 8px 0 12px;
-	}
-
-	.lightbox__filename {
-		display: none;
-	}
-
-	.lightbox__tools {
-		gap: 4px;
-	}
-
-	.lightbox__tools button,
-	.lightbox__download {
-		min-width: 38px;
-		padding: 0 9px;
-	}
-
-	.lightbox .lightbox__slideshow,
-	.lightbox .lightbox__download {
-		display: none;
-	}
-
-	.lightbox__feedback-toggle {
-		display: inline-grid;
-	}
-
-	.lightbox__stage {
-		grid-column: 1 / -1;
-		grid-row: 2;
-	}
-
-	.lightbox:has(.lightbox__feedback) .lightbox__stage {
-		padding: 0;
-	}
-
-	.lightbox__feedback {
-		z-index: 4;
-		inset: auto 0 52px;
-		display: none;
-		width: auto;
-		height: min(64vh, 520px);
-		padding: 10px 0 18px;
-		border-top: 1px solid #292929;
-		border-inline-start: 0;
-		box-shadow: 0 -4px 8px rgb(0 0 0 / 35%);
-	}
-
-	.lightbox__feedback--open {
-		display: block;
-	}
-
-	.lightbox__feedback-header {
-		display: flex;
-	}
-
-	.lightbox__feedback > :not(.lightbox__feedback-header) {
-		margin-inline: 16px;
-	}
-
-	.lightbox__previous,
-	.lightbox__next {
-		grid-row: 3;
-		margin: 4px;
-	}
 }
 
 @media (prefers-reduced-motion: reduce) {

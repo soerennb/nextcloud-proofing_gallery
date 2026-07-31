@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: build appstore verify-package watch install lint test test-compat dev-up dev-down dev-logs dev-install dev-reset occ
+.PHONY: build appstore verify-package test-upgrade watch install lint test test-compat dev-up dev-down dev-logs dev-install dev-reset occ
 
 install:
 	npm ci
@@ -14,6 +14,9 @@ appstore:
 
 verify-package:
 	./scripts/verify-appstore-package.sh
+
+test-upgrade:
+	./scripts/test-upgrade.sh
 
 watch:
 	npm run watch

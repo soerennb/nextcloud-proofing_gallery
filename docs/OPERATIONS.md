@@ -7,7 +7,8 @@
   watermarked previews and contact sheets
 - SQLite, MariaDB/MySQL, or PostgreSQL
 - a working Nextcloud background-job runner
-- configured Nextcloud mail transport for invitations and upload notices
+- configured Nextcloud mail transport for invitations and subscribed event
+  notifications
 
 ## Install and upgrade
 
@@ -30,6 +31,16 @@ Run cron at least every five minutes. Monitor Nextcloud's log for
 mail transport errors. Capacity planning should include originals in Files,
 temporary resumable chunks, and appdata preview derivatives.
 
+Event email is opt-in and queued. Only a gallery owner or an individual
+Nextcloud user already assigned as a gallery manager can be subscribed; groups
+and arbitrary addresses are rejected. Immediate messages are dispatched by the
+five-minute job. Daily events from the same UTC day share a delivery boundary
+and are coalesced per recipient/gallery. Queue records use a subscription/event
+unique key, and claimed records are not sent again after success. Failed claims
+return to the queue after a bounded delay; claims abandoned for 15 minutes are
+recovered. Each mail contains a random scoped link that disables only its own
+recipient/gallery subscription.
+
 Upload chunks are capped at 5 MiB each. Administrators can configure the
 per-file upload limit, selection-delivery limits, and retention periods in
 Administration settings → Additional settings → Proofing Gallery. The same
@@ -43,10 +54,24 @@ policies still apply to gallery source folders.
 Collection galleries create empty native share anchors below each owner's
 `.proofing-gallery/collections` directory. The application database contains the
 ordered source references; anchors must stay empty and are not media storage.
-The lifecycle job removes orphaned collection rows and memberships. If a
-collection creation is interrupted before its gallery row is persisted, an
-empty orphan anchor may remain and can be removed after confirming that no
-gallery references its node ID. Never place user files in these directories.
+The lifecycle job removes orphaned collection rows and memberships. It also
+reconciles at most 100 collection anchors per daily run. Only folders whose
+names are exactly 32 lowercase hexadecimal characters, which are empty, at
+least 24 hours old, and not referenced by a collection gallery are deleted.
+Referenced, recent, non-empty, or irregularly named folders are never removed.
+Never place user files in these directories.
+
+Administrators can inspect the same bounded scan without changing files. The
+endpoint defaults to dry-run; pass `dryRun=false` only after reviewing the
+candidate count:
+
+```bash
+curl -u admin -H 'OCS-APIRequest: true' -X POST \
+  'https://cloud.example/ocs/v2.php/apps/proofing_gallery/api/v1/admin/collection-anchors/reconcile?format=json&dryRun=true'
+```
+
+The response and the Administration settings cleanup summary report scanned
+anchors, candidates, and deletions without exposing user IDs or paths.
 
 ## Recovery and removal
 

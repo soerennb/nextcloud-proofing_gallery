@@ -19,6 +19,7 @@ final class GallerySettingsTest extends TestCase {
 		self::assertSame(50, $settings['appearance']['heroFocusX']);
 		self::assertSame('system', $settings['appearance']['fontPreset']);
 		self::assertSame('compact', $settings['appearance']['openerStyle']);
+		self::assertSame('auto', $settings['publicLocale']);
 	}
 
 	public function testRejectsUnknownKeys(): void {
@@ -67,5 +68,10 @@ final class GallerySettingsTest extends TestCase {
 	public function testRejectsUnknownOpenerStyle(): void {
 		$this->expectException(InvalidArgumentException::class);
 		GallerySettings::fromArray(['appearance' => ['openerStyle' => 'fullscreen']]);
+	}
+
+	public function testRejectsUnknownPublicLocale(): void {
+		$this->expectException(InvalidArgumentException::class);
+		GallerySettings::fromArray(['publicLocale' => 'fr']);
 	}
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Db;
 
+use OCA\ProofingGallery\Service\CollectionAnchorReferences;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Db\MultipleObjectsReturnedException;
 use OCP\AppFramework\Db\QBMapper;
@@ -11,7 +12,7 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
 /** @extends QBMapper<Gallery> */
-final class GalleryMapper extends QBMapper {
+final class GalleryMapper extends QBMapper implements CollectionAnchorReferences {
 	public function __construct(IDBConnection $db) {
 		parent::__construct($db, 'proofing_galleries', Gallery::class);
 	}
@@ -66,6 +67,16 @@ final class GalleryMapper extends QBMapper {
 			->from($this->tableName)
 			->where($qb->expr()->eq('owner_uid', $qb->createNamedParameter($ownerUid)))
 			->andWhere($qb->expr()->eq('slug', $qb->createNamedParameter($slug)));
+
+		return (int)$qb->executeQuery()->fetchOne() > 0;
+	}
+
+	public function isReferenced(int $folderId): bool {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select($qb->func()->count())
+			->from($this->tableName)
+			->where($qb->expr()->eq('folder_id', $qb->createNamedParameter($folderId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('source_type', $qb->createNamedParameter('collection')));
 
 		return (int)$qb->executeQuery()->fetchOne() > 0;
 	}

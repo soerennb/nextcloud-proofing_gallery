@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Service\HealthService;
 use OCA\ProofingGallery\Service\PolicyService;
+use OCA\ProofingGallery\Service\CollectionAnchorReconciler;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\ApiRoute;
@@ -19,6 +20,7 @@ final class AdminController extends Controller {
 		IRequest $request,
 		private PolicyService $policies,
 		private HealthService $health,
+		private CollectionAnchorReconciler $collectionAnchors,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -50,5 +52,10 @@ final class AdminController extends Controller {
 		} catch (InvalidArgumentException $exception) {
 			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
+	}
+
+	#[ApiRoute(verb: 'POST', url: '/api/v1/admin/collection-anchors/reconcile')]
+	public function reconcileCollectionAnchors(bool $dryRun = true): DataResponse {
+		return new DataResponse($this->collectionAnchors->reconcile($dryRun));
 	}
 }

@@ -35,7 +35,7 @@ async function notify(kind: 'error' | 'success', message: string) {
 async function load() {
 	loading.value = true
 	try {
-		galleries.value = (await fetchGalleries(archived.value, search.value)).items
+		galleries.value = (await fetchGalleries({ archived: archived.value, search: search.value })).items
 		const match = window.location.hash.match(/^#gallery\/(\d+)/)
 		if (match && !selectedGallery.value) {
 			selectedGallery.value = galleries.value.find(gallery => gallery.id === Number(match[1])) ?? null

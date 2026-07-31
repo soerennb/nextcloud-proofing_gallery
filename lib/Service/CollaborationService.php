@@ -20,6 +20,7 @@ final class CollaborationService {
 		private ITimeFactory $clock,
 		private FolderService $folders,
 		private CollectionService $collections,
+		private NotificationService $notifications,
 	) {
 	}
 
@@ -455,6 +456,7 @@ final class CollaborationService {
 
 	/** @param array<string, mixed> $payload */
 	private function event(Gallery $gallery, Guest $guest, string $type, array $payload): void {
+		$now = $this->clock->getTime();
 		$qb = $this->db->getQueryBuilder();
 		$qb->insert('proofing_events')->values([
 			'gallery_id' => $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT),
@@ -462,8 +464,9 @@ final class CollaborationService {
 			'actor_uid' => $qb->createNamedParameter(null),
 			'event_type' => $qb->createNamedParameter($type),
 			'payload' => $qb->createNamedParameter(json_encode($payload, JSON_THROW_ON_ERROR)),
-			'created_at' => $qb->createNamedParameter($this->clock->getTime(), IQueryBuilder::PARAM_INT),
+			'created_at' => $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT),
 		])->executeStatement();
+		$this->notifications->queue($gallery, (int)$this->db->lastInsertId('proofing_events'), $type, $now);
 	}
 
 	private function uuid(): string {

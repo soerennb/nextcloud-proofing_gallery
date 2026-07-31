@@ -18,8 +18,10 @@ guest feedback, selections, secure downloads, and an upload inbox.
   CSV/plain-text exports
 - individual downloads, selected ZIP files, and printable contact sheets
 - resumable guest uploads to a hidden moderation inbox
-- user/group gallery managers, activity filters, and email notifications
-- German and English interfaces
+- user/group gallery managers, activity filters, and opt-in event digests for
+  owners and individual managers
+- reusable gallery and invitation templates plus explicit German/English
+  public-gallery and mail delivery
 - ordered, copy-free collections spanning the owner's folder galleries, with
   unavailable-source diagnostics and conflict-safe editing
 

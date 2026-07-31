@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use OCA\ProofingGallery\Db\Gallery;
 use OCP\IURLGenerator;
 use OCP\IUserManager;
+use OCP\L10N\IFactory;
 use OCP\Mail\IMailer;
 
 final class InvitationService {
@@ -15,6 +16,7 @@ final class InvitationService {
 		private IMailer $mailer,
 		private IURLGenerator $urlGenerator,
 		private IUserManager $users,
+		private IFactory $l10nFactory,
 	) {
 	}
 
@@ -34,15 +36,20 @@ final class InvitationService {
 			'token' => $gallery->getShareToken(),
 		]);
 		$ownerName = $this->users->getDisplayName($gallery->getOwnerUid()) ?? $gallery->getOwnerUid();
+		$settings = \OCA\ProofingGallery\Dto\GallerySettings::fromArray(
+			json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR),
+		);
+		$language = $settings->publicLocale === 'auto' ? null : $settings->publicLocale;
+		$l10n = $this->l10nFactory->get('proofing_gallery', $language);
 		$template = $this->mailer->createEMailTemplate('proofing_gallery.invitation', [
 			'galleryId' => $gallery->getId(),
 		]);
-		$template->setSubject($ownerName . ' shared “' . $gallery->getTitle() . '” with you');
+		$template->setSubject($l10n->t('%s shared “%s” with you', [$ownerName, $gallery->getTitle()]));
 		$template->addHeader();
 		$template->addHeading($gallery->getTitle());
-		$template->addBodyText($message !== '' ? $message : $ownerName . ' prepared a private gallery for you.');
-		$template->addBodyButton('Open gallery', $url);
-		$template->addFooter('This invitation was sent from a self-hosted Nextcloud instance.');
+		$template->addBodyText($message !== '' ? $message : $l10n->t('%s prepared a private gallery for you.', [$ownerName]));
+		$template->addBodyButton($l10n->t('Open gallery'), $url);
+		$template->addFooter($l10n->t('This invitation was sent from a self-hosted Nextcloud instance.'));
 
 		$mail = $this->mailer->createMessage();
 		$mail->setTo([$recipient])

@@ -18,11 +18,15 @@ final readonly class GallerySettings implements JsonSerializable {
 		public bool $allowGuestUploads,
 		public bool $showFilenames,
 		public array $colorLabels,
+		public string $publicLocale,
 		/** @var array{accentColor: string, welcomeMessage: string, logoFileId: ?int, heroFileId: ?int, openerStyle: string, heroFocusX: int, heroFocusY: int, fontPreset: string, watermarkText: string, watermarkOpacity: int} */
 		public array $appearance,
 	) {
 		if (count($colorLabels) !== 4) {
 			throw new InvalidArgumentException('Exactly four color labels are required');
+		}
+		if (!in_array($publicLocale, ['auto', 'en', 'de'], true)) {
+			throw new InvalidArgumentException('Public locale must be auto, en or de');
 		}
 		foreach ($colorLabels as $label) {
 			if ($label === '' || mb_strlen($label) > 40) {
@@ -52,6 +56,7 @@ final readonly class GallerySettings implements JsonSerializable {
 			false,
 			true,
 			['Favorit', 'Auswahl', 'Überarbeiten', 'Ablehnen'],
+			'auto',
 			[
 				'accentColor' => '#1f6f8b',
 				'welcomeMessage' => '',
@@ -76,6 +81,7 @@ final readonly class GallerySettings implements JsonSerializable {
 			'allowGuestUploads',
 			'showFilenames',
 			'colorLabels',
+			'publicLocale',
 			'appearance',
 		];
 		$unknown = array_diff(array_keys($input), $allowed);
@@ -92,6 +98,9 @@ final readonly class GallerySettings implements JsonSerializable {
 		}
 		if (!is_array($settings['colorLabels']) || !array_is_list($settings['colorLabels'])) {
 			throw new InvalidArgumentException('colorLabels must be a list');
+		}
+		if (!is_string($settings['publicLocale'])) {
+			throw new InvalidArgumentException('publicLocale must be a string');
 		}
 		foreach ($settings['colorLabels'] as $label) {
 			if (!is_string($label)) {
@@ -143,6 +152,7 @@ final readonly class GallerySettings implements JsonSerializable {
 			$settings['allowGuestUploads'],
 			$settings['showFilenames'],
 			$settings['colorLabels'],
+			$settings['publicLocale'],
 			$appearance,
 		);
 	}
@@ -156,6 +166,7 @@ final readonly class GallerySettings implements JsonSerializable {
 			'allowGuestUploads' => $this->allowGuestUploads,
 			'showFilenames' => $this->showFilenames,
 			'colorLabels' => $this->colorLabels,
+			'publicLocale' => $this->publicLocale,
 			'appearance' => $this->appearance,
 		];
 	}

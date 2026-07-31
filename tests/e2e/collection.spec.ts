@@ -42,11 +42,19 @@ test('collection membership protects originals and rejects stale revisions', asy
 		expect(secondFolderId).toBeGreaterThan(0)
 		expect(secondFileId).toBeGreaterThan(0)
 
+		const secondSourceTitle = `Second source ${Date.now()}`
 		const secondSource = await request.post(`${galleries}?format=json`, {
 			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
-			data: { title: `Second source ${Date.now()}`, sourceType: 'folder', folderId: secondFolderId },
+			data: { title: secondSourceTitle, sourceType: 'folder', folderId: secondFolderId },
 		}).then(response => response.json()) as { id: number }
 		secondGalleryId = secondSource.id
+		const filteredSources = await request.get(
+			`${galleries}?format=json&limit=50&sourceType=folder&ownedOnly=true&search=${encodeURIComponent(secondSourceTitle)}`,
+			{ headers: apiHeaders },
+		).then(response => response.json()) as { items: Array<{ id: number; sourceType: string }>; total: number }
+		expect(filteredSources.total).toBe(1)
+		expect(filteredSources.items).toEqual([expect.objectContaining({ id: secondGalleryId, sourceType: 'folder' })])
+		expect((await request.get(`${galleries}?format=json&sourceType=invalid`, { headers: apiHeaders })).status()).toBe(422)
 
 		const createdResponse = await request.post(`${galleries}?format=json`, {
 			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
@@ -76,6 +84,12 @@ test('collection membership protects originals and rejects stale revisions', asy
 		}).then(response => response.json()) as { items: Array<{ id: number; name: string }> }
 		const proof = sourcePage.items.find(item => item.name === 'proof.png')
 		expect(proof).toBeTruthy()
+		const searchedPage = await request.get(
+			`${galleries}/${source.galleryId}/media?format=json&limit=100&search=PROOF`,
+			{ headers: apiHeaders },
+		).then(response => response.json()) as { items: Array<{ id: number }>; total: number; limit: number }
+		expect(searchedPage).toMatchObject({ total: 1, limit: 100 })
+		expect(searchedPage.items[0]?.id).toBe(proof!.id)
 
 		const arbitrary = await request.put(`${galleries}/${collectionId}/collection?format=json`, {
 			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
@@ -160,10 +174,20 @@ test('owner creates and fills a collection through the content workspace', async
 		await page.getByRole('button', { name: new RegExp(title) }).click()
 		await page.getByRole('button', { name: 'Content', exact: true }).click()
 
+		const sourceSearch = page.getByRole('searchbox', { name: 'Search source galleries' })
+		await sourceSearch.fill('E2E Gallery')
 		const source = page.getByRole('combobox', { name: 'Source gallery' })
+		await expect(source.locator('option')).toHaveCount(1)
 		await source.selectOption({ label: 'E2E Gallery' })
-		await expect(page.getByRole('checkbox', { name: 'proof.png' })).toBeEnabled()
-		await page.getByRole('checkbox', { name: 'proof.png' }).check()
+		const mediaSearch = page.getByRole('searchbox', { name: 'Search this folder' })
+		await mediaSearch.fill('proof')
+		const proofCheckbox = page.getByRole('checkbox', { name: 'proof.png' })
+		await expect(proofCheckbox).toBeEnabled()
+		await proofCheckbox.check()
+		await mediaSearch.fill('does-not-exist')
+		await expect(page.getByText('No files or folders match your search.')).toBeVisible()
+		await mediaSearch.fill('')
+		await expect(proofCheckbox).toBeChecked()
 		await page.getByRole('button', { name: 'Add selected files' }).click()
 		await expect(page.getByRole('region', { name: 'Selected files' }).getByText('proof.png')).toBeVisible()
 		await page.getByRole('button', { name: 'Save collection' }).click()

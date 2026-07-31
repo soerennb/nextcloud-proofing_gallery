@@ -7,11 +7,12 @@ import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
-import { fetchCollection, fetchGalleryMedia, ownerPreviewUrl, updateGallery, updateGallerySource } from '../services/galleryApi.ts'
-import type { Gallery, MediaItem } from '../types.ts'
+import { applyPreset, createPreset, deletePreset, fetchCollection, fetchGalleryMedia, fetchPresets, ownerPreviewUrl, updateGallery, updateGallerySource, updatePreset } from '../services/galleryApi.ts'
+import type { Gallery, GalleryPreset, MediaItem } from '../types.ts'
 import GalleryActivity from './GalleryActivity.vue'
 import CollectionContent from './CollectionContent.vue'
 import ManagerPanel from './ManagerPanel.vue'
+import NotificationPanel from './NotificationPanel.vue'
 import SharingModal from './SharingModal.vue'
 
 type SettingsTab = 'overview' | 'content' | 'design' | 'access' | 'feedback' | 'activity'
@@ -40,10 +41,16 @@ const activeTab = ref<SettingsTab>(tabFromHash())
 const saving = ref(false)
 const rebinding = ref(false)
 const showSharing = ref(false)
+const notificationPanel = ref<InstanceType<typeof NotificationPanel> | null>(null)
 const media = ref<MediaItem[]>([])
 const mediaTotal = ref(0)
 const mediaLoading = ref(true)
 const baseline = ref('')
+const presets = ref<GalleryPreset[]>([])
+const presetsLoading = ref(false)
+const presetSaving = ref(false)
+const selectedPresetId = ref<number | null>(null)
+const presetName = ref('')
 const draft = reactive({
 	title: props.gallery.title,
 	settings: structuredClone(props.gallery.settings),
@@ -190,9 +197,90 @@ async function save() {
 	}
 }
 
+async function loadPresets() {
+	if (props.gallery.permissions.role !== 'owner') return
+	presetsLoading.value = true
+	try {
+		presets.value = await fetchPresets()
+	} catch {
+		showError(t('proofing_gallery', 'Presets could not be loaded.'))
+	} finally {
+		presetsLoading.value = false
+	}
+}
+
+function selectPreset() {
+	presetName.value = presets.value.find(preset => preset.id === selectedPresetId.value)?.name ?? ''
+}
+
+async function applySelectedPreset() {
+	if (selectedPresetId.value === null) return
+	if (dirty.value && !window.confirm(t('proofing_gallery', 'Apply the preset and discard unsaved changes?'))) return
+	presetSaving.value = true
+	try {
+		const gallery = await applyPreset(selectedPresetId.value, props.gallery.id)
+		resetDraft(gallery)
+		emit('updated', gallery)
+		showSuccess(t('proofing_gallery', 'Preset applied.'))
+	} catch {
+		showError(t('proofing_gallery', 'The preset could not be applied.'))
+	} finally {
+		presetSaving.value = false
+	}
+}
+
+async function saveNewPreset() {
+	if (!presetName.value.trim()) return
+	presetSaving.value = true
+	try {
+		const preset = await createPreset(presetName.value.trim(), structuredClone(draft.settings))
+		presets.value = [...presets.value, preset].sort((left, right) => left.name.localeCompare(right.name))
+		selectedPresetId.value = preset.id
+		showSuccess(t('proofing_gallery', 'Preset created.'))
+	} catch {
+		showError(t('proofing_gallery', 'The preset could not be created. Check that its name is unique.'))
+	} finally {
+		presetSaving.value = false
+	}
+}
+
+async function updateSelectedPreset() {
+	if (selectedPresetId.value === null || !presetName.value.trim()) return
+	presetSaving.value = true
+	try {
+		const preset = await updatePreset(selectedPresetId.value, {
+			name: presetName.value.trim(),
+			settings: structuredClone(draft.settings),
+		})
+		presets.value = presets.value.map(item => item.id === preset.id ? preset : item)
+		showSuccess(t('proofing_gallery', 'Preset updated from the current settings.'))
+	} catch {
+		showError(t('proofing_gallery', 'The preset could not be updated.'))
+	} finally {
+		presetSaving.value = false
+	}
+}
+
+async function removeSelectedPreset() {
+	if (selectedPresetId.value === null || !window.confirm(t('proofing_gallery', 'Delete this preset? Existing galleries will not change.'))) return
+	presetSaving.value = true
+	try {
+		await deletePreset(selectedPresetId.value)
+		presets.value = presets.value.filter(preset => preset.id !== selectedPresetId.value)
+		selectedPresetId.value = null
+		presetName.value = ''
+		showSuccess(t('proofing_gallery', 'Preset deleted.'))
+	} catch {
+		showError(t('proofing_gallery', 'The preset could not be deleted.'))
+	} finally {
+		presetSaving.value = false
+	}
+}
+
 onMounted(() => {
 	resetDraft()
 	loadMedia()
+	loadPresets()
 	window.addEventListener('beforeunload', beforeUnload)
 })
 onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
@@ -231,7 +319,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 			</button>
 		</nav>
 
-		<main class="settings-content">
+		<div class="settings-content">
 			<section v-if="activeTab === 'overview'" class="settings-section">
 				<div class="section-heading">
 					<h2>{{ t('proofing_gallery', 'Gallery details') }}</h2>
@@ -266,6 +354,54 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 						</span>
 					</label>
 				</fieldset>
+				<label v-if="gallery.permissions.canEdit" class="select-field">
+					<span>{{ t('proofing_gallery', 'Public gallery language') }}</span>
+					<select v-model="draft.settings.publicLocale" name="publicLocale">
+						<option value="auto">{{ t('proofing_gallery', 'Automatic') }}</option>
+						<option value="en">English</option>
+						<option value="de">Deutsch</option>
+					</select>
+				</label>
+				<section v-if="gallery.permissions.role === 'owner'" class="preset-panel" aria-labelledby="preset-title">
+					<div>
+						<h3 id="preset-title">
+							{{ t('proofing_gallery', 'Reusable preset') }}
+						</h3>
+						<p>{{ t('proofing_gallery', 'Apply saved design, access and feedback defaults without changing this gallery’s link or source.') }}</p>
+					</div>
+					<label>
+						<span>{{ t('proofing_gallery', 'Saved preset') }}</span>
+						<select v-model="selectedPresetId"
+							name="savedPreset"
+							:disabled="presetsLoading || presetSaving"
+							@change="selectPreset">
+							<option :value="null">{{ presetsLoading ? t('proofing_gallery', 'Loading…') : t('proofing_gallery', 'Choose a preset') }}</option>
+							<option v-for="preset in presets" :key="preset.id" :value="preset.id">{{ preset.name }}</option>
+						</select>
+					</label>
+					<NcTextField
+						id="proofing-gallery-preset-name"
+						v-model="presetName"
+						name="presetName"
+						:label="t('proofing_gallery', 'Preset name')" />
+					<div class="preset-actions">
+						<NcButton :disabled="presetSaving || !presetName.trim()" @click="saveNewPreset">
+							{{ t('proofing_gallery', 'Save as new') }}
+						</NcButton>
+						<NcButton :disabled="presetSaving || selectedPresetId === null" @click="applySelectedPreset">
+							{{ t('proofing_gallery', 'Apply') }}
+						</NcButton>
+						<NcButton variant="tertiary" :disabled="presetSaving || selectedPresetId === null || !presetName.trim()" @click="updateSelectedPreset">
+							{{ t('proofing_gallery', 'Update preset') }}
+						</NcButton>
+						<NcButton variant="tertiary" :disabled="presetSaving || selectedPresetId === null" @click="removeSelectedPreset">
+							{{ t('proofing_gallery', 'Delete preset') }}
+						</NcButton>
+					</div>
+					<p v-if="!presetsLoading && presets.length === 0" class="preset-empty">
+						{{ t('proofing_gallery', 'No presets yet. Enter a name to save the current settings.') }}
+					</p>
+				</section>
 				<dl class="gallery-facts">
 					<div v-if="gallery.source.type === 'folder'">
 						<dt>{{ t('proofing_gallery', 'Source folder') }}</dt>
@@ -445,7 +581,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 				<NcButton variant="primary" @click="showSharing = true">
 					{{ gallery.shareToken ? t('proofing_gallery', 'Manage public link') : t('proofing_gallery', 'Publish gallery') }}
 				</NcButton>
-				<ManagerPanel :gallery-id="gallery.id" />
+				<ManagerPanel :gallery-id="gallery.id" @changed="notificationPanel?.load()" />
+				<NotificationPanel v-if="gallery.permissions.role === 'owner'" ref="notificationPanel" :gallery="gallery" />
 			</section>
 
 			<section v-else-if="activeTab === 'feedback'" class="settings-section">
@@ -477,7 +614,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 			<section v-else class="settings-section">
 				<GalleryActivity :gallery-id="gallery.id" mode="activity" />
 			</section>
-		</main>
+		</div>
 
 		<div v-if="dirty && gallery.permissions.canEdit" class="save-bar" role="status">
 			<span>{{ t('proofing_gallery', 'Unsaved changes') }}</span>
@@ -570,6 +707,45 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 .section-heading h2,
 .section-heading p {
 	margin: 0;
+}
+
+.preset-panel {
+	display: grid;
+	gap: 12px;
+	padding: 16px;
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+}
+
+.preset-panel h3,
+.preset-panel p {
+	margin: 0;
+}
+
+.preset-panel > div:first-child p,
+.preset-empty {
+	margin-top: 4px;
+	color: var(--color-text-maxcontrast);
+}
+
+.preset-panel label {
+	display: grid;
+	gap: 5px;
+}
+
+.preset-panel select {
+	min-height: 40px;
+	padding: 0 10px;
+	border: 1px solid var(--color-border-maxcontrast);
+	border-radius: 6px;
+	background: var(--color-main-background);
+	color: var(--color-main-text);
+}
+
+.preset-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
 }
 
 .section-heading h2 {

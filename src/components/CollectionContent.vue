@@ -16,18 +16,31 @@ import type { CollectionDocument, CollectionItem, Gallery, MediaItem } from '../
 
 const props = defineProps<{ gallery: Gallery }>()
 const emit = defineEmits<{ changed: [] }>()
+const SOURCE_PAGE_SIZE = 50
+const MEDIA_PAGE_SIZE = 100
 
 const document = ref<CollectionDocument | null>(null)
 const items = ref<CollectionItem[]>([])
 const sources = ref<Gallery[]>([])
+const sourceTotal = ref(0)
+const sourceSearch = ref('')
 const sourceId = ref<number | null>(null)
 const sourcePath = ref('')
 const sourceMedia = ref<MediaItem[]>([])
-const selectedIds = ref<number[]>([])
+const mediaTotal = ref(0)
+const mediaSearch = ref('')
+const selectedMedia = ref<MediaItem[]>([])
 const loading = ref(true)
+const sourcesLoading = ref(false)
+const sourcesLoadingMore = ref(false)
 const sourceLoading = ref(false)
+const sourceLoadingMore = ref(false)
 const saving = ref(false)
 const draggedIndex = ref<number | null>(null)
+let sourceSearchTimer: ReturnType<typeof setTimeout> | undefined
+let mediaSearchTimer: ReturnType<typeof setTimeout> | undefined
+let sourcesRequest = 0
+let mediaRequest = 0
 
 const dirty = computed(() => document.value !== null
 	&& JSON.stringify(items.value.map(item => [item.sourceGalleryId, item.fileId]))
@@ -35,12 +48,27 @@ const dirty = computed(() => document.value !== null
 const selectedSource = computed(() => sources.value.find(source => source.id === sourceId.value) ?? null)
 const folders = computed(() => sourceMedia.value.filter(item => item.folder))
 const files = computed(() => sourceMedia.value.filter(item => !item.folder))
+const selectedIds = computed(() => selectedMedia.value.map(item => item.id))
+const hasMoreSources = computed(() => sources.value.length < sourceTotal.value)
+const hasMoreMedia = computed(() => sourceMedia.value.length < mediaTotal.value)
 
 onMounted(load)
 watch(sourceId, () => {
 	sourcePath.value = ''
-	selectedIds.value = []
-	loadSource()
+	selectedMedia.value = []
+	if (mediaSearch.value !== '') {
+		mediaSearch.value = ''
+	} else {
+		loadSource(true)
+	}
+})
+watch(sourceSearch, () => {
+	clearTimeout(sourceSearchTimer)
+	sourceSearchTimer = setTimeout(() => loadSources(true), 250)
+})
+watch(mediaSearch, () => {
+	clearTimeout(mediaSearchTimer)
+	mediaSearchTimer = setTimeout(() => loadSource(true), 250)
 })
 
 async function load() {
@@ -48,13 +76,16 @@ async function load() {
 	try {
 		const [current, galleryPage] = await Promise.all([
 			fetchCollection(props.gallery.id),
-			fetchGalleries(false),
+			fetchGalleries({
+				limit: SOURCE_PAGE_SIZE,
+				sourceType: 'folder',
+				ownedOnly: true,
+			}),
 		])
 		document.value = current
 		items.value = structuredClone(current.items)
-		sources.value = galleryPage.items.filter(gallery => gallery.ownerUid === props.gallery.ownerUid
-			&& gallery.sourceType === 'folder'
-			&& gallery.id !== props.gallery.id)
+		sources.value = galleryPage.items
+		sourceTotal.value = galleryPage.total
 		sourceId.value = sources.value[0]?.id ?? null
 	} catch {
 		showError(t('proofing_gallery', 'Collection content could not be loaded.'))
@@ -63,47 +94,100 @@ async function load() {
 	}
 }
 
-async function loadSource() {
+async function loadSources(reset: boolean) {
+	const request = ++sourcesRequest
+	reset ? sourcesLoading.value = true : sourcesLoadingMore.value = true
+	try {
+		const page = await fetchGalleries({
+			search: sourceSearch.value,
+			limit: SOURCE_PAGE_SIZE,
+			offset: reset ? 0 : sources.value.length,
+			sourceType: 'folder',
+			ownedOnly: true,
+		})
+		if (request !== sourcesRequest) return
+		sources.value = reset ? page.items : [...sources.value, ...page.items]
+		sourceTotal.value = page.total
+		if (reset && !sources.value.some(source => source.id === sourceId.value)) {
+			sourceId.value = sources.value[0]?.id ?? null
+		}
+	} catch {
+		if (request !== sourcesRequest) return
+		if (reset) {
+			sources.value = []
+			sourceTotal.value = 0
+			sourceId.value = null
+		}
+		showError(t('proofing_gallery', 'Source galleries could not be loaded.'))
+	} finally {
+		if (request === sourcesRequest) {
+			sourcesLoading.value = false
+			sourcesLoadingMore.value = false
+		}
+	}
+}
+
+async function loadSource(reset: boolean) {
+	const request = ++mediaRequest
 	if (sourceId.value === null) {
 		sourceMedia.value = []
+		mediaTotal.value = 0
 		return
 	}
-	sourceLoading.value = true
+	reset ? sourceLoading.value = true : sourceLoadingMore.value = true
 	try {
-		sourceMedia.value = (await fetchGalleryMedia(sourceId.value, 200, 0, sourcePath.value)).items
+		const page = await fetchGalleryMedia(
+			sourceId.value,
+			MEDIA_PAGE_SIZE,
+			reset ? 0 : sourceMedia.value.length,
+			sourcePath.value,
+			mediaSearch.value,
+		)
+		if (request !== mediaRequest) return
+		sourceMedia.value = reset ? page.items : [...sourceMedia.value, ...page.items]
+		mediaTotal.value = page.total
 	} catch {
-		sourceMedia.value = []
+		if (request !== mediaRequest) return
+		if (reset) {
+			sourceMedia.value = []
+			mediaTotal.value = 0
+		}
 		showError(t('proofing_gallery', 'Source gallery could not be opened.'))
 	} finally {
-		sourceLoading.value = false
+		if (request === mediaRequest) {
+			sourceLoading.value = false
+			sourceLoadingMore.value = false
+		}
 	}
 }
 
 function openFolder(folder: MediaItem) {
 	sourcePath.value = [sourcePath.value, folder.name].filter(Boolean).join('/')
-	selectedIds.value = []
-	loadSource()
+	selectedMedia.value = []
+	if (mediaSearch.value !== '') mediaSearch.value = ''
+	else loadSource(true)
 }
 
 function goUp() {
 	const parts = sourcePath.value.split('/').filter(Boolean)
 	parts.pop()
 	sourcePath.value = parts.join('/')
-	selectedIds.value = []
-	loadSource()
+	selectedMedia.value = []
+	if (mediaSearch.value !== '') mediaSearch.value = ''
+	else loadSource(true)
 }
 
-function toggle(fileId: number) {
-	selectedIds.value = selectedIds.value.includes(fileId)
-		? selectedIds.value.filter(id => id !== fileId)
-		: [...selectedIds.value, fileId]
+function toggle(file: MediaItem) {
+	selectedMedia.value = selectedIds.value.includes(file.id)
+		? selectedMedia.value.filter(item => item.id !== file.id)
+		: [...selectedMedia.value, file]
 }
 
 function addSelected() {
 	if (!selectedSource.value) return
 	const existing = new Set(items.value.map(item => item.fileId))
-	for (const file of files.value) {
-		if (!selectedIds.value.includes(file.id) || existing.has(file.id)) continue
+	for (const file of selectedMedia.value) {
+		if (existing.has(file.id)) continue
 		items.value.push({
 			sourceGalleryId: selectedSource.value.id,
 			sourceGalleryTitle: selectedSource.value.title,
@@ -117,7 +201,7 @@ function addSelected() {
 		})
 		existing.add(file.id)
 	}
-	selectedIds.value = []
+	selectedMedia.value = []
 }
 
 function move(index: number, direction: -1 | 1) {
@@ -235,19 +319,44 @@ async function save() {
 			</section>
 
 			<section class="collection-browser" aria-labelledby="collection-source-title">
-				<div>
+				<div class="collection-browser__header">
 					<h3 id="collection-source-title">
 						{{ t('proofing_gallery', 'Add from a gallery') }}
 					</h3>
-					<label>
-						<span>{{ t('proofing_gallery', 'Source gallery') }}</span>
-						<select v-model="sourceId">
-							<option v-for="source in sources" :key="source.id" :value="source.id">{{ source.title }}</option>
-						</select>
-					</label>
+					<div class="source-controls">
+						<label>
+							<span>{{ t('proofing_gallery', 'Search source galleries') }}</span>
+							<input
+								v-model="sourceSearch"
+								name="collectionSourceSearch"
+								type="search"
+								:placeholder="t('proofing_gallery', 'Search by gallery title')">
+						</label>
+						<label>
+							<span>{{ t('proofing_gallery', 'Source gallery') }}</span>
+							<select v-model="sourceId" :disabled="sourcesLoading || sources.length === 0">
+								<option v-for="source in sources" :key="source.id" :value="source.id">{{ source.title }}</option>
+							</select>
+						</label>
+						<NcButton
+							v-if="hasMoreSources"
+							variant="tertiary"
+							:disabled="sourcesLoadingMore"
+							@click="loadSources(false)">
+							{{ sourcesLoadingMore
+								? t('proofing_gallery', 'Loading…')
+								: t('proofing_gallery', 'Load more galleries') }}
+						</NcButton>
+					</div>
 				</div>
-				<p v-if="sources.length === 0" class="collection-empty">
-					{{ t('proofing_gallery', 'Create a folder gallery before adding files to a collection.') }}
+				<div v-if="sourcesLoading" class="collection-loading">
+					<NcLoadingIcon :size="24" />
+					{{ t('proofing_gallery', 'Loading source galleries…') }}
+				</div>
+				<p v-else-if="sources.length === 0" class="collection-empty">
+					{{ sourceSearch
+						? t('proofing_gallery', 'No source galleries match your search.')
+						: t('proofing_gallery', 'Create a folder gallery before adding files to a collection.') }}
 				</p>
 				<template v-else>
 					<div class="collection-path">
@@ -256,7 +365,20 @@ async function save() {
 						</NcButton>
 						<span>/{{ sourcePath }}</span>
 					</div>
+					<label class="media-search">
+						<span>{{ t('proofing_gallery', 'Search this folder') }}</span>
+						<input
+							v-model="mediaSearch"
+							name="collectionMediaSearch"
+							type="search"
+							:placeholder="t('proofing_gallery', 'Search files and folders')">
+					</label>
 					<NcLoadingIcon v-if="sourceLoading" :size="24" />
+					<p v-else-if="sourceMedia.length === 0" class="collection-empty">
+						{{ mediaSearch
+							? t('proofing_gallery', 'No files or folders match your search.')
+							: t('proofing_gallery', 'This source folder is empty.') }}
+					</p>
 					<div v-else class="source-grid">
 						<button
 							v-for="folder in folders"
@@ -271,14 +393,28 @@ async function save() {
 								type="checkbox"
 								:checked="selectedIds.includes(file.id)"
 								:disabled="items.some(item => item.fileId === file.id)"
-								@change="toggle(file.id)">
+								@change="toggle(file)">
 							<img :src="ownerPreviewUrl(sourceId!, file.id, 220, 160)" alt="">
 							<span>{{ file.name }}</span>
 						</label>
 					</div>
-					<NcButton :disabled="selectedIds.length === 0 || items.length + selectedIds.length > 1000" @click="addSelected">
-						{{ t('proofing_gallery', 'Add selected files') }}
-					</NcButton>
+					<div class="source-actions">
+						<NcButton
+							v-if="hasMoreMedia"
+							variant="tertiary"
+							:disabled="sourceLoadingMore"
+							@click="loadSource(false)">
+							{{ sourceLoadingMore
+								? t('proofing_gallery', 'Loading…')
+								: t('proofing_gallery', 'Load more files') }}
+						</NcButton>
+						<span>{{ sourceMedia.length }} / {{ mediaTotal }}</span>
+						<NcButton
+							:disabled="selectedIds.length === 0 || items.length + selectedIds.length > 1000"
+							@click="addSelected">
+							{{ t('proofing_gallery', 'Add selected files') }}
+						</NcButton>
+					</div>
 				</template>
 			</section>
 		</template>
@@ -423,7 +559,15 @@ async function save() {
 	gap: 5px;
 }
 
-.collection-browser select {
+.source-controls {
+	display: grid;
+	grid-template-columns: minmax(180px, 1fr) minmax(220px, 1fr) auto;
+	align-items: end;
+	gap: 8px;
+}
+
+.collection-browser select,
+.collection-browser input[type='search'] {
 	min-width: 260px;
 	min-height: 40px;
 	padding: 6px 10px;
@@ -431,6 +575,10 @@ async function save() {
 	border-radius: 8px;
 	background: var(--color-main-background);
 	color: var(--color-main-text);
+}
+
+.media-search {
+	max-width: 420px;
 }
 
 .collection-path {
@@ -493,6 +641,18 @@ async function save() {
 	white-space: nowrap;
 }
 
+.source-actions {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.source-actions > span {
+	margin-inline-end: auto;
+	color: var(--color-text-maxcontrast);
+	font-size: 13px;
+}
+
 @media (max-width: 700px) {
 	.collection-heading,
 	.collection-browser > div:first-child {
@@ -503,6 +663,24 @@ async function save() {
 	.collection-browser select {
 		width: 100%;
 		min-width: 0;
+	}
+
+	.source-controls {
+		grid-template-columns: 1fr;
+	}
+
+	.collection-browser input[type='search'] {
+		width: 100%;
+		min-width: 0;
+	}
+
+	.source-actions {
+		align-items: stretch;
+		flex-direction: column;
+	}
+
+	.source-actions > span {
+		margin-inline-end: 0;
 	}
 
 	.collection-list li {

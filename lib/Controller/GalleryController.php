@@ -40,8 +40,27 @@ final class GalleryController extends Controller {
 
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/galleries')]
-	public function index(int $limit = 25, int $offset = 0, bool $archived = false, string $search = ''): DataResponse {
-		return new DataResponse($this->galleries->list($this->userId(), $limit, $offset, $archived, $search));
+	public function index(
+		int $limit = 25,
+		int $offset = 0,
+		bool $archived = false,
+		string $search = '',
+		?string $sourceType = null,
+		bool $ownedOnly = false,
+	): DataResponse {
+		try {
+			return new DataResponse($this->galleries->list(
+				$this->userId(),
+				$limit,
+				$offset,
+				$archived,
+				$search,
+				$sourceType,
+				$ownedOnly,
+			));
+		} catch (InvalidArgumentException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
 	}
 
 	/** @param array<string, mixed> $settings */
@@ -127,13 +146,20 @@ final class GalleryController extends Controller {
 
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/galleries/{id}/media')]
-	public function media(int $id, int $limit = 60, int $offset = 0, string $path = ''): DataResponse {
+	public function media(int $id, int $limit = 60, int $offset = 0, string $path = '', string $search = ''): DataResponse {
 		try {
 			$gallery = $this->galleries->view($this->userId(), $id);
 			if ($gallery->getSourceType() !== 'folder') {
 				return new DataResponse(['message' => 'Collection sources cannot be browsed'], Http::STATUS_UNPROCESSABLE_ENTITY);
 			}
-			return new DataResponse($this->folders->listMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $limit, $offset, $path));
+			return new DataResponse($this->folders->listMedia(
+				$gallery->getOwnerUid(),
+				$gallery->getFolderId(),
+				$limit,
+				$offset,
+				$path,
+				$search,
+			));
 		} catch (DoesNotExistException|FolderAccessException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery or folder not found'], Http::STATUS_NOT_FOUND);
 		}

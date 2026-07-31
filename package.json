@@ -1,6 +1,6 @@
 {
   "name": "proofing_gallery",
-  "version": "0.2.0-beta.1",
+  "version": "0.2.0-beta.3",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "type": "module",
@@ -13,7 +13,8 @@
     "watch": "vite --mode development build --watch",
     "lint": "npm run build:l10n && npm run lint:js && npm run lint:style && npm run typecheck",
     "lint:js": "eslint src --max-warnings=0",
-    "lint:style": "stylelint \"src/**/*.{vue,css,scss}\"",
+		"lint:style": "stylelint \"src/**/*.{vue,css,scss}\"",
+		"perf:public": "node scripts/measure-public-lcp.mjs",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",

@@ -1,13 +1,31 @@
 import axios from '@nextcloud/axios'
 import { generateOcsUrl, generateUrl } from '@nextcloud/router'
 
-import type { CollectionDocument, Gallery, GalleryManager, GalleryPage, MediaPage } from '../types'
+import type { CollectionDocument, Gallery, GalleryManager, GalleryPage, GalleryPreset, InvitationTemplate, MediaPage, NotificationEventType, NotificationSubscription } from '../types'
+import type { GallerySettings } from '../domain/gallerySettings'
 
 const galleriesUrl = generateOcsUrl('/apps/proofing_gallery/api/v1/galleries')
 
-export async function fetchGalleries(archived = false, search = ''): Promise<GalleryPage> {
+export interface GalleryQuery {
+	archived?: boolean
+	search?: string
+	limit?: number
+	offset?: number
+	sourceType?: 'folder' | 'collection'
+	ownedOnly?: boolean
+}
+
+export async function fetchGalleries(query: GalleryQuery = {}): Promise<GalleryPage> {
 	const { data } = await axios.get<GalleryPage>(galleriesUrl, {
-		params: { archived, search, limit: 100, format: 'json' },
+		params: {
+			archived: query.archived ?? false,
+			search: query.search ?? '',
+			limit: query.limit ?? 100,
+			offset: query.offset ?? 0,
+			sourceType: query.sourceType,
+			ownedOnly: query.ownedOnly,
+			format: 'json',
+		},
 	})
 	return data
 }
@@ -17,13 +35,40 @@ export async function createGallery(payload: {
 	title: string
 	mode: 'presentation' | 'collaboration'
 	sourceType: 'folder' | 'collection'
+	settings?: GallerySettings
 }): Promise<Gallery> {
 	const { data } = await axios.post<Gallery>(galleriesUrl, {
 		folderId: payload.folderId,
 		title: payload.title,
 		sourceType: payload.sourceType,
-		settings: { mode: payload.mode },
+		settings: payload.settings ?? { mode: payload.mode },
 	})
+	return data
+}
+
+const presetsUrl = generateOcsUrl('/apps/proofing_gallery/api/v1/presets')
+
+export async function fetchPresets(): Promise<GalleryPreset[]> {
+	const { data } = await axios.get<{ items: GalleryPreset[] }>(presetsUrl, { params: { format: 'json' } })
+	return data.items
+}
+
+export async function createPreset(name: string, settings: GallerySettings): Promise<GalleryPreset> {
+	const { data } = await axios.post<GalleryPreset>(presetsUrl, { name, settings })
+	return data
+}
+
+export async function updatePreset(id: number, payload: { name?: string; settings?: GallerySettings }): Promise<GalleryPreset> {
+	const { data } = await axios.put<GalleryPreset>(`${presetsUrl}/${id}`, payload)
+	return data
+}
+
+export async function deletePreset(id: number): Promise<void> {
+	await axios.delete(`${presetsUrl}/${id}`)
+}
+
+export async function applyPreset(id: number, galleryId: number): Promise<Gallery> {
+	const { data } = await axios.post<Gallery>(`${presetsUrl}/${id}/apply/${galleryId}`)
 	return data
 }
 
@@ -40,9 +85,9 @@ export async function updateGallerySource(id: number, folderId: number): Promise
 	return data
 }
 
-export async function fetchGalleryMedia(id: number, limit = 8, offset = 0, path = ''): Promise<MediaPage> {
+export async function fetchGalleryMedia(id: number, limit = 8, offset = 0, path = '', search = ''): Promise<MediaPage> {
 	const { data } = await axios.get<MediaPage>(`${galleriesUrl}/${id}/media`, {
-		params: { limit, offset, path },
+		params: { limit, offset, path, search },
 	})
 	return data
 }
@@ -90,6 +135,25 @@ export async function saveManager(
 
 export async function removeManager(galleryId: number, managerId: number): Promise<void> {
 	await axios.delete(`${galleriesUrl}/${galleryId}/managers/${managerId}`)
+}
+
+export async function fetchNotificationSubscriptions(galleryId: number): Promise<NotificationSubscription[]> {
+	const { data } = await axios.get<{ items: NotificationSubscription[] }>(`${galleriesUrl}/${galleryId}/notification-subscriptions`)
+	return data.items
+}
+
+export async function saveNotificationSubscription(galleryId: number, payload: {
+	recipientUid: string
+	eventTypes: NotificationEventType[]
+	frequency: 'immediate' | 'daily'
+	locale: 'auto' | 'en' | 'de'
+}): Promise<NotificationSubscription> {
+	const { data } = await axios.put<NotificationSubscription>(`${galleriesUrl}/${galleryId}/notification-subscriptions`, payload)
+	return data
+}
+
+export async function deleteNotificationSubscription(galleryId: number, id: number): Promise<void> {
+	await axios.delete(`${galleriesUrl}/${galleryId}/notification-subscriptions/${id}`)
 }
 
 export interface PrincipalOption {
@@ -148,6 +212,32 @@ export async function sendInvitation(
 	payload: { recipient: string; message: string },
 ): Promise<void> {
 	await axios.post(`${galleriesUrl}/${id}/invite`, payload)
+}
+
+const invitationTemplatesUrl = generateOcsUrl('/apps/proofing_gallery/api/v1/invitation-templates')
+
+export async function fetchInvitationTemplates(): Promise<InvitationTemplate[]> {
+	const { data } = await axios.get<{ items: InvitationTemplate[] }>(invitationTemplatesUrl, { params: { format: 'json' } })
+	return data.items
+}
+
+export async function createInvitationTemplate(name: string, body: string): Promise<InvitationTemplate> {
+	const { data } = await axios.post<InvitationTemplate>(invitationTemplatesUrl, { name, body })
+	return data
+}
+
+export async function updateInvitationTemplate(id: number, name: string, body: string): Promise<InvitationTemplate> {
+	const { data } = await axios.put<InvitationTemplate>(`${invitationTemplatesUrl}/${id}`, { name, body })
+	return data
+}
+
+export async function deleteInvitationTemplate(id: number): Promise<void> {
+	await axios.delete(`${invitationTemplatesUrl}/${id}`)
+}
+
+export async function renderInvitationTemplate(id: number, galleryId: number): Promise<string> {
+	const { data } = await axios.post<{ body: string }>(`${invitationTemplatesUrl}/${id}/render/${galleryId}`)
+	return data.body
 }
 
 export interface InboxUpload {

@@ -52,15 +52,24 @@ final class FolderService {
 		throw new FolderAccessException('Image file was not found or is not readable');
 	}
 
-	public function listMedia(string $userId, int $folderId, int $limit = 60, int $offset = 0, string $path = ''): MediaPage {
+	public function listMedia(
+		string $userId,
+		int $folderId,
+		int $limit = 60,
+		int $offset = 0,
+		string $path = '',
+		string $search = '',
+	): MediaPage {
 		$limit = max(1, min(200, $limit));
 		$offset = max(0, $offset);
+		$search = mb_substr(trim($search), 0, 120);
 		$root = $this->resolveFolder($userId, $folderId);
 		$current = $this->folderAt($root, trim($path, '/'));
 		$nodes = array_values(array_filter(
 			$current->getDirectoryListing(),
 			fn (Node $node): bool => !str_starts_with($node->getName(), '.')
-				&& ($node instanceof Folder || ($node instanceof File && $this->isSupported($node))),
+				&& ($node instanceof Folder || ($node instanceof File && $this->isSupported($node)))
+				&& ($search === '' || mb_stripos($node->getName(), $search) !== false),
 		));
 		usort($nodes, static fn (Node $left, Node $right): int => strnatcasecmp($left->getName(), $right->getName()));
 

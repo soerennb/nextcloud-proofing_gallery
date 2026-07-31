@@ -15,6 +15,7 @@ import {
 import type { GalleryManager } from '../types.ts'
 
 const props = defineProps<{ galleryId: number }>()
+const emit = defineEmits<{ changed: [] }>()
 const managers = ref<GalleryManager[]>([])
 const loading = ref(true)
 const query = ref('')
@@ -66,6 +67,7 @@ async function add() {
 		const index = managers.value.findIndex(item => item.id === manager.id)
 		if (index === -1) managers.value.push(manager)
 		else managers.value[index] = manager
+		emit('changed')
 		query.value = ''
 		selected.value = null
 		showSuccess(t('proofing_gallery', 'Gallery access updated.'))
@@ -81,6 +83,7 @@ async function remove(manager: GalleryManager) {
 	try {
 		await removeManager(props.galleryId, manager.id)
 		managers.value = managers.value.filter(item => item.id !== manager.id)
+		emit('changed')
 		showSuccess(t('proofing_gallery', 'Gallery access removed.'))
 	} catch {
 		showError(t('proofing_gallery', 'Gallery access could not be removed.'))

@@ -17,6 +17,7 @@ final class LifecycleService {
 		private ITimeFactory $clock,
 		private IAppData $appData,
 		private PolicyService $policies,
+		private CollectionAnchorReconciler $collectionAnchors,
 	) {
 	}
 
@@ -33,7 +34,8 @@ final class LifecycleService {
 			$now - $this->policies->get('previewRetentionDays') * 86400,
 		);
 		$orphans = $this->cleanupOrphanMetadata();
-		return compact('events', 'uploads', 'previews', 'orphans');
+		$collectionAnchors = $this->collectionAnchors->reconcile(false)['deleted'];
+		return compact('events', 'uploads', 'previews', 'orphans', 'collectionAnchors');
 	}
 
 	private function deleteOldRows(string $table, string $column, int $before): int {

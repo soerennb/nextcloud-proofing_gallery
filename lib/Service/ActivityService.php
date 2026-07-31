@@ -11,16 +11,13 @@ use OCP\Activity\IManager;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
-use OCP\IUserManager;
-use OCP\Mail\IMailer;
 
 final class ActivityService {
 	public function __construct(
 		private IDBConnection $db,
 		private ITimeFactory $clock,
 		private IManager $activity,
-		private IMailer $mailer,
-		private IUserManager $users,
+		private NotificationService $notifications,
 	) {
 	}
 
@@ -36,6 +33,8 @@ final class ActivityService {
 			'payload' => $qb->createNamedParameter(json_encode($payload, JSON_THROW_ON_ERROR)),
 			'created_at' => $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT),
 		])->executeStatement();
+		$eventId = (int)$this->db->lastInsertId('proofing_events');
+		$this->notifications->queue($gallery, $eventId, $type, $now);
 
 		$message = $this->message($gallery, $guest, $type, $payload);
 		$event = $this->activity->generateEvent()
@@ -48,9 +47,6 @@ final class ActivityService {
 			->setObject('proofing_gallery', $gallery->getId(), $gallery->getTitle());
 		$this->activity->publish($event);
 
-		if ($type === 'upload.received') {
-			$this->sendUploadMail($gallery, $message);
-		}
 	}
 
 	/** @return list<array<string, mixed>> */
@@ -86,19 +82,4 @@ final class ActivityService {
 		};
 	}
 
-	private function sendUploadMail(Gallery $gallery, string $message): void {
-		$owner = $this->users->get($gallery->getOwnerUid());
-		$email = $owner?->getEMailAddress();
-		if ($email === null || !$this->mailer->validateMailAddress($email)) {
-			return;
-		}
-		$template = $this->mailer->createEMailTemplate('proofing_gallery.upload', ['galleryId' => $gallery->getId()]);
-		$template->setSubject('New upload for “' . $gallery->getTitle() . '”');
-		$template->addHeader();
-		$template->addHeading('New gallery upload');
-		$template->addBodyText($message);
-		$template->addFooter('Sent by Proofing Gallery on Nextcloud.');
-		$mail = $this->mailer->createMessage()->setTo([$email])->useTemplate($template);
-		$this->mailer->send($mail);
-	}
 }

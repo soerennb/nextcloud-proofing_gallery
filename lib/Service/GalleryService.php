@@ -83,12 +83,28 @@ final class GalleryService {
 	}
 
 	/** @return array{items: list<array<string, mixed>>, total: int, limit: int, offset: int} */
-	public function list(string $ownerUid, int $limit, int $offset, bool $archived, string $search): array {
+	public function list(
+		string $ownerUid,
+		int $limit,
+		int $offset,
+		bool $archived,
+		string $search,
+		?string $sourceType = null,
+		bool $ownedOnly = false,
+	): array {
 		$limit = max(1, min(100, $limit));
 		$offset = max(0, $offset);
 		$search = mb_substr(trim($search), 0, 120);
+		if ($sourceType !== null && !in_array($sourceType, ['folder', 'collection'], true)) {
+			throw new InvalidArgumentException('Unknown gallery source type');
+		}
 
 		$all = $this->access->list($ownerUid, $archived, $search);
+		$all = array_values(array_filter(
+			$all,
+			static fn (Gallery $gallery): bool => (!$ownedOnly || $gallery->getOwnerUid() === $ownerUid)
+				&& ($sourceType === null || $gallery->getSourceType() === $sourceType),
+		));
 		return [
 			'items' => array_map(
 				fn (Gallery $gallery): array => $this->present($ownerUid, $gallery),

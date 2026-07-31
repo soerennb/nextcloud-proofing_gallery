@@ -4,10 +4,10 @@ import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
-import { createGallery } from '../services/galleryApi.ts'
-import type { Gallery } from '../types.ts'
+import { createGallery, fetchPresets } from '../services/galleryApi.ts'
+import type { Gallery, GalleryPreset } from '../types.ts'
 
 defineProps<{ show: boolean }>()
 
@@ -22,6 +22,8 @@ const folderName = ref('')
 const mode = ref<'presentation' | 'collaboration'>('presentation')
 const sourceType = ref<'folder' | 'collection'>('folder')
 const saving = ref(false)
+const presets = ref<GalleryPreset[]>([])
+const presetId = ref<number | null>(null)
 const canSubmit = computed(() => title.value.trim() !== ''
 	&& (sourceType.value === 'collection' || folderId.value !== null)
 	&& !saving.value)
@@ -61,6 +63,9 @@ async function submit() {
 			title: title.value.trim(),
 			mode: mode.value,
 			sourceType: sourceType.value,
+			settings: presetId.value === null
+				? undefined
+				: structuredClone(presets.value.find(preset => preset.id === presetId.value)?.settings),
 		})
 		emit('created', gallery)
 		reset()
@@ -77,7 +82,16 @@ function reset() {
 	folderName.value = ''
 	mode.value = 'presentation'
 	sourceType.value = 'folder'
+	presetId.value = null
 }
+
+onMounted(async () => {
+	try {
+		presets.value = await fetchPresets()
+	} catch {
+		presets.value = []
+	}
+})
 
 function updateOpen(open: boolean) {
 	if (!open) emit('close')
@@ -129,6 +143,16 @@ function updateOpen(open: boolean) {
 					name="title"
 					:label="t('proofing_gallery', 'Gallery title')"
 					:placeholder="t('proofing_gallery', 'Wedding, portrait session, event…')" />
+			</section>
+
+			<section v-if="presets.length" class="create-gallery__section">
+				<label class="preset-field">
+					<span>{{ t('proofing_gallery', 'Starting preset') }}</span>
+					<select v-model="presetId" name="presetId">
+						<option :value="null">{{ t('proofing_gallery', 'No preset') }}</option>
+						<option v-for="preset in presets" :key="preset.id" :value="preset.id">{{ preset.name }}</option>
+					</select>
+				</label>
 			</section>
 
 			<fieldset class="create-gallery__section">
@@ -198,6 +222,20 @@ function updateOpen(open: boolean) {
 	padding: 0;
 	font-size: 14px;
 	font-weight: 650;
+}
+
+.preset-field {
+	display: grid;
+	gap: 6px;
+}
+
+.preset-field select {
+	min-height: 40px;
+	padding: 0 10px;
+	border: 1px solid var(--color-border-maxcontrast);
+	border-radius: 6px;
+	background: var(--color-main-background);
+	color: var(--color-main-text);
 }
 
 .folder-choice {

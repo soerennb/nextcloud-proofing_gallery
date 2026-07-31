@@ -9,8 +9,17 @@ import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { computed, ref, watch } from 'vue'
 
-import { publishGallery, revokeGallery, sendInvitation } from '../services/galleryApi.ts'
-import type { Gallery } from '../types.ts'
+import {
+	createInvitationTemplate,
+	deleteInvitationTemplate,
+	fetchInvitationTemplates,
+	publishGallery,
+	renderInvitationTemplate,
+	revokeGallery,
+	sendInvitation,
+	updateInvitationTemplate,
+} from '../services/galleryApi.ts'
+import type { Gallery, InvitationTemplate } from '../types.ts'
 
 const props = defineProps<{ show: boolean; gallery: Gallery }>()
 const emit = defineEmits<{
@@ -27,6 +36,11 @@ const publishing = ref(false)
 const recipient = ref('')
 const invitationMessage = ref('')
 const sending = ref(false)
+const templates = ref<InvitationTemplate[]>([])
+const templatesLoading = ref(false)
+const templateSaving = ref(false)
+const selectedTemplateId = ref<number | null>(null)
+const templateName = ref('')
 const published = computed(() => publicUrl.value !== '')
 const publishDisabled = computed(() => publishing.value
 	|| (!published.value && props.gallery.sourceType === 'collection' && props.gallery.mediaSummary.total === 0))
@@ -35,6 +49,68 @@ watch(() => props.gallery, gallery => {
 	publicUrl.value = gallery.shareToken ? absoluteShareUrl(gallery.shareToken) : ''
 	allowDownloads.value = gallery.settings.allowDownloads
 })
+
+watch(() => props.show, async show => {
+	if (!show) return
+	templatesLoading.value = true
+	try {
+		templates.value = await fetchInvitationTemplates()
+	} catch {
+		templates.value = []
+		showError(t('proofing_gallery', 'Invitation templates could not be loaded.'))
+	} finally {
+		templatesLoading.value = false
+	}
+})
+
+async function selectTemplate() {
+	if (selectedTemplateId.value === null) {
+		templateName.value = ''
+		return
+	}
+	const selected = templates.value.find(template => template.id === selectedTemplateId.value)
+	if (!selected) return
+	templateName.value = selected.name
+	try {
+		invitationMessage.value = await renderInvitationTemplate(selected.id, props.gallery.id)
+	} catch {
+		showError(t('proofing_gallery', 'The invitation template could not be applied.'))
+	}
+}
+
+async function saveTemplate() {
+	if (!templateName.value.trim() || !invitationMessage.value.trim()) return
+	templateSaving.value = true
+	try {
+		if (selectedTemplateId.value === null) {
+			const template = await createInvitationTemplate(templateName.value, invitationMessage.value)
+			templates.value = [...templates.value, template].sort((left, right) => left.name.localeCompare(right.name))
+			selectedTemplateId.value = template.id
+		} else {
+			const template = await updateInvitationTemplate(selectedTemplateId.value, templateName.value, invitationMessage.value)
+			templates.value = templates.value.map(item => item.id === template.id ? template : item)
+		}
+		showSuccess(t('proofing_gallery', 'Invitation template saved.'))
+	} catch {
+		showError(t('proofing_gallery', 'The invitation template could not be saved. Check its name and placeholders.'))
+	} finally {
+		templateSaving.value = false
+	}
+}
+
+async function removeTemplate() {
+	if (selectedTemplateId.value === null) return
+	if (!window.confirm(t('proofing_gallery', 'Delete this invitation template?'))) return
+	try {
+		await deleteInvitationTemplate(selectedTemplateId.value)
+		templates.value = templates.value.filter(template => template.id !== selectedTemplateId.value)
+		selectedTemplateId.value = null
+		templateName.value = ''
+		showSuccess(t('proofing_gallery', 'Invitation template deleted.'))
+	} catch {
+		showError(t('proofing_gallery', 'The invitation template could not be deleted.'))
+	}
+}
 
 async function publish() {
 	publishing.value = true
@@ -108,9 +184,9 @@ function updateOpen(open: boolean) {
 		size="normal"
 		@update:open="updateOpen">
 		<div class="sharing-dialog">
-			<header>
+			<div class="sharing-dialog__title">
 				<h2>{{ gallery.title }}</h2>
-			</header>
+			</div>
 
 			<section>
 				<h3>{{ t('proofing_gallery', 'Public link') }}</h3>
@@ -174,6 +250,19 @@ function updateOpen(open: boolean) {
 
 			<section v-if="published">
 				<h3>{{ t('proofing_gallery', 'Email invitation') }}</h3>
+				<div class="template-fields">
+					<label>
+						<span>{{ t('proofing_gallery', 'Message template') }}</span>
+						<select v-model="selectedTemplateId" :disabled="templatesLoading" @change="selectTemplate">
+							<option :value="null">{{ templatesLoading ? t('proofing_gallery', 'Loading…') : t('proofing_gallery', 'New template') }}</option>
+							<option v-for="template in templates" :key="template.id" :value="template.id">{{ template.name }}</option>
+						</select>
+					</label>
+					<NcTextField
+						id="proofing-gallery-template-name"
+						v-model="templateName"
+						:label="t('proofing_gallery', 'Template name')" />
+				</div>
 				<NcTextField
 					id="proofing-gallery-recipient"
 					v-model="recipient"
@@ -186,6 +275,17 @@ function updateOpen(open: boolean) {
 					v-model="invitationMessage"
 					name="message"
 					:label="t('proofing_gallery', 'Personal message (optional)')" />
+				<p class="sharing-dialog__hint">
+					{{ t('proofing_gallery', 'Available placeholders: {gallery}, {owner}, {url}. The applied message remains editable.') }}
+				</p>
+				<div class="template-actions">
+					<NcButton :disabled="!templateName.trim() || !invitationMessage.trim() || templateSaving" @click="saveTemplate">
+						{{ templateSaving ? t('proofing_gallery', 'Saving…') : selectedTemplateId === null ? t('proofing_gallery', 'Save as template') : t('proofing_gallery', 'Update template') }}
+					</NcButton>
+					<NcButton v-if="selectedTemplateId !== null" variant="tertiary" @click="removeTemplate">
+						{{ t('proofing_gallery', 'Delete template') }}
+					</NcButton>
+				</div>
 				<NcButton :disabled="!recipient || sending" @click="sendInvite">
 					{{ sending ? t('proofing_gallery', 'Sending…') : t('proofing_gallery', 'Send invitation') }}
 				</NcButton>
@@ -199,7 +299,7 @@ function updateOpen(open: boolean) {
 	padding: 30px;
 }
 
-.sharing-dialog header {
+.sharing-dialog__title {
 	margin-bottom: 24px;
 }
 
@@ -248,6 +348,35 @@ function updateOpen(open: boolean) {
 	gap: 8px;
 }
 
+.template-fields {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 8px;
+}
+
+.template-fields label {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	color: var(--color-text-maxcontrast);
+	font-size: 13px;
+}
+
+.template-fields select {
+	min-height: 44px;
+	padding: 8px 10px;
+	border: 1px solid var(--color-border-maxcontrast);
+	border-radius: 8px;
+	background: var(--color-main-background);
+	color: var(--color-main-text);
+}
+
+.template-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
 .date-field {
 	display: flex;
 	flex-direction: column;
@@ -271,6 +400,10 @@ function updateOpen(open: boolean) {
 	}
 
 	.sharing-fields {
+		grid-template-columns: 1fr;
+	}
+
+	.template-fields {
 		grid-template-columns: 1fr;
 	}
 }
