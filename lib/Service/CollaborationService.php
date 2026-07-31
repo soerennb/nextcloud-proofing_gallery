@@ -267,14 +267,14 @@ final class CollaborationService {
 	}
 
 	/** @return array{content: string, filename: string, mimeType: string} */
-	public function exportSelection(Gallery $gallery, Guest $guest, string $publicId, string $format): array {
+	public function exportSelection(Gallery $gallery, ?Guest $guest, string $publicId, string $format): array {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')->from('proofing_selections')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('public_id', $qb->createNamedParameter($publicId)));
 		$row = $qb->executeQuery()->fetchAssociative();
 		if ($row === false
-			|| ($this->settings($gallery)->feedbackVisibility === FeedbackVisibility::Private
+			|| ($guest !== null && $this->settings($gallery)->feedbackVisibility === FeedbackVisibility::Private
 				&& (int)$row['guest_id'] !== $guest->getId())) {
 			throw new InvalidArgumentException('Selection not found');
 		}
@@ -314,6 +314,51 @@ final class CollaborationService {
 			],
 			default => throw new InvalidArgumentException('Unknown export format'),
 		};
+	}
+
+	/** @return list<array<string, mixed>> */
+	public function ownerSelections(Gallery $gallery): array {
+		return array_reverse($this->presentSelections($this->selectionRows($gallery->getId(), null), null));
+	}
+
+	/** @return array{content: string, filename: string, mimeType: string} */
+	public function exportOwnerSelection(Gallery $gallery, string $publicId, string $format): array {
+		return $this->exportSelection($gallery, null, $publicId, $format);
+	}
+
+	public function updateOwnerSelection(Gallery $gallery, string $publicId, string $name, string $status): void {
+		$name = trim($name);
+		if ($name === '' || mb_strlen($name) > 120 || !in_array($status, ['open', 'completed'], true)) {
+			throw new InvalidArgumentException('Invalid selection name or status');
+		}
+		$qb = $this->db->getQueryBuilder();
+		$qb->update('proofing_selections')
+			->set('name', $qb->createNamedParameter($name))
+			->set('status', $qb->createNamedParameter($status))
+			->set('updated_at', $qb->createNamedParameter($this->clock->getTime(), IQueryBuilder::PARAM_INT))
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('public_id', $qb->createNamedParameter($publicId)));
+		if ($qb->executeStatement() !== 1) throw new InvalidArgumentException('Selection not found');
+	}
+
+	public function deleteOwnerSelection(Gallery $gallery, string $publicId): void {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('id')->from('proofing_selections')
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('public_id', $qb->createNamedParameter($publicId)));
+		$id = $qb->executeQuery()->fetchOne();
+		if ($id === false) throw new InvalidArgumentException('Selection not found');
+		$this->db->beginTransaction();
+		try {
+			$qb = $this->db->getQueryBuilder();
+			$qb->delete('proofing_selection_items')->where($qb->expr()->eq('selection_id', $qb->createNamedParameter((int)$id, IQueryBuilder::PARAM_INT)))->executeStatement();
+			$qb = $this->db->getQueryBuilder();
+			$qb->delete('proofing_selections')->where($qb->expr()->eq('id', $qb->createNamedParameter((int)$id, IQueryBuilder::PARAM_INT)))->executeStatement();
+			$this->db->commit();
+		} catch (\Throwable $exception) {
+			$this->db->rollBack();
+			throw $exception;
+		}
 	}
 
 	private function settings(Gallery $gallery): GallerySettings {

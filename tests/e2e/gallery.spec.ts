@@ -33,9 +33,14 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await fileActions.click()
 	await expect(page.getByRole('button', { name: 'Versions', exact: true })).toBeVisible()
 	expect(await fileActions.locator('..').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+	await page.getByRole('button', { name: 'Metadata', exact: true }).click()
+	await expect(page.locator('.metadata-panel').getByRole('heading', { name: 'proof.png' })).toBeVisible()
+	await expect(page.getByRole('button', { name: 'Save XMP sidecar' })).toBeVisible()
+	await page.locator('.metadata-panel').getByRole('button', { name: 'Close' }).click()
 
 	await page.getByRole('button', { name: 'Design', exact: true }).click()
 	await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible()
+	await expect(page.getByText('Public image information')).toBeVisible()
 	await page.setViewportSize({ width: 390, height: 844 })
 	await page.getByRole('button', { name: 'Preview gallery' }).click()
 	await expect(page.locator('.gallery-preview--expanded')).toBeVisible()
@@ -68,7 +73,7 @@ test('guest completes an accessible proofing flow', async ({ page, baseURL }) =>
 	await page.getByRole('textbox', { name: 'Comment' }).fill('Approved in automated review')
 	await page.getByRole('button', { name: 'Comment', exact: true }).click()
 	await expect(page.getByText('Approved in automated review')).toBeVisible()
-	await page.getByRole('button', { name: 'Close' }).click()
+	await page.getByRole('button', { name: 'Close', exact: true }).click()
 
 	const accessibility = await new AxeBuilder({ page }).include('.public-gallery').analyze()
 	expect(accessibility.violations).toEqual([])

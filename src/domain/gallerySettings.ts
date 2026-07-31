@@ -25,7 +25,7 @@ export interface GalleryPresentation extends GalleryAppearance {
 }
 
 export interface GallerySettings {
-	schemaVersion?: 2
+	schemaVersion?: 3
 	mode: GalleryMode
 	feedbackVisibility: FeedbackVisibility
 	allowDownloads: boolean
@@ -59,17 +59,20 @@ export interface GallerySettings {
 		allowModeSwitch: boolean
 		hideRejectedInPresentation: boolean
 	}
+	metadata: {
+		publicFields: Array<'capturedAt' | 'camera' | 'lens' | 'exposure' | 'title' | 'description' | 'creator' | 'copyright'>
+	}
 	presentation: GalleryPresentation
 	/** Version 1 response alias. New writes use presentation. */
 	appearance: GalleryPresentation
 }
 
 export type CanonicalGallerySettings = Pick<GallerySettings,
-	'schemaVersion' | 'mode' | 'publicLocale' | 'review' | 'presentation' | 'delivery' | 'navigation' | 'security'>
+	'schemaVersion' | 'mode' | 'publicLocale' | 'review' | 'presentation' | 'delivery' | 'navigation' | 'security' | 'metadata'>
 
 export function canonicalGallerySettings(settings: GallerySettings): CanonicalGallerySettings {
 	return {
-		schemaVersion: 2,
+		schemaVersion: 3,
 		mode: settings.mode,
 		publicLocale: settings.publicLocale,
 		review: structuredClone(settings.review),
@@ -77,6 +80,7 @@ export function canonicalGallerySettings(settings: GallerySettings): CanonicalGa
 		delivery: structuredClone(settings.delivery),
 		navigation: structuredClone(settings.navigation),
 		security: structuredClone(settings.security),
+		metadata: structuredClone(settings.metadata),
 	}
 }
 
@@ -108,7 +112,7 @@ export function createDefaultGallerySettings(): GallerySettings {
 		showFilenames: true,
 	}
 	return {
-		schemaVersion: 2,
+		schemaVersion: 3,
 		mode: 'presentation',
 		feedbackVisibility: 'collaborative',
 		allowDownloads: false,
@@ -130,6 +134,7 @@ export function createDefaultGallerySettings(): GallerySettings {
 		delivery: { downloadScope: 'none', contactSheet: true, guestUploads: false },
 		navigation: { folders: true, sortBy: 'name', sortDirection: 'asc', groupBy: 'none' },
 		security: { allowModeSwitch: false, hideRejectedInPresentation: false },
+		metadata: { publicFields: [] },
 		presentation,
 		appearance: presentation,
 	}

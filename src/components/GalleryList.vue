@@ -4,7 +4,7 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import { ownerPreviewUrl } from '../services/galleryApi.ts'
 import type { Gallery } from '../types.ts'
 
-defineProps<{ galleries: Gallery[]; archived: boolean }>()
+defineProps<{ galleries: Gallery[]; archived: boolean; view: 'list' | 'grid' }>()
 const emit = defineEmits<{
 	select: [gallery: Gallery]
 	share: [gallery: Gallery]
@@ -26,7 +26,7 @@ function previewUrl(gallery: Gallery): string {
 </script>
 
 <template>
-	<div class="gallery-list">
+	<div class="gallery-list" :class="`gallery-list--${view}`">
 		<article v-for="gallery in galleries" :key="gallery.id" class="gallery-row">
 			<button class="gallery-row__main" type="button" @click="emit('select', gallery)">
 				<span class="gallery-row__cover" aria-hidden="true">
@@ -72,7 +72,15 @@ function previewUrl(gallery: Gallery): string {
 
 <style scoped>
 .gallery-list {
+	min-width: 0;
 	border-top: 1px solid var(--color-border);
+}
+
+.gallery-list--grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+	gap: 14px;
+	border-top: 0;
 }
 
 .gallery-row {
@@ -186,7 +194,57 @@ function previewUrl(gallery: Gallery): string {
 	box-shadow: 0 2px 8px var(--color-box-shadow);
 }
 
+.gallery-list--grid .gallery-row {
+	position: relative;
+	display: block;
+	min-width: 0;
+	overflow: visible;
+	border: 1px solid var(--color-border);
+	border-top: 4px solid var(--color-primary-element);
+	border-radius: 9px;
+	background: var(--color-main-background);
+	transition: border-color 160ms ease, transform 220ms cubic-bezier(.2,.75,.25,1);
+}
+
+.gallery-list--grid .gallery-row:hover,
+.gallery-list--grid .gallery-row:focus-within {
+	border-color: var(--color-primary-element);
+	background: var(--color-main-background);
+	transform: translateY(-3px);
+}
+
+.gallery-list--grid .gallery-row__main {
+	display: grid;
+	width: 100%;
+	grid-template-columns: 1fr;
+	gap: 14px;
+	padding: 0 0 16px;
+}
+
+.gallery-list--grid .gallery-row__cover {
+	width: 100%;
+	border-radius: 0;
+	font-size: 38px;
+}
+
+.gallery-list--grid .gallery-row__identity,
+.gallery-list--grid .gallery-row__date {
+	padding-inline: 16px 54px;
+}
+
+.gallery-list--grid .gallery-row__identity strong { font-size: 18px; }
+
+.gallery-list--grid .gallery-row__date { margin-top: -8px; }
+
+.gallery-list--grid .gallery-row__actions {
+	position: absolute;
+	z-index: 3;
+	inset: auto 6px 8px auto;
+	padding: 0;
+}
+
 @media (max-width: 760px) {
+	.gallery-list--grid { grid-template-columns: 1fr; }
 	.gallery-row {
 		grid-template-columns: minmax(0, 1fr) auto;
 		gap: 4px;
@@ -207,5 +265,11 @@ function previewUrl(gallery: Gallery): string {
 		align-self: center;
 		padding-inline-end: 4px;
 	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.gallery-list--grid .gallery-row { transition: none; }
+	.gallery-list--grid .gallery-row:hover,
+	.gallery-list--grid .gallery-row:focus-within { transform: none; }
 }
 </style>

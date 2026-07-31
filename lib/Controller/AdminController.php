@@ -34,6 +34,15 @@ final class AdminController extends Controller {
 		int $previewRetentionDays,
 		int $pendingUploadRetentionHours,
 		int $completedUploadRetentionDays,
+		int $maxVersionsPerFile = 10,
+		int $versionRetentionDays = 365,
+		int $metadataMaxMiB = 64,
+		int $metadataBatchSize = 100,
+		int $xmpWritingEnabled = 1,
+		string $defaultPublicLocale = 'auto',
+		string $defaultTheme = 'dark',
+		string $defaultLayout = 'grid',
+		string $defaultDownloadScope = 'none',
 	): DataResponse {
 		try {
 			$this->policies->save([
@@ -44,9 +53,20 @@ final class AdminController extends Controller {
 				'previewRetentionDays' => $previewRetentionDays,
 				'pendingUploadRetentionHours' => $pendingUploadRetentionHours,
 				'completedUploadRetentionDays' => $completedUploadRetentionDays,
+				'maxVersionsPerFile' => $maxVersionsPerFile,
+				'versionRetentionDays' => $versionRetentionDays,
+				'metadataMaxBytes' => $metadataMaxMiB * 1024 * 1024,
+				'metadataBatchSize' => $metadataBatchSize,
+				'xmpWritingEnabled' => $xmpWritingEnabled,
+			]);
+			$this->policies->saveGalleryDefaults([
+				'publicLocale' => $defaultPublicLocale,
+				'presentation' => ['theme' => $defaultTheme, 'layout' => $defaultLayout],
+				'delivery' => ['downloadScope' => $defaultDownloadScope],
 			]);
 			return new DataResponse([
 				'policies' => $this->policies->all(),
+				'galleryDefaults' => $this->policies->galleryDefaults(),
 				'health' => $this->health->status(),
 			]);
 		} catch (InvalidArgumentException $exception) {

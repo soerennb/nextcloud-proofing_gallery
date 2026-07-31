@@ -8,6 +8,20 @@ export interface MediaItem {
 	modifiedAt: number
 	etag: string
 	folder: boolean
+	metadata?: {
+		state: 'ready' | 'pending' | 'unavailable'
+		capturedAt?: number
+		camera?: string
+		lens?: string
+		focalLength?: number
+		aperture?: number
+		exposureTime?: string
+		iso?: number
+		title?: string
+		description?: string
+		creator?: string
+		copyright?: string
+	}
 }
 
 export interface PublicGallery {

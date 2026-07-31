@@ -20,6 +20,7 @@ final class GalleryService {
 		private GalleryAccessService $access,
 		private PublicShareService $shares,
 		private ITimeFactory $clock,
+		private PolicyService $policies,
 	) {
 	}
 
@@ -55,7 +56,10 @@ final class GalleryService {
 		$gallery->setTitle($title);
 		$gallery->setSlug($this->uniqueSlug($ownerUid, $title));
 		$gallery->setStatus(GalleryStatus::Draft->value);
-		$gallery->setSettings(json_encode(GallerySettings::fromArray($settings), JSON_THROW_ON_ERROR));
+		$gallery->setSettings(json_encode(GallerySettings::merge(
+			GallerySettings::fromArray($this->policies->galleryDefaults()),
+			$settings,
+		), JSON_THROW_ON_ERROR));
 		$gallery->setCreatedAt($now);
 		$gallery->setUpdatedAt($now);
 

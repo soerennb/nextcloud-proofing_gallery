@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { n, t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import type { GallerySettings } from './domain/gallerySettings.ts'
 import type { CollaborationState, GuestIdentity, MediaItem, PublicGallery } from './publicTypes.ts'
@@ -56,10 +56,21 @@ const search = ref('')
 const sortBy = ref(settings.value.navigation?.sortBy ?? 'name')
 const sortDirection = ref(settings.value.navigation?.sortDirection ?? 'asc')
 const groupBy = ref(settings.value.navigation?.groupBy ?? 'none')
-const layout = ref(settings.value.presentation?.layout ?? settings.value.appearance.layout ?? 'grid')
+const savedLayout = localStorage.getItem(`proofing-gallery-layout:${props.gallery.token}`)
+const layout = ref<'grid' | 'masonry' | 'list'>(
+	savedLayout === 'grid' || savedLayout === 'masonry' || savedLayout === 'list'
+		? savedLayout
+		: settings.value.presentation?.layout ?? settings.value.appearance.layout ?? 'grid',
+)
 const mobileToolsOpen = ref(false)
+const mediaDimensions = ref<Record<number, { width: number; height: number }>>({})
+const mobileViewportQuery = window.matchMedia('(max-width: 640px)')
+const mobileViewport = ref(mobileViewportQuery.matches)
 const nonce = ref(sessionStorage.getItem(`proofing-gallery-nonce:${props.gallery.token}`) ?? '')
 let searchTimer: number | undefined
+const activeFilterCount = computed(() => Number(groupBy.value !== 'none') + Number(layout.value !== 'grid'))
+
+watch(layout, value => localStorage.setItem(`proofing-gallery-layout:${props.gallery.token}`, value))
 
 onMounted(() => {
 	if (props.gallery.initialPage) {
@@ -68,12 +79,19 @@ onMounted(() => {
 		loadPage(0).then(() => deferCollaborationInitialization())
 	}
 	document.addEventListener('visibilitychange', onVisibilityChange)
+	mobileViewportQuery.addEventListener('change', onMobileViewportChange)
 })
 onBeforeUnmount(() => {
 	document.removeEventListener('visibilitychange', onVisibilityChange)
+	mobileViewportQuery.removeEventListener('change', onMobileViewportChange)
 	window.clearInterval(collaborationTimer)
 	window.clearTimeout(searchTimer)
 })
+
+function onMobileViewportChange(event: MediaQueryListEvent) {
+	mobileViewport.value = event.matches
+	if (!event.matches) mobileToolsOpen.value = false
+}
 
 function deferCollaborationInitialization() {
 	requestAnimationFrame(() => requestAnimationFrame(() => initializeCollaboration()))
@@ -247,8 +265,24 @@ async function saveSelection() {
 	savingSelection.value = false
 }
 
-function previewUrl(item: MediaItem, width = 900, height = 900): string {
-	return publicEndpoint(`media/${item.id}/preview?x=${width}&y=${height}`)
+function previewUrl(item: MediaItem, width = 900, height = 900, mode: 'cover' | 'fit' = 'cover'): string {
+	return publicEndpoint(`media/${item.id}/preview?x=${width}&y=${height}&mode=${mode}`)
+}
+
+function rememberDimensions(item: MediaItem, event: Event) {
+	const image = event.currentTarget as HTMLImageElement
+	if (!image.naturalWidth || !image.naturalHeight) return
+	mediaDimensions.value = {
+		...mediaDimensions.value,
+		[item.id]: { width: image.naturalWidth, height: image.naturalHeight },
+	}
+}
+
+function resetViewFilters() {
+	groupBy.value = 'none'
+	layout.value = 'grid'
+	mobileToolsOpen.value = false
+	applyView()
 }
 
 function assetUrl(kind: 'logo' | 'hero'): string {
@@ -282,6 +316,7 @@ function publicEndpoint(path: string): string {
 }
 
 function openItem(item: MediaItem) {
+	mobileToolsOpen.value = false
 	if (!item.folder) {
 		activeIndex.value = mediaItems.value.findIndex(media => media.id === item.id)
 		return
@@ -342,6 +377,7 @@ function upOneLevel() {
 			}"
 			:style="settings.appearance.heroFileId ? { backgroundImage: `url(${assetUrl('hero')})` } : undefined">
 			<div :class="`public-gallery__hero-copy--${settings.presentation?.titleAlignment ?? settings.appearance.titleAlignment ?? 'left'}`">
+				<span class="public-gallery__hero-count" aria-hidden="true">№ {{ total }}</span>
 				<h2 class="public-gallery__title">
 					{{ title }}
 				</h2>
@@ -401,11 +437,14 @@ function upOneLevel() {
 					:aria-expanded="mobileToolsOpen"
 					:aria-controls="'proofing-gallery-view-tools'"
 					@click="mobileToolsOpen = !mobileToolsOpen">
-					{{ t('proofing_gallery', 'Filter & view') }}
+					{{ t('proofing_gallery', 'Filter & view') }}<span v-if="activeFilterCount">{{ activeFilterCount }}</span>
 				</button>
+				<div v-if="mobileToolsOpen" class="gallery-toolbar__backdrop" aria-hidden="true" />
 				<div id="proofing-gallery-view-tools"
 					class="gallery-toolbar__secondary"
-					:class="{ 'gallery-toolbar__secondary--open': mobileToolsOpen }">
+					:class="{ 'gallery-toolbar__secondary--open': mobileToolsOpen }"
+					:aria-hidden="mobileViewport && !mobileToolsOpen ? 'true' : undefined"
+					:inert="mobileViewport && !mobileToolsOpen">
 					<label>
 						<span>{{ t('proofing_gallery', 'Group') }}</span>
 						<select v-model="groupBy" :aria-label="t('proofing_gallery', 'Group gallery')" @change="applyView">
@@ -424,7 +463,18 @@ function upOneLevel() {
 					<button v-if="settings.mode === 'collaboration' && !guest" type="button" @click="guestDialogOpen = true; mobileToolsOpen = false">
 						{{ t('proofing_gallery', 'Identify for feedback') }}
 					</button>
+					<button v-if="activeFilterCount" type="button" @click="resetViewFilters">
+						{{ t('proofing_gallery', 'Reset') }}
+					</button>
 				</div>
+			</div>
+			<div v-if="activeFilterCount" class="gallery-filter-chips" :aria-label="t('proofing_gallery', 'Gallery tools')">
+				<button v-if="groupBy !== 'none'" type="button" @click="groupBy = 'none'; applyView()">
+					{{ t('proofing_gallery', 'File type') }} ×
+				</button>
+				<button v-if="layout !== 'grid'" type="button" @click="layout = 'grid'">
+					{{ layout === 'masonry' ? t('proofing_gallery', 'Masonry') : t('proofing_gallery', 'List') }} ×
+				</button>
 			</div>
 			<div class="public-gallery__summary">
 				<p>
@@ -438,39 +488,44 @@ function upOneLevel() {
 					{{ t('proofing_gallery', 'Select an image to review it.') }}
 				</p>
 			</div>
-			<div v-if="(canDownloadSelection || (settings.mode === 'collaboration' && settings.review?.selections !== false)) && selectedIds.length" class="delivery-bar proof-rail">
-				<div class="proof-rail__previews" aria-hidden="true">
-					<img v-for="item in selectedItems.slice(0, 6)"
-						:key="item.id"
-						:src="previewUrl(item, 96, 72)"
-						alt="">
-				</div>
-				<span>{{ n('proofing_gallery', '%n item selected', '%n items selected', selectedIds.length) }}</span>
-				<a v-if="canDownloadSelection" :href="selectionUrl('download/selection')">{{ t('proofing_gallery', 'Download ZIP') }}</a>
-				<a v-if="canDownloadSelection && settings.delivery?.contactSheet !== false" :href="selectionUrl('contact-sheet')" target="_blank">{{ t('proofing_gallery', 'Print contact sheet') }}</a>
-				<template v-if="settings.mode === 'collaboration' && settings.review?.selections !== false">
-					<input
-						id="proofing-gallery-selection-name"
-						v-model="selectionName"
-						name="selectionName"
-						maxlength="120"
-						:placeholder="t('proofing_gallery', 'Selection name')"
-						:aria-label="t('proofing_gallery', 'Selection name')">
-					<input
-						id="proofing-gallery-selection-message"
-						v-model="selectionMessage"
-						name="selectionMessage"
-						maxlength="2000"
-						:placeholder="t('proofing_gallery', 'Message (optional)')"
-						:aria-label="t('proofing_gallery', 'Message (optional)')">
-					<button type="button" :disabled="savingSelection || !selectionName.trim()" @click="saveSelection">
-						{{ t('proofing_gallery', 'Save selection') }}
+			<Transition name="proof-rail">
+				<div v-if="(canDownloadSelection || (settings.mode === 'collaboration' && settings.review?.selections !== false)) && selectedIds.length" class="delivery-bar proof-rail">
+					<TransitionGroup name="proof-preview"
+						tag="div"
+						class="proof-rail__previews"
+						aria-hidden="true">
+						<img v-for="item in selectedItems.slice(0, 6)"
+							:key="item.id"
+							:src="previewUrl(item, 96, 72)"
+							alt="">
+					</TransitionGroup>
+					<span>{{ n('proofing_gallery', '%n item selected', '%n items selected', selectedIds.length) }}</span>
+					<a v-if="canDownloadSelection" :href="selectionUrl('download/selection')">{{ t('proofing_gallery', 'Download ZIP') }}</a>
+					<a v-if="canDownloadSelection && settings.delivery?.contactSheet !== false" :href="selectionUrl('contact-sheet')" target="_blank">{{ t('proofing_gallery', 'Print contact sheet') }}</a>
+					<template v-if="settings.mode === 'collaboration' && settings.review?.selections !== false">
+						<input
+							id="proofing-gallery-selection-name"
+							v-model="selectionName"
+							name="selectionName"
+							maxlength="120"
+							:placeholder="t('proofing_gallery', 'Selection name')"
+							:aria-label="t('proofing_gallery', 'Selection name')">
+						<input
+							id="proofing-gallery-selection-message"
+							v-model="selectionMessage"
+							name="selectionMessage"
+							maxlength="2000"
+							:placeholder="t('proofing_gallery', 'Message (optional)')"
+							:aria-label="t('proofing_gallery', 'Message (optional)')">
+						<button type="button" :disabled="savingSelection || !selectionName.trim()" @click="saveSelection">
+							{{ t('proofing_gallery', 'Save selection') }}
+						</button>
+					</template>
+					<button type="button" @click="selectedIds = []">
+						{{ t('proofing_gallery', 'Clear') }}
 					</button>
-				</template>
-				<button type="button" @click="selectedIds = []">
-					{{ t('proofing_gallery', 'Clear') }}
-				</button>
-			</div>
+				</div>
+			</Transition>
 
 			<div v-if="loading" class="public-gallery__skeleton" aria-label="Loading gallery">
 				<span v-for="index in 12" :key="index" />
@@ -497,7 +552,8 @@ function upOneLevel() {
 				<article
 					v-for="(item, index) in items"
 					:key="item.id"
-					class="media-tile">
+					class="media-tile"
+					:class="{ 'media-tile--selected': selectedIds.includes(item.id) }">
 					<button
 						class="media-tile__open"
 						type="button"
@@ -505,10 +561,11 @@ function upOneLevel() {
 						@click="openItem(item)">
 						<img
 							v-if="item.mimeType.startsWith('image/')"
-							:src="previewUrl(item)"
+							:src="previewUrl(item, 900, 900, 'fit')"
 							alt=""
 							:loading="index === 0 ? 'eager' : 'lazy'"
-							:fetchpriority="index === 0 ? 'high' : 'auto'">
+							:fetchpriority="index === 0 ? 'high' : 'auto'"
+							@load="rememberDimensions(item, $event)">
 						<span v-else-if="item.folder" class="media-tile__folder" aria-hidden="true" />
 						<span v-else class="media-tile__video" aria-hidden="true">▶</span>
 						<span v-if="settings.presentation?.showFilenames ?? settings.showFilenames" class="media-tile__name" aria-hidden="true">
@@ -593,6 +650,7 @@ function upOneLevel() {
 			:settings="settings"
 			:collaboration="collaboration"
 			:guest="guest"
+			:dimensions="mediaDimensions"
 			:mutate="mutateCollaboration"
 			:preview-url="previewUrl"
 			:stream-url="streamUrl"
@@ -667,6 +725,8 @@ function upOneLevel() {
 }
 
 .public-gallery__topbar {
+	position: relative;
+	z-index: 3;
 	display: flex;
 	min-height: 58px;
 	align-items: center;
@@ -674,6 +734,7 @@ function upOneLevel() {
 	padding: 0 clamp(20px, 4vw, 64px);
 	border-bottom: 1px solid var(--gallery-border);
 	background: var(--gallery-bg);
+	box-shadow: inset 5px 0 0 var(--gallery-accent);
 }
 
 .public-gallery__logo {
@@ -695,7 +756,7 @@ function upOneLevel() {
 
 .public-gallery__hero {
 	display: flex;
-	min-height: 180px;
+	min-height: 220px;
 	align-items: flex-end;
 	padding: 32px clamp(20px, 5vw, 72px);
 	background: #1c1c1c;
@@ -713,13 +774,14 @@ function upOneLevel() {
 	position: absolute;
 	z-index: -1;
 	inset: 0;
-	background: linear-gradient(180deg, rgb(0 0 0 / 12%) 20%, rgb(0 0 0 / 72%) 100%);
+	background: rgb(0 0 0 / 42%);
+	box-shadow: inset 0 -180px 160px -90px rgb(0 0 0 / 86%);
 	content: '';
 }
 
 .public-gallery__hero--cinematic {
-	min-height: clamp(340px, 52svh, 620px);
-	padding-block: clamp(44px, 7vw, 92px);
+	min-height: clamp(440px, 68svh, 820px);
+	padding-block: clamp(52px, 9vw, 120px);
 }
 
 .public-gallery--font-editorial { font-family: Optima, Candara, 'Noto Sans', sans-serif; }
@@ -739,14 +801,26 @@ function upOneLevel() {
 .public-gallery__title {
 	margin: 0;
 	color: #fff;
-	font-size: clamp(30px, 4vw, 58px);
-	font-weight: 500;
-	letter-spacing: -0.03em;
-	line-height: 1.05;
+	max-width: 14ch;
+	font-size: clamp(38px, 6vw, 84px);
+	font-weight: 650;
+	letter-spacing: -0.055em;
+	line-height: 0.92;
+	text-wrap: balance;
 }
 
 .public-gallery__hero--cinematic .public-gallery__title {
-	font-size: clamp(42px, 7vw, 92px);
+	font-size: clamp(58px, 10vw, 142px);
+}
+
+.public-gallery__hero-count {
+	display: inline-block;
+	margin-bottom: 16px;
+	padding: 7px 10px;
+	background: var(--gallery-accent);
+	color: #fff;
+	font-size: 12px;
+	font-weight: 750;
 }
 
 .public-gallery__welcome {
@@ -780,6 +854,17 @@ function upOneLevel() {
 .gallery-toolbar__more {
 	display: none;
 }
+
+.gallery-toolbar__more span {
+	margin-inline-start: 7px;
+	padding: 1px 5px;
+	border-radius: 4px;
+	background: var(--gallery-accent);
+	color: #090909;
+	font-size: 11px;
+}
+
+.gallery-toolbar__backdrop { display: none; }
 
 .gallery-toolbar label {
 	display: flex;
@@ -834,6 +919,23 @@ function upOneLevel() {
 	padding: 0 4px 18px;
 	color: var(--gallery-muted);
 	font-size: 13px;
+}
+
+.gallery-filter-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: -8px 4px 16px;
+}
+
+.gallery-filter-chips button {
+	min-height: 32px;
+	padding: 0 9px;
+	border: 1px solid var(--gallery-accent);
+	border-radius: 5px;
+	background: transparent;
+	color: var(--gallery-text);
+	cursor: pointer;
 }
 
 .guest-identity {
@@ -903,8 +1005,10 @@ function upOneLevel() {
 	gap: 12px;
 	margin: 0 4px 18px;
 	padding: 10px 12px;
-	border: 1px solid var(--gallery-border);
-	background: var(--gallery-surface);
+	border: 1px solid var(--gallery-accent);
+	border-top-width: 4px;
+	background: color-mix(in srgb, var(--gallery-surface) 88%, var(--gallery-accent));
+	box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
 	font-size: 13px;
 }
 
@@ -920,6 +1024,19 @@ function upOneLevel() {
 	border: 2px solid var(--gallery-surface);
 	object-fit: cover;
 }
+
+.proof-rail-enter-active,
+.proof-rail-leave-active { transition: opacity 180ms ease, transform 220ms cubic-bezier(.2,.75,.25,1); }
+
+.proof-rail-enter-from,
+.proof-rail-leave-to { opacity: 0; transform: translateY(28px); }
+
+.proof-preview-enter-active,
+.proof-preview-leave-active,
+.proof-preview-move { transition: opacity 160ms ease, transform 180ms ease; }
+
+.proof-preview-enter-from,
+.proof-preview-leave-to { opacity: 0; transform: scale(.82); }
 
 .delivery-bar a {
 	color: var(--gallery-accent-readable);
@@ -996,13 +1113,19 @@ function upOneLevel() {
 	border-radius: var(--tile-radius);
 	background: var(--gallery-surface-raised);
 	color: var(--gallery-text);
+	transition: outline-color 140ms ease, transform 220ms cubic-bezier(.2,.75,.25,1);
 }
 
 .media-tile:hover,
 .media-tile:focus-within {
 	z-index: 1;
-	outline: 2px solid var(--gallery-accent);
-	outline-offset: -2px;
+	outline: 4px solid var(--gallery-accent);
+	outline-offset: -4px;
+}
+
+.media-tile--selected {
+	outline: 5px solid var(--gallery-accent);
+	outline-offset: -5px;
 }
 
 .media-tile__open {
@@ -1022,7 +1145,11 @@ function upOneLevel() {
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
+	transition: filter 180ms ease, transform 360ms cubic-bezier(.2,.75,.25,1);
 }
+
+.media-tile:hover .media-tile__open img,
+.media-tile:focus-within .media-tile__open img { filter: contrast(1.04) saturate(1.08); transform: scale(1.035); }
 
 .media-tile__folder {
 	position: absolute;
@@ -1083,7 +1210,8 @@ function upOneLevel() {
 .media-tile__select--active {
 	border-color: var(--gallery-accent);
 	background: var(--gallery-accent);
-	color: #111;
+	color: #080808;
+	box-shadow: 0 0 0 4px rgb(0 0 0 / 48%);
 }
 
 .public-gallery__message {
@@ -1202,8 +1330,8 @@ function upOneLevel() {
 
 	.public-gallery__hero--cinematic,
 	.public-gallery__hero--cinematic.public-gallery__hero--image {
-		min-height: min(40svh, 320px);
-		max-height: 320px;
+		min-height: min(58svh, 520px);
+		max-height: 520px;
 	}
 
 	.public-gallery__title {
@@ -1211,7 +1339,7 @@ function upOneLevel() {
 	}
 
 	.public-gallery__hero--cinematic .public-gallery__title {
-		font-size: clamp(34px, 11vw, 52px);
+		font-size: clamp(46px, 15vw, 76px);
 	}
 
 	.public-gallery__content {
@@ -1258,16 +1386,40 @@ function upOneLevel() {
 	}
 
 	.gallery-toolbar__secondary {
-		display: none;
-		grid-column: 1 / -1;
+		position: fixed;
+		z-index: 21;
+		inset: auto 0 0;
+		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 8px;
-		padding-top: 8px;
-		border-top: 1px solid var(--gallery-border);
+		gap: 12px;
+		padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+		border-top: 4px solid var(--gallery-accent);
+		background: var(--gallery-surface);
+		box-shadow: 0 -8px 28px rgb(0 0 0 / 34%);
+		opacity: 0;
+		pointer-events: none;
+		transform: translateY(105%);
+		transition: opacity 160ms ease, transform 240ms cubic-bezier(.2,.75,.25,1);
 	}
 
 	.gallery-toolbar__secondary--open {
-		display: grid;
+		opacity: 1;
+		pointer-events: auto;
+		transform: translateY(0);
+	}
+
+	.gallery-toolbar__backdrop {
+		position: fixed;
+		z-index: 20;
+		inset: 0;
+		display: block;
+		width: 100%;
+		height: 100%;
+		padding: 0;
+		border: 0;
+		border-radius: 0;
+		background: rgb(0 0 0 / 62%);
+		pointer-events: none;
 	}
 
 	.gallery-toolbar__secondary label {
@@ -1316,7 +1468,7 @@ function upOneLevel() {
 
 	.delivery-bar {
 		flex-wrap: wrap;
-		bottom: 8px;
+		bottom: max(8px, env(safe-area-inset-bottom));
 	}
 
 	.proof-rail__previews {
@@ -1335,6 +1487,7 @@ function upOneLevel() {
 	.public-gallery *::after {
 		scroll-behavior: auto !important;
 		transition-duration: 0.01ms !important;
+		animation-duration: 0.01ms !important;
 	}
 }
 </style>

@@ -5,10 +5,14 @@ declare(strict_types=1);
 namespace OCA\ProofingGallery\Tests\Unit\Service;
 
 use OCA\ProofingGallery\Service\FolderService;
+use OCA\ProofingGallery\Service\MediaMetadataService;
+use OCA\ProofingGallery\Service\PolicyService;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\Files\Node;
+use OCP\FilesMetadata\IFilesMetadataManager;
+use OCP\IConfig;
 use PHPUnit\Framework\TestCase;
 
 final class FolderServiceTest extends TestCase {
@@ -76,7 +80,12 @@ final class FolderServiceTest extends TestCase {
 		$root = $this->createMock(IRootFolder::class);
 		$root->method('getUserFolder')->with('owner')->willReturn($userFolder);
 
-		return new FolderService($root);
+		$metadata = new MediaMetadataService(
+			$this->createMock(IFilesMetadataManager::class),
+			new PolicyService($this->createMock(IConfig::class)),
+		);
+
+		return new FolderService($root, $metadata);
 	}
 
 	private function file(int $id, string $name, string $mime, int $modifiedAt = 1_700_000_000): File {

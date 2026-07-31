@@ -15,6 +15,7 @@ final readonly class MediaItem implements JsonSerializable {
 		public int $modifiedAt,
 		public string $etag,
 		public bool $folder,
+		public array $metadata = ['state' => 'unavailable'],
 	) {
 	}
 
@@ -28,6 +29,7 @@ final readonly class MediaItem implements JsonSerializable {
 			'modifiedAt' => $this->modifiedAt,
 			'etag' => $this->etag,
 			'folder' => $this->folder,
+			'metadata' => $this->metadata,
 		];
 	}
 }

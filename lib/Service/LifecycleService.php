@@ -18,6 +18,7 @@ final class LifecycleService {
 		private IAppData $appData,
 		private PolicyService $policies,
 		private CollectionAnchorReconciler $collectionAnchors,
+		private VersionService $versions,
 	) {
 	}
 
@@ -35,7 +36,8 @@ final class LifecycleService {
 		);
 		$orphans = $this->cleanupOrphanMetadata();
 		$collectionAnchors = $this->collectionAnchors->reconcile(false)['deleted'];
-		return compact('events', 'uploads', 'previews', 'orphans', 'collectionAnchors');
+		$versions = $this->versions->cleanupExpired(self::BATCH_SIZE);
+		return compact('events', 'uploads', 'previews', 'versions', 'orphans', 'collectionAnchors');
 	}
 
 	private function deleteOldRows(string $table, string $column, int $before): int {

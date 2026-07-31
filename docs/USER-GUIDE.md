@@ -55,6 +55,31 @@ Guests do not need Nextcloud accounts. Their browser receives a private session
 cookie and a separate mutation nonce. Clearing site data or deleting the guest
 identity ends access to that identity's private feedback.
 
+## Photo metadata and XMP sidecars
+
+In a folder gallery, choose **Index metadata** to process the current folder in
+the administrator-defined batch size. Once indexed, **Metadata filters** can
+narrow the owner view by capture date, camera, lens, keyword, or minimum
+rating. Files outside the configured size limit remain unprocessed.
+
+Open a file's **Metadata** action to inspect technical EXIF/IPTC fields and edit
+title, description, creator, copyright, keywords, rating, or label. Saving
+creates or updates `<image basename>.xmp` beside the original. The original is
+never rewritten. Existing sidecars are merged, and saving stops if the source
+or sidecar changed since it was opened. Two images with the same basename in
+one folder cannot safely share an Adobe-style sidecar, so resolve that filename
+collision first.
+
+Public image information is off by default. In **Design**, owners can expose
+individual safe fields such as capture date, camera, lens, exposure, title, or
+copyright. GPS, keywords, rating, and workflow labels always remain private.
+
+The **Client selections** section can write a saved selection back to each
+selected image's sidecar. The export records a five-star selection, the most
+common workflow label, standard keywords, a Lightroom hierarchy, and the
+gallery/selection identity in the Proofing Gallery XMP namespace. Review any
+reported per-file conflicts before repeating the export.
+
 ## Downloads and uploads
 
 Depending on gallery settings, guests can download one original, a ZIP of their

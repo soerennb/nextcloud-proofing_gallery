@@ -23,6 +23,7 @@ final class Admin implements ISettings {
 		Util::addScript(Application::APP_ID, 'proofing_gallery-admin');
 		return new TemplateResponse(Application::APP_ID, 'admin', [
 			'policies' => $this->policies->all(),
+			'galleryDefaults' => $this->policies->galleryDefaults(),
 			'health' => $this->health->status(),
 		]);
 	}

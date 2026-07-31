@@ -1,12 +1,47 @@
 #proofing-gallery-admin {
-	max-width: 720px;
+	max-width: 860px;
 	box-sizing: border-box;
-	padding: 0 24px 48px;
+	padding: 0 24px 110px;
 }
 
-.proofing-gallery-admin__form h3,
 #proofing-gallery-admin > h3 {
 	margin-block: 28px 12px;
+}
+
+#proofing-gallery-admin > h2 {
+	margin-bottom: 6px;
+	font-size: clamp(30px, 4vw, 46px);
+	letter-spacing: -0.04em;
+}
+
+.proofing-gallery-admin__form {
+	display: grid;
+	gap: 18px;
+	margin-top: 28px;
+}
+
+.proofing-gallery-admin__form fieldset {
+	display: grid;
+	gap: 4px;
+	margin: 0;
+	padding: 18px 20px 20px;
+	border: 1px solid var(--color-border);
+	border-top: 4px solid var(--color-primary-element);
+	border-radius: 8px;
+}
+
+.proofing-gallery-admin__form legend {
+	padding: 0 8px;
+	font-size: 18px;
+	font-weight: 700;
+}
+
+.proofing-gallery-admin__hint {
+	display: block !important;
+	margin: 0 0 10px !important;
+	color: var(--color-text-maxcontrast);
+	font-size: 13px;
+	line-height: 1.45;
 }
 
 .proofing-gallery-admin__form p {
@@ -17,15 +52,36 @@
 	margin-block: 10px;
 }
 
-.proofing-gallery-admin__form input {
+.proofing-gallery-admin__form input,
+.proofing-gallery-admin__form select {
 	width: 100%;
 	min-height: 40px;
 }
 
 .proofing-gallery-admin__status {
-	margin-inline-start: 12px;
+	min-width: 0;
 	color: var(--color-text-maxcontrast);
 }
+
+.proofing-gallery-admin__save-bar {
+	position: sticky;
+	z-index: 4;
+	bottom: 12px;
+	display: grid;
+	grid-template-columns: minmax(120px, 1fr) auto minmax(0, 180px);
+	align-items: center;
+	gap: 12px;
+	padding: 10px 12px 10px 16px;
+	border: 1px solid var(--color-border-maxcontrast);
+	border-top: 4px solid var(--color-primary-element);
+	border-radius: 8px;
+	background: var(--color-main-background);
+	box-shadow: 0 2px 8px var(--color-box-shadow);
+}
+
+.proofing-gallery-admin__dirty { font-weight: 600; }
+
+.proofing-gallery-admin__health-section { margin-top: 44px; }
 
 .proofing-gallery-admin__health {
 	margin: 0;
@@ -70,6 +126,17 @@
 	.proofing-gallery-admin__form p {
 		grid-template-columns: 1fr;
 		gap: 4px;
+	}
+
+	.proofing-gallery-admin__form fieldset { padding: 14px 12px 16px; }
+
+	.proofing-gallery-admin__save-bar {
+		bottom: 8px;
+		grid-template-columns: minmax(0, 1fr) auto;
+	}
+
+	.proofing-gallery-admin__status {
+		grid-column: 1 / -1;
 	}
 
 	.proofing-gallery-admin__status {

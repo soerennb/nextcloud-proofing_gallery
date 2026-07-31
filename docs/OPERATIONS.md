@@ -51,6 +51,18 @@ failed Nextcloud background jobs. Cleanup is eventual, so allow headroom for int
 uploads. Native Nextcloud retention, backup, encryption, and object-storage
 policies still apply to gallery source folders.
 
+The **Photo metadata** administration section separately bounds the maximum
+image size processed for embedded EXIF/IPTC data and the number of files in one
+manual indexing run. XMP sidecar writing can be disabled instance-wide without
+disabling metadata reads. Processing is local to the Nextcloud instance and
+uses FilesMetadata for ETag-bound index records. Size limits reduce memory and
+temporary-disk exposure; they are not upload limits.
+
+XMP writes create `<basename>.xmp` in the original's folder and therefore
+require a writable source folder. Backups and storage quotas should account for
+these small files. Sidecars are capped at 1 MiB, external XML entities are
+disabled, and writes use source/sidecar ETags to surface concurrent changes.
+
 Collection galleries create empty native share anchors below each owner's
 `.proofing-gallery/collections` directory. The application database contains the
 ordered source references; anchors must stay empty and are not media storage.

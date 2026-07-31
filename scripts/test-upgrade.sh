@@ -6,7 +6,7 @@ repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 compose_file="${repo_dir}/tests/compat/compose.yaml"
 archive="${repo_dir}/build/artifacts/appstore/proofing_gallery.tar.gz"
 upgrade_root="$(mktemp -d -t proofing-gallery-upgrade.XXXXXXXX)"
-project_name="pg-upgrade-beta3-$$"
+project_name="pg-upgrade-alpha1-$$"
 app_source="${upgrade_root}/proofing_gallery"
 
 cleanup() {
@@ -24,7 +24,6 @@ fi
 
 install -d "${app_source}"
 git -C "${repo_dir}" archive HEAD | tar -x -C "${app_source}"
-sed -i 's#<version>0.2.0-beta.1</version>#<version>0.2.0-beta.2</version>#' "${app_source}/appinfo/info.xml"
 
 compose() {
 	COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION=34 \
@@ -73,9 +72,9 @@ compose exec -T --user www-data sqlite php -r '
 '
 version="$(compose exec -T --user www-data sqlite php occ app:list --enabled --output=json \
 	| php -r '$apps=json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR); echo $apps["enabled"]["proofing_gallery"];')"
-if [[ "${version}" != "0.2.0-beta.3" ]]; then
+if [[ "${version}" != "0.3.0-alpha.1" ]]; then
 	echo "Unexpected upgraded version: ${version}" >&2
 	exit 4
 fi
 
-echo "Beta.2 -> Beta.3 schema and data upgrade passed (${version})."
+echo "Beta.3 -> 0.3 Alpha.1 schema and data upgrade passed (${version})."

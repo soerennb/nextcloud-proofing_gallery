@@ -37,6 +37,28 @@ export interface Gallery {
 	}
 }
 
+export interface MediaMetadata {
+	state: 'ready' | 'pending' | 'unavailable'
+	capturedAt?: number
+	camera?: string
+	lens?: string
+	focalLength?: number
+	aperture?: number
+	exposureTime?: string
+	iso?: number
+	width?: number
+	height?: number
+	title?: string
+	description?: string
+	creator?: string
+	copyright?: string
+	keywords?: string[]
+	rating?: number
+	label?: string
+	gps?: { latitude: number; longitude: number }
+	sidecar?: { name: string; etag: string; fileId: number; invalid?: boolean }
+}
+
 export interface MediaItem {
 	id: number
 	name: string
@@ -47,6 +69,7 @@ export interface MediaItem {
 	folder: boolean
 	sourceGalleryId?: number
 	sourceGalleryTitle?: string
+	metadata?: MediaMetadata
 }
 
 export interface CollectionItem {
@@ -81,6 +104,16 @@ export interface MediaVersion {
 	size: number
 	createdBy: string
 	createdAt: number
+}
+
+export interface OwnerSelection {
+	id: string
+	name: string
+	message: string
+	status: 'open' | 'completed'
+	fileIds: number[]
+	updatedAt: number
+	author: string
 }
 
 export interface GalleryManager {

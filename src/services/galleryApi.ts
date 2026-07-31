@@ -1,7 +1,7 @@
 import axios from '@nextcloud/axios'
 import { generateOcsUrl, generateUrl } from '@nextcloud/router'
 
-import type { CollectionDocument, Gallery, GalleryManager, GalleryPage, GalleryPreset, InvitationTemplate, MediaItem, MediaPage, MediaVersion, NotificationEventType, NotificationSubscription } from '../types'
+import type { CollectionDocument, Gallery, GalleryManager, GalleryPage, GalleryPreset, InvitationTemplate, MediaItem, MediaMetadata, MediaPage, MediaVersion, NotificationEventType, NotificationSubscription, OwnerSelection } from '../types'
 import type { CanonicalGallerySettings, GallerySettings } from '../domain/gallerySettings'
 
 const galleriesUrl = generateOcsUrl('/apps/proofing_gallery/api/v1/galleries')
@@ -91,12 +91,53 @@ export async function fetchGalleryMedia(
 	offset = 0,
 	path = '',
 	search = '',
-	sortBy: GallerySettings['navigation']['sortBy'] = 'name',
+	sortBy: GallerySettings['navigation']['sortBy'] | 'capturedAt' = 'name',
 	sortDirection: GallerySettings['navigation']['sortDirection'] = 'asc',
+	metadataFilters: {
+		capturedFrom?: string
+		capturedTo?: string
+		camera?: string
+		lens?: string
+		keyword?: string
+		ratingMin?: number
+	} = {},
 ): Promise<MediaPage> {
 	const { data } = await axios.get<MediaPage>(`${galleriesUrl}/${id}/media`, {
-		params: { limit, offset, path, search, sortBy, sortDirection },
+		params: { limit, offset, path, search, sortBy, sortDirection, ...metadataFilters },
 	})
+	return data
+}
+
+export async function fetchMediaMetadata(id: number, fileId: number, refresh = true): Promise<MediaMetadata> {
+	const { data } = await axios.get<MediaMetadata>(`${galleriesUrl}/${id}/media/${fileId}/metadata`, { params: { refresh } })
+	return data
+}
+
+export async function updateMediaMetadata(
+	id: number,
+	fileId: number,
+	changes: {
+		title?: string | null
+		description?: string | null
+		creator?: string | null
+		copyright?: string | null
+		keywords?: string[] | null
+		rating?: number | null
+		label?: string | null
+	},
+	expectedSourceEtag: string,
+	expectedSidecarEtag?: string,
+): Promise<MediaMetadata> {
+	const { data } = await axios.put<MediaMetadata>(`${galleriesUrl}/${id}/media/${fileId}/metadata`, {
+		changes,
+		expectedSourceEtag,
+		expectedSidecarEtag,
+	})
+	return data
+}
+
+export async function indexGalleryMetadata(id: number, path = ''): Promise<{ indexed: number; limit: number }> {
+	const { data } = await axios.post<{ indexed: number; limit: number }>(`${galleriesUrl}/${id}/metadata/index`, { path })
 	return data
 }
 
@@ -120,6 +161,41 @@ export async function renameGalleryMedia(id: number, fileId: number, name: strin
 
 export async function deleteGalleryMedia(id: number, fileId: number): Promise<void> {
 	await axios.delete(`${galleriesUrl}/${id}/media/${fileId}`)
+}
+
+export async function bulkGalleryMedia(id: number, action: 'delete' | 'move', fileIds: number[], destinationPath = ''): Promise<number> {
+	const { data } = await axios.post<{ count: number }>(`${galleriesUrl}/${id}/media/bulk`, { action, fileIds, destinationPath })
+	return data.count
+}
+
+export function ownerMediaDownloadUrl(id: number, fileIds: number[]): string {
+	const url = new URL(`${galleriesUrl}/${id}/media/download`, window.location.origin)
+	url.searchParams.set('fileIds', fileIds.join(','))
+	return url.toString()
+}
+
+export async function fetchOwnerSelections(id: number): Promise<OwnerSelection[]> {
+	const { data } = await axios.get<{ items: OwnerSelection[] }>(`${galleriesUrl}/${id}/selections`)
+	return data.items
+}
+
+export async function updateOwnerSelection(galleryId: number, selection: OwnerSelection): Promise<void> {
+	await axios.put(`${galleriesUrl}/${galleryId}/selections/${selection.id}`, { name: selection.name, status: selection.status })
+}
+
+export async function deleteOwnerSelection(galleryId: number, selectionId: string): Promise<void> {
+	await axios.delete(`${galleriesUrl}/${galleryId}/selections/${selectionId}`)
+}
+
+export function ownerSelectionExportUrl(galleryId: number, selectionId: string, format: 'csv' | 'plain' | 'search'): string {
+	const url = new URL(`${galleriesUrl}/${galleryId}/selections/${selectionId}/export`, window.location.origin)
+	url.searchParams.set('format', format)
+	return url.toString()
+}
+
+export async function exportOwnerSelectionXmp(galleryId: number, selectionId: string): Promise<{ written: number; failed: number }> {
+	const { data } = await axios.post<{ written: number; failed: number }>(`${galleriesUrl}/${galleryId}/selections/${selectionId}/xmp`)
+	return data
 }
 
 export async function fetchMediaVersions(id: number, fileId: number): Promise<MediaVersion[]> {

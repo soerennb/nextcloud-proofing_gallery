@@ -15,7 +15,10 @@ use OCP\Files\Node;
 final class FolderService {
 	private const SUPPORTED_VIDEO_MIMES = ['video/mp4', 'video/webm'];
 
-	public function __construct(private IRootFolder $rootFolder) {
+	public function __construct(
+		private IRootFolder $rootFolder,
+		private MediaMetadataService $metadata,
+	) {
 	}
 
 	public function resolveFolder(string $userId, int $folderId): Folder {
@@ -80,20 +83,70 @@ final class FolderService {
 		$node = $this->nodeInGallery($root, $nodeId);
 		$name = $this->safeName($name);
 		$parent = $node->getParent();
-		if (!$node->isUpdateable() || $parent->nodeExists($name)) {
+		$sidecar = $this->sidecarFor($node);
+		$newSidecarName = $node instanceof File ? pathinfo($name, PATHINFO_FILENAME) . '.xmp' : null;
+		if (!$node->isUpdateable() || $parent->nodeExists($name)
+			|| ($sidecar !== null && (!$sidecar->isUpdateable() || ($newSidecarName !== $sidecar->getName() && $parent->nodeExists((string)$newSidecarName))))) {
 			throw new FolderAccessException('The item cannot be renamed or the name already exists');
 		}
 		$node->move($parent->getPath() . '/' . $name);
+		if ($sidecar !== null && $newSidecarName !== $sidecar->getName()) $sidecar->move($parent->getPath() . '/' . $newSidecarName);
 		return $this->mediaItem($node);
 	}
 
 	public function deleteNode(string $userId, int $folderId, int $nodeId): void {
 		$root = $this->resolveFolder($userId, $folderId);
 		$node = $this->nodeInGallery($root, $nodeId);
-		if (!$node->isDeletable()) {
+		$sidecar = $this->sidecarFor($node);
+		if (!$node->isDeletable() || ($sidecar !== null && !$sidecar->isDeletable())) {
 			throw new FolderAccessException('The item cannot be deleted');
 		}
 		$node->delete();
+		$sidecar?->delete();
+	}
+
+	/** @param list<int> $nodeIds */
+	public function deleteNodes(string $userId, int $folderId, array $nodeIds): int {
+		$root = $this->resolveFolder($userId, $folderId);
+		$nodes = $this->bulkNodes($root, $nodeIds);
+		foreach ($nodes as $node) {
+			$sidecar = $this->sidecarFor($node);
+			if (!$node->isDeletable() || ($sidecar !== null && !$sidecar->isDeletable())) {
+				throw new FolderAccessException('At least one selected item cannot be deleted');
+			}
+		}
+		foreach ($nodes as $node) {
+			$sidecar = $this->sidecarFor($node);
+			$node->delete();
+			$sidecar?->delete();
+		}
+		return count($nodes);
+	}
+
+	/** @param list<int> $nodeIds */
+	public function moveNodes(string $userId, int $folderId, array $nodeIds, string $destinationPath): int {
+		$root = $this->resolveFolder($userId, $folderId);
+		$destination = $this->folderAt($root, trim($destinationPath, '/'));
+		$nodes = $this->bulkNodes($root, $nodeIds);
+		if (!$destination->isUpdateable()) {
+			throw new FolderAccessException('The destination is not writable');
+		}
+		foreach ($nodes as $node) {
+			$sidecar = $this->sidecarFor($node);
+			if (!$node->isUpdateable() || $destination->nodeExists($node->getName())
+				|| ($sidecar !== null && (!$sidecar->isUpdateable() || $destination->nodeExists($sidecar->getName())))) {
+				throw new FolderAccessException('At least one selected item cannot be moved or already exists at the destination');
+			}
+			if ($node instanceof Folder && ($node->getPath() === $destination->getPath() || $node->isSubNode($destination))) {
+				throw new FolderAccessException('A folder cannot be moved into itself');
+			}
+		}
+		foreach ($nodes as $node) {
+			$sidecar = $this->sidecarFor($node);
+			$node->move($destination->getPath() . '/' . $node->getName());
+			if ($sidecar !== null) $sidecar->move($destination->getPath() . '/' . $sidecar->getName());
+		}
+		return count($nodes);
 	}
 
 	public function resolveOwnerImage(string $userId, int $fileId): File {
@@ -115,14 +168,23 @@ final class FolderService {
 		string $search = '',
 		string $sortBy = 'name',
 		string $sortDirection = 'asc',
+		string $capturedFrom = '',
+		string $capturedTo = '',
+		string $camera = '',
+		string $lens = '',
+		string $keyword = '',
+		int $ratingMin = 0,
 	): MediaPage {
 		$limit = max(1, min(200, $limit));
 		$offset = max(0, $offset);
 		$search = mb_substr(trim($search), 0, 120);
-		if (!in_array($sortBy, ['name', 'modified', 'size'], true)
+		if (!in_array($sortBy, ['name', 'modified', 'size', 'capturedAt'], true)
 			|| !in_array($sortDirection, ['asc', 'desc'], true)) {
 			throw new \InvalidArgumentException('Invalid media sort');
 		}
+		if ($ratingMin < 0 || $ratingMin > 5) throw new \InvalidArgumentException('Invalid minimum rating');
+		$capturedFromTime = $this->filterTimestamp($capturedFrom);
+		$capturedToTime = $this->filterTimestamp($capturedTo, true);
 		$root = $this->resolveFolder($userId, $folderId);
 		$current = $this->folderAt($root, trim($path, '/'));
 		$nodes = array_values(array_filter(
@@ -131,7 +193,17 @@ final class FolderService {
 				&& ($node instanceof Folder || ($node instanceof File && $this->isSupported($node)))
 				&& ($search === '' || mb_stripos($node->getName(), $search) !== false),
 		));
-		usort($nodes, static function (Node $left, Node $right) use ($sortBy, $sortDirection): int {
+		$metadataById = [];
+		if ($capturedFrom !== '' || $capturedTo !== '' || $camera !== '' || $lens !== '' || $keyword !== '' || $ratingMin > 0 || $sortBy === 'capturedAt') {
+			$nodes = array_values(array_filter($nodes, function (Node $node) use (&$metadataById, $capturedFromTime, $capturedToTime, $camera, $lens, $keyword, $ratingMin): bool {
+				if ($node instanceof Folder) return true;
+				if (!$node instanceof File) return false;
+				$summary = $this->metadata->summary($node);
+				$metadataById[$node->getId()] = $summary;
+				return $this->matchesMetadata($summary, $capturedFromTime, $capturedToTime, $camera, $lens, $keyword, $ratingMin);
+			}));
+		}
+		usort($nodes, static function (Node $left, Node $right) use ($sortBy, $sortDirection, $metadataById): int {
 			if ($sortBy !== 'name') {
 				$folderOrder = ($left instanceof Folder ? 0 : 1) <=> ($right instanceof Folder ? 0 : 1);
 				if ($folderOrder !== 0) return $folderOrder;
@@ -139,6 +211,7 @@ final class FolderService {
 			$result = match ($sortBy) {
 				'modified' => $left->getMTime() <=> $right->getMTime(),
 				'size' => $left->getSize() <=> $right->getSize(),
+				'capturedAt' => (int)($metadataById[$left->getId()]['capturedAt'] ?? 0) <=> (int)($metadataById[$right->getId()]['capturedAt'] ?? 0),
 				default => strnatcasecmp($left->getName(), $right->getName()),
 			};
 			if ($result === 0) $result = strnatcasecmp($left->getName(), $right->getName());
@@ -180,12 +253,33 @@ final class FolderService {
 		throw new FolderAccessException('Gallery item was not found');
 	}
 
+	/** @param list<int> $nodeIds
+	 * @return list<Node>
+	 */
+	private function bulkNodes(Folder $root, array $nodeIds): array {
+		$nodeIds = array_values(array_unique(array_map('intval', $nodeIds)));
+		if ($nodeIds === [] || count($nodeIds) > 200 || in_array(0, $nodeIds, true)) {
+			throw new \InvalidArgumentException('Select between 1 and 200 gallery items');
+		}
+		return array_map(fn (int $nodeId): Node => $this->nodeInGallery($root, $nodeId), $nodeIds);
+	}
+
 	private function safeName(string $name): string {
 		$name = trim($name);
 		if ($name === '' || mb_strlen($name) > 255 || $name !== basename($name) || str_contains($name, "\0")) {
 			throw new \InvalidArgumentException('Invalid filename');
 		}
 		return $name;
+	}
+
+	private function sidecarFor(Node $node): ?File {
+		if (!$node instanceof File || !str_starts_with($node->getMimeType(), 'image/')) return null;
+		$parent = $node->getParent();
+		if (!$parent instanceof Folder) return null;
+		$name = pathinfo($node->getName(), PATHINFO_FILENAME) . '.xmp';
+		if (!$parent->nodeExists($name)) return null;
+		$sidecar = $parent->get($name);
+		return $sidecar instanceof File ? $sidecar : null;
 	}
 
 	private function mediaItem(Node $node): MediaItem {
@@ -197,7 +291,30 @@ final class FolderService {
 			$node->getMTime(),
 			$node->getEtag(),
 			$node instanceof Folder,
+			$node instanceof File ? $this->metadata->summary($node) : ['state' => 'unavailable'],
 		);
+	}
+
+	private function filterTimestamp(string $value, bool $endOfDay = false): ?int {
+		if ($value === '') return null;
+		$date = \DateTimeImmutable::createFromFormat('!Y-m-d', $value);
+		if ($date === false || $date->format('Y-m-d') !== $value) throw new \InvalidArgumentException('Invalid capture date');
+		return $endOfDay ? $date->setTime(23, 59, 59)->getTimestamp() : $date->getTimestamp();
+	}
+
+	/** @param array<string, mixed> $summary */
+	private function matchesMetadata(array $summary, ?int $from, ?int $to, string $camera, string $lens, string $keyword, int $ratingMin): bool {
+		if (($summary['state'] ?? '') !== 'ready') return false;
+		$captured = isset($summary['capturedAt']) ? (int)$summary['capturedAt'] : null;
+		if ($from !== null && ($captured === null || $captured < $from)) return false;
+		if ($to !== null && ($captured === null || $captured > $to)) return false;
+		if ($camera !== '' && mb_stripos((string)($summary['camera'] ?? ''), $camera) === false) return false;
+		if ($lens !== '' && mb_stripos((string)($summary['lens'] ?? ''), $lens) === false) return false;
+		if ($keyword !== '') {
+			$keywords = is_array($summary['keywords'] ?? null) ? implode("\n", $summary['keywords']) : '';
+			if (mb_stripos($keywords, $keyword) === false) return false;
+		}
+		return (int)($summary['rating'] ?? 0) >= $ratingMin;
 	}
 
 	/** @return array{folderId: int, displayPath: ?string, state: 'readable'} */

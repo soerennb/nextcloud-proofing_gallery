@@ -19,7 +19,14 @@ final class WatermarkPreviewService {
 	}
 
 	/** @return array{content: string, mimeType: string, etag: string} */
-	public function render(File $file, int $width, int $height, string $text, int $opacity): array {
+	public function render(
+		File $file,
+		int $width,
+		int $height,
+		string $text,
+		int $opacity,
+		string $mode = 'cover',
+	): array {
 		$cacheKey = hash('sha256', implode('|', [
 			(string)$file->getId(),
 			$file->getEtag(),
@@ -27,6 +34,7 @@ final class WatermarkPreviewService {
 			(string)$height,
 			$text,
 			(string)$opacity,
+			$mode,
 		]));
 		$folder = $this->cacheFolder();
 		$filename = $cacheKey . '.png';
@@ -38,7 +46,13 @@ final class WatermarkPreviewService {
 			];
 		}
 
-		$preview = $this->preview->getPreview($file, $width, $height, true, IPreview::MODE_COVER);
+		$preview = $this->preview->getPreview(
+			$file,
+			$width,
+			$height,
+			$mode === 'cover',
+			$mode === 'cover' ? IPreview::MODE_COVER : IPreview::MODE_FILL,
+		);
 		$image = imagecreatefromstring($preview->getContent());
 		if ($image === false) {
 			throw new \InvalidArgumentException('Preview format cannot be watermarked');

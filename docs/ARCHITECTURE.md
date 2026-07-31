@@ -40,6 +40,15 @@ Original media is never copied into app tables. Derived watermarked previews and
 resumable upload chunks live in Nextcloud appdata. Accepted uploads move into
 the source folder through the Files API.
 
+Image metadata is extracted locally within administrator-defined file and batch
+bounds, stored under an app-specific Nextcloud FilesMetadata key, and bound to
+the source ETag. Public responses project only the gallery's validated allowlist.
+Editable descriptive fields live in Adobe-style sibling XMP files; XML parsing
+rejects DTDs and network access, preserves unknown namespaces, and applies
+optimistic source/sidecar ETag checks. Proofing exports use standard XMP/DC/
+Lightroom fields plus `urn:nextcloud:proofing-gallery:1.0` for lossless workflow
+identity.
+
 ## Frontend
 
 Vite builds two Vue 3 entry points: the authenticated owner application and the

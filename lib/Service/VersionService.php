@@ -21,6 +21,7 @@ final class VersionService {
 		private ISecureRandom $random,
 		private ITimeFactory $clock,
 		private FolderService $folders,
+		private PolicyService $policies,
 	) {
 	}
 
@@ -103,6 +104,42 @@ final class VersionService {
 			$archive->delete();
 			throw $exception;
 		}
+		$this->pruneFile($gallery->getId(), $file->getId());
+	}
+
+	public function cleanupExpired(int $limit = 1000): int {
+		$before = $this->clock->getTime() - $this->policies->get('versionRetentionDays') * 86400;
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('id', 'gallery_id', 'file_id', 'version_id')->from('proofing_versions')
+			->where($qb->expr()->lt('created_at', $qb->createNamedParameter($before, IQueryBuilder::PARAM_INT)))
+			->orderBy('id', 'ASC')->setMaxResults(max(1, min(1000, $limit)));
+		return $this->deleteRows($qb->executeQuery()->fetchAllAssociative());
+	}
+
+	private function pruneFile(int $galleryId, int $fileId): void {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('id', 'gallery_id', 'file_id', 'version_id')->from('proofing_versions')
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
+			->orderBy('created_at', 'DESC')
+			->setFirstResult($this->policies->get('maxVersionsPerFile'));
+		$this->deleteRows($qb->executeQuery()->fetchAllAssociative());
+	}
+
+	/** @param list<array<string, mixed>> $rows */
+	private function deleteRows(array $rows): int {
+		foreach ($rows as $row) {
+			try {
+				$this->versionFolder((int)$row['gallery_id'], (int)$row['file_id'])->getFile((string)$row['version_id'])->delete();
+			} catch (\OCP\Files\NotFoundException) {
+			}
+		}
+		$ids = array_map(static fn (array $row): int => (int)$row['id'], $rows);
+		if ($ids === []) return 0;
+		$qb = $this->db->getQueryBuilder();
+		$qb->delete('proofing_versions')
+			->where($qb->expr()->in('id', $qb->createNamedParameter($ids, IQueryBuilder::PARAM_INT_ARRAY)));
+		return $qb->executeStatement();
 	}
 
 	/** @return array<string, mixed> */

@@ -10,12 +10,19 @@ tracking pixels, or external media services.
 - optional guest display name and encrypted email address
 - likes, color states, comments, normalized point annotations, and selections
 - pending upload metadata and temporary chunks
+- locally extracted EXIF/IPTC technical and descriptive metadata, plus optional
+  XMP sidecars stored beside originals
 - privacy-minimal operational activity such as action type, gallery, time, and
   a display label needed by the owner
 
 Guest session secrets and mutation nonces are random, independently hashed, and
 never stored in plaintext. Public share passwords are managed by Nextcloud.
 Optional email addresses use the server's secret-derived encryption.
+
+Embedded metadata processing never sends image content to an external service.
+Public galleries receive no metadata fields unless the owner selects them for
+that gallery. The public allowlist excludes GPS coordinates, keywords, ratings,
+and workflow labels even if those values exist in Files or an XMP sidecar.
 
 ## Visibility and retention
 

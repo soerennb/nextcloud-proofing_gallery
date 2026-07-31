@@ -10,7 +10,10 @@ use OCA\ProofingGallery\Domain\FeedbackVisibility;
 use OCA\ProofingGallery\Domain\GalleryMode;
 
 final readonly class GallerySettings implements JsonSerializable {
-	public const SCHEMA_VERSION = 2;
+	public const SCHEMA_VERSION = 3;
+	public const PUBLIC_METADATA_FIELDS = [
+		'capturedAt', 'camera', 'lens', 'exposure', 'title', 'description', 'creator', 'copyright',
+	];
 
 	/** @var list<string> */
 	public array $colorLabels;
@@ -27,6 +30,7 @@ final readonly class GallerySettings implements JsonSerializable {
 	 * @param array{downloadScope: string, contactSheet: bool, guestUploads: bool} $delivery
 	 * @param array{folders: bool, sortBy: string, sortDirection: string, groupBy: string} $navigation
 	 * @param array{allowModeSwitch: bool, hideRejectedInPresentation: bool} $security
+	 * @param array{publicFields: list<string>} $metadata
 	 */
 	public function __construct(
 		public int $schemaVersion,
@@ -37,6 +41,7 @@ final readonly class GallerySettings implements JsonSerializable {
 		public array $delivery,
 		public array $navigation,
 		public array $security,
+		public array $metadata,
 	) {
 		$this->validate();
 		$this->feedbackVisibility = FeedbackVisibility::from($review['visibility']);
@@ -58,13 +63,14 @@ final readonly class GallerySettings implements JsonSerializable {
 			$defaults['delivery'],
 			$defaults['navigation'],
 			$defaults['security'],
+			$defaults['metadata'],
 		);
 	}
 
 	/** @param array<string, mixed> $input */
 	public static function fromArray(array $input): self {
 		$allowed = [
-			'schemaVersion', 'mode', 'publicLocale', 'review', 'presentation', 'delivery', 'navigation', 'security',
+			'schemaVersion', 'mode', 'publicLocale', 'review', 'presentation', 'delivery', 'navigation', 'security', 'metadata',
 			// Version 1 compatibility. These aliases can be removed after all supported releases write v2 settings.
 			'feedbackVisibility', 'allowDownloads', 'allowGuestUploads', 'showFilenames', 'colorLabels', 'appearance',
 		];
@@ -79,6 +85,7 @@ final readonly class GallerySettings implements JsonSerializable {
 		$delivery = self::object($input, 'delivery');
 		$navigation = self::object($input, 'navigation');
 		$security = self::object($input, 'security');
+		$metadata = self::object($input, 'metadata');
 		$heroWasProvided = array_key_exists('heroFileId', $presentation)
 			|| (is_array($input['appearance'] ?? null) && array_key_exists('heroFileId', $input['appearance']));
 
@@ -113,6 +120,7 @@ final readonly class GallerySettings implements JsonSerializable {
 		$delivery = self::mergeSection('delivery', $defaults['delivery'], $delivery);
 		$navigation = self::mergeSection('navigation', $defaults['navigation'], $navigation);
 		$security = self::mergeSection('security', $defaults['security'], $security);
+		$metadata = self::mergeSection('metadata', $defaults['metadata'], $metadata);
 
 		$openerWasProvided = array_key_exists('openerStyle', self::object($input, 'presentation'))
 			|| (is_array($input['appearance'] ?? null) && array_key_exists('openerStyle', $input['appearance']));
@@ -135,13 +143,14 @@ final readonly class GallerySettings implements JsonSerializable {
 			$delivery,
 			$navigation,
 			$security,
+			$metadata,
 		);
 	}
 
 	/** @param array<string, mixed> $patch */
 	public static function merge(self $current, array $patch): self {
 		$base = $current->canonical();
-		foreach (['review', 'presentation', 'delivery', 'navigation', 'security'] as $section) {
+		foreach (['review', 'presentation', 'delivery', 'navigation', 'security', 'metadata'] as $section) {
 			if (isset($patch[$section]) && is_array($patch[$section])) {
 				$base[$section] = array_replace($base[$section], $patch[$section]);
 				unset($patch[$section]);
@@ -175,6 +184,7 @@ final readonly class GallerySettings implements JsonSerializable {
 			'delivery' => $this->delivery,
 			'navigation' => $this->navigation,
 			'security' => $this->security,
+			'metadata' => $this->metadata,
 		];
 	}
 
@@ -254,9 +264,20 @@ final readonly class GallerySettings implements JsonSerializable {
 			throw new InvalidArgumentException('Invalid navigation settings');
 		}
 		foreach (['allowModeSwitch', 'hideRejectedInPresentation'] as $key) self::assertBoolean($this->security[$key], 'security.' . $key);
+		if (!is_array($this->metadata['publicFields']) || !array_is_list($this->metadata['publicFields'])) {
+			throw new InvalidArgumentException('metadata.publicFields must be a list');
+		}
+		foreach ($this->metadata['publicFields'] as $field) {
+			if (!is_string($field) || !in_array($field, self::PUBLIC_METADATA_FIELDS, true)) {
+				throw new InvalidArgumentException('Invalid public metadata field');
+			}
+		}
+		if (count(array_unique($this->metadata['publicFields'])) !== count($this->metadata['publicFields'])) {
+			throw new InvalidArgumentException('Public metadata fields must be unique');
+		}
 	}
 
-	/** @return array{review: array<string, mixed>, presentation: array<string, mixed>, delivery: array<string, mixed>, navigation: array<string, mixed>, security: array<string, mixed>} */
+	/** @return array{review: array<string, mixed>, presentation: array<string, mixed>, delivery: array<string, mixed>, navigation: array<string, mixed>, security: array<string, mixed>, metadata: array<string, mixed>} */
 	private static function defaultValues(): array {
 		return [
 			'review' => [
@@ -275,6 +296,7 @@ final readonly class GallerySettings implements JsonSerializable {
 			'delivery' => ['downloadScope' => 'none', 'contactSheet' => true, 'guestUploads' => false],
 			'navigation' => ['folders' => true, 'sortBy' => 'name', 'sortDirection' => 'asc', 'groupBy' => 'none'],
 			'security' => ['allowModeSwitch' => false, 'hideRejectedInPresentation' => false],
+			'metadata' => ['publicFields' => []],
 		];
 	}
 

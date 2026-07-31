@@ -7,6 +7,7 @@ import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwit
 import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
+import QRCode from 'qrcode'
 import { computed, ref, watch } from 'vue'
 
 import {
@@ -41,6 +42,8 @@ const templatesLoading = ref(false)
 const templateSaving = ref(false)
 const selectedTemplateId = ref<number | null>(null)
 const templateName = ref('')
+const qrDataUrl = ref('')
+const qrSvg = ref('')
 const published = computed(() => publicUrl.value !== '')
 const publishDisabled = computed(() => publishing.value
 	|| (!published.value && props.gallery.sourceType === 'collection' && props.gallery.mediaSummary.total === 0))
@@ -49,6 +52,25 @@ watch(() => props.gallery, gallery => {
 	publicUrl.value = gallery.shareToken ? absoluteShareUrl(gallery.shareToken) : ''
 	downloadScope.value = gallery.settings.delivery.downloadScope
 })
+
+watch(publicUrl, async url => {
+	qrDataUrl.value = ''
+	qrSvg.value = ''
+	if (!url) return
+	try {
+		const options = { errorCorrectionLevel: 'M' as const, margin: 2, color: { dark: '#111111', light: '#ffffff' } }
+		const [dataUrl, svg] = await Promise.all([
+			QRCode.toDataURL(url, { ...options, width: 480 }),
+			QRCode.toString(url, { ...options, type: 'svg' }),
+		])
+		if (publicUrl.value === url) {
+			qrDataUrl.value = dataUrl
+			qrSvg.value = svg
+		}
+	} catch {
+		showError(t('proofing_gallery', 'The QR code could not be generated.'))
+	}
+}, { immediate: true })
 
 watch(() => props.show, async show => {
 	if (!show) return
@@ -151,6 +173,16 @@ async function copyLink() {
 	showSuccess(t('proofing_gallery', 'Gallery link copied.'))
 }
 
+function downloadQr(kind: 'png' | 'svg') {
+	const content = kind === 'png' ? qrDataUrl.value : URL.createObjectURL(new Blob([qrSvg.value], { type: 'image/svg+xml' }))
+	if (!content) return
+	const link = document.createElement('a')
+	link.href = content
+	link.download = `${props.gallery.slug || 'gallery'}-qr.${kind}`
+	link.click()
+	if (kind === 'svg') URL.revokeObjectURL(content)
+}
+
 async function sendInvite() {
 	sending.value = true
 	try {
@@ -201,6 +233,22 @@ function updateOpen(open: boolean) {
 						? t('proofing_gallery', 'Publishing creates a standard Nextcloud link protected by an empty collection anchor.')
 						: t('proofing_gallery', 'Publishing creates a standard Nextcloud link share for the source folder.') }}
 				</p>
+				<div v-if="published && qrDataUrl" class="qr-share">
+					<img :src="qrDataUrl"
+						:alt="t('proofing_gallery', 'QR code for the public gallery link')">
+					<div>
+						<strong>{{ t('proofing_gallery', 'QR code') }}</strong>
+						<p>{{ t('proofing_gallery', 'Generated locally in your browser. The gallery link is not sent to a third party.') }}</p>
+						<span>
+							<NcButton variant="tertiary" @click="downloadQr('png')">
+								{{ t('proofing_gallery', 'Download PNG') }}
+							</NcButton>
+							<NcButton variant="tertiary" @click="downloadQr('svg')">
+								{{ t('proofing_gallery', 'Download SVG') }}
+							</NcButton>
+						</span>
+					</div>
+				</div>
 			</section>
 
 			<section>
@@ -348,6 +396,33 @@ function updateOpen(open: boolean) {
 	color: var(--color-main-text);
 }
 
+.qr-share {
+	display: grid;
+	grid-template-columns: 116px 1fr;
+	gap: 16px;
+	align-items: center;
+	padding: 12px;
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+}
+
+.qr-share img {
+	display: block;
+	width: 116px;
+	height: 116px;
+}
+
+.qr-share p {
+	margin: 4px 0 10px;
+	color: var(--color-text-maxcontrast);
+}
+
+.qr-share span {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
 .sharing-fields {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
@@ -412,6 +487,15 @@ function updateOpen(open: boolean) {
 
 	.template-fields {
 		grid-template-columns: 1fr;
+	}
+
+	.qr-share {
+		grid-template-columns: 84px 1fr;
+	}
+
+	.qr-share img {
+		width: 84px;
+		height: 84px;
 	}
 }
 </style>

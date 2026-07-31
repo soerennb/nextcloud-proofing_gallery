@@ -7,8 +7,8 @@ import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { computed, onMounted, ref, watch } from 'vue'
 
-import { createGalleryFolder, deleteGalleryMedia, fetchGalleryMedia, fetchMediaVersions, ownerPreviewUrl, renameGalleryMedia, replaceGalleryMedia, restoreMediaVersion, uploadGalleryMedia } from '../services/galleryApi.ts'
-import type { Gallery, MediaItem, MediaVersion } from '../types.ts'
+import { bulkGalleryMedia, createGalleryFolder, deleteGalleryMedia, fetchGalleryMedia, fetchMediaMetadata, fetchMediaVersions, indexGalleryMetadata, ownerMediaDownloadUrl, ownerPreviewUrl, renameGalleryMedia, replaceGalleryMedia, restoreMediaVersion, updateMediaMetadata, uploadGalleryMedia } from '../services/galleryApi.ts'
+import type { Gallery, MediaItem, MediaMetadata, MediaVersion } from '../types.ts'
 
 const props = defineProps<{ gallery: Gallery }>()
 const emit = defineEmits<{ changed: [] }>()
@@ -17,7 +17,7 @@ const items = ref<MediaItem[]>([])
 const total = ref(0)
 const path = ref('')
 const search = ref('')
-const sortBy = ref<'name' | 'modified' | 'size'>('name')
+const sortBy = ref<'name' | 'modified' | 'size' | 'capturedAt'>('name')
 const sortDirection = ref<'asc' | 'desc'>('asc')
 const loading = ref(false)
 const uploading = ref(false)
@@ -26,6 +26,20 @@ const replacementInput = ref<HTMLInputElement | null>(null)
 const versionItem = ref<MediaItem | null>(null)
 const versions = ref<MediaVersion[]>([])
 const versionsLoading = ref(false)
+const selectedIds = ref<number[]>([])
+const bulkWorking = ref(false)
+const metadataItem = ref<MediaItem | null>(null)
+const metadataDraft = ref<MediaMetadata>({ state: 'pending' })
+const metadataLoading = ref(false)
+const metadataSaving = ref(false)
+const metadataIndexing = ref(false)
+const metadataFiltersOpen = ref(false)
+const capturedFrom = ref('')
+const capturedTo = ref('')
+const camera = ref('')
+const lens = ref('')
+const keyword = ref('')
+const ratingMin = ref(0)
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 
 const crumbs = computed(() => path.value.split('/').filter(Boolean))
@@ -33,13 +47,131 @@ const crumbs = computed(() => path.value.split('/').filter(Boolean))
 async function load() {
 	loading.value = true
 	try {
-		const page = await fetchGalleryMedia(props.gallery.id, 200, 0, path.value, search.value, sortBy.value, sortDirection.value)
+		const page = await fetchGalleryMedia(props.gallery.id, 200, 0, path.value, search.value, sortBy.value, sortDirection.value, {
+			capturedFrom: capturedFrom.value,
+			capturedTo: capturedTo.value,
+			camera: camera.value,
+			lens: lens.value,
+			keyword: keyword.value,
+			ratingMin: ratingMin.value,
+		})
 		items.value = page.items
 		total.value = page.total
+		selectedIds.value = selectedIds.value.filter(id => page.items.some(item => item.id === id))
 	} catch {
 		showError(t('proofing_gallery', 'Gallery files could not be loaded.'))
 	} finally {
 		loading.value = false
+	}
+}
+
+async function indexMetadata() {
+	metadataIndexing.value = true
+	try {
+		const result = await indexGalleryMetadata(props.gallery.id, path.value)
+		showSuccess(t('proofing_gallery', 'Indexed metadata for {count} files.', { count: result.indexed }))
+		await load()
+	} catch {
+		showError(t('proofing_gallery', 'Metadata could not be indexed.'))
+	} finally {
+		metadataIndexing.value = false
+	}
+}
+
+async function showMetadata(item: MediaItem) {
+	metadataItem.value = item
+	metadataLoading.value = true
+	try {
+		metadataDraft.value = await fetchMediaMetadata(props.gallery.id, item.id)
+	} catch {
+		showError(t('proofing_gallery', 'Metadata could not be loaded.'))
+		metadataItem.value = null
+	} finally {
+		metadataLoading.value = false
+	}
+}
+
+async function saveMetadata() {
+	if (!metadataItem.value) return
+	metadataSaving.value = true
+	try {
+		metadataDraft.value = await updateMediaMetadata(props.gallery.id, metadataItem.value.id, {
+			title: metadataDraft.value.title ?? null,
+			description: metadataDraft.value.description ?? null,
+			creator: metadataDraft.value.creator ?? null,
+			copyright: metadataDraft.value.copyright ?? null,
+			keywords: metadataDraft.value.keywords ?? [],
+			rating: metadataDraft.value.rating ?? null,
+			label: metadataDraft.value.label ?? null,
+		}, metadataItem.value.etag, metadataDraft.value.sidecar?.etag)
+		showSuccess(t('proofing_gallery', 'XMP sidecar saved.'))
+		await load()
+	} catch {
+		showError(t('proofing_gallery', 'The sidecar changed or could not be saved. Reload metadata and try again.'))
+	} finally {
+		metadataSaving.value = false
+	}
+}
+
+function metadataKeywords(value: string) {
+	metadataDraft.value.keywords = value.split(',').map(item => item.trim()).filter(Boolean)
+}
+
+function onMetadataKeywords(event: Event) {
+	metadataKeywords((event.target as HTMLInputElement).value)
+}
+
+function formatCapture(timestamp?: number): string {
+	return timestamp ? new Date(timestamp * 1000).toLocaleString() : ''
+}
+
+function clearMetadataFilters() {
+	capturedFrom.value = ''
+	capturedTo.value = ''
+	camera.value = ''
+	lens.value = ''
+	keyword.value = ''
+	ratingMin.value = 0
+	load()
+}
+
+const selectableItems = computed(() => items.value.filter(item => !item.folder))
+const allVisibleSelected = computed(() => selectableItems.value.length > 0 && selectableItems.value.every(item => selectedIds.value.includes(item.id)))
+
+function toggleAllVisible() {
+	selectedIds.value = allVisibleSelected.value ? [] : selectableItems.value.map(item => item.id)
+}
+
+async function bulkDelete() {
+	if (!window.confirm(t('proofing_gallery', 'Delete {count} selected files permanently from Nextcloud?', { count: selectedIds.value.length }))) return
+	bulkWorking.value = true
+	try {
+		const count = await bulkGalleryMedia(props.gallery.id, 'delete', selectedIds.value)
+		selectedIds.value = []
+		await load()
+		emit('changed')
+		showSuccess(t('proofing_gallery', '{count} files deleted.', { count }))
+	} catch {
+		showError(t('proofing_gallery', 'The selected files could not be deleted. Reload the folder to verify its current state.'))
+	} finally {
+		bulkWorking.value = false
+	}
+}
+
+async function bulkMove() {
+	const destination = window.prompt(t('proofing_gallery', 'Destination path inside this gallery (leave empty for gallery root)'))
+	if (destination === null) return
+	bulkWorking.value = true
+	try {
+		const count = await bulkGalleryMedia(props.gallery.id, 'move', selectedIds.value, destination.trim())
+		selectedIds.value = []
+		await load()
+		emit('changed')
+		showSuccess(t('proofing_gallery', '{count} files moved.', { count }))
+	} catch {
+		showError(t('proofing_gallery', 'The selected files could not be moved. Check the destination and duplicate names.'))
+	} finally {
+		bulkWorking.value = false
 	}
 }
 
@@ -164,6 +296,10 @@ function formatSize(size: number): string {
 }
 
 watch([sortBy, sortDirection], load)
+watch([capturedFrom, capturedTo, camera, lens, keyword, ratingMin], () => {
+	clearTimeout(searchTimer)
+	searchTimer = setTimeout(load, 300)
+})
 watch(search, () => {
 	clearTimeout(searchTimer)
 	searchTimer = setTimeout(load, 250)
@@ -192,6 +328,9 @@ onMounted(load)
 				<NcButton variant="tertiary" @click="addFolder">
 					{{ t('proofing_gallery', 'New folder') }}
 				</NcButton>
+				<NcButton variant="tertiary" :disabled="metadataIndexing" @click="indexMetadata">
+					{{ metadataIndexing ? t('proofing_gallery', 'Indexing metadata…') : t('proofing_gallery', 'Index metadata') }}
+				</NcButton>
 			</div>
 		</header>
 
@@ -206,11 +345,50 @@ onMounted(load)
 
 		<div class="folder-toolbar">
 			<NcTextField v-model="search" type="search" :label="t('proofing_gallery', 'Search this folder')" />
-			<label><span>{{ t('proofing_gallery', 'Sort') }}</span><select v-model="sortBy" :aria-label="t('proofing_gallery', 'Sort files')"><option value="name">{{ t('proofing_gallery', 'Name') }}</option><option value="modified">{{ t('proofing_gallery', 'Modified') }}</option><option value="size">{{ t('proofing_gallery', 'Size') }}</option></select></label>
+			<label><span>{{ t('proofing_gallery', 'Sort') }}</span><select v-model="sortBy" :aria-label="t('proofing_gallery', 'Sort files')"><option value="name">{{ t('proofing_gallery', 'Name') }}</option><option value="modified">{{ t('proofing_gallery', 'Modified') }}</option><option value="size">{{ t('proofing_gallery', 'Size') }}</option><option value="capturedAt">{{ t('proofing_gallery', 'Captured') }}</option></select></label>
 			<NcButton variant="tertiary" :aria-label="t('proofing_gallery', 'Reverse file order')" @click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'">
 				{{ sortDirection === 'asc' ? '↑' : '↓' }}
 			</NcButton>
 			<span>{{ total }}</span>
+			<NcButton variant="tertiary" :aria-expanded="metadataFiltersOpen" @click="metadataFiltersOpen = !metadataFiltersOpen">
+				{{ t('proofing_gallery', 'Metadata filters') }}
+			</NcButton>
+		</div>
+		<div v-if="metadataFiltersOpen" class="metadata-filters">
+			<label><span>{{ t('proofing_gallery', 'Captured from') }}</span><input v-model="capturedFrom" type="date"></label>
+			<label><span>{{ t('proofing_gallery', 'Captured to') }}</span><input v-model="capturedTo" type="date"></label>
+			<label><span>{{ t('proofing_gallery', 'Camera') }}</span><input v-model="camera" type="search"></label>
+			<label><span>{{ t('proofing_gallery', 'Lens') }}</span><input v-model="lens" type="search"></label>
+			<label><span>{{ t('proofing_gallery', 'Keyword') }}</span><input v-model="keyword" type="search"></label>
+			<label><span>{{ t('proofing_gallery', 'Minimum rating') }}</span><select v-model.number="ratingMin"><option v-for="rating in 6" :key="rating - 1" :value="rating - 1">{{ rating - 1 }}</option></select></label>
+			<NcButton variant="tertiary" @click="clearMetadataFilters">
+				{{ t('proofing_gallery', 'Reset') }}
+			</NcButton>
+		</div>
+		<div v-if="selectableItems.length" class="selection-control">
+			<label><input type="checkbox" :checked="allVisibleSelected" @change="toggleAllVisible"> {{ t('proofing_gallery', 'Select all visible files') }}</label>
+			<span>{{ t('proofing_gallery', '{count} selected', { count: selectedIds.length }) }}</span>
+		</div>
+
+		<div v-if="selectedIds.length"
+			class="selection-rail"
+			role="region"
+			:aria-label="t('proofing_gallery', 'Selected file actions')">
+			<strong>{{ t('proofing_gallery', '{count} files selected', { count: selectedIds.length }) }}</strong>
+			<div>
+				<NcButton :href="ownerMediaDownloadUrl(gallery.id, selectedIds)" :disabled="bulkWorking">
+					{{ t('proofing_gallery', 'Download ZIP') }}
+				</NcButton>
+				<NcButton variant="tertiary" :disabled="bulkWorking" @click="bulkMove">
+					{{ t('proofing_gallery', 'Move') }}
+				</NcButton>
+				<NcButton variant="error" :disabled="bulkWorking" @click="bulkDelete">
+					{{ t('proofing_gallery', 'Delete') }}
+				</NcButton>
+				<NcButton variant="tertiary" :disabled="bulkWorking" @click="selectedIds = []">
+					{{ t('proofing_gallery', 'Clear') }}
+				</NcButton>
+			</div>
 		</div>
 
 		<div v-if="loading" class="workspace-status">
@@ -219,6 +397,9 @@ onMounted(load)
 		<NcEmptyContent v-else-if="items.length === 0" :name="t('proofing_gallery', 'This folder is empty')" :description="t('proofing_gallery', 'Upload images or videos to start the gallery.')" />
 		<ul v-else class="file-grid">
 			<li v-for="item in items" :key="item.id" class="file-card">
+				<label v-if="!item.folder" class="file-card__select" :aria-label="t('proofing_gallery', 'Select {name}', { name: item.name })">
+					<input v-model="selectedIds" type="checkbox" :value="item.id">
+				</label>
 				<button v-if="item.folder"
 					class="file-card__preview file-card__folder"
 					type="button"
@@ -234,12 +415,18 @@ onMounted(load)
 				</div>
 				<div class="file-card__meta">
 					<strong :title="item.name">{{ item.name }}</strong><small>{{ item.folder ? t('proofing_gallery', 'Folder') : formatSize(item.size) }}</small>
+					<span v-if="item.metadata?.state === 'ready' && (item.metadata.capturedAt || item.metadata.camera)" class="file-card__capture">
+						{{ [formatCapture(item.metadata.capturedAt), item.metadata.camera].filter(Boolean).join(' · ') }}
+					</span>
 				</div>
 				<details class="file-card__actions">
 					<summary role="button" :aria-label="t('proofing_gallery', 'Actions for {name}', { name: item.name })">
 						•••
 					</summary>
 					<div>
+						<button v-if="!item.folder && item.mimeType.startsWith('image/')" type="button" @click="showMetadata(item)">
+							{{ t('proofing_gallery', 'Metadata') }}
+						</button>
 						<button v-if="!item.folder" type="button" @click="showVersions(item)">
 							{{ t('proofing_gallery', 'Versions') }}
 						</button>
@@ -252,6 +439,51 @@ onMounted(load)
 				</details>
 			</li>
 		</ul>
+
+		<aside v-if="metadataItem" class="metadata-panel">
+			<header>
+				<div><h3>{{ metadataItem.name }}</h3><p>{{ t('proofing_gallery', 'Technical data stays read-only. Descriptive fields are written to an XMP sidecar next to the original.') }}</p></div>
+				<button type="button" :aria-label="t('proofing_gallery', 'Close')" @click="metadataItem = null">
+					×
+				</button>
+			</header>
+			<div v-if="metadataLoading" class="workspace-status">
+				<NcLoadingIcon :size="24" />
+			</div>
+			<template v-else>
+				<dl class="metadata-panel__technical">
+					<div><dt>{{ t('proofing_gallery', 'Captured') }}</dt><dd>{{ formatCapture(metadataDraft.capturedAt) || '—' }}</dd></div>
+					<div><dt>{{ t('proofing_gallery', 'Camera') }}</dt><dd>{{ metadataDraft.camera || '—' }}</dd></div>
+					<div><dt>{{ t('proofing_gallery', 'Lens') }}</dt><dd>{{ metadataDraft.lens || '—' }}</dd></div>
+					<div><dt>{{ t('proofing_gallery', 'Exposure') }}</dt><dd>{{ [metadataDraft.focalLength ? `${metadataDraft.focalLength} mm` : '', metadataDraft.aperture ? `ƒ/${metadataDraft.aperture}` : '', metadataDraft.exposureTime, metadataDraft.iso ? `ISO ${metadataDraft.iso}` : ''].filter(Boolean).join(' · ') || '—' }}</dd></div>
+					<div><dt>{{ t('proofing_gallery', 'Dimensions') }}</dt><dd>{{ metadataDraft.width && metadataDraft.height ? `${metadataDraft.width} × ${metadataDraft.height}` : '—' }}</dd></div>
+					<div v-if="metadataDraft.gps">
+						<dt>{{ t('proofing_gallery', 'Location (private)') }}</dt><dd>{{ metadataDraft.gps.latitude.toFixed(5) }}, {{ metadataDraft.gps.longitude.toFixed(5) }}</dd>
+					</div>
+					<div><dt>{{ t('proofing_gallery', 'Sidecar') }}</dt><dd>{{ metadataDraft.sidecar?.name || t('proofing_gallery', 'Not created') }}</dd></div>
+				</dl>
+				<form class="metadata-panel__form" @submit.prevent="saveMetadata">
+					<label><span>{{ t('proofing_gallery', 'Title') }}</span><input v-model="metadataDraft.title" maxlength="500"></label>
+					<label><span>{{ t('proofing_gallery', 'Description') }}</span><textarea v-model="metadataDraft.description" maxlength="4000" rows="3" /></label>
+					<label><span>{{ t('proofing_gallery', 'Creator') }}</span><input v-model="metadataDraft.creator" maxlength="500"></label>
+					<label><span>{{ t('proofing_gallery', 'Copyright') }}</span><input v-model="metadataDraft.copyright" maxlength="500"></label>
+					<label><span>{{ t('proofing_gallery', 'Keywords, comma separated') }}</span><input :value="metadataDraft.keywords?.join(', ')" @input="onMetadataKeywords"></label>
+					<div class="metadata-panel__short-fields">
+						<label><span>{{ t('proofing_gallery', 'Rating') }}</span><select v-model.number="metadataDraft.rating"><option :value="undefined">—</option><option v-for="rating in 6" :key="rating - 1" :value="rating - 1">{{ rating - 1 }}</option></select></label>
+						<label><span>{{ t('proofing_gallery', 'Label') }}</span><input v-model="metadataDraft.label" maxlength="500"></label>
+					</div>
+					<button v-if="gallery.permissions.role === 'owner'"
+						class="metadata-panel__save"
+						type="submit"
+						:disabled="metadataSaving">
+						{{ metadataSaving ? t('proofing_gallery', 'Saving…') : t('proofing_gallery', 'Save XMP sidecar') }}
+					</button>
+					<p v-else>
+						{{ t('proofing_gallery', 'Only the gallery owner can write sidecars.') }}
+					</p>
+				</form>
+			</template>
+		</aside>
 
 		<aside v-if="versionItem" class="version-panel">
 			<header>
@@ -308,17 +540,35 @@ onMounted(load)
 
 .breadcrumbs button { padding: 4px; border: 0; background: transparent; color: var(--color-primary-element); cursor: pointer; }
 
-.folder-toolbar { display: grid; grid-template-columns: minmax(220px, 1fr) auto auto auto; }
+.folder-toolbar { display: grid; grid-template-columns: minmax(220px, 1fr) repeat(4, auto); }
 
 .folder-toolbar label { display: flex; align-items: center; gap: 6px; color: var(--color-text-maxcontrast); }
 
 .folder-toolbar select { min-height: 38px; padding: 0 9px; border: 1px solid var(--color-border-maxcontrast); border-radius: 6px; background: var(--color-main-background); color: var(--color-main-text); }
+
+.metadata-filters { display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)) auto; align-items: end; gap: 10px; padding: 14px 0; border-block: 1px solid var(--color-border); }
+
+.metadata-filters label, .metadata-panel__form label { display: grid; gap: 5px; color: var(--color-text-maxcontrast); font-size: 12px; }
+
+.metadata-filters input, .metadata-filters select, .metadata-panel__form input, .metadata-panel__form textarea, .metadata-panel__form select { box-sizing: border-box; width: 100%; min-height: 38px; padding: 7px 9px; border: 1px solid var(--color-border-maxcontrast); border-radius: 6px; background: var(--color-main-background); color: var(--color-main-text); font: inherit; }
+
+.selection-control { display: flex; min-height: 36px; align-items: center; justify-content: space-between; gap: 12px; color: var(--color-text-maxcontrast); }
+
+.selection-control label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+
+.selection-rail { position: sticky; z-index: 5; top: 8px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 12px; border: 1px solid var(--color-primary-element); border-radius: 8px; background: var(--color-main-background); box-shadow: 0 4px 14px var(--color-box-shadow); }
+
+.selection-rail > div { display: flex; flex-wrap: wrap; gap: 6px; }
 
 .workspace-status { display: flex; min-height: 160px; align-items: center; justify-content: center; gap: 10px; color: var(--color-text-maxcontrast); }
 
 .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
 
 .file-card { position: relative; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-main-background); }
+
+.file-card__select { position: absolute; z-index: 2; inset-block-start: 8px; inset-inline-start: 8px; display: grid; width: 32px; height: 32px; place-items: center; border-radius: 6px; background: var(--color-main-background); box-shadow: 0 1px 5px var(--color-box-shadow); cursor: pointer; }
+
+.file-card__select input { width: 18px; height: 18px; }
 
 .file-card__preview { display: flex; width: 100%; aspect-ratio: 4 / 3; align-items: center; justify-content: center; border: 0; background: var(--color-background-dark); object-fit: cover; }
 
@@ -333,6 +583,8 @@ onMounted(load)
 .file-card__meta strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .file-card__meta small { color: var(--color-text-maxcontrast); }
+
+.file-card__capture { overflow: hidden; margin-top: 5px; color: var(--color-primary-element); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 
 .file-card__actions { border-top: 1px solid var(--color-border); }
 
@@ -354,6 +606,40 @@ onMounted(load)
 
 .version-panel { position: fixed; z-index: 30; inset: 64px 0 0 auto; width: min(420px, 100%); overflow-y: auto; padding: 24px; border-inline-start: 1px solid var(--color-border); background: var(--color-main-background); box-shadow: -4px 0 16px var(--color-box-shadow); }
 
+.metadata-panel { position: fixed; z-index: 31; inset: 64px 0 0 auto; box-sizing: border-box; width: min(520px, 100%); overflow-y: auto; padding: 24px; border-block-start: 5px solid var(--color-primary-element); border-inline-start: 1px solid var(--color-border); background: radial-gradient(circle at 100% 0, color-mix(in srgb, var(--color-primary-element) 18%, transparent), transparent 280px), var(--color-main-background); box-shadow: -18px 0 60px rgb(0 0 0 / 24%); }
+
+.metadata-panel header { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+
+.metadata-panel h3, .metadata-panel header p { margin: 0; }
+
+.metadata-panel h3 { overflow-wrap: anywhere; font-size: 24px; }
+
+.metadata-panel header p { margin-top: 5px; color: var(--color-text-maxcontrast); line-height: 1.45; }
+
+.metadata-panel header > button { align-self: start; padding: 0 6px; border: 0; background: transparent; color: var(--color-main-text); font-size: 26px; cursor: pointer; }
+
+.metadata-panel__technical { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0 0 24px; border-block-start: 1px solid var(--color-border); }
+
+.metadata-panel__technical div { min-width: 0; padding: 11px 8px 11px 0; border-block-end: 1px solid var(--color-border); }
+
+.metadata-panel__technical dt { color: var(--color-text-maxcontrast); font-size: 11px; }
+
+.metadata-panel__technical dd { overflow-wrap: anywhere; margin: 3px 0 0; font-variant-numeric: tabular-nums; }
+
+.metadata-panel__form { display: grid; gap: 13px; }
+
+.metadata-panel__short-fields { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; }
+
+.metadata-panel__save { min-height: 46px; margin-top: 4px; padding: 10px 18px; border: 0; border-radius: 13px; background: linear-gradient(125deg, var(--color-primary-element), #7b2cff 58%, #d8249f); box-shadow: 0 12px 28px color-mix(in srgb, var(--color-primary-element) 32%, transparent); color: #fff; font: inherit; font-weight: 700; letter-spacing: 0.01em; cursor: pointer; transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease; }
+
+.metadata-panel__save:hover:not(:disabled) { box-shadow: 0 16px 36px color-mix(in srgb, var(--color-primary-element) 44%, transparent); filter: saturate(1.16); transform: translateY(-2px); }
+
+.metadata-panel__save:active:not(:disabled) { transform: translateY(0) scale(0.99); }
+
+.metadata-panel__save:disabled { cursor: wait; filter: grayscale(0.35); opacity: 0.65; }
+
+@media (prefers-reduced-motion: reduce) { .metadata-panel__save { transition: none; } }
+
 .version-panel header { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
 
 .version-panel h3, .version-panel p { margin: 0; }
@@ -371,5 +657,5 @@ onMounted(load)
 .version-panel li small { margin-top: 3px; color: var(--color-text-maxcontrast); }
 
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-@media (max-width: 700px) { .folder-workspace__header { display: grid; } .folder-workspace__actions { flex-wrap: wrap; } .folder-toolbar { grid-template-columns: minmax(0, 1fr) auto auto; } .folder-toolbar > :first-child { grid-column: 1 / -1; } .file-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 700px) { .folder-workspace__header { display: grid; } .folder-workspace__actions { flex-wrap: wrap; } .folder-toolbar { grid-template-columns: minmax(0, 1fr) auto auto; } .folder-toolbar > :first-child { grid-column: 1 / -1; } .metadata-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .metadata-filters > :last-child { grid-column: 1 / -1; } .selection-rail { align-items: stretch; flex-direction: column; } .file-grid { grid-template-columns: minmax(0, 1fr); } .metadata-panel__technical { grid-template-columns: minmax(0, 1fr); } }
 </style>

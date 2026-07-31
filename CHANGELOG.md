@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.0-alpha.1 — 2026-07-31
+
+- Index bounded EXIF and IPTC image metadata into Nextcloud FilesMetadata and
+  add owner filters for capture date, camera, lens, keywords, and ratings.
+- Keep public metadata private by default and let owners expose only selected,
+  privacy-safe fields per gallery; GPS data is never included publicly.
+- Add conflict-safe, Adobe-named XMP sidecars for descriptive metadata without
+  modifying originals or discarding unrelated third-party XMP properties.
+- Export client selections into standard XMP rating, label, keyword, and
+  Lightroom hierarchy fields plus a versioned Proofing Gallery namespace.
+- Add administrator bounds for metadata file size, batch processing, and XMP
+  writes, with responsive owner and public metadata interfaces.
+
+## 0.2.0-beta.4 — 2026-07-31
+
+- Add an expressive, image-led gallery shell, animated lightbox and feedback
+  panels, mobile action rails, and clearer content/settings workspaces.
+- Add owner-side batch operations, file version replacement and restoration,
+  QR sharing, richer selection management, and expanded mobile/a11y coverage.
+- Revalidate clean installs, upgrades, packages, bundle budgets, and the full
+  Nextcloud 31–34 database compatibility matrix.
+
 ## 0.2.0-beta.3 — 2026-07-31
 
 - Add owner-scoped gallery presets with validated design, access, feedback,

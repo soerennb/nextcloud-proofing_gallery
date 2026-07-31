@@ -11,7 +11,10 @@ use OCP\Files\Folder;
 use OCP\Files\Node;
 
 final class PublicGalleryDataService {
-	public function __construct(private CollectionService $collections) {
+	public function __construct(
+		private CollectionService $collections,
+		private MediaMetadataService $metadata,
+	) {
 	}
 
 	/** @return array<string, mixed> */
@@ -47,6 +50,17 @@ final class PublicGalleryDataService {
 				$this->collections->availableItems($gallery),
 				static fn (array $item): bool => $search === '' || mb_stripos((string)$item['name'], $search) !== false,
 			));
+			$nodes = array_map(function (array $item) use ($gallery, $settings): array {
+				try {
+					$item['metadata'] = $this->metadata->publicSummary(
+						$this->collections->resolveMedia($gallery, (int)$item['id']),
+						$settings->metadata['publicFields'],
+					);
+				} catch (\Throwable) {
+					$item['metadata'] = ['state' => 'unavailable'];
+				}
+				return $item;
+			}, $nodes);
 			return $this->response($gallery, array_slice($nodes, $offset, $limit), count($nodes), $limit, $offset, '', $search, 'collection', 'asc', 'none');
 		}
 		if (!$settings->navigation['folders'] && $path !== '') {
@@ -81,7 +95,7 @@ final class PublicGalleryDataService {
 			return $sortDirection === 'desc' ? -$result : $result;
 		});
 
-		$items = array_map(static fn (Node $node): array => [
+		$items = array_map(fn (Node $node): array => [
 			'id' => $node->getId(),
 			'name' => $node->getName(),
 			'mimeType' => $node->getMimeType(),
@@ -90,6 +104,9 @@ final class PublicGalleryDataService {
 			'etag' => $node->getEtag(),
 			'folder' => $node instanceof Folder,
 			'group' => self::group($node),
+			'metadata' => $node instanceof File
+				? $this->metadata->publicSummary($node, $settings->metadata['publicFields'])
+				: ['state' => 'unavailable'],
 		], array_slice($nodes, $offset, $limit));
 
 		return $this->response($gallery, $items, count($nodes), $limit, $offset, $path, $search, $sortBy, $sortDirection, $groupBy);

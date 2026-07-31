@@ -48,7 +48,11 @@ in services or dedicated domain objects.
 Set the same semantic version in `appinfo/info.xml`, `package.json`, and
 `package-lock.json`, update the changelog, then run `make verify-package`.
 Run `make test-upgrade` as well when a release adds database migrations; it
-verifies the previous 0.2 Beta schema and a preserved gallery against the
+verifies the previous 0.2 Beta.3 schema and a preserved gallery against the
 current App Store artifact in an isolated Nextcloud 34 instance.
 Signing is performed afterward with the maintainer's Nextcloud certificate and
 private key outside this repository.
+
+Metadata changes must retain the public allowlist boundary, source-ETag binding,
+1 MiB sidecar limit, DTD/network rejection, and preservation of unknown XMP
+namespaces. Test both clean sidecar creation and merges with third-party fields.

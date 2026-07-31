@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ProofingGallery\Service;
 
 use OCA\ProofingGallery\AppInfo\Application;
+use OCA\ProofingGallery\Dto\GallerySettings;
 use OCP\IConfig;
 
 final class PolicyService {
@@ -17,6 +18,11 @@ final class PolicyService {
 		'previewRetentionDays' => ['default' => 30, 'min' => 1, 'max' => 365],
 		'pendingUploadRetentionHours' => ['default' => 24, 'min' => 1, 'max' => 168],
 		'completedUploadRetentionDays' => ['default' => 365, 'min' => 7, 'max' => 3650],
+		'maxVersionsPerFile' => ['default' => 10, 'min' => 1, 'max' => 100],
+		'versionRetentionDays' => ['default' => 365, 'min' => 1, 'max' => 3650],
+		'metadataMaxBytes' => ['default' => 67108864, 'min' => 1048576, 'max' => 536870912],
+		'metadataBatchSize' => ['default' => 100, 'min' => 1, 'max' => 200],
+		'xmpWritingEnabled' => ['default' => 1, 'min' => 0, 'max' => 1],
 	];
 
 	public function __construct(private IConfig $config) {
@@ -52,5 +58,22 @@ final class PolicyService {
 			$values[$key] = $this->get($key);
 		}
 		return $values;
+	}
+
+	/** @return array<string, mixed> */
+	public function galleryDefaults(): array {
+		$raw = $this->config->getAppValue(Application::APP_ID, 'galleryDefaults', '');
+		try {
+			$values = $raw === '' ? [] : json_decode($raw, true, flags: JSON_THROW_ON_ERROR);
+			return GallerySettings::fromArray(is_array($values) ? $values : [])->jsonSerialize();
+		} catch (\Throwable) {
+			return GallerySettings::defaults()->jsonSerialize();
+		}
+	}
+
+	/** @param array<string, mixed> $values */
+	public function saveGalleryDefaults(array $values): void {
+		$settings = GallerySettings::merge(GallerySettings::defaults(), $values);
+		$this->config->setAppValue(Application::APP_ID, 'galleryDefaults', json_encode($settings, JSON_THROW_ON_ERROR));
 	}
 }

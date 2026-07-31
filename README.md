@@ -25,6 +25,17 @@ guest feedback, selections, secure downloads, and an upload inbox.
 - ordered, copy-free collections spanning the owner's folder galleries, with
   unavailable-source diagnostics and conflict-safe editing
 
+## New in 0.3 alpha
+
+- bounded EXIF/IPTC indexing through Nextcloud FilesMetadata, with owner-side
+  capture date, camera, lens, keyword, and rating filters
+- per-gallery public metadata disclosure that starts with no shared fields and
+  permanently excludes GPS, private keywords, ratings, and workflow labels
+- direct Adobe-compatible `<basename>.xmp` editing for titles, descriptions,
+  creators, copyright, keywords, ratings, and labels while originals stay intact
+- client-selection round trips into standard XMP/Lightroom fields and a
+  versioned Proofing Gallery namespace for workflow fidelity
+
 ## Local development
 
 Requirements: Docker with Compose, Node.js 24.11 or newer, npm 11, PHP 8.1 or

@@ -20,7 +20,8 @@ final class GallerySettingsTest extends TestCase {
 		self::assertSame('system', $settings['appearance']['fontPreset']);
 		self::assertSame('compact', $settings['appearance']['openerStyle']);
 		self::assertSame('auto', $settings['publicLocale']);
-		self::assertSame(2, $settings['schemaVersion']);
+		self::assertSame(3, $settings['schemaVersion']);
+		self::assertSame([], $settings['metadata']['publicFields']);
 		self::assertSame('dark', $settings['presentation']['theme']);
 		self::assertSame('none', $settings['delivery']['downloadScope']);
 		self::assertTrue($settings['review']['likes']);
@@ -103,5 +104,18 @@ final class GallerySettingsTest extends TestCase {
 
 		self::assertSame('light', $settings['presentation']['theme']);
 		self::assertSame('#1f6f8b', $settings['presentation']['accentColor']);
+	}
+
+	public function testAcceptsOnlyPrivacySafePublicMetadataFields(): void {
+		$settings = GallerySettings::fromArray([
+			'metadata' => ['publicFields' => ['camera', 'lens', 'exposure']],
+		])->jsonSerialize();
+
+		self::assertSame(['camera', 'lens', 'exposure'], $settings['metadata']['publicFields']);
+	}
+
+	public function testRejectsUnknownPublicMetadataFields(): void {
+		$this->expectException(InvalidArgumentException::class);
+		GallerySettings::fromArray(['metadata' => ['publicFields' => ['gps']]]);
 	}
 }

@@ -84,9 +84,9 @@ final class PublicGalleryController extends PublicShareController {
 	#[PublicPage]
 	#[NoCSRFRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/media/{fileId}/preview')]
-	public function preview(int $fileId, int $x = 1200, int $y = 1200): DataDisplayResponse {
+	public function preview(int $fileId, int $x = 1200, int $y = 1200, string $mode = 'cover'): DataDisplayResponse {
 		$file = $this->fileInShare($fileId);
-		return $this->previewResponse($file, $x, $y);
+		return $this->previewResponse($file, $x, $y, true, $mode);
 	}
 
 	#[PublicPage]
@@ -298,9 +298,18 @@ final class PublicGalleryController extends PublicShareController {
 		throw new \OCP\Files\NotFoundException('Media file not found');
 	}
 
-	private function previewResponse(File $file, int $x, int $y, bool $applyWatermark = true): DataDisplayResponse {
+	private function previewResponse(
+		File $file,
+		int $x,
+		int $y,
+		bool $applyWatermark = true,
+		string $mode = 'cover',
+	): DataDisplayResponse {
 		$x = max(64, min(2400, $x));
 		$y = max(64, min(2400, $y));
+		if (!in_array($mode, ['cover', 'fit'], true)) {
+			return new DataDisplayResponse('', Http::STATUS_BAD_REQUEST);
+		}
 		try {
 			$appearance = GallerySettings::fromArray(json_decode(
 				$this->resolvedGallery()->getSettings(),
@@ -314,6 +323,7 @@ final class PublicGalleryController extends PublicShareController {
 					$y,
 					$appearance['watermarkText'],
 					$appearance['watermarkOpacity'],
+					$mode,
 				);
 				return new DataDisplayResponse($watermarked['content'], Http::STATUS_OK, [
 					'Content-Type' => $watermarked['mimeType'],
@@ -321,7 +331,13 @@ final class PublicGalleryController extends PublicShareController {
 					'ETag' => '"' . $watermarked['etag'] . '"',
 				]);
 			}
-			$preview = $this->preview->getPreview($file, $x, $y, true, IPreview::MODE_COVER);
+			$preview = $this->preview->getPreview(
+				$file,
+				$x,
+				$y,
+				$mode === 'cover',
+				$mode === 'cover' ? IPreview::MODE_COVER : IPreview::MODE_FILL,
+			);
 			return new DataDisplayResponse($preview->getContent(), Http::STATUS_OK, [
 				'Content-Type' => $preview->getMimeType(),
 				'Cache-Control' => 'private, max-age=3600',
