@@ -43,6 +43,7 @@ const activeTab = ref<SettingsTab>(tabFromHash())
 const saving = ref(false)
 const rebinding = ref(false)
 const showSharing = ref(false)
+const designPreviewOpen = ref(false)
 const notificationPanel = ref<InstanceType<typeof NotificationPanel> | null>(null)
 const media = ref<MediaItem[]>([])
 const mediaTotal = ref(0)
@@ -364,13 +365,13 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 						<option value="de">Deutsch</option>
 					</select>
 				</label>
-				<section v-if="gallery.permissions.role === 'owner'" class="preset-panel" aria-labelledby="preset-title">
-					<div>
+				<details v-if="gallery.permissions.role === 'owner'" class="preset-panel">
+					<summary role="button" :aria-label="t('proofing_gallery', 'Reusable preset')">
 						<h3 id="preset-title">
 							{{ t('proofing_gallery', 'Reusable preset') }}
 						</h3>
 						<p>{{ t('proofing_gallery', 'Apply saved design, access and feedback defaults without changing this gallery’s link or source.') }}</p>
-					</div>
+					</summary>
 					<label>
 						<span>{{ t('proofing_gallery', 'Saved preset') }}</span>
 						<select v-model="selectedPresetId"
@@ -403,7 +404,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 					<p v-if="!presetsLoading && presets.length === 0" class="preset-empty">
 						{{ t('proofing_gallery', 'No presets yet. Enter a name to save the current settings.') }}
 					</p>
-				</section>
+				</details>
 				<dl class="gallery-facts">
 					<div v-if="gallery.source.type === 'folder'">
 						<dt>{{ t('proofing_gallery', 'Source folder') }}</dt>
@@ -585,9 +586,14 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 						v-model="draft.settings.presentation.watermarkText"
 						name="watermarkText"
 						:label="t('proofing_gallery', 'Preview watermark')" />
+					<NcButton class="mobile-preview-button" @click="designPreviewOpen = true">
+						{{ t('proofing_gallery', 'Preview gallery') }}
+					</NcButton>
 				</div>
 
-				<aside class="gallery-preview" :style="accentStyle">
+				<aside class="gallery-preview"
+					:class="{ 'gallery-preview--expanded': designPreviewOpen }"
+					:style="accentStyle">
 					<div class="gallery-preview__bar">
 						<img
 							v-if="draft.settings.presentation.logoFileId"
@@ -595,6 +601,12 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 							:alt="t('proofing_gallery', 'Gallery logo')">
 						<span v-else>Proofing Gallery</span>
 						<span>{{ t('proofing_gallery', 'Preview') }}</span>
+						<button class="gallery-preview__close"
+							type="button"
+							:aria-label="t('proofing_gallery', 'Close preview')"
+							@click="designPreviewOpen = false">
+							×
+						</button>
 					</div>
 					<div
 						class="gallery-preview__opener"
@@ -837,7 +849,36 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 	margin: 0;
 }
 
-.preset-panel > div:first-child p,
+.preset-panel summary {
+	position: relative;
+	padding-inline-end: 28px;
+	cursor: pointer;
+	list-style: none;
+}
+
+.preset-panel summary::-webkit-details-marker {
+	display: none;
+}
+
+.preset-panel summary::after {
+	position: absolute;
+	inset: 50% 4px auto auto;
+	content: '+';
+	font-size: 22px;
+	font-weight: 400;
+	transform: translateY(-50%);
+}
+
+.preset-panel[open] summary::after {
+	content: '−';
+}
+
+.preset-panel summary:focus-visible {
+	outline: 2px solid var(--color-primary-element);
+	outline-offset: 4px;
+}
+
+.preset-panel summary p,
 .preset-empty {
 	margin-top: 4px;
 	color: var(--color-text-maxcontrast);
@@ -1079,6 +1120,11 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 	object-fit: contain;
 }
 
+.gallery-preview__close,
+.mobile-preview-button {
+	display: none;
+}
+
 .gallery-preview__opener {
 	display: flex;
 	min-height: 140px;
@@ -1193,7 +1239,35 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 	}
 
 	.gallery-preview {
-		position: static;
+		display: none;
+	}
+
+	.mobile-preview-button {
+		display: inline-flex;
+	}
+
+	.gallery-preview--expanded {
+		position: fixed;
+		z-index: 1000;
+		inset: 0;
+		display: block;
+		overflow-y: auto;
+		border: 0;
+		border-radius: 0;
+	}
+
+	.gallery-preview__close {
+		display: grid;
+		width: 40px;
+		height: 40px;
+		place-items: center;
+		margin-inline-start: 4px;
+		border: 1px solid #444;
+		border-radius: 4px;
+		background: #151515;
+		color: #fff;
+		font-size: 22px;
+		cursor: pointer;
 	}
 }
 
@@ -1221,17 +1295,18 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 	}
 
 	.settings-tabs {
-		display: grid;
-		overflow: visible;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 0 8px;
+		display: flex;
+		overflow-x: auto;
+		gap: 22px;
 		margin-top: 20px;
+		scroll-padding-inline: 12px;
+		scrollbar-width: thin;
 	}
 
 	.settings-tabs button {
-		min-width: 0;
+		flex: 0 0 auto;
 		font-size: 14px;
-		white-space: normal;
+		white-space: nowrap;
 	}
 
 	.settings-content {

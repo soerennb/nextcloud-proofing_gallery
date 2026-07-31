@@ -133,6 +133,11 @@ test('administrator policies reject out-of-range API values and health remains a
 	await expect(page.getByRole('heading', { name: 'Proofing Gallery' })).toBeVisible()
 	await expect(page.getByText('Cleanup status')).toBeVisible()
 	await expect(page.getByText(/Not run yet|Healthy|Overdue|Failed/).first()).toBeVisible()
+	const adminStyles = page.locator('link[rel="stylesheet"][href*="proofing_gallery-admin"]')
+	await expect(adminStyles).toHaveCount(1)
+	const healthRow = page.locator('.proofing-gallery-admin__health > div').first()
+	await expect(healthRow).toHaveCSS('display', 'grid')
+	expect(await healthRow.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
 	await context.close()
 })
 
@@ -245,7 +250,7 @@ test('owner preset and locale controls remain clear and responsive', async ({ pa
 	await page.getByRole('textbox', { name: /Account name/ }).fill('admin')
 	await page.getByRole('textbox', { name: 'Password' }).fill('admin')
 	await page.getByRole('button', { name: 'Log in', exact: true }).click()
-	await page.getByRole('button', { name: /E2E Gallery/ }).click()
+	await page.getByRole('button', { name: /^E2E Gallery / }).click()
 	await expect(page.getByRole('heading', { name: 'Reusable preset' })).toBeVisible()
 
 	const locale = page.getByRole('combobox', { name: 'Public gallery language' })
@@ -254,6 +259,7 @@ test('owner preset and locale controls remain clear and responsive', async ({ pa
 	await page.getByRole('button', { name: 'Discard', exact: true }).click()
 	await expect(locale).toHaveValue('auto')
 
+	await page.getByRole('button', { name: 'Reusable preset' }).click()
 	await page.getByRole('textbox', { name: 'Preset name' }).fill(presetName)
 	await page.getByRole('button', { name: 'Save as new' }).click()
 	await expect(page.getByText('Preset created.')).toBeVisible()
@@ -474,7 +480,7 @@ test('notification and invitation controls stay understandable and responsive', 
 	await page.getByRole('textbox', { name: /Account name/ }).fill('admin')
 	await page.getByRole('textbox', { name: 'Password' }).fill('admin')
 	await page.getByRole('button', { name: 'Log in', exact: true }).click()
-	await page.getByRole('button', { name: /E2E Gallery/ }).click()
+	await page.getByRole('button', { name: /^E2E Gallery / }).click()
 	await page.getByRole('button', { name: 'Access', exact: true }).click()
 	await expect(page.getByRole('heading', { name: 'Email notifications' })).toBeVisible()
 	await expect(page.getByText('Notifications are off until you explicitly subscribe an eligible person.')).toBeVisible()

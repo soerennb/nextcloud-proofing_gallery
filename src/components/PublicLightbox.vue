@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { n, t } from '@nextcloud/l10n'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import { normalizeAnnotationPoint } from '../domain/collaboration.ts'
 import type { GallerySettings } from '../domain/gallerySettings.ts'
@@ -35,6 +35,8 @@ const zoom = ref(1)
 const panX = ref(0)
 const panY = ref(0)
 const feedbackOpen = ref(false)
+const dialog = ref<HTMLElement | null>(null)
+const closeButton = ref<HTMLButtonElement | null>(null)
 const commentBody = ref('')
 const marking = ref(false)
 const annotationDraft = ref<{ x: number; y: number; width: number; height: number } | null>(null)
@@ -42,11 +44,21 @@ const editingCommentId = ref<number | null>(null)
 const editingCommentBody = ref('')
 let slideshowTimer: number | undefined
 let pointerStart: { x: number; y: number; panX: number; panY: number } | null = null
+let previousBodyOverflow = ''
+let previouslyFocused: HTMLElement | null = null
 
-onMounted(() => window.addEventListener('keydown', onKeydown))
+onMounted(() => {
+	previouslyFocused = document.activeElement as HTMLElement | null
+	previousBodyOverflow = document.body.style.overflow
+	document.body.style.overflow = 'hidden'
+	window.addEventListener('keydown', onKeydown)
+	nextTick(() => closeButton.value?.focus())
+})
 onBeforeUnmount(() => {
 	window.removeEventListener('keydown', onKeydown)
 	window.clearInterval(slideshowTimer)
+	document.body.style.overflow = previousBodyOverflow
+	previouslyFocused?.focus()
 })
 
 function close() {
@@ -57,6 +69,7 @@ function close() {
 function step(direction: number) {
 	if (props.mediaItems.length === 0) return
 	activeIndex.value = (activeIndex.value + direction + props.mediaItems.length) % props.mediaItems.length
+	feedbackOpen.value = false
 	resetViewport()
 }
 
@@ -73,12 +86,41 @@ function resetViewport() {
 }
 
 function onKeydown(event: KeyboardEvent) {
-	if (event.key === 'Escape') close()
+	if (event.key === 'Escape') {
+		if (feedbackOpen.value) {
+			feedbackOpen.value = false
+		} else {
+			close()
+		}
+		return
+	}
+	if (event.key === 'Tab') {
+		trapFocus(event)
+		return
+	}
+	const target = event.target as HTMLElement | null
+	if (target?.matches('input, textarea, select, [contenteditable="true"]')) return
 	if (event.key === 'ArrowLeft') step(-1)
 	if (event.key === 'ArrowRight') step(1)
 	if (event.key === ' ') {
 		event.preventDefault()
 		setSlideshow(!slideshow.value)
+	}
+}
+
+function trapFocus(event: KeyboardEvent) {
+	const focusable = Array.from(dialog.value?.querySelectorAll<HTMLElement>(
+		'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+	) ?? []).filter(element => element.offsetParent !== null)
+	if (focusable.length === 0) return
+	const first = focusable[0]
+	const last = focusable[focusable.length - 1]
+	if (event.shiftKey && document.activeElement === first) {
+		event.preventDefault()
+		last?.focus()
+	} else if (!event.shiftKey && document.activeElement === last) {
+		event.preventDefault()
+		first?.focus()
 	}
 }
 
@@ -142,6 +184,7 @@ async function saveEditedComment(commentId: number) {
 <template>
 	<div
 		v-if="activeItem"
+		ref="dialog"
 		class="lightbox"
 		role="dialog"
 		aria-modal="true"
@@ -172,7 +215,10 @@ async function saveEditedComment(commentId: number) {
 					@click="feedbackOpen = !feedbackOpen">
 					{{ t('proofing_gallery', 'Feedback') }}
 				</button>
-				<button type="button" :aria-label="t('proofing_gallery', 'Close')" @click="close">
+				<button ref="closeButton"
+					type="button"
+					:aria-label="t('proofing_gallery', 'Close')"
+					@click="close">
 					×
 				</button>
 			</div>
@@ -215,6 +261,11 @@ async function saveEditedComment(commentId: number) {
 					:style="{ left: `${annotationDraft.x / 100}%`, top: `${annotationDraft.y / 100}%`, width: `${annotationDraft.width / 100}%`, height: `${annotationDraft.height / 100}%` }" />
 			</template>
 		</div>
+		<button v-if="feedbackOpen"
+			class="lightbox__feedback-backdrop"
+			type="button"
+			:aria-label="t('proofing_gallery', 'Close feedback')"
+			@click="feedbackOpen = false" />
 		<aside v-if="settings.mode === 'collaboration'" class="lightbox__feedback" :class="{ 'lightbox__feedback--open': feedbackOpen }">
 			<div class="lightbox__feedback-header">
 				<strong>{{ t('proofing_gallery', 'Feedback') }}</strong>
@@ -320,7 +371,11 @@ async function saveEditedComment(commentId: number) {
 
 .lightbox__feedback-toggle, .lightbox__feedback-header { display: none; }
 
+.lightbox__feedback-backdrop { display: none !important; }
+
 .lightbox button, .lightbox__download { display: inline-grid; min-width: 40px; min-height: 40px; align-items: center; padding: 0 12px; border: 1px solid #444; border-radius: 4px; background: #161616; color: #fff; cursor: pointer; text-decoration: none; }
+
+.lightbox :is(a, button, input, select, textarea):focus-visible { outline: 2px solid var(--gallery-accent-readable); outline-offset: 2px; }
 
 .lightbox__previous, .lightbox__next { align-self: center; margin: 8px; }
 
@@ -380,7 +435,7 @@ async function saveEditedComment(commentId: number) {
 
 .saved-selections a { color: var(--gallery-accent-readable); font-size: 12px; }
 @media (max-width: 640px) {
-	.lightbox { grid-template: 60px 1fr 52px / 1fr 1fr; }
+	.lightbox { grid-template: calc(56px + env(safe-area-inset-top)) minmax(0, 1fr) calc(52px + env(safe-area-inset-bottom)) / 1fr 1fr; }
 	.lightbox__bar { padding: 0 8px 0 12px; }
 	.lightbox__filename { display: none; }
 	.lightbox__tools { gap: 4px; }
@@ -389,10 +444,17 @@ async function saveEditedComment(commentId: number) {
 	.lightbox__feedback-toggle { display: inline-grid; }
 	.lightbox__stage { grid-column: 1 / -1; grid-row: 2; }
 	.lightbox:has(.lightbox__feedback) .lightbox__stage { padding: 0; }
-	.lightbox__feedback { z-index: 4; inset: auto 0 52px; display: none; width: auto; height: min(64vh, 520px); padding: 10px 0 18px; border-top: 1px solid #292929; border-inline-start: 0; box-shadow: 0 -4px 8px rgb(0 0 0 / 35%); }
+	.lightbox__stage img, .lightbox__stage video { max-height: 100%; }
+	.lightbox__feedback-backdrop { position: absolute; z-index: 3; inset: 0; display: block !important; width: 100%; height: 100%; padding: 0; border: 0; border-radius: 0; background: rgb(0 0 0 / 52%); }
+	.lightbox__feedback { z-index: 4; inset: auto 0 calc(52px + env(safe-area-inset-bottom)); display: none; width: auto; max-height: min(70dvh, 590px); padding: 10px 0 calc(18px + env(safe-area-inset-bottom)); border-top: 1px solid #383838; border-inline-start: 0; background: #111; box-shadow: 0 -4px 8px rgb(0 0 0 / 35%); }
 	.lightbox__feedback--open { display: block; }
 	.lightbox__feedback-header { display: flex; }
 	.lightbox__feedback > :not(.lightbox__feedback-header) { margin-inline: 16px; }
 	.lightbox__previous, .lightbox__next { grid-row: 3; margin: 4px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.lightbox__stage img,
+	.lightbox__stage video { transition: none; }
 }
 </style>

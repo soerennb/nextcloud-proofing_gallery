@@ -1,5 +1,7 @@
 #proofing-gallery-admin {
 	max-width: 720px;
+	box-sizing: border-box;
+	padding: 0 24px 48px;
 }
 
 .proofing-gallery-admin__form h3,
@@ -17,6 +19,7 @@
 
 .proofing-gallery-admin__form input {
 	width: 100%;
+	min-height: 40px;
 }
 
 .proofing-gallery-admin__status {
@@ -31,7 +34,8 @@
 
 .proofing-gallery-admin__health div {
 	display: grid;
-	grid-template-columns: 1fr auto;
+	grid-template-columns: minmax(180px, 1fr) minmax(0, auto);
+	align-items: start;
 	gap: 20px;
 	padding-block: 10px;
 	border-bottom: 1px solid var(--color-border);
@@ -40,6 +44,8 @@
 .proofing-gallery-admin__health dd {
 	margin: 0;
 	font-weight: 600;
+	text-align: end;
+	overflow-wrap: anywhere;
 }
 
 .proofing-gallery-admin__state--healthy {
@@ -56,8 +62,28 @@
 }
 
 @media (max-width: 560px) {
+	#proofing-gallery-admin {
+		max-width: 100%;
+		padding-inline: 16px;
+	}
+
 	.proofing-gallery-admin__form p {
 		grid-template-columns: 1fr;
 		gap: 4px;
+	}
+
+	.proofing-gallery-admin__status {
+		display: block;
+		min-height: 24px;
+		margin: 8px 0 0;
+	}
+
+	.proofing-gallery-admin__health div {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 4px;
+	}
+
+	.proofing-gallery-admin__health dd {
+		text-align: start;
 	}
 }

@@ -50,17 +50,22 @@ function previewUrl(gallery: Gallery): string {
 				</span>
 				<span class="gallery-row__date">{{ formattedDate(gallery.updatedAt) }}</span>
 			</button>
-			<div class="gallery-row__actions">
-				<NcButton v-if="!archived && gallery.permissions.canManageAccess" variant="tertiary" @click="emit('share', gallery)">
-					{{ t('proofing_gallery', 'Share') }}
-				</NcButton>
-				<NcButton v-if="archived && gallery.permissions.canArchive" variant="tertiary" @click="emit('restore', gallery)">
-					{{ t('proofing_gallery', 'Restore') }}
-				</NcButton>
-				<NcButton v-else-if="gallery.permissions.canArchive" variant="tertiary" @click="emit('archive', gallery)">
-					{{ t('proofing_gallery', 'Archive') }}
-				</NcButton>
-			</div>
+			<details class="gallery-row__actions">
+				<summary role="button" :aria-label="t('proofing_gallery', 'Actions for {title}', { title: gallery.title })">
+					•••
+				</summary>
+				<div>
+					<NcButton v-if="!archived && gallery.permissions.canManageAccess" variant="tertiary" @click="emit('share', gallery)">
+						{{ t('proofing_gallery', 'Share') }}
+					</NcButton>
+					<NcButton v-if="archived && gallery.permissions.canArchive" variant="tertiary" @click="emit('restore', gallery)">
+						{{ t('proofing_gallery', 'Restore') }}
+					</NcButton>
+					<NcButton v-else-if="gallery.permissions.canArchive" variant="tertiary" @click="emit('archive', gallery)">
+						{{ t('proofing_gallery', 'Archive') }}
+					</NcButton>
+				</div>
+			</details>
 		</article>
 	</div>
 </template>
@@ -139,15 +144,52 @@ function previewUrl(gallery: Gallery): string {
 }
 
 .gallery-row__actions {
-	display: flex;
-	gap: 2px;
+	position: relative;
 	padding-inline-end: 6px;
+}
+
+.gallery-row__actions summary {
+	display: grid;
+	width: 42px;
+	height: 42px;
+	place-items: center;
+	border-radius: 6px;
+	color: var(--color-text-maxcontrast);
+	cursor: pointer;
+	list-style: none;
+}
+
+.gallery-row__actions summary::-webkit-details-marker {
+	display: none;
+}
+
+.gallery-row__actions summary:hover,
+.gallery-row__actions summary:focus-visible {
+	background: var(--color-background-hover);
+}
+
+.gallery-row__actions summary:focus-visible {
+	outline: 2px solid var(--color-primary-element);
+	outline-offset: -2px;
+}
+
+.gallery-row__actions > div {
+	position: absolute;
+	z-index: 5;
+	inset: 44px 6px auto auto;
+	display: grid;
+	min-width: 150px;
+	padding: 4px;
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	background: var(--color-main-background);
+	box-shadow: 0 2px 8px var(--color-box-shadow);
 }
 
 @media (max-width: 760px) {
 	.gallery-row {
-		grid-template-columns: minmax(0, 1fr);
-		gap: 0;
+		grid-template-columns: minmax(0, 1fr) auto;
+		gap: 4px;
 		padding: 8px 0;
 	}
 
@@ -162,8 +204,8 @@ function previewUrl(gallery: Gallery): string {
 	}
 
 	.gallery-row__actions {
-		justify-content: flex-end;
-		padding: 0 4px;
+		align-self: center;
+		padding-inline-end: 4px;
 	}
 }
 </style>

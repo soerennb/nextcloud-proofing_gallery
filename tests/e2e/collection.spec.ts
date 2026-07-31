@@ -166,12 +166,12 @@ test('owner creates and fills a collection through the content workspace', async
 		await page.getByRole('radio', { name: /Collection/ }).check()
 		await page.getByRole('textbox', { name: 'Gallery title' }).fill(title)
 		await page.getByRole('button', { name: 'Create draft' }).click()
-		await expect(page.getByRole('button', { name: new RegExp(title) })).toBeVisible()
+		await expect(page.getByRole('button', { name: new RegExp(`^${title} `) })).toBeVisible()
 		const listed = await request.get(`${galleries}?format=json&limit=100`, { headers: apiHeaders })
 		const gallery = (await listed.json() as { items: Array<{ id: number; title: string }> }).items.find(item => item.title === title)
 		expect(gallery).toBeTruthy()
 		collectionId = gallery!.id
-		await page.getByRole('button', { name: new RegExp(title) }).click()
+		await page.getByRole('button', { name: new RegExp(`^${title} `) }).click()
 		await page.getByRole('button', { name: 'Content', exact: true }).click()
 
 		const sourceSearch = page.getByRole('searchbox', { name: 'Search source galleries' })

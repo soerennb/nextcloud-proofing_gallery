@@ -182,6 +182,7 @@ onMounted(load)
 				<input ref="fileInput"
 					class="visually-hidden"
 					type="file"
+					:aria-label="t('proofing_gallery', 'Choose files to upload')"
 					accept="image/*,video/mp4,video/webm"
 					multiple
 					@change="upload">
@@ -205,8 +206,8 @@ onMounted(load)
 
 		<div class="folder-toolbar">
 			<NcTextField v-model="search" type="search" :label="t('proofing_gallery', 'Search this folder')" />
-			<label><span>{{ t('proofing_gallery', 'Sort') }}</span><select v-model="sortBy"><option value="name">{{ t('proofing_gallery', 'Name') }}</option><option value="modified">{{ t('proofing_gallery', 'Modified') }}</option><option value="size">{{ t('proofing_gallery', 'Size') }}</option></select></label>
-			<NcButton variant="tertiary" @click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'">
+			<label><span>{{ t('proofing_gallery', 'Sort') }}</span><select v-model="sortBy" :aria-label="t('proofing_gallery', 'Sort files')"><option value="name">{{ t('proofing_gallery', 'Name') }}</option><option value="modified">{{ t('proofing_gallery', 'Modified') }}</option><option value="size">{{ t('proofing_gallery', 'Size') }}</option></select></label>
+			<NcButton variant="tertiary" :aria-label="t('proofing_gallery', 'Reverse file order')" @click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'">
 				{{ sortDirection === 'asc' ? '↑' : '↓' }}
 			</NcButton>
 			<span>{{ total }}</span>
@@ -234,16 +235,21 @@ onMounted(load)
 				<div class="file-card__meta">
 					<strong :title="item.name">{{ item.name }}</strong><small>{{ item.folder ? t('proofing_gallery', 'Folder') : formatSize(item.size) }}</small>
 				</div>
-				<div class="file-card__actions">
-					<button v-if="!item.folder" type="button" @click="showVersions(item)">
-						{{ t('proofing_gallery', 'Versions') }}
-					</button>
-					<button type="button" @click="rename(item)">
-						{{ t('proofing_gallery', 'Rename') }}
-					</button><button type="button" class="danger" @click="remove(item)">
-						{{ t('proofing_gallery', 'Delete') }}
-					</button>
-				</div>
+				<details class="file-card__actions">
+					<summary role="button" :aria-label="t('proofing_gallery', 'Actions for {name}', { name: item.name })">
+						•••
+					</summary>
+					<div>
+						<button v-if="!item.folder" type="button" @click="showVersions(item)">
+							{{ t('proofing_gallery', 'Versions') }}
+						</button>
+						<button type="button" @click="rename(item)">
+							{{ t('proofing_gallery', 'Rename') }}
+						</button><button type="button" class="danger" @click="remove(item)">
+							{{ t('proofing_gallery', 'Delete') }}
+						</button>
+					</div>
+				</details>
 			</li>
 		</ul>
 
@@ -260,6 +266,7 @@ onMounted(load)
 			<input ref="replacementInput"
 				class="visually-hidden"
 				type="file"
+				:aria-label="t('proofing_gallery', 'Choose a new file version')"
 				accept="image/*,video/mp4,video/webm"
 				@change="replaceVersion">
 			<NcButton :disabled="versionsLoading" @click="replacementInput?.click()">
@@ -311,7 +318,7 @@ onMounted(load)
 
 .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
 
-.file-card { overflow: hidden; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-main-background); }
+.file-card { position: relative; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-main-background); }
 
 .file-card__preview { display: flex; width: 100%; aspect-ratio: 4 / 3; align-items: center; justify-content: center; border: 0; background: var(--color-background-dark); object-fit: cover; }
 
@@ -327,9 +334,21 @@ onMounted(load)
 
 .file-card__meta small { color: var(--color-text-maxcontrast); }
 
-.file-card__actions { display: flex; justify-content: flex-end; border-top: 1px solid var(--color-border); }
+.file-card__actions { border-top: 1px solid var(--color-border); }
 
-.file-card__actions button { padding: 8px 10px; border: 0; background: transparent; color: var(--color-text-maxcontrast); cursor: pointer; }
+.file-card__actions summary { display: flex; min-height: 38px; align-items: center; justify-content: flex-end; padding: 0 12px; color: var(--color-text-maxcontrast); cursor: pointer; list-style: none; }
+
+.file-card__actions summary::-webkit-details-marker { display: none; }
+
+.file-card__actions summary:focus-visible { outline: 2px solid var(--color-primary-element); outline-offset: -2px; }
+
+.file-card__actions > div { display: grid; border-top: 1px solid var(--color-border); }
+
+.file-card__actions button { min-height: 40px; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--color-border); background: transparent; color: var(--color-text-maxcontrast); text-align: start; cursor: pointer; }
+
+.file-card__actions button:last-child { border-bottom: 0; }
+
+.file-card__actions button:hover { background: var(--color-background-hover); }
 
 .file-card__actions .danger { color: var(--color-error); }
 
@@ -352,5 +371,5 @@ onMounted(load)
 .version-panel li small { margin-top: 3px; color: var(--color-text-maxcontrast); }
 
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-@media (max-width: 700px) { .folder-workspace__header { display: grid; } .folder-toolbar { grid-template-columns: 1fr auto auto; } .folder-toolbar > :first-child { grid-column: 1 / -1; } }
+@media (max-width: 700px) { .folder-workspace__header { display: grid; } .folder-workspace__actions { flex-wrap: wrap; } .folder-toolbar { grid-template-columns: minmax(0, 1fr) auto auto; } .folder-toolbar > :first-child { grid-column: 1 / -1; } .file-grid { grid-template-columns: minmax(0, 1fr); } }
 </style>

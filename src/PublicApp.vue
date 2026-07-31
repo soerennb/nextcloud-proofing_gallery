@@ -57,6 +57,7 @@ const sortBy = ref(settings.value.navigation?.sortBy ?? 'name')
 const sortDirection = ref(settings.value.navigation?.sortDirection ?? 'asc')
 const groupBy = ref(settings.value.navigation?.groupBy ?? 'none')
 const layout = ref(settings.value.presentation?.layout ?? settings.value.appearance.layout ?? 'grid')
+const mobileToolsOpen = ref(false)
 const nonce = ref(sessionStorage.getItem(`proofing-gallery-nonce:${props.gallery.token}`) ?? '')
 let searchTimer: number | undefined
 
@@ -163,6 +164,12 @@ async function joinCollaboration() {
 		nonce.value = payload.nonce
 		sessionStorage.setItem(`proofing-gallery-nonce:${props.gallery.token}`, payload.nonce)
 		await loadCollaboration()
+		guestDialogOpen.value = false
+		if (pendingMutation.value) {
+			const pending = pendingMutation.value
+			pendingMutation.value = null
+			await performMutation(pending.path, pending.method, pending.body)
+		}
 	} catch (exception) {
 		collaborationError.value = exception instanceof Error ? exception.message : String(exception)
 	} finally {
@@ -284,6 +291,16 @@ function openItem(item: MediaItem) {
 	loadPage(0)
 }
 
+function mediaAccessibleName(item: MediaItem): string {
+	const action = item.folder
+		? t('proofing_gallery', 'Open folder {name}', { name: item.name })
+		: t('proofing_gallery', 'Open {name}', { name: item.name })
+	const likeCount = collaboration.value?.likes[item.id]?.count ?? 0
+	return likeCount > 0
+		? `${action}. ${n('proofing_gallery', '%n like', '%n likes', likeCount)}`
+		: action
+}
+
 function upOneLevel() {
 	currentPath.value = currentPath.value.split('/').slice(0, -1).join('/')
 	error.value = false
@@ -353,47 +370,61 @@ function upOneLevel() {
 			<p v-if="collaborationError" class="collaboration-error" role="status">
 				{{ collaborationError }}
 			</p>
-			<div class="gallery-toolbar" :aria-label="t('proofing_gallery', 'Gallery tools')">
+			<div class="gallery-toolbar" role="group" :aria-label="t('proofing_gallery', 'Gallery tools')">
 				<label class="gallery-toolbar__search">
 					<span class="visually-hidden">{{ t('proofing_gallery', 'Filter by filename') }}</span>
 					<input
 						v-model="search"
 						type="search"
+						:aria-label="t('proofing_gallery', 'Filter by filename')"
 						:placeholder="t('proofing_gallery', 'Filter by filename')"
 						@input="queueSearch">
 				</label>
-				<label>
+				<label class="gallery-toolbar__sort">
 					<span>{{ t('proofing_gallery', 'Sort') }}</span>
-					<select v-model="sortBy" @change="applyView">
+					<select v-model="sortBy" :aria-label="t('proofing_gallery', 'Sort gallery')" @change="applyView">
 						<option value="name">{{ t('proofing_gallery', 'Filename') }}</option>
 						<option value="modified">{{ t('proofing_gallery', 'Last changed') }}</option>
 						<option value="size">{{ t('proofing_gallery', 'File size') }}</option>
 					</select>
 				</label>
 				<button
+					class="gallery-toolbar__direction"
 					type="button"
 					:aria-label="t('proofing_gallery', 'Reverse order')"
 					@click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'; applyView()">
 					{{ sortDirection === 'asc' ? '↑' : '↓' }}
 				</button>
-				<label>
-					<span>{{ t('proofing_gallery', 'Group') }}</span>
-					<select v-model="groupBy" @change="applyView">
-						<option value="none">{{ t('proofing_gallery', 'None') }}</option>
-						<option value="type">{{ t('proofing_gallery', 'File type') }}</option>
-					</select>
-				</label>
-				<label>
-					<span>{{ t('proofing_gallery', 'View') }}</span>
-					<select v-model="layout">
-						<option value="grid">{{ t('proofing_gallery', 'Grid') }}</option>
-						<option value="masonry">{{ t('proofing_gallery', 'Masonry') }}</option>
-						<option value="list">{{ t('proofing_gallery', 'List') }}</option>
-					</select>
-				</label>
-				<button v-if="settings.mode === 'collaboration' && !guest" type="button" @click="guestDialogOpen = true">
-					{{ t('proofing_gallery', 'Identify for feedback') }}
+				<button
+					class="gallery-toolbar__more"
+					type="button"
+					:aria-expanded="mobileToolsOpen"
+					:aria-controls="'proofing-gallery-view-tools'"
+					@click="mobileToolsOpen = !mobileToolsOpen">
+					{{ t('proofing_gallery', 'Filter & view') }}
 				</button>
+				<div id="proofing-gallery-view-tools"
+					class="gallery-toolbar__secondary"
+					:class="{ 'gallery-toolbar__secondary--open': mobileToolsOpen }">
+					<label>
+						<span>{{ t('proofing_gallery', 'Group') }}</span>
+						<select v-model="groupBy" :aria-label="t('proofing_gallery', 'Group gallery')" @change="applyView">
+							<option value="none">{{ t('proofing_gallery', 'None') }}</option>
+							<option value="type">{{ t('proofing_gallery', 'File type') }}</option>
+						</select>
+					</label>
+					<label>
+						<span>{{ t('proofing_gallery', 'View') }}</span>
+						<select v-model="layout" :aria-label="t('proofing_gallery', 'Gallery view')">
+							<option value="grid">{{ t('proofing_gallery', 'Grid') }}</option>
+							<option value="masonry">{{ t('proofing_gallery', 'Masonry') }}</option>
+							<option value="list">{{ t('proofing_gallery', 'List') }}</option>
+						</select>
+					</label>
+					<button v-if="settings.mode === 'collaboration' && !guest" type="button" @click="guestDialogOpen = true; mobileToolsOpen = false">
+						{{ t('proofing_gallery', 'Identify for feedback') }}
+					</button>
+				</div>
 			</div>
 			<div class="public-gallery__summary">
 				<p>
@@ -457,7 +488,12 @@ function upOneLevel() {
 				<p>{{ t('proofing_gallery', 'New photographs will appear here automatically.') }}</p>
 			</div>
 
-			<div v-else class="media-grid" :class="`media-grid--${layout}`">
+			<div v-else
+				class="media-grid"
+				:class="[
+					`media-grid--${layout}`,
+					{ 'media-grid--featured': mediaItems.length <= 3 && layout !== 'list' },
+				]">
 				<article
 					v-for="(item, index) in items"
 					:key="item.id"
@@ -465,7 +501,7 @@ function upOneLevel() {
 					<button
 						class="media-tile__open"
 						type="button"
-						:aria-label="t('proofing_gallery', 'Open {name}', { name: item.name })"
+						:aria-label="mediaAccessibleName(item)"
 						@click="openItem(item)">
 						<img
 							v-if="item.mimeType.startsWith('image/')"
@@ -569,9 +605,9 @@ function upOneLevel() {
 <style scoped>
 :global(#content.app-proofing_gallery > #proofing_gallery_public) {
 	min-width: 0;
-	height: 100%;
+	min-height: 100dvh;
 	flex: 1 1 auto;
-	overflow-y: auto;
+	overflow: visible;
 }
 
 :global(body.proofing-gallery-public-page > footer.guest-box) {
@@ -583,8 +619,11 @@ function upOneLevel() {
 }
 
 :global(body.proofing-gallery-public-page #content) {
-	height: 100vh;
+	min-height: 100dvh;
+	height: auto !important;
+	margin-top: 0 !important;
 	padding-top: 0 !important;
+	border-radius: 0 !important;
 }
 
 .public-gallery {
@@ -599,7 +638,7 @@ function upOneLevel() {
 	--tile-min: 240px;
 	--tile-gap: 6px;
 	--tile-radius: 6px;
-	min-height: 100vh;
+	min-height: 100dvh;
 	background: var(--gallery-bg);
 	color: var(--gallery-text);
 	font-family: Avenir, Montserrat, Corbel, 'URW Gothic', source-sans-pro, sans-serif;
@@ -665,13 +704,22 @@ function upOneLevel() {
 }
 
 .public-gallery__hero--image {
+	position: relative;
 	background-position: var(--hero-focus);
-	box-shadow: inset 0 -100px 90px -70px rgb(0 0 0 / 80%);
+	isolation: isolate;
+}
+
+.public-gallery__hero--image::before {
+	position: absolute;
+	z-index: -1;
+	inset: 0;
+	background: linear-gradient(180deg, rgb(0 0 0 / 12%) 20%, rgb(0 0 0 / 72%) 100%);
+	content: '';
 }
 
 .public-gallery__hero--cinematic {
-	min-height: clamp(360px, 62vh, 720px);
-	padding-block: clamp(48px, 8vw, 110px);
+	min-height: clamp(340px, 52svh, 620px);
+	padding-block: clamp(44px, 7vw, 92px);
 }
 
 .public-gallery--font-editorial { font-family: Optima, Candara, 'Noto Sans', sans-serif; }
@@ -725,6 +773,14 @@ function upOneLevel() {
 	background: var(--gallery-surface);
 }
 
+.gallery-toolbar__secondary {
+	display: contents;
+}
+
+.gallery-toolbar__more {
+	display: none;
+}
+
 .gallery-toolbar label {
 	display: flex;
 	align-items: center;
@@ -753,6 +809,12 @@ function upOneLevel() {
 .gallery-toolbar input { width: 100%; }
 
 .gallery-toolbar button { cursor: pointer; }
+
+.gallery-toolbar :is(input, select, button):focus-visible,
+.public-gallery :is(a, button, input, select, textarea):focus-visible {
+	outline: 2px solid var(--gallery-accent-readable);
+	outline-offset: 2px;
+}
 
 .visually-hidden {
 	position: absolute;
@@ -891,6 +953,11 @@ function upOneLevel() {
 .media-grid--masonry {
 	grid-template-columns: repeat(auto-fill, minmax(var(--tile-min), 1fr));
 	grid-auto-flow: dense;
+}
+
+.media-grid--featured {
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 520px));
+	justify-content: start;
 }
 
 .media-grid--list {
@@ -1135,7 +1202,8 @@ function upOneLevel() {
 
 	.public-gallery__hero--cinematic,
 	.public-gallery__hero--cinematic.public-gallery__hero--image {
-		min-height: min(46vh, 360px);
+		min-height: min(40svh, 320px);
+		max-height: 320px;
 	}
 
 	.public-gallery__title {
@@ -1143,24 +1211,82 @@ function upOneLevel() {
 	}
 
 	.public-gallery__hero--cinematic .public-gallery__title {
-		font-size: 42px;
+		font-size: clamp(34px, 11vw, 52px);
 	}
 
 	.public-gallery__content {
-		padding-top: 20px;
+		padding: 16px 8px 64px;
 	}
 
 	.gallery-toolbar {
-		overflow-x: auto;
-		align-items: flex-end;
-	}
-
-	.gallery-toolbar label:not(.gallery-toolbar__search) span {
-		display: none;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 42px auto;
+		gap: 8px;
+		margin-bottom: 14px;
+		padding: 8px;
 	}
 
 	.gallery-toolbar__search {
-		min-width: 150px;
+		grid-column: 1 / -1;
+		min-width: 0;
+		max-width: none;
+	}
+
+	.gallery-toolbar__sort {
+		min-width: 0;
+	}
+
+	.gallery-toolbar__sort span {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+	}
+
+	.gallery-toolbar__sort select {
+		width: 100%;
+	}
+
+	.gallery-toolbar__direction {
+		padding: 0;
+	}
+
+	.gallery-toolbar__more {
+		display: block;
+		white-space: nowrap;
+	}
+
+	.gallery-toolbar__secondary {
+		display: none;
+		grid-column: 1 / -1;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 8px;
+		padding-top: 8px;
+		border-top: 1px solid var(--gallery-border);
+	}
+
+	.gallery-toolbar__secondary--open {
+		display: grid;
+	}
+
+	.gallery-toolbar__secondary label {
+		display: grid;
+		min-width: 0;
+		gap: 4px;
+	}
+
+	.gallery-toolbar__secondary select {
+		width: 100%;
+	}
+
+	.gallery-toolbar__secondary > button {
+		grid-column: 1 / -1;
+	}
+
+	.public-gallery__summary {
+		gap: 16px;
+		padding-bottom: 14px;
 	}
 
 	.media-grid,
@@ -1168,22 +1294,47 @@ function upOneLevel() {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 
+	.media-grid--featured .media-tile:only-child,
+	.media-grid--featured .media-tile:first-child:nth-last-child(3) {
+		grid-column: 1 / -1;
+		aspect-ratio: 16 / 10;
+	}
+
+	.media-grid--list {
+		grid-template-columns: 1fr;
+	}
+
 	.public-gallery__summary p:last-child,
 	.public-gallery__footer span:first-child {
 		display: none;
 	}
 
-	.guest-identity,
-	.delivery-bar {
+	.guest-identity {
 		align-items: stretch;
 		flex-direction: column;
 	}
 
+	.delivery-bar {
+		flex-wrap: wrap;
+		bottom: 8px;
+	}
+
+	.proof-rail__previews {
+		display: none;
+	}
+
+	.delivery-bar input {
+		min-width: 0;
+		flex: 1 1 150px;
+	}
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.media-tile img {
-		transition: none;
+	.public-gallery *,
+	.public-gallery *::before,
+	.public-gallery *::after {
+		scroll-behavior: auto !important;
+		transition-duration: 0.01ms !important;
 	}
 }
 </style>
