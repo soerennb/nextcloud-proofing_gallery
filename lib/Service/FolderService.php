@@ -68,6 +68,58 @@ final class FolderService {
 		return new MediaPage($items, count($nodes), $limit, $offset);
 	}
 
+	/**
+	 * @return array{
+	 *   source: array{folderId: int, displayPath: ?string, state: 'readable'},
+	 *   mediaSummary: array{total: int, coverFileId: ?int, coverMimeType: ?string}
+	 * }
+	 */
+	public function describe(string $userId, int $folderId, bool $includePath): array {
+		$folder = $this->resolveFolder($userId, $folderId);
+		$total = 0;
+		$coverFileId = null;
+		$coverMimeType = null;
+
+		foreach ($folder->getDirectoryListing() as $node) {
+			if (str_starts_with($node->getName(), '.')
+				|| !($node instanceof Folder || ($node instanceof File && $this->isSupported($node)))) {
+				continue;
+			}
+			$total++;
+			if ($coverFileId === null && $node instanceof File) {
+				$coverFileId = $node->getId();
+				$coverMimeType = $node->getMimeType();
+			}
+			if ($node instanceof File
+				&& str_starts_with($node->getMimeType(), 'image/')
+				&& ($coverMimeType === null || !str_starts_with($coverMimeType, 'image/'))) {
+				$coverFileId = $node->getId();
+				$coverMimeType = $node->getMimeType();
+			}
+		}
+
+		$path = null;
+		if ($includePath) {
+			$prefix = '/' . $userId . '/files';
+			$path = str_starts_with($folder->getPath(), $prefix)
+				? substr($folder->getPath(), strlen($prefix)) ?: '/'
+				: '/' . $folder->getName();
+		}
+
+		return [
+			'source' => [
+				'folderId' => $folderId,
+				'displayPath' => $path,
+				'state' => 'readable',
+			],
+			'mediaSummary' => [
+				'total' => $total,
+				'coverFileId' => $coverFileId,
+				'coverMimeType' => $coverMimeType,
+			],
+		];
+	}
+
 	private function isSupported(File $file): bool {
 		return str_starts_with($file->getMimeType(), 'image/')
 			|| in_array($file->getMimeType(), self::SUPPORTED_VIDEO_MIMES, true);

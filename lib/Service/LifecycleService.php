@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Service;
 
+use OCA\ProofingGallery\AppInfo\Application;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\Files\IAppData;
 use OCP\IDBConnection;
+use OCP\IConfig;
 
 final class LifecycleService {
 	private const BATCH_SIZE = 1000;
@@ -16,17 +18,28 @@ final class LifecycleService {
 		private IDBConnection $db,
 		private ITimeFactory $clock,
 		private IAppData $appData,
+		private PolicyService $policies,
+		private IConfig $config,
 	) {
 	}
 
 	/** @return array<string, int> */
 	public function cleanup(): array {
 		$now = $this->clock->getTime();
-		$events = $this->deleteOldRows('proofing_events', 'created_at', $now - 180 * 86400);
+		$events = $this->deleteOldRows(
+			'proofing_events',
+			'created_at',
+			$now - $this->policies->get('eventRetentionDays') * 86400,
+		);
 		$uploads = $this->cleanupUploads($now);
-		$previews = $this->cleanupPreviewCache($now - 30 * 86400);
+		$previews = $this->cleanupPreviewCache(
+			$now - $this->policies->get('previewRetentionDays') * 86400,
+		);
 		$orphans = $this->cleanupOrphanMetadata();
-		return compact('events', 'uploads', 'previews', 'orphans');
+		$result = compact('events', 'uploads', 'previews', 'orphans');
+		$this->config->setAppValue(Application::APP_ID, 'lastCleanupAt', (string)$now);
+		$this->config->setAppValue(Application::APP_ID, 'lastCleanupResult', json_encode($result, JSON_THROW_ON_ERROR));
+		return $result;
 	}
 
 	private function deleteOldRows(string $table, string $column, int $before): int {
@@ -50,11 +63,17 @@ final class LifecycleService {
 			->where($qb->expr()->orX(
 				$qb->expr()->andX(
 					$qb->expr()->eq('status', $qb->createNamedParameter('pending')),
-					$qb->expr()->lt('updated_at', $qb->createNamedParameter($now - 86400, IQueryBuilder::PARAM_INT)),
+					$qb->expr()->lt('updated_at', $qb->createNamedParameter(
+						$now - $this->policies->get('pendingUploadRetentionHours') * 3600,
+						IQueryBuilder::PARAM_INT,
+					)),
 				),
 				$qb->expr()->andX(
 					$qb->expr()->in('status', $qb->createNamedParameter(['accepted', 'rejected'], IQueryBuilder::PARAM_STR_ARRAY)),
-					$qb->expr()->lt('updated_at', $qb->createNamedParameter($now - 365 * 86400, IQueryBuilder::PARAM_INT)),
+					$qb->expr()->lt('updated_at', $qb->createNamedParameter(
+						$now - $this->policies->get('completedUploadRetentionDays') * 86400,
+						IQueryBuilder::PARAM_INT,
+					)),
 				),
 			))
 			->orderBy('id', 'ASC')->setMaxResults(self::BATCH_SIZE);

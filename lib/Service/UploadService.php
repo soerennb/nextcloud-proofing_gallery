@@ -18,7 +18,6 @@ use OCP\Security\ISecureRandom;
 
 final class UploadService {
 	public const CHUNK_SIZE = 5 * 1024 * 1024;
-	private const MAX_SIZE = 2 * 1024 * 1024 * 1024;
 	private const INBOX_NAME = '.proofing-gallery-inbox';
 
 	public function __construct(
@@ -28,6 +27,7 @@ final class UploadService {
 		private ISecureRandom $random,
 		private FolderService $folders,
 		private ActivityService $activity,
+		private PolicyService $policies,
 	) {
 	}
 
@@ -35,7 +35,7 @@ final class UploadService {
 	public function initiate(Gallery $gallery, Guest $guest, string $filename, string $mimeType, int $size): array {
 		$this->assertEnabled($gallery);
 		$filename = $this->safeFilename($filename);
-		if ($size <= 0 || $size > self::MAX_SIZE) {
+		if ($size <= 0 || $size > $this->policies->get('maxUploadBytes')) {
 			throw new InvalidArgumentException('Upload size is outside the allowed range');
 		}
 		if (!$this->supportedMime($mimeType)) {

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.0-beta.3 — 2026-07-31
+
+- Add stable source-folder status and a safe owner-only recovery flow that
+  preserves the native public-share token and existing feedback history.
+- Return file counts and cover identity with gallery lists, eliminating the
+  per-gallery preview request fan-out, and lazy-load settings and modal code.
+- Bootstrap the first public media page in the authenticated server response
+  and preload the first image to improve first-media rendering.
+- Add server-wide administrator policies for uploads, deliveries, and
+  retention plus cleanup, queue, and preview-cache health diagnostics.
+- Configure Beads Dolt synchronization through the Git remote and verify a
+  clean cross-machine bootstrap.
+
 ## 0.1.0-beta.2 — 2026-07-30
 
 - Replace the long owner settings page with task-focused Overview, Design,

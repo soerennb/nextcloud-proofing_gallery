@@ -10,13 +10,6 @@ import {
 	toggleOptimisticLike,
 } from './domain/collaboration.ts'
 
-interface PublicGallery {
-	id: number
-	title: string
-	token: string
-	settings: GallerySettings
-}
-
 interface MediaItem {
 	id: number
 	name: string
@@ -27,8 +20,23 @@ interface MediaItem {
 	folder: boolean
 }
 
+interface PublicGallery {
+	id: number
+	title: string
+	token: string
+	settings: GallerySettings
+	initialPage?: {
+		gallery: { id: number; title: string; settings: GallerySettings }
+		items: MediaItem[]
+		total: number
+		limit: number
+		offset: number
+		path: string
+	}
+}
+
 interface GalleryResponse {
-	gallery: Omit<PublicGallery, 'token'>
+	gallery: { id: number; title: string; settings: GallerySettings }
 	items: MediaItem[]
 	total: number
 	limit: number
@@ -68,14 +76,14 @@ interface CollaborationState {
 }
 
 const props = defineProps<{ gallery: PublicGallery }>()
-const items = ref<MediaItem[]>([])
-const total = ref(0)
-const loading = ref(true)
+const items = ref<MediaItem[]>(props.gallery.initialPage?.items ?? [])
+const total = ref(props.gallery.initialPage?.total ?? 0)
+const loading = ref(!props.gallery.initialPage)
 const loadingMore = ref(false)
 const error = ref(false)
-const currentPath = ref('')
-const settings = ref(props.gallery.settings)
-const title = ref(props.gallery.title)
+const currentPath = ref(props.gallery.initialPage?.path ?? '')
+const settings = ref(props.gallery.initialPage?.gallery.settings ?? props.gallery.settings)
+const title = ref(props.gallery.initialPage?.gallery.title ?? props.gallery.title)
 const hasMore = computed(() => items.value.length < total.value)
 const pageStyle = computed(() => ({
 	'--gallery-accent': settings.value.appearance.accentColor,
@@ -116,7 +124,11 @@ const uploadProgress = ref<Record<string, number>>({})
 const nonce = ref(sessionStorage.getItem(`proofing-gallery-nonce:${props.gallery.token}`) ?? '')
 
 onMounted(() => {
-	loadPage(0).then(() => initializeCollaboration())
+	if (props.gallery.initialPage) {
+		initializeCollaboration()
+	} else {
+		loadPage(0).then(() => initializeCollaboration())
+	}
 	window.addEventListener('keydown', onKeydown)
 	document.addEventListener('visibilitychange', onVisibilityChange)
 })

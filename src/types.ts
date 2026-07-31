@@ -12,6 +12,16 @@ export interface Gallery {
 	createdAt: number
 	updatedAt: number
 	archivedAt: number | null
+	source: {
+		folderId: number
+		displayPath: string | null
+		state: 'readable' | 'missing'
+	}
+	mediaSummary: {
+		total: number
+		coverFileId: number | null
+		coverMimeType: string | null
+	}
 	permissions: {
 		role: 'owner' | 'editor' | 'viewer'
 		canEdit: boolean

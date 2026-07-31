@@ -10,6 +10,14 @@ interface PublicGalleryState {
 	token: string
 	path: string
 	settings: GallerySettings
+	initialPage: {
+		gallery: { id: number; title: string; settings: GallerySettings }
+		items: Array<{ id: number; name: string; mimeType: string; size: number; modifiedAt: number; etag: string; folder: boolean }>
+		total: number
+		limit: number
+		offset: number
+		path: string
+	}
 }
 
 const state = loadState<PublicGalleryState>('proofing_gallery', 'public-gallery')

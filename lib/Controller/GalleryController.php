@@ -82,6 +82,22 @@ final class GalleryController extends Controller {
 	}
 
 	#[NoAdminRequired]
+	#[ApiRoute(verb: 'PUT', url: '/api/v1/galleries/{id}/source')]
+	public function source(int $id, int $folderId): DataResponse {
+		try {
+			$userId = $this->userId();
+			return new DataResponse($this->galleries->present(
+				$userId,
+				$this->galleries->rebindSource($userId, $id, $folderId),
+			));
+		} catch (DoesNotExistException|AuthorizationException) {
+			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		} catch (FolderAccessException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+	}
+
+	#[NoAdminRequired]
 	#[ApiRoute(verb: 'DELETE', url: '/api/v1/galleries/{id}')]
 	public function archive(int $id): DataResponse {
 		try {

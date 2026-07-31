@@ -8,14 +8,15 @@ import NcContent from '@nextcloud/vue/components/NcContent'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
-import { onMounted, ref, watch } from 'vue'
+import { defineAsyncComponent, onMounted, ref, watch } from 'vue'
 
-import CreateGalleryModal from './components/CreateGalleryModal.vue'
 import GalleryList from './components/GalleryList.vue'
-import GallerySettings from './components/GallerySettings.vue'
-import SharingModal from './components/SharingModal.vue'
 import { archiveGallery, fetchGalleries, restoreGallery } from './services/galleryApi.ts'
 import type { Gallery } from './types.ts'
+
+const CreateGalleryModal = defineAsyncComponent(() => import('./components/CreateGalleryModal.vue'))
+const GallerySettings = defineAsyncComponent(() => import('./components/GallerySettings.vue'))
+const SharingModal = defineAsyncComponent(() => import('./components/SharingModal.vue'))
 
 const galleries = ref<Gallery[]>([])
 const loading = ref(true)

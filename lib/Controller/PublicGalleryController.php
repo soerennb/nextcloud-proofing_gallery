@@ -9,6 +9,8 @@ use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\GalleryMapper;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCA\ProofingGallery\Http\TemporaryFileResponse;
+use OCA\ProofingGallery\Service\PolicyService;
+use OCA\ProofingGallery\Service\PublicGalleryDataService;
 use OCA\ProofingGallery\Service\WatermarkPreviewService;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
@@ -23,7 +25,6 @@ use OCP\AppFramework\PublicShareController;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
-use OCP\Files\Node;
 use OCP\IPreview;
 use OCP\IRequest;
 use OCP\ISession;
@@ -43,6 +44,8 @@ final class PublicGalleryController extends PublicShareController {
 		private IRootFolder $rootFolder,
 		private IPreview $preview,
 		private WatermarkPreviewService $watermarks,
+		private PublicGalleryDataService $galleryData,
+		private PolicyService $policies,
 	) {
 		parent::__construct(Application::APP_ID, $request, $session);
 	}
@@ -51,42 +54,13 @@ final class PublicGalleryController extends PublicShareController {
 	#[NoCSRFRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/gallery')]
 	public function gallery(int $limit = 60, int $offset = 0, string $path = ''): JSONResponse {
-		$limit = max(1, min(200, $limit));
-		$offset = max(0, $offset);
-		$currentFolder = $this->folderAt($path);
-		$nodes = array_values(array_filter(
-			$currentFolder->getDirectoryListing(),
-			fn (Node $node): bool => !str_starts_with($node->getName(), '.')
-				&& ($node instanceof Folder || ($node instanceof File && $this->isSupported($node))),
+		return new JSONResponse($this->galleryData->page(
+			$this->resolvedGallery(),
+			$this->folder(),
+			$limit,
+			$offset,
+			$path,
 		));
-		usort($nodes, static fn (Node $left, Node $right): int => strnatcasecmp($left->getName(), $right->getName()));
-
-		$items = array_map(static fn (Node $node): array => [
-			'id' => $node->getId(),
-			'name' => $node->getName(),
-			'mimeType' => $node->getMimeType(),
-			'size' => (int)$node->getSize(),
-			'modifiedAt' => $node->getMTime(),
-			'etag' => $node->getEtag(),
-			'folder' => $node instanceof Folder,
-		], array_slice($nodes, $offset, $limit));
-
-		return new JSONResponse([
-			'gallery' => [
-				'id' => $this->resolvedGallery()->getId(),
-				'title' => $this->resolvedGallery()->getTitle(),
-				'settings' => GallerySettings::fromArray(json_decode(
-					$this->resolvedGallery()->getSettings(),
-					true,
-					flags: JSON_THROW_ON_ERROR,
-				)),
-			],
-			'items' => $items,
-			'total' => count($nodes),
-			'limit' => $limit,
-			'offset' => $offset,
-			'path' => trim($path, '/'),
-		]);
 	}
 
 	#[PublicPage]
@@ -296,21 +270,6 @@ final class PublicGalleryController extends PublicShareController {
 		throw new \OCP\Files\NotFoundException('Media file not found');
 	}
 
-	private function folderAt(string $path): Folder {
-		$path = trim($path, '/');
-		if ($path === '') {
-			return $this->folder();
-		}
-		if (in_array('..', explode('/', $path), true)) {
-			throw new \OCP\Files\NotFoundException('Invalid gallery path');
-		}
-		$node = $this->folder()->get($path);
-		if (!$node instanceof Folder || !$this->folder()->isSubNode($node)) {
-			throw new \OCP\Files\NotFoundException('Gallery folder not found');
-		}
-		return $node;
-	}
-
 	private function previewResponse(File $file, int $x, int $y, bool $applyWatermark = true): DataDisplayResponse {
 		$x = max(64, min(2400, $x));
 		$y = max(64, min(2400, $y));
@@ -365,15 +324,15 @@ final class PublicGalleryController extends PublicShareController {
 			array_map('intval', explode(',', $fileIds)),
 			static fn (int $id): bool => $id > 0,
 		)));
-		if (count($ids) > 100) {
-			throw new \InvalidArgumentException('A maximum of 100 files can be delivered at once');
+		if (count($ids) > $this->policies->get('maxSelectionFiles')) {
+			throw new \InvalidArgumentException('The selection contains too many files');
 		}
 		$files = [];
 		$totalSize = 0;
 		foreach ($ids as $id) {
 			$file = $this->fileInShare($id);
 			$totalSize += (int)$file->getSize();
-			if ($totalSize > 1024 * 1024 * 1024) {
+			if ($totalSize > $this->policies->get('maxSelectionBytes')) {
 				throw new \InvalidArgumentException('Selection is too large');
 			}
 			$files[] = $file;

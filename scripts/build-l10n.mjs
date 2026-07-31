@@ -6,6 +6,7 @@ import path from 'node:path'
 const root = path.resolve(import.meta.dirname, '..')
 const sourceFiles = [
 	'src/App.vue',
+	'src/admin.ts',
 	'src/PublicApp.vue',
 	'src/components/CreateGalleryModal.vue',
 	'src/components/GalleryActivity.vue',
@@ -13,6 +14,7 @@ const sourceFiles = [
 	'src/components/GallerySettings.vue',
 	'src/components/ManagerPanel.vue',
 	'src/components/SharingModal.vue',
+	'templates/admin.php',
 ]
 
 const de = {
@@ -36,6 +38,8 @@ const de = {
 	'Change logo': 'Logo ändern',
 	'Choose a folder': 'Ordner auswählen',
 	'Choose an image': 'Bild auswählen',
+	'Choose source folder': 'Quellordner auswählen',
+	'Choose another folder': 'Anderen Ordner auswählen',
 	'Choose hero image': 'Titelbild auswählen',
 	'Choose logo': 'Logo auswählen',
 	'Choose the gallery folder': 'Galerieordner auswählen',
@@ -269,6 +273,33 @@ const de = {
 	'Comment deleted': 'Kommentar gelöscht',
 	'Comment edited': 'Kommentar bearbeitet',
 	'Logo': 'Logo',
+	'Folder unavailable': 'Ordner nicht verfügbar',
+	'Proofing Gallery': 'Proofing Gallery',
+	'Set delivery limits and automatic retention for all galleries on this server.': 'Legen Sie Übergabegrenzen und automatische Aufbewahrungszeiten für alle Galerien auf diesem Server fest.',
+	'Settings saved.': 'Einstellungen gespeichert.',
+	'Settings could not be saved.': 'Einstellungen konnten nicht gespeichert werden.',
+	'Delivery limits': 'Übergabegrenzen',
+	'Maximum guest upload (MiB)': 'Maximaler Gast-Upload (MiB)',
+	'Maximum files per delivery': 'Maximale Dateien pro Übergabe',
+	'Maximum delivery size (MiB)': 'Maximale Übergabegröße (MiB)',
+	'Retention': 'Aufbewahrung',
+	'Activity history (days)': 'Aktivitätsverlauf (Tage)',
+	'Watermarked previews (days)': 'Vorschauen mit Wasserzeichen (Tage)',
+	'Incomplete uploads (hours)': 'Unvollständige Uploads (Stunden)',
+	'Moderated upload records (days)': 'Moderierte Upload-Datensätze (Tage)',
+	'Health': 'Systemzustand',
+	'Incomplete uploads': 'Unvollständige Uploads',
+	'Uploads awaiting review': 'Uploads zur Prüfung',
+	'Preview cache': 'Vorschau-Zwischenspeicher',
+	'Last cleanup': 'Letzte Bereinigung',
+	'Last cleanup result': 'Ergebnis der letzten Bereinigung',
+	'events': 'Ereignisse',
+	'uploads': 'Uploads',
+	'previews': 'Vorschauen',
+	'orphan records': 'verwaiste Datensätze',
+	'Not run yet': 'Noch nicht ausgeführt',
+	'Source folder updated. The public link remains unchanged.': 'Quellordner aktualisiert. Der öffentliche Link bleibt unverändert.',
+	'The source folder could not be updated.': 'Der Quellordner konnte nicht aktualisiert werden.',
 }
 
 const pluralDe = {
@@ -283,6 +314,9 @@ const singular = new Set()
 const plurals = new Map()
 for (const source of sources) {
 	for (const match of source.matchAll(/\bt\(\s*'proofing_gallery'\s*,\s*'([^']+)'/g)) {
+		singular.add(match[1])
+	}
+	for (const match of source.matchAll(/\$l->t\(\s*'([^']+)'/g)) {
 		singular.add(match[1])
 	}
 	for (const match of source.matchAll(/\bn\(\s*'proofing_gallery'\s*,\s*'([^']+)'\s*,\s*'([^']+)'/g)) {

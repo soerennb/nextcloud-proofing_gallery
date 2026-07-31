@@ -1,12 +1,10 @@
 <script setup lang="ts">
 import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
-import { onMounted, ref, watch } from 'vue'
+import { ownerPreviewUrl } from '../services/galleryApi.ts'
+import type { Gallery } from '../types.ts'
 
-import { fetchGalleryMedia, ownerPreviewUrl } from '../services/galleryApi.ts'
-import type { Gallery, MediaItem } from '../types.ts'
-
-const props = defineProps<{ galleries: Gallery[]; archived: boolean }>()
+defineProps<{ galleries: Gallery[]; archived: boolean }>()
 const emit = defineEmits<{
 	select: [gallery: Gallery]
 	share: [gallery: Gallery]
@@ -14,35 +12,17 @@ const emit = defineEmits<{
 	restore: [gallery: Gallery]
 }>()
 
-const covers = ref<Record<number, MediaItem | null>>({})
-
 function formattedDate(timestamp: number): string {
 	return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(timestamp * 1000))
 }
 
 function previewUrl(gallery: Gallery): string {
-	const fileId = gallery.settings.appearance.heroFileId ?? covers.value[gallery.id]?.id
+	const fileId = gallery.settings.appearance.heroFileId ?? gallery.mediaSummary.coverFileId
 	return fileId
 		? ownerPreviewUrl(gallery.id, fileId, 360, 204)
 		: ''
 }
 
-async function loadCovers() {
-	await Promise.all(props.galleries.map(async gallery => {
-		if (gallery.settings.appearance.heroFileId || gallery.id in covers.value) return
-		try {
-			const media = await fetchGalleryMedia(gallery.id, 12)
-			covers.value[gallery.id] = media.items.find(item => !item.folder && item.mimeType.startsWith('image/'))
-				?? media.items.find(item => !item.folder)
-				?? null
-		} catch {
-			covers.value[gallery.id] = null
-		}
-	}))
-}
-
-watch(() => props.galleries, loadCovers)
-onMounted(loadCovers)
 </script>
 
 <template>

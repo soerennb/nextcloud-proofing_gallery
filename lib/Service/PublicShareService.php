@@ -13,6 +13,7 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Constants;
 use OCP\Share\IManager;
 use OCP\Share\IShare;
+use Throwable;
 
 final class PublicShareService {
 	public function __construct(
@@ -68,6 +69,48 @@ final class PublicShareService {
 		$gallery->setUpdatedAt($this->clock->getTime());
 
 		return $this->galleries->update($gallery);
+	}
+
+	/**
+	 * Move the gallery and its native link share as one logical operation.
+	 *
+	 * The share is moved first so a published gallery never points at a folder
+	 * different from its public token. If persisting the gallery fails, the
+	 * original share node is restored best-effort before the error is rethrown.
+	 */
+	public function rebindSource(Gallery $gallery, int $folderId): Gallery {
+		$newFolder = $this->folders->resolveFolder($gallery->getOwnerUid(), $folderId);
+		$oldFolderId = $gallery->getFolderId();
+		$share = null;
+		$oldNode = null;
+
+		if ($gallery->getShareToken() !== null) {
+			$share = $this->shareManager->getShareByToken($gallery->getShareToken());
+			try {
+				$oldNode = $share->getNode();
+			} catch (Throwable) {
+				// A missing old source is the primary recovery use case.
+			}
+			$share->setNode($newFolder);
+			$this->shareManager->updateShare($share);
+		}
+
+		try {
+			$gallery->setFolderId($folderId);
+			$gallery->setUpdatedAt($this->clock->getTime());
+			return $this->galleries->update($gallery);
+		} catch (Throwable $exception) {
+			$gallery->setFolderId($oldFolderId);
+			if ($share !== null && $oldNode !== null) {
+				try {
+					$share->setNode($oldNode);
+					$this->shareManager->updateShare($share);
+				} catch (Throwable) {
+					// Preserve the original persistence exception.
+				}
+			}
+			throw $exception;
+		}
 	}
 
 	private function createShare(Gallery $gallery): IShare {

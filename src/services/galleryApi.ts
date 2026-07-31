@@ -33,6 +33,11 @@ export async function updateGallery(
 	return data
 }
 
+export async function updateGallerySource(id: number, folderId: number): Promise<Gallery> {
+	const { data } = await axios.put<Gallery>(`${galleriesUrl}/${id}/source`, { folderId })
+	return data
+}
+
 export async function fetchGalleryMedia(id: number, limit = 8, offset = 0): Promise<MediaPage> {
 	const { data } = await axios.get<MediaPage>(`${galleriesUrl}/${id}/media`, {
 		params: { limit, offset },

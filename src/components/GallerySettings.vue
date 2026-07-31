@@ -7,7 +7,7 @@ import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
-import { fetchGalleryMedia, ownerPreviewUrl, updateGallery } from '../services/galleryApi.ts'
+import { fetchGalleryMedia, ownerPreviewUrl, updateGallery, updateGallerySource } from '../services/galleryApi.ts'
 import type { Gallery, MediaItem } from '../types.ts'
 import GalleryActivity from './GalleryActivity.vue'
 import ManagerPanel from './ManagerPanel.vue'
@@ -35,6 +35,7 @@ const availableTabs = computed(() => allTabs.filter(tab => {
 }))
 const activeTab = ref<SettingsTab>(tabFromHash())
 const saving = ref(false)
+const rebinding = ref(false)
 const showSharing = ref(false)
 const media = ref<MediaItem[]>([])
 const mediaTotal = ref(0)
@@ -118,6 +119,33 @@ async function chooseImage(kind: 'heroFileId' | 'logoFileId') {
 		draft.settings.appearance[kind] = image.fileid
 	} catch {
 		// Closing the picker is not an error.
+	}
+}
+
+async function chooseSource() {
+	try {
+		const nodes = await getFilePickerBuilder(t('proofing_gallery', 'Choose source folder'))
+			.setMultiSelect(false)
+			.setType(FilePickerType.Choose)
+			.setCanPick(node => node.type === 'folder')
+			.build()
+			.pickNodes()
+		const folder = nodes[0]
+		if (folder?.fileid === undefined) {
+			showError(t('proofing_gallery', 'The selected folder has no compatible file ID.'))
+			return
+		}
+		rebinding.value = true
+		const gallery = await updateGallerySource(props.gallery.id, folder.fileid)
+		emit('updated', gallery)
+		await loadMedia()
+		showSuccess(t('proofing_gallery', 'Source folder updated. The public link remains unchanged.'))
+	} catch (error) {
+		if (rebinding.value) {
+			showError(t('proofing_gallery', 'The source folder could not be updated.'))
+		}
+	} finally {
+		rebinding.value = false
 	}
 }
 
@@ -216,8 +244,26 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 					</label>
 				</fieldset>
 				<dl class="gallery-facts">
-					<div><dt>{{ t('proofing_gallery', 'Source folder') }}</dt><dd>#{{ gallery.folderId }}</dd></div>
-					<div><dt>{{ t('proofing_gallery', 'Files shown') }}</dt><dd>{{ mediaLoading ? t('proofing_gallery', 'Loading…') : mediaTotal }}</dd></div>
+					<div>
+						<dt>{{ t('proofing_gallery', 'Source folder') }}</dt>
+						<dd>
+							<span :class="{ 'source-missing': gallery.source.state === 'missing' }">
+								{{ gallery.source.state === 'missing'
+									? t('proofing_gallery', 'Folder unavailable')
+									: gallery.source.displayPath }}
+							</span>
+							<NcButton
+								v-if="gallery.permissions.role === 'owner'"
+								variant="tertiary"
+								:disabled="rebinding"
+								@click="chooseSource">
+								{{ gallery.source.state === 'missing'
+									? t('proofing_gallery', 'Choose another folder')
+									: t('proofing_gallery', 'Change') }}
+							</NcButton>
+						</dd>
+					</div>
+					<div><dt>{{ t('proofing_gallery', 'Files shown') }}</dt><dd>{{ mediaLoading ? gallery.mediaSummary.total : mediaTotal }}</dd></div>
 					<div><dt>{{ t('proofing_gallery', 'Last changed') }}</dt><dd>{{ new Date(gallery.updatedAt * 1000).toLocaleString() }}</dd></div>
 				</dl>
 				<div v-if="previewMedia.length" class="contact-strip" :aria-label="t('proofing_gallery', 'Gallery preview')">

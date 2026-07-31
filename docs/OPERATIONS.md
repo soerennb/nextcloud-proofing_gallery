@@ -30,16 +30,24 @@ Run cron at least every five minutes. Monitor Nextcloud's log for
 mail transport errors. Capacity planning should include originals in Files,
 temporary resumable chunks, and appdata preview derivatives.
 
-Upload chunks are capped at 5 MiB each and an upload at 2 GiB. Cleanup is
-eventual, so allow headroom for interrupted uploads. Native Nextcloud retention,
-backup, encryption, and object-storage policies still apply to gallery source
-folders.
+Upload chunks are capped at 5 MiB each. Administrators can configure the
+per-file upload limit, selection-delivery limits, and retention periods in
+Administration settings → Additional settings → Proofing Gallery. The same
+section shows pending and unreviewed uploads, preview-cache use, and the last
+successful cleanup. Cleanup is eventual, so allow headroom for interrupted
+uploads. Native Nextcloud retention, backup, encryption, and object-storage
+policies still apply to gallery source folders.
 
 ## Recovery and removal
 
 Gallery originals remain ordinary Nextcloud files and can be restored with the
 normal backup process. Database and appdata must be restored together if
 feedback or pending uploads matter.
+
+If a source folder is missing or no longer readable, the gallery Overview shows
+“Folder unavailable”. Its owner can choose a replacement folder without
+changing the public URL; the app updates the native Nextcloud share node and
+keeps gallery activity and reviewer feedback intact.
 
 Disabling the app stops access but preserves data. Before uninstalling, export
 needed selections and feedback and decide how pending inbox uploads should be
