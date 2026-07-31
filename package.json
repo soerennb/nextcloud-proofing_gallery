@@ -1,12 +1,13 @@
 {
   "name": "proofing_gallery",
-  "version": "0.1.0-beta.3",
+  "version": "0.1.0-beta.4",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {
     "build": "vite build",
     "prebuild": "node scripts/clean-build.mjs",
+    "postbuild": "node scripts/check-bundle-size.mjs",
     "build:l10n": "node scripts/build-l10n.mjs",
     "dev": "vite --mode development build",
     "watch": "vite --mode development build --watch",
@@ -49,6 +50,11 @@
     "vite": "^7.3.2",
     "vitest": "^3.2.0",
     "vue-tsc": "^3.0.0"
+  },
+  "overrides": {
+    "webdav": {
+      "minimatch": "10.2.6"
+    }
   },
   "engines": {
     "node": "^24.11.0",

@@ -34,7 +34,9 @@ Upload chunks are capped at 5 MiB each. Administrators can configure the
 per-file upload limit, selection-delivery limits, and retention periods in
 Administration settings → Additional settings → Proofing Gallery. The same
 section shows pending and unreviewed uploads, preview-cache use, and the last
-successful cleanup. Cleanup is eventual, so allow headroom for interrupted
+attempt and successful cleanup. A daily cleanup is considered overdue after 36
+hours; failed runs expose only a non-sensitive error code and remain visible as
+failed Nextcloud background jobs. Cleanup is eventual, so allow headroom for interrupted
 uploads. Native Nextcloud retention, backup, encryption, and object-storage
 policies still apply to gallery source folders.
 

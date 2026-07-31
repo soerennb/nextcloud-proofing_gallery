@@ -15,6 +15,7 @@ final class GalleryService {
 	public function __construct(
 		private GalleryMapper $mapper,
 		private FolderService $folders,
+		private MediaSummaryService $summaries,
 		private GalleryAccessService $access,
 		private PublicShareService $shares,
 		private ITimeFactory $clock,
@@ -70,29 +71,35 @@ final class GalleryService {
 	public function present(string $userId, Gallery $gallery): array {
 		$permissions = $this->access->permissions($userId, $gallery);
 		try {
-			$folder = $this->folders->describe(
+			$folder = $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId());
+			$source = $this->folders->describeSource(
 				$gallery->getOwnerUid(),
 				$gallery->getFolderId(),
+				$folder,
 				$permissions['role'] === 'owner',
 			);
+			$mediaSummary = $this->summaries->forFolder(
+				$gallery->getId(),
+				$gallery->getFolderId(),
+				$folder,
+			);
 		} catch (\OCA\ProofingGallery\Exception\FolderAccessException) {
-			$folder = [
-				'source' => [
+			$source = [
 					'folderId' => $gallery->getFolderId(),
 					'displayPath' => null,
 					'state' => 'missing',
-				],
-				'mediaSummary' => [
+			];
+			$mediaSummary = [
 					'total' => 0,
 					'coverFileId' => null,
 					'coverMimeType' => null,
-				],
 			];
 		}
 
 		return [
 			...$gallery->jsonSerialize(),
-			...$folder,
+			'source' => $source,
+			'mediaSummary' => $mediaSummary,
 			'permissions' => $permissions,
 		];
 	}

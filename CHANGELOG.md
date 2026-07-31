@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.0-beta.4 — 2026-07-31
+
+- Cache gallery media summaries by source-folder ETag so unchanged owner
+  lists avoid repeated directory scans while retaining deterministic covers.
+- Split notification dialogs from the owner shell and enforce raw-entry and
+  eager-gzip bundle budgets during every production build.
+- Distinguish never-run, healthy, overdue, and failed cleanup jobs with safe
+  operational diagnostics in the Nextcloud administrator settings.
+- Extend automated recovery, cache, public-bootstrap, policy, and lifecycle
+  regression coverage.
+
 ## 0.1.0-beta.3 — 2026-07-31
 
 - Add stable source-folder status and a safe owner-only recovery flow that

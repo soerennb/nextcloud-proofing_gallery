@@ -42,6 +42,19 @@
 	font-weight: 600;
 }
 
+.proofing-gallery-admin__state--healthy {
+	color: var(--color-success);
+}
+
+.proofing-gallery-admin__state--stale,
+.proofing-gallery-admin__state--never {
+	color: var(--color-warning);
+}
+
+.proofing-gallery-admin__state--failed {
+	color: var(--color-error);
+}
+
 @media (max-width: 560px) {
 	.proofing-gallery-admin__form p {
 		grid-template-columns: 1fr;

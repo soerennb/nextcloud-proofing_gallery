@@ -68,36 +68,8 @@ final class FolderService {
 		return new MediaPage($items, count($nodes), $limit, $offset);
 	}
 
-	/**
-	 * @return array{
-	 *   source: array{folderId: int, displayPath: ?string, state: 'readable'},
-	 *   mediaSummary: array{total: int, coverFileId: ?int, coverMimeType: ?string}
-	 * }
-	 */
-	public function describe(string $userId, int $folderId, bool $includePath): array {
-		$folder = $this->resolveFolder($userId, $folderId);
-		$total = 0;
-		$coverFileId = null;
-		$coverMimeType = null;
-
-		foreach ($folder->getDirectoryListing() as $node) {
-			if (str_starts_with($node->getName(), '.')
-				|| !($node instanceof Folder || ($node instanceof File && $this->isSupported($node)))) {
-				continue;
-			}
-			$total++;
-			if ($coverFileId === null && $node instanceof File) {
-				$coverFileId = $node->getId();
-				$coverMimeType = $node->getMimeType();
-			}
-			if ($node instanceof File
-				&& str_starts_with($node->getMimeType(), 'image/')
-				&& ($coverMimeType === null || !str_starts_with($coverMimeType, 'image/'))) {
-				$coverFileId = $node->getId();
-				$coverMimeType = $node->getMimeType();
-			}
-		}
-
+	/** @return array{folderId: int, displayPath: ?string, state: 'readable'} */
+	public function describeSource(string $userId, int $folderId, Folder $folder, bool $includePath): array {
 		$path = null;
 		if ($includePath) {
 			$prefix = '/' . $userId . '/files';
@@ -107,16 +79,9 @@ final class FolderService {
 		}
 
 		return [
-			'source' => [
-				'folderId' => $folderId,
-				'displayPath' => $path,
-				'state' => 'readable',
-			],
-			'mediaSummary' => [
-				'total' => $total,
-				'coverFileId' => $coverFileId,
-				'coverMimeType' => $coverMimeType,
-			],
+			'folderId' => $folderId,
+			'displayPath' => $path,
+			'state' => 'readable',
 		];
 	}
 

@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 $policies = $_['policies'];
 $health = $_['health'];
-$cleanup = json_decode((string)$health['lastCleanupResult'], true);
+$cleanupHealth = $health['cleanup'];
+$cleanup = json_decode((string)$cleanupHealth['lastResult'], true);
 $cleanupSummary = is_array($cleanup)
 	? sprintf(
 		'%s: %d · %s: %d · %s: %d · %s: %d',
@@ -18,6 +19,12 @@ $cleanupSummary = is_array($cleanup)
 		(int)($cleanup['orphans'] ?? 0),
 	)
 	: $l->t('Not run yet');
+$cleanupState = match ($cleanupHealth['state']) {
+	'healthy' => $l->t('Healthy'),
+	'stale' => $l->t('Overdue'),
+	'failed' => $l->t('Failed'),
+	default => $l->t('Not run yet'),
+};
 ?>
 <section id="proofing-gallery-admin" class="settings-section">
 	<h2><?= $l->t('Proofing Gallery') ?></h2>
@@ -57,10 +64,15 @@ $cleanupSummary = is_array($cleanup)
 
 	<h3><?= $l->t('Health') ?></h3>
 	<dl class="proofing-gallery-admin__health">
+		<div><dt><?= $l->t('Cleanup status') ?></dt><dd class="proofing-gallery-admin__state proofing-gallery-admin__state--<?= htmlspecialchars($cleanupHealth['state'], ENT_QUOTES) ?>"><?= $cleanupState ?></dd></div>
 		<div><dt><?= $l->t('Incomplete uploads') ?></dt><dd><?= (int)$health['pendingUploads'] ?></dd></div>
 		<div><dt><?= $l->t('Uploads awaiting review') ?></dt><dd><?= (int)$health['awaitingReview'] ?></dd></div>
 		<div><dt><?= $l->t('Preview cache') ?></dt><dd><?= \OCP\Util::humanFileSize((int)$health['previewCacheBytes']) ?></dd></div>
-		<div><dt><?= $l->t('Last cleanup') ?></dt><dd><?= $health['lastCleanupAt'] === null ? $l->t('Not run yet') : $l->l('datetime', (int)$health['lastCleanupAt']) ?></dd></div>
+		<div><dt><?= $l->t('Last cleanup attempt') ?></dt><dd><?= $cleanupHealth['lastAttemptAt'] === null ? $l->t('Not run yet') : $l->l('datetime', (int)$cleanupHealth['lastAttemptAt']) ?></dd></div>
+		<div><dt><?= $l->t('Last successful cleanup') ?></dt><dd><?= $cleanupHealth['lastSuccessAt'] === null ? $l->t('Not run yet') : $l->l('datetime', (int)$cleanupHealth['lastSuccessAt']) ?></dd></div>
 		<div><dt><?= $l->t('Last cleanup result') ?></dt><dd><?= htmlspecialchars($cleanupSummary, ENT_QUOTES) ?></dd></div>
+		<?php if ($cleanupHealth['errorCode'] !== null): ?>
+			<div><dt><?= $l->t('Last cleanup error') ?></dt><dd><code><?= htmlspecialchars($cleanupHealth['errorCode'], ENT_QUOTES) ?></code></dd></div>
+		<?php endif; ?>
 	</dl>
 </section>

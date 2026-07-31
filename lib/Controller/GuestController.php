@@ -63,7 +63,8 @@ final class GuestController extends PublicShareController {
 				'guest' => $this->guests->authenticate($this->gallery(), $this->request->getCookie(GuestService::COOKIE_NAME)),
 			]);
 		} catch (DoesNotExistException) {
-			return new JSONResponse(['message' => 'Guest session not found'], Http::STATUS_NOT_FOUND);
+			// An anonymous visitor is the normal initial state of a public gallery.
+			return new JSONResponse(['guest' => null]);
 		}
 	}
 

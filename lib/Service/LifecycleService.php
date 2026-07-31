@@ -4,12 +4,10 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Service;
 
-use OCA\ProofingGallery\AppInfo\Application;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\Files\IAppData;
 use OCP\IDBConnection;
-use OCP\IConfig;
 
 final class LifecycleService {
 	private const BATCH_SIZE = 1000;
@@ -19,7 +17,6 @@ final class LifecycleService {
 		private ITimeFactory $clock,
 		private IAppData $appData,
 		private PolicyService $policies,
-		private IConfig $config,
 	) {
 	}
 
@@ -36,10 +33,7 @@ final class LifecycleService {
 			$now - $this->policies->get('previewRetentionDays') * 86400,
 		);
 		$orphans = $this->cleanupOrphanMetadata();
-		$result = compact('events', 'uploads', 'previews', 'orphans');
-		$this->config->setAppValue(Application::APP_ID, 'lastCleanupAt', (string)$now);
-		$this->config->setAppValue(Application::APP_ID, 'lastCleanupResult', json_encode($result, JSON_THROW_ON_ERROR));
-		return $result;
+		return compact('events', 'uploads', 'previews', 'orphans');
 	}
 
 	private function deleteOldRows(string $table, string $column, int $before): int {

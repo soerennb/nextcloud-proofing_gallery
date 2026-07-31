@@ -59,6 +59,6 @@ export default async function globalSetup(config: FullConfig) {
 
 	await writeFile(
 		path.join(process.cwd(), 'test-results-e2e-state.json'),
-		JSON.stringify({ galleryId: publish.gallery.id, token: publish.gallery.shareToken }),
+		JSON.stringify({ galleryId: publish.gallery.id, token: publish.gallery.shareToken, folderId }),
 	)
 }

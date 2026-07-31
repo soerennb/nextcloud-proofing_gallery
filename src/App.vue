@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { showError, showSuccess } from '@nextcloud/dialogs'
 import { n, t } from '@nextcloud/l10n'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcAppNavigation from '@nextcloud/vue/components/NcAppNavigation'
@@ -27,6 +26,12 @@ const selectedGallery = ref<Gallery | null>(null)
 const shareGallery = ref<Gallery | null>(null)
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 
+async function notify(kind: 'error' | 'success', message: string) {
+	const dialogs = await import('@nextcloud/dialogs')
+	if (kind === 'error') dialogs.showError(message)
+	else dialogs.showSuccess(message)
+}
+
 async function load() {
 	loading.value = true
 	try {
@@ -36,7 +41,7 @@ async function load() {
 			selectedGallery.value = galleries.value.find(gallery => gallery.id === Number(match[1])) ?? null
 		}
 	} catch {
-		showError(t('proofing_gallery', 'Galleries could not be loaded.'))
+		notify('error', t('proofing_gallery', 'Galleries could not be loaded.')).catch(() => {})
 	} finally {
 		loading.value = false
 	}
@@ -45,7 +50,7 @@ async function load() {
 function created(gallery: Gallery) {
 	showCreate.value = false
 	galleries.value.unshift(gallery)
-	showSuccess(t('proofing_gallery', 'Gallery draft created.'))
+	notify('success', t('proofing_gallery', 'Gallery draft created.')).catch(() => {})
 }
 
 function selectGallery(gallery: Gallery) {
@@ -76,9 +81,9 @@ async function archive(gallery: Gallery) {
 	try {
 		await archiveGallery(gallery.id)
 		galleries.value = galleries.value.filter(item => item.id !== gallery.id)
-		showSuccess(t('proofing_gallery', 'Gallery archived.'))
+		notify('success', t('proofing_gallery', 'Gallery archived.')).catch(() => {})
 	} catch {
-		showError(t('proofing_gallery', 'The gallery could not be archived.'))
+		notify('error', t('proofing_gallery', 'The gallery could not be archived.')).catch(() => {})
 	}
 }
 
@@ -86,9 +91,9 @@ async function restore(gallery: Gallery) {
 	try {
 		await restoreGallery(gallery.id)
 		galleries.value = galleries.value.filter(item => item.id !== gallery.id)
-		showSuccess(t('proofing_gallery', 'Gallery restored.'))
+		notify('success', t('proofing_gallery', 'Gallery restored.')).catch(() => {})
 	} catch {
-		showError(t('proofing_gallery', 'The gallery could not be restored.'))
+		notify('error', t('proofing_gallery', 'The gallery could not be restored.')).catch(() => {})
 	}
 }
 

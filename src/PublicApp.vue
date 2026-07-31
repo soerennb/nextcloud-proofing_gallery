@@ -173,8 +173,8 @@ async function initializeCollaboration() {
 	try {
 		const response = await fetch(publicEndpoint('session'), { credentials: 'same-origin' })
 		if (response.ok && nonce.value) {
-			const payload = await response.json() as { guest: GuestIdentity }
-			guest.value = payload.guest
+			const payload = await response.json() as { guest: GuestIdentity | null }
+			if (payload.guest) guest.value = payload.guest
 		}
 	} catch {
 		// A visitor may not have a guest identity yet.

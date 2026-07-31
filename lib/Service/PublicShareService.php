@@ -20,6 +20,7 @@ final class PublicShareService {
 		private IManager $shareManager,
 		private GalleryMapper $galleries,
 		private FolderService $folders,
+		private MediaSummaryService $summaries,
 		private ITimeFactory $clock,
 	) {
 	}
@@ -98,7 +99,9 @@ final class PublicShareService {
 		try {
 			$gallery->setFolderId($folderId);
 			$gallery->setUpdatedAt($this->clock->getTime());
-			return $this->galleries->update($gallery);
+			$updated = $this->galleries->update($gallery);
+			$this->summaries->invalidate($gallery->getId());
+			return $updated;
 		} catch (Throwable $exception) {
 			$gallery->setFolderId($oldFolderId);
 			if ($share !== null && $oldNode !== null) {

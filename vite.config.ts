@@ -9,5 +9,10 @@ export default createAppConfig(
 	},
 	{
 		createEmptyCSSEntryPoints: true,
+		config: {
+			build: {
+				manifest: 'build/vite-manifest.json',
+			},
+		},
 	},
 )
