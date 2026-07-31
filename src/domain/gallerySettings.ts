@@ -25,7 +25,7 @@ export interface GalleryPresentation extends GalleryAppearance {
 }
 
 export interface GallerySettings {
-	schemaVersion?: 3
+	schemaVersion?: 4
 	mode: GalleryMode
 	feedbackVisibility: FeedbackVisibility
 	allowDownloads: boolean
@@ -62,17 +62,25 @@ export interface GallerySettings {
 	metadata: {
 		publicFields: Array<'capturedAt' | 'camera' | 'lens' | 'exposure' | 'title' | 'description' | 'creator' | 'copyright'>
 	}
+	lifecycle: {
+		enabled: boolean
+		trigger: 'fixed_date' | 'after_completion'
+		revokeAt: string
+		revokeAfterDays: number
+		archiveAfterDays: number
+		reminderDays: number[]
+	}
 	presentation: GalleryPresentation
 	/** Version 1 response alias. New writes use presentation. */
 	appearance: GalleryPresentation
 }
 
 export type CanonicalGallerySettings = Pick<GallerySettings,
-	'schemaVersion' | 'mode' | 'publicLocale' | 'review' | 'presentation' | 'delivery' | 'navigation' | 'security' | 'metadata'>
+	'schemaVersion' | 'mode' | 'publicLocale' | 'review' | 'presentation' | 'delivery' | 'navigation' | 'security' | 'metadata' | 'lifecycle'>
 
 export function canonicalGallerySettings(settings: GallerySettings): CanonicalGallerySettings {
 	return {
-		schemaVersion: 3,
+		schemaVersion: 4,
 		mode: settings.mode,
 		publicLocale: settings.publicLocale,
 		review: structuredClone(settings.review),
@@ -81,6 +89,7 @@ export function canonicalGallerySettings(settings: GallerySettings): CanonicalGa
 		navigation: structuredClone(settings.navigation),
 		security: structuredClone(settings.security),
 		metadata: structuredClone(settings.metadata),
+		lifecycle: structuredClone(settings.lifecycle),
 	}
 }
 
@@ -112,7 +121,7 @@ export function createDefaultGallerySettings(): GallerySettings {
 		showFilenames: true,
 	}
 	return {
-		schemaVersion: 3,
+		schemaVersion: 4,
 		mode: 'presentation',
 		feedbackVisibility: 'collaborative',
 		allowDownloads: false,
@@ -135,6 +144,7 @@ export function createDefaultGallerySettings(): GallerySettings {
 		navigation: { folders: true, sortBy: 'name', sortDirection: 'asc', groupBy: 'none' },
 		security: { allowModeSwitch: false, hideRejectedInPresentation: false },
 		metadata: { publicFields: [] },
+		lifecycle: { enabled: false, trigger: 'after_completion', revokeAt: '', revokeAfterDays: 30, archiveAfterDays: 30, reminderDays: [7, 1] },
 		presentation,
 		appearance: presentation,
 	}

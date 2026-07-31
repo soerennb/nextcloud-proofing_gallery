@@ -81,7 +81,8 @@ async function load() {
 function created(gallery: Gallery) {
 	showCreate.value = false
 	galleries.value.unshift(gallery)
-	notify('success', t('proofing_gallery', 'Gallery draft created.')).catch(() => {})
+	selectGallery(gallery)
+	notify('success', t('proofing_gallery', 'Project created. Add photos when you are ready.')).catch(() => {})
 }
 
 function selectGallery(gallery: Gallery) {
@@ -195,7 +196,7 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 							</button>
 						</div>
 						<NcButton v-if="!archived" variant="primary" @click="showCreate = true">
-							{{ t('proofing_gallery', 'Create gallery') }}
+							{{ t('proofing_gallery', 'New project') }}
 						</NcButton>
 					</div>
 				</header>

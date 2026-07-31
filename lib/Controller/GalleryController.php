@@ -18,6 +18,7 @@ use OCA\ProofingGallery\Service\MediaMetadataService;
 use OCA\ProofingGallery\Http\TemporaryFileResponse;
 use OCA\ProofingGallery\Exception\CollectionConflictException;
 use OCA\ProofingGallery\Exception\MetadataConflictException;
+use OCA\ProofingGallery\Exception\GalleryConflictException;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCP\AppFramework\Controller;
@@ -91,6 +92,29 @@ final class GalleryController extends Controller {
 		}
 	}
 
+	/** @param array<string, mixed> $settings */
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'POST', url: '/api/v1/projects')]
+	public function createProject(
+		string $title,
+		string $purpose = 'delivery',
+		string $sourceMode = 'existing',
+		?int $folderId = null,
+		?int $parentFolderId = null,
+		?string $folderName = null,
+		array $settings = [],
+	): DataResponse {
+		try {
+			$userId = $this->userId();
+			$gallery = $this->galleries->createProject(
+				$userId, $title, $purpose, $sourceMode, $folderId, $parentFolderId, $folderName, $settings,
+			);
+			return new DataResponse($this->galleries->present($userId, $gallery), Http::STATUS_CREATED);
+		} catch (InvalidArgumentException|FolderAccessException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+	}
+
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/galleries/{id}')]
 	public function show(int $id): DataResponse {
@@ -105,13 +129,20 @@ final class GalleryController extends Controller {
 	/** @param array<string, mixed>|null $settings */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'PUT', url: '/api/v1/galleries/{id}')]
-	public function update(int $id, ?string $title = null, ?array $settings = null): DataResponse {
+	public function update(int $id, ?string $title = null, ?array $settings = null, ?int $expectedRevision = null): DataResponse {
 		try {
 			$userId = $this->userId();
 			return new DataResponse($this->galleries->present(
 				$userId,
-				$this->galleries->update($userId, $id, $title, $settings),
+				$this->galleries->update($userId, $id, $title, $settings, $expectedRevision),
 			));
+		} catch (GalleryConflictException $exception) {
+			$userId = $this->userId();
+			return new DataResponse([
+				'code' => 'revision_conflict',
+				'message' => $exception->getMessage(),
+				'gallery' => $this->galleries->present($userId, $this->galleries->view($userId, $id)),
+			], Http::STATUS_CONFLICT);
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
 		} catch (InvalidArgumentException $exception) {
@@ -156,6 +187,17 @@ final class GalleryController extends Controller {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
 		} catch (InvalidArgumentException $exception) {
 			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'POST', url: '/api/v1/galleries/{id}/complete')]
+	public function complete(int $id): DataResponse {
+		try {
+			$userId = $this->userId();
+			return new DataResponse($this->galleries->present($userId, $this->galleries->complete($userId, $id)));
+		} catch (DoesNotExistException|AuthorizationException) {
+			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
 		}
 	}
 

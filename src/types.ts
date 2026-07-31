@@ -1,5 +1,7 @@
 import type { GallerySettings } from './domain/gallerySettings'
 
+export type GalleryPurpose = 'showcase' | 'delivery' | 'selection' | 'proofing' | 'uploads' | 'custom'
+
 export interface Gallery {
 	id: number
 	ownerUid: string
@@ -13,6 +15,12 @@ export interface Gallery {
 	createdAt: number
 	updatedAt: number
 	archivedAt: number | null
+	revision: number
+	purpose: GalleryPurpose
+	workflowState: 'preparing' | 'live' | 'response_received' | 'completed'
+	publishedAt: number | null
+	completedAt: number | null
+	revokedAt: number | null
 	source: {
 		type: 'folder'
 		folderId: number

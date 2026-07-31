@@ -150,7 +150,19 @@ final class UploadService {
 			'filename' => $filename,
 			'size' => (int)$row['size'],
 		]);
+		$this->markResponseReceived($gallery);
 		return ['id' => $uploadId, 'filename' => $filename, 'status' => 'awaiting_review'];
+	}
+
+	private function markResponseReceived(Gallery $gallery): void {
+		$qb = $this->db->getQueryBuilder();
+		$qb->update('proofing_galleries')
+			->set('workflow_state', $qb->createNamedParameter('response_received'))
+			->set('updated_at', $qb->createNamedParameter($this->clock->getTime(), IQueryBuilder::PARAM_INT))
+			->set('revision', $qb->createFunction('revision + 1'))
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->neq('workflow_state', $qb->createNamedParameter('completed')))
+			->executeStatement();
 	}
 
 	/** @return list<array<string, mixed>> */

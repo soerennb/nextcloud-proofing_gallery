@@ -34,6 +34,15 @@ final class FolderService {
 		throw new FolderAccessException('Folder was not found or is not readable');
 	}
 
+	public function createProjectFolder(string $userId, int $parentFolderId, string $name): Folder {
+		$parent = $this->resolveFolder($userId, $parentFolderId);
+		$name = $this->safeName($name);
+		if (!$parent->isUpdateable() || $parent->nodeExists($name)) {
+			throw new FolderAccessException('The project folder cannot be created or already exists');
+		}
+		return $parent->newFolder($name);
+	}
+
 	public function resolveMedia(string $userId, int $folderId, int $fileId): File {
 		$folder = $this->resolveFolder($userId, $folderId);
 		foreach ($folder->getById($fileId) as $node) {

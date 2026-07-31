@@ -31,7 +31,6 @@ const emit = defineEmits<{
 const password = ref('')
 const removePassword = ref(false)
 const expiresAt = ref('')
-const downloadScope = ref(props.gallery.settings.delivery.downloadScope)
 const publicUrl = ref(props.gallery.shareToken ? absoluteShareUrl(props.gallery.shareToken) : '')
 const publishing = ref(false)
 const recipient = ref('')
@@ -50,7 +49,6 @@ const publishDisabled = computed(() => publishing.value
 
 watch(() => props.gallery, gallery => {
 	publicUrl.value = gallery.shareToken ? absoluteShareUrl(gallery.shareToken) : ''
-	downloadScope.value = gallery.settings.delivery.downloadScope
 })
 
 watch(publicUrl, async url => {
@@ -140,7 +138,7 @@ async function publish() {
 		const result = await publishGallery(props.gallery.id, {
 			password: removePassword.value ? '' : password.value || null,
 			expiresAt: expiresAt.value,
-			downloadScope: downloadScope.value,
+			expectedRevision: props.gallery.revision,
 		})
 		publicUrl.value = result.url
 		password.value = ''
@@ -278,15 +276,17 @@ function updateOpen(open: boolean) {
 				<NcCheckboxRadioSwitch v-if="published" v-model="removePassword" type="checkbox">
 					{{ t('proofing_gallery', 'Remove the current password') }}
 				</NcCheckboxRadioSwitch>
-				<label class="date-field">
-					<span>{{ t('proofing_gallery', 'Downloads') }}</span>
-					<select v-model="downloadScope" name="downloadScope">
-						<option value="none">{{ t('proofing_gallery', 'Disabled') }}</option>
-						<option value="individual">{{ t('proofing_gallery', 'Individual files') }}</option>
-						<option value="selection">{{ t('proofing_gallery', 'Saved selections') }}</option>
-						<option value="all">{{ t('proofing_gallery', 'Files and selections') }}</option>
-					</select>
-				</label>
+				<div class="delivery-summary">
+					<strong>{{ t('proofing_gallery', 'Downloads') }}</strong>
+					<span>{{ gallery.settings.delivery.downloadScope === 'none'
+						? t('proofing_gallery', 'Disabled')
+						: gallery.settings.delivery.downloadScope === 'individual'
+							? t('proofing_gallery', 'Individual files')
+							: gallery.settings.delivery.downloadScope === 'selection'
+								? t('proofing_gallery', 'Saved selections')
+								: t('proofing_gallery', 'Files and selections') }}</span>
+					<small>{{ t('proofing_gallery', 'Change downloads in the Delivery workspace.') }}</small>
+				</div>
 				<p v-if="!published && gallery.sourceType === 'collection' && gallery.mediaSummary.total === 0" class="sharing-dialog__hint">
 					{{ t('proofing_gallery', 'Add at least one available file before publishing this collection.') }}
 				</p>
@@ -474,6 +474,19 @@ function updateOpen(open: boolean) {
 	border-radius: 8px;
 	background: var(--color-main-background);
 	color: var(--color-main-text);
+}
+
+.delivery-summary {
+	display: grid;
+	grid-template-columns: minmax(120px, auto) 1fr;
+	gap: 3px 16px;
+	padding: 12px 0;
+	border-block: 1px solid var(--color-border);
+}
+
+.delivery-summary small {
+	grid-column: 2;
+	color: var(--color-text-maxcontrast);
 }
 
 @media (max-width: 600px) {

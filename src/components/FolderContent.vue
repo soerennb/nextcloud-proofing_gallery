@@ -21,6 +21,8 @@ const sortBy = ref<'name' | 'modified' | 'size' | 'capturedAt'>('name')
 const sortDirection = ref<'asc' | 'desc'>('asc')
 const loading = ref(false)
 const uploading = ref(false)
+type UploadQueueItem = { id: string; file: File; progress: number; state: 'waiting' | 'uploading' | 'done' | 'failed'; attempts: number }
+const uploadQueue = ref<UploadQueueItem[]>([])
 const fileInput = ref<HTMLInputElement | null>(null)
 const replacementInput = ref<HTMLInputElement | null>(null)
 const versionItem = ref<MediaItem | null>(null)
@@ -191,20 +193,60 @@ async function upload(event: Event) {
 	const files = Array.from(input.files ?? [])
 	if (files.length === 0) return
 	uploading.value = true
-	let uploaded = 0
-	try {
-		for (const file of files) {
-			await uploadGalleryMedia(props.gallery.id, file, path.value)
-			uploaded++
+	uploadQueue.value = files.map((file, index) => ({
+		id: `${file.name}-${file.size}-${file.lastModified}-${index}`,
+		file,
+		progress: 0,
+		state: 'waiting',
+		attempts: 0,
+	}))
+	let cursor = 0
+	const worker = async () => {
+		while (cursor < uploadQueue.value.length) {
+			const item = uploadQueue.value[cursor++]
+			item.state = 'uploading'
+			while (item.attempts < 3 && item.state !== 'done') {
+				item.attempts++
+				try {
+					await uploadGalleryMedia(props.gallery.id, item.file, path.value, (loaded, total) => {
+						item.progress = Math.min(100, Math.round(loaded / Math.max(1, total) * 100))
+					})
+					item.progress = 100
+					item.state = 'done'
+				} catch {
+					if (item.attempts >= 3) item.state = 'failed'
+					else await new Promise(resolve => setTimeout(resolve, 500 * 2 ** (item.attempts - 1)))
+				}
+			}
 		}
-		showSuccess(t('proofing_gallery', '{count} files uploaded', { count: uploaded }))
+	}
+	try {
+		await Promise.all(Array.from({ length: Math.min(3, files.length) }, worker))
+		const uploaded = uploadQueue.value.filter(item => item.state === 'done').length
+		const failed = uploadQueue.value.filter(item => item.state === 'failed').length
+		if (uploaded > 0) showSuccess(t('proofing_gallery', '{count} files uploaded', { count: uploaded }))
+		if (failed > 0) showError(t('proofing_gallery', '{count} files need attention. You can retry them individually.', { count: failed }))
 		emit('changed')
 		await load()
-	} catch {
-		showError(t('proofing_gallery', 'Upload stopped after {count} files. Check file type and duplicate names.', { count: uploaded }))
 	} finally {
 		uploading.value = false
 		input.value = ''
+	}
+}
+
+async function retryUpload(item: UploadQueueItem) {
+	item.state = 'uploading'
+	item.attempts = 0
+	try {
+		await uploadGalleryMedia(props.gallery.id, item.file, path.value, (loaded, total) => {
+			item.progress = Math.min(100, Math.round(loaded / Math.max(1, total) * 100))
+		})
+		item.state = 'done'
+		item.progress = 100
+		emit('changed')
+		await load()
+	} catch {
+		item.state = 'failed'
 	}
 }
 
@@ -333,6 +375,16 @@ onMounted(load)
 				</NcButton>
 			</div>
 		</header>
+
+		<ul v-if="uploadQueue.length" class="owner-upload-queue" aria-live="polite">
+			<li v-for="item in uploadQueue" :key="item.id">
+				<div><strong>{{ item.file.name }}</strong><span>{{ item.state === 'done' ? t('proofing_gallery', 'Uploaded') : item.state === 'failed' ? t('proofing_gallery', 'Upload failed') : `${item.progress}%` }}</span></div>
+				<progress :value="item.progress" max="100" />
+				<NcButton v-if="item.state === 'failed'" variant="tertiary" @click="retryUpload(item)">
+					{{ t('proofing_gallery', 'Try again') }}
+				</NcButton>
+			</li>
+		</ul>
 
 		<nav class="breadcrumbs" :aria-label="t('proofing_gallery', 'Current folder')">
 			<button type="button" @click="path = ''; load()">
@@ -535,6 +587,18 @@ onMounted(load)
 .folder-workspace__header p { max-width: 650px; margin-top: 5px; color: var(--color-text-maxcontrast); }
 
 .folder-workspace__actions, .folder-toolbar, .breadcrumbs { display: flex; align-items: center; gap: 8px; }
+
+.owner-upload-queue { display: grid; gap: 6px; margin: 0; padding: 12px 0; border-block: 1px solid var(--color-border); list-style: none; }
+
+.owner-upload-queue li { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(120px, 0.8fr) auto; align-items: center; gap: 12px; min-height: 42px; }
+
+.owner-upload-queue li > div { display: flex; min-width: 0; justify-content: space-between; gap: 12px; }
+
+.owner-upload-queue strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.owner-upload-queue span { color: var(--color-text-maxcontrast); white-space: nowrap; }
+
+.owner-upload-queue progress { width: 100%; accent-color: var(--color-primary-element); }
 
 .breadcrumbs { min-height: 36px; border-bottom: 1px solid var(--color-border); }
 

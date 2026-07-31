@@ -4,10 +4,10 @@ import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
-import { createGallery, fetchPresets } from '../services/galleryApi.ts'
-import type { Gallery, GalleryPreset } from '../types.ts'
+import { createProject } from '../services/galleryApi.ts'
+import type { Gallery, GalleryPurpose } from '../types.ts'
 
 defineProps<{ show: boolean }>()
 
@@ -16,21 +16,40 @@ const emit = defineEmits<{
 	created: [gallery: Gallery]
 }>()
 
+const purposes: Array<{ id: Exclude<GalleryPurpose, 'custom'>; title: string; description: string }> = [
+	{ id: 'delivery', title: t('proofing_gallery', 'Deliver finished photos'), description: t('proofing_gallery', 'A polished gallery with individual and complete downloads.') },
+	{ id: 'showcase', title: t('proofing_gallery', 'Show photos only'), description: t('proofing_gallery', 'An image-first presentation without downloads or review tools.') },
+	{ id: 'selection', title: t('proofing_gallery', 'Collect a selection'), description: t('proofing_gallery', 'Clients choose their favorites and submit one clear result.') },
+	{ id: 'proofing', title: t('proofing_gallery', 'Review together'), description: t('proofing_gallery', 'Selections, likes, colors, comments and image annotations.') },
+	{ id: 'uploads', title: t('proofing_gallery', 'Receive files'), description: t('proofing_gallery', 'Clients send files into a moderated project inbox.') },
+]
+
+const step = ref<1 | 2>(1)
+const purpose = ref<Exclude<GalleryPurpose, 'custom'>>('delivery')
+const sourceMode = ref<'existing' | 'new' | 'collection'>('existing')
 const title = ref('')
 const folderId = ref<number | null>(null)
 const folderName = ref('')
-const mode = ref<'presentation' | 'collaboration'>('presentation')
-const sourceType = ref<'folder' | 'collection'>('folder')
+const parentFolderId = ref<number | null>(null)
+const parentFolderName = ref('')
+const newFolderName = ref('')
 const saving = ref(false)
-const presets = ref<GalleryPreset[]>([])
-const presetId = ref<number | null>(null)
-const canSubmit = computed(() => title.value.trim() !== ''
-	&& (sourceType.value === 'collection' || folderId.value !== null)
-	&& !saving.value)
 
-async function chooseFolder() {
+const canSubmit = computed(() => title.value.trim() !== '' && !saving.value && (
+	sourceMode.value === 'collection'
+		|| (sourceMode.value === 'existing' && folderId.value !== null)
+		|| (sourceMode.value === 'new' && parentFolderId.value !== null && newFolderName.value.trim() !== '')
+))
+
+watch(title, value => {
+	if (sourceMode.value === 'new' && newFolderName.value === '') newFolderName.value = value
+})
+
+async function chooseFolder(kind: 'source' | 'parent') {
 	try {
-		const nodes = await getFilePickerBuilder(t('proofing_gallery', 'Choose the gallery folder'))
+		const nodes = await getFilePickerBuilder(kind === 'source'
+			? t('proofing_gallery', 'Choose the project folder')
+			: t('proofing_gallery', 'Choose where the project folder will be created'))
 			.setMultiSelect(false)
 			.allowDirectories()
 			.setType(FilePickerType.Choose)
@@ -42,56 +61,66 @@ async function chooseFolder() {
 			showError(t('proofing_gallery', 'The selected folder has no compatible file ID.'))
 			return
 		}
-		folderId.value = folder.fileid
-		folderName.value = folder.displayname
-		if (title.value === '') {
-			title.value = folder.displayname
+		if (kind === 'source') {
+			folderId.value = folder.fileid
+			folderName.value = folder.displayname
+			if (!title.value) title.value = folder.displayname
+		} else {
+			parentFolderId.value = folder.fileid
+			parentFolderName.value = folder.displayname
+			localStorage.setItem('proofing-gallery:last-parent', JSON.stringify({ id: folder.fileid, name: folder.displayname }))
 		}
 	} catch {
 		// Closing the picker is not an error.
 	}
 }
 
-async function submit() {
-	if (!canSubmit.value) {
-		return
+function continueToSource() {
+	step.value = 2
+	if (parentFolderId.value === null) {
+		try {
+			const stored = JSON.parse(localStorage.getItem('proofing-gallery:last-parent') ?? 'null') as { id?: number; name?: string } | null
+			if (stored?.id) {
+				parentFolderId.value = stored.id
+				parentFolderName.value = stored.name ?? ''
+			}
+		} catch { /* Ignore a stale browser preference. */ }
 	}
+}
+
+async function submit() {
+	if (!canSubmit.value) return
 	saving.value = true
 	try {
-		const gallery = await createGallery({
-			folderId: sourceType.value === 'folder' ? folderId.value : null,
+		const gallery = await createProject({
 			title: title.value.trim(),
-			mode: mode.value,
-			sourceType: sourceType.value,
-			settings: presetId.value === null
-				? undefined
-				: structuredClone(presets.value.find(preset => preset.id === presetId.value)?.settings),
+			purpose: purpose.value,
+			sourceMode: sourceMode.value,
+			folderId: sourceMode.value === 'existing' ? folderId.value : null,
+			parentFolderId: sourceMode.value === 'new' ? parentFolderId.value : null,
+			folderName: sourceMode.value === 'new' ? newFolderName.value.trim() : undefined,
 		})
 		emit('created', gallery)
 		reset()
-	} catch {
-		showError(t('proofing_gallery', 'The gallery could not be created.'))
+	} catch (error) {
+		const message = typeof error === 'object' && error !== null && 'response' in error
+			? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+			: null
+		showError(message || t('proofing_gallery', 'The project could not be created.'))
 	} finally {
 		saving.value = false
 	}
 }
 
 function reset() {
+	step.value = 1
+	purpose.value = 'delivery'
+	sourceMode.value = 'existing'
 	title.value = ''
 	folderId.value = null
 	folderName.value = ''
-	mode.value = 'presentation'
-	sourceType.value = 'folder'
-	presetId.value = null
+	newFolderName.value = ''
 }
-
-onMounted(async () => {
-	try {
-		presets.value = await fetchPresets()
-	} catch {
-		presets.value = []
-	}
-})
 
 function updateOpen(open: boolean) {
 	if (!open) emit('close')
@@ -101,277 +130,141 @@ function updateOpen(open: boolean) {
 <template>
 	<NcDialog
 		:open="show"
-		:name="t('proofing_gallery', 'Create gallery')"
-		size="normal"
+		:name="step === 1 ? t('proofing_gallery', 'What do you want to do?') : t('proofing_gallery', 'Set up the project')"
+		size="large"
 		@update:open="updateOpen">
-		<form class="create-gallery" @submit.prevent="submit">
-			<div class="create-gallery__intro">
-				<p>
-					{{ t('proofing_gallery', 'The original files stay in their Nextcloud folder. The gallery only keeps a reference.') }}
-				</p>
+		<form class="project-wizard" @submit.prevent="submit">
+			<div class="wizard-progress" :aria-label="t('proofing_gallery', 'Project setup progress')">
+				<span :aria-current="step === 1 ? 'step' : undefined">{{ t('proofing_gallery', 'Purpose') }}</span>
+				<span :aria-current="step === 2 ? 'step' : undefined">{{ t('proofing_gallery', 'Files and title') }}</span>
 			</div>
 
-			<fieldset class="create-gallery__section">
-				<legend>{{ t('proofing_gallery', 'Gallery source') }}</legend>
-				<div class="source-options">
-					<label :class="{ 'source-option--selected': sourceType === 'folder' }">
-						<input v-model="sourceType" type="radio" value="folder">
-						<span><strong>{{ t('proofing_gallery', 'Folder gallery') }}</strong>{{ t('proofing_gallery', 'Show one Nextcloud folder and its subfolders.') }}</span>
-					</label>
-					<label :class="{ 'source-option--selected': sourceType === 'collection' }">
-						<input v-model="sourceType" type="radio" value="collection">
-						<span><strong>{{ t('proofing_gallery', 'Collection') }}</strong>{{ t('proofing_gallery', 'Curate files from several of your galleries.') }}</span>
-					</label>
-				</div>
-			</fieldset>
+			<div v-if="step === 1" class="purpose-list">
+				<label v-for="(option, index) in purposes" :key="option.id" :class="{ selected: purpose === option.id }">
+					<input v-model="purpose"
+						type="radio"
+						name="purpose"
+						:value="option.id">
+					<span class="purpose-number" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>
+					<span><strong>{{ option.title }}</strong><small>{{ option.description }}</small></span>
+					<span class="purpose-arrow" aria-hidden="true">→</span>
+				</label>
+			</div>
 
-			<section v-if="sourceType === 'folder'" class="create-gallery__section">
-				<h3>{{ t('proofing_gallery', 'Source folder') }}</h3>
-				<button class="folder-choice" type="button" @click="chooseFolder">
-					<span class="folder-choice__mark" aria-hidden="true" />
-					<span>
-						<strong>{{ folderName || t('proofing_gallery', 'Choose a folder') }}</strong>
-						<small>{{ folderName ? t('proofing_gallery', 'Change folder') : t('proofing_gallery', 'Images and supported videos will be shown') }}</small>
-					</span>
-				</button>
-			</section>
-
-			<section class="create-gallery__section">
+			<div v-else class="source-setup">
 				<NcTextField
 					id="proofing-gallery-title"
 					v-model="title"
 					name="title"
-					:label="t('proofing_gallery', 'Gallery title')"
+					:label="t('proofing_gallery', 'Project title')"
 					:placeholder="t('proofing_gallery', 'Wedding, portrait session, event…')" />
-			</section>
 
-			<section v-if="presets.length" class="create-gallery__section">
-				<label class="preset-field">
-					<span>{{ t('proofing_gallery', 'Starting preset') }}</span>
-					<select v-model="presetId" name="presetId">
-						<option :value="null">{{ t('proofing_gallery', 'No preset') }}</option>
-						<option v-for="preset in presets" :key="preset.id" :value="preset.id">{{ preset.name }}</option>
-					</select>
-				</label>
-			</section>
+				<fieldset>
+					<legend>{{ t('proofing_gallery', 'Where are the photos?') }}</legend>
+					<div class="source-options">
+						<label :class="{ selected: sourceMode === 'existing' }"><input v-model="sourceMode" type="radio" value="existing"><strong>{{ t('proofing_gallery', 'Existing folder') }}</strong><span>{{ t('proofing_gallery', 'Use photos already stored in Nextcloud.') }}</span></label>
+						<label :class="{ selected: sourceMode === 'new' }"><input v-model="sourceMode" type="radio" value="new"><strong>{{ t('proofing_gallery', 'New project folder') }}</strong><span>{{ t('proofing_gallery', 'Create the folder here and upload next.') }}</span></label>
+						<label :class="{ selected: sourceMode === 'collection' }"><input v-model="sourceMode" type="radio" value="collection"><strong>{{ t('proofing_gallery', 'Curated collection') }}</strong><span>{{ t('proofing_gallery', 'Combine files from several galleries.') }}</span></label>
+					</div>
+				</fieldset>
 
-			<fieldset class="create-gallery__section">
-				<legend>{{ t('proofing_gallery', 'Starting mode') }}</legend>
-				<div class="mode-options">
-					<label :class="{ 'mode-option--selected': mode === 'presentation' }">
-						<input v-model="mode"
-							name="mode"
-							type="radio"
-							value="presentation">
-						<strong>{{ t('proofing_gallery', 'Presentation') }}</strong>
-						<span>{{ t('proofing_gallery', 'A quiet, image-first delivery gallery.') }}</span>
-					</label>
-					<label :class="{ 'mode-option--selected': mode === 'collaboration' }">
-						<input v-model="mode"
-							name="mode"
-							type="radio"
-							value="collaboration">
-						<strong>{{ t('proofing_gallery', 'Proofing') }}</strong>
-						<span>{{ t('proofing_gallery', 'Prepare likes, colors, comments and selections.') }}</span>
-					</label>
+				<button v-if="sourceMode === 'existing'"
+					class="folder-choice"
+					type="button"
+					@click="chooseFolder('source')">
+					<strong>{{ folderName || t('proofing_gallery', 'Choose project folder') }}</strong>
+					<span>{{ folderName ? t('proofing_gallery', 'Choose another folder') : t('proofing_gallery', 'Original files stay in this Nextcloud folder.') }}</span>
+				</button>
+
+				<div v-if="sourceMode === 'new'" class="new-folder-fields">
+					<button class="folder-choice" type="button" @click="chooseFolder('parent')">
+						<strong>{{ parentFolderName || t('proofing_gallery', 'Choose parent folder') }}</strong>
+						<span>{{ t('proofing_gallery', 'The new project folder will be created here.') }}</span>
+					</button>
+					<NcTextField id="proofing-gallery-folder-name" v-model="newFolderName" :label="t('proofing_gallery', 'New folder name')" />
 				</div>
-			</fieldset>
+			</div>
 
-			<footer class="create-gallery__actions">
-				<NcButton @click="emit('close')">
+			<footer>
+				<NcButton v-if="step === 1" @click="emit('close')">
 					{{ t('proofing_gallery', 'Cancel') }}
 				</NcButton>
-				<NcButton type="submit" variant="primary" :disabled="!canSubmit">
-					{{ saving ? t('proofing_gallery', 'Creating…') : t('proofing_gallery', 'Create draft') }}
+				<NcButton v-else @click="step = 1">
+					{{ t('proofing_gallery', 'Back') }}
+				</NcButton>
+				<NcButton v-if="step === 1" variant="primary" @click="continueToSource">
+					{{ t('proofing_gallery', 'Continue') }}
+				</NcButton>
+				<NcButton v-else
+					type="submit"
+					variant="primary"
+					:disabled="!canSubmit">
+					{{ saving ? t('proofing_gallery', 'Creating…') : t('proofing_gallery', 'Create project') }}
 				</NcButton>
 			</footer>
-			<p v-if="!canSubmit && !saving" class="create-gallery__requirement">
-				{{ sourceType === 'folder'
-					? t('proofing_gallery', 'Choose a folder and enter a title to create the draft.')
-					: t('proofing_gallery', 'Enter a title to create the collection.') }}
-			</p>
 		</form>
 	</NcDialog>
 </template>
 
 <style scoped>
-.create-gallery {
-	padding: 32px;
-}
+.project-wizard { padding: 0 32px 28px; }
 
-.create-gallery__intro {
-	max-width: 560px;
-	margin-bottom: 20px;
-}
+.wizard-progress { display: grid; grid-template-columns: 1fr 1fr; margin-bottom: 16px; border-bottom: 1px solid var(--color-border); color: var(--color-text-maxcontrast); }
 
-.create-gallery__intro p {
-	margin: 0;
-	color: var(--color-text-maxcontrast);
-	line-height: 1.5;
-}
+.wizard-progress span { padding: 14px 0 12px; border-bottom: 2px solid transparent; }
 
-.create-gallery__section {
-	padding: 20px 0;
-	border: 0;
-	border-top: 1px solid var(--color-border);
-}
+.wizard-progress span[aria-current='step'] { border-color: var(--color-primary-element); color: var(--color-main-text); font-weight: 650; }
 
-.create-gallery__section h3,
-.create-gallery__section legend {
-	margin: 0 0 12px;
-	padding: 0;
-	font-size: 14px;
-	font-weight: 650;
-}
+.purpose-list { display: grid; }
 
-.preset-field {
-	display: grid;
-	gap: 6px;
-}
+.purpose-list label { display: grid; grid-template-columns: 44px 1fr 32px; align-items: center; min-height: 78px; border-bottom: 1px solid var(--color-border); cursor: pointer; transition: background-color 160ms ease; }
 
-.preset-field select {
-	min-height: 40px;
-	padding: 0 10px;
-	border: 1px solid var(--color-border-maxcontrast);
-	border-radius: 6px;
-	background: var(--color-main-background);
-	color: var(--color-main-text);
-}
+.purpose-list label:hover, .purpose-list label.selected { background: var(--color-background-hover); }
 
-.folder-choice {
-	display: flex;
-	width: 100%;
-	align-items: center;
-	gap: 14px;
-	padding: 14px;
-	border: 1px solid var(--color-border-maxcontrast);
-	border-radius: 8px;
-	background: transparent;
-	color: var(--color-main-text);
-	text-align: start;
-	cursor: pointer;
-}
+.purpose-list input { position: absolute; opacity: 0; }
 
-.folder-choice:hover,
-.folder-choice:focus-visible {
-	border-color: var(--color-primary-element);
-	background: var(--color-background-hover);
-}
+.purpose-number { color: var(--color-text-maxcontrast); font-variant-numeric: tabular-nums; }
 
-.folder-choice__mark {
-	width: 34px;
-	height: 25px;
-	border-radius: 3px;
-	background: var(--color-primary-element);
-	clip-path: polygon(0 16%, 38% 16%, 46% 0, 100% 0, 100% 100%, 0 100%);
-}
+.purpose-list label > span:nth-of-type(2) { display: grid; gap: 4px; }
 
-.folder-choice strong,
-.folder-choice small {
-	display: block;
-}
+.purpose-list strong { font-size: 18px; letter-spacing: -0.015em; }
 
-.folder-choice small {
-	margin-top: 2px;
-	color: var(--color-text-maxcontrast);
-}
+.purpose-list small { color: var(--color-text-maxcontrast); font-size: 14px; }
 
-.mode-options {
-	display: grid;
-	grid-template-columns: 1fr 1fr;
-	gap: 8px;
-}
+.purpose-arrow { font-size: 22px; opacity: 0; transition: opacity 160ms ease; }
 
-.source-options {
-	display: grid;
-	grid-template-columns: 1fr 1fr;
-	gap: 8px;
-}
+.purpose-list label.selected .purpose-arrow { opacity: 1; }
 
-.source-options label {
-	display: flex;
-	gap: 10px;
-	padding: 14px;
-	border: 1px solid var(--color-border);
-	border-radius: 8px;
-	cursor: pointer;
-}
+.source-setup { display: grid; gap: 24px; padding: 12px 0; }
 
-.source-options label.source-option--selected {
-	border-color: var(--color-primary-element);
-}
+.source-setup fieldset { margin: 0; padding: 0; border: 0; }
 
-.source-options span,
-.source-options strong {
-	display: block;
-}
+.source-setup legend { margin-bottom: 10px; font-weight: 650; }
 
-.source-options span {
-	color: var(--color-text-maxcontrast);
-}
+.source-options { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--color-border); border-radius: 8px; overflow: hidden; }
 
-.source-options strong {
-	margin-bottom: 2px;
-	color: var(--color-main-text);
-}
+.source-options label { display: grid; gap: 5px; min-height: 112px; padding: 16px; border-inline-end: 1px solid var(--color-border); cursor: pointer; }
 
-.mode-options label {
-	position: relative;
-	min-height: 104px;
-	padding: 14px;
-	border: 1px solid var(--color-border);
-	border-radius: 8px;
-	cursor: pointer;
-}
+.source-options label:last-child { border: 0; }
 
-.mode-options label:hover {
-	background: var(--color-background-hover);
-}
+.source-options label.selected { background: var(--color-background-hover); box-shadow: inset 0 -3px var(--color-primary-element); }
 
-.mode-options label.mode-option--selected {
-	border-color: var(--color-primary-element);
-	box-shadow: inset 0 0 0 1px var(--color-primary-element);
-}
+.source-options input { width: 18px; height: 18px; }
 
-.mode-options input {
-	position: absolute;
-	opacity: 0;
-}
+.source-options span, .folder-choice span { color: var(--color-text-maxcontrast); line-height: 1.35; }
 
-.mode-options strong,
-.mode-options span {
-	display: block;
-}
+.folder-choice { display: grid; gap: 4px; width: 100%; min-height: 72px; padding: 14px 16px; border: 1px solid var(--color-border-maxcontrast); border-radius: 8px; background: var(--color-main-background); color: var(--color-main-text); text-align: start; cursor: pointer; }
 
-.mode-options span {
-	margin-top: 6px;
-	color: var(--color-text-maxcontrast);
-	font-size: 13px;
-	line-height: 1.4;
-}
+.folder-choice:hover { border-color: var(--color-primary-element); }
 
-.create-gallery__actions {
-	display: flex;
-	justify-content: flex-end;
-	gap: 8px;
-	padding-top: 20px;
-	border-top: 1px solid var(--color-border);
-}
+.new-folder-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
 
-.create-gallery__requirement {
-	margin: 8px 0 0;
-	color: var(--color-text-maxcontrast);
-	font-size: 12px;
-	text-align: end;
+footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 24px; }
+@media (max-width: 700px) {
+	.project-wizard { padding: 0 18px 20px; }
+	.source-options, .new-folder-fields { grid-template-columns: 1fr; }
+	.source-options label { min-height: 88px; border-inline-end: 0; border-bottom: 1px solid var(--color-border); }
+	.purpose-list label { grid-template-columns: 36px 1fr 24px; min-height: 88px; }
 }
-
-@media (max-width: 600px) {
-	.create-gallery {
-		padding: 20px;
-	}
-
-	.mode-options {
-		grid-template-columns: 1fr;
-	}
-}
+@media (prefers-reduced-motion: reduce) { .purpose-list label, .purpose-arrow { transition: none; } }
 </style>

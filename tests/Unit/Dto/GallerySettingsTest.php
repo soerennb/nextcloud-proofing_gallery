@@ -20,7 +20,8 @@ final class GallerySettingsTest extends TestCase {
 		self::assertSame('system', $settings['appearance']['fontPreset']);
 		self::assertSame('compact', $settings['appearance']['openerStyle']);
 		self::assertSame('auto', $settings['publicLocale']);
-		self::assertSame(3, $settings['schemaVersion']);
+		self::assertSame(4, $settings['schemaVersion']);
+		self::assertFalse($settings['lifecycle']['enabled']);
 		self::assertSame([], $settings['metadata']['publicFields']);
 		self::assertSame('dark', $settings['presentation']['theme']);
 		self::assertSame('none', $settings['delivery']['downloadScope']);

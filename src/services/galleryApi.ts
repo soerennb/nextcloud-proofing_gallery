@@ -1,7 +1,7 @@
 import axios from '@nextcloud/axios'
 import { generateOcsUrl, generateUrl } from '@nextcloud/router'
 
-import type { CollectionDocument, Gallery, GalleryManager, GalleryPage, GalleryPreset, InvitationTemplate, MediaItem, MediaMetadata, MediaPage, MediaVersion, NotificationEventType, NotificationSubscription, OwnerSelection } from '../types'
+import type { CollectionDocument, Gallery, GalleryManager, GalleryPage, GalleryPreset, GalleryPurpose, InvitationTemplate, MediaItem, MediaMetadata, MediaPage, MediaVersion, NotificationEventType, NotificationSubscription, OwnerSelection } from '../types'
 import type { CanonicalGallerySettings, GallerySettings } from '../domain/gallerySettings'
 
 const galleriesUrl = generateOcsUrl('/apps/proofing_gallery/api/v1/galleries')
@@ -46,6 +46,18 @@ export async function createGallery(payload: {
 	return data
 }
 
+export async function createProject(payload: {
+	title: string
+	purpose: GalleryPurpose
+	sourceMode: 'existing' | 'new' | 'collection'
+	folderId?: number | null
+	parentFolderId?: number | null
+	folderName?: string
+}): Promise<Gallery> {
+	const { data } = await axios.post<Gallery>(generateOcsUrl('/apps/proofing_gallery/api/v1/projects'), payload)
+	return data
+}
+
 const presetsUrl = generateOcsUrl('/apps/proofing_gallery/api/v1/presets')
 
 export async function fetchPresets(): Promise<GalleryPreset[]> {
@@ -74,7 +86,7 @@ export async function applyPreset(id: number, galleryId: number): Promise<Galler
 
 export async function updateGallery(
 	id: number,
-	payload: { title?: string; settings?: Partial<Gallery['settings']> | CanonicalGallerySettings },
+	payload: { title?: string; settings?: Partial<Gallery['settings']> | CanonicalGallerySettings; expectedRevision?: number },
 ): Promise<Gallery> {
 	const { data } = await axios.put<Gallery>(`${galleriesUrl}/${id}`, payload)
 	return data
@@ -141,11 +153,13 @@ export async function indexGalleryMetadata(id: number, path = ''): Promise<{ ind
 	return data
 }
 
-export async function uploadGalleryMedia(id: number, file: File, path = ''): Promise<MediaItem> {
+export async function uploadGalleryMedia(id: number, file: File, path = '', onProgress?: (loaded: number, total: number) => void): Promise<MediaItem> {
 	const body = new FormData()
 	body.append('file', file)
 	body.append('path', path)
-	const { data } = await axios.post<MediaItem>(`${galleriesUrl}/${id}/media/upload`, body)
+	const { data } = await axios.post<MediaItem>(`${galleriesUrl}/${id}/media/upload`, body, {
+		onUploadProgress: event => onProgress?.(event.loaded, event.total ?? file.size),
+	})
 	return data
 }
 
@@ -316,7 +330,7 @@ export async function searchPrincipals(search: string): Promise<PrincipalOption[
 
 export async function publishGallery(
 	id: number,
-	payload: { password: string | null; expiresAt: string; downloadScope: GallerySettings['delivery']['downloadScope'] },
+	payload: { password: string | null; expiresAt: string; expectedRevision: number },
 ): Promise<{ gallery: Gallery; url: string }> {
 	const { data } = await axios.post<{ gallery: Gallery; url: string }>(
 		`${galleriesUrl}/${id}/publish`,
@@ -327,6 +341,11 @@ export async function publishGallery(
 
 export async function revokeGallery(id: number): Promise<Gallery> {
 	const { data } = await axios.delete<Gallery>(`${galleriesUrl}/${id}/publish`)
+	return data
+}
+
+export async function completeGallery(id: number): Promise<Gallery> {
+	const { data } = await axios.post<Gallery>(`${galleriesUrl}/${id}/complete`)
 	return data
 }
 

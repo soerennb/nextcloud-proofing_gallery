@@ -263,7 +263,19 @@ final class CollaborationService {
 			throw $exception;
 		}
 		$this->event($gallery, $guest, 'selection.created', ['selectionId' => $publicId, 'count' => count($fileIds)]);
+		$this->markResponseReceived($gallery, $now);
 		return $publicId;
+	}
+
+	private function markResponseReceived(Gallery $gallery, int $now): void {
+		$qb = $this->db->getQueryBuilder();
+		$qb->update('proofing_galleries')
+			->set('workflow_state', $qb->createNamedParameter('response_received'))
+			->set('updated_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT))
+			->set('revision', $qb->createFunction('revision + 1'))
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->neq('workflow_state', $qb->createNamedParameter('completed')))
+			->executeStatement();
 	}
 
 	/** @return array{content: string, filename: string, mimeType: string} */

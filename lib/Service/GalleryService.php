@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\GalleryMapper;
 use OCA\ProofingGallery\Domain\GalleryStatus;
+use OCA\ProofingGallery\Domain\GalleryPurpose;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCP\AppFramework\Utility\ITimeFactory;
 
@@ -31,7 +32,9 @@ final class GalleryService {
 		?int $folderId,
 		array $settings = [],
 		string $sourceType = 'folder',
+		string $purpose = 'custom',
 	): Gallery {
+		$galleryPurpose = GalleryPurpose::tryFrom($purpose) ?? throw new InvalidArgumentException('Unknown gallery purpose');
 		if (!in_array($sourceType, ['folder', 'collection'], true)) {
 			throw new InvalidArgumentException('Unknown gallery source type');
 		}
@@ -56,9 +59,11 @@ final class GalleryService {
 		$gallery->setTitle($title);
 		$gallery->setSlug($this->uniqueSlug($ownerUid, $title));
 		$gallery->setStatus(GalleryStatus::Draft->value);
+		$gallery->setPurpose($galleryPurpose->value);
+		$gallery->setWorkflowState('preparing');
 		$gallery->setSettings(json_encode(GallerySettings::merge(
 			GallerySettings::fromArray($this->policies->galleryDefaults()),
-			$settings,
+			array_replace_recursive($galleryPurpose->settings(), $settings),
 		), JSON_THROW_ON_ERROR));
 		$gallery->setCreatedAt($now);
 		$gallery->setUpdatedAt($now);
@@ -80,6 +85,48 @@ final class GalleryService {
 				try {
 					$this->collections->deleteAnchor($anchor);
 				} catch (\Throwable) {
+				}
+			}
+			throw $exception;
+		}
+	}
+
+	/** @param array<string, mixed> $settings */
+	public function createProject(
+		string $ownerUid,
+		string $title,
+		string $purpose,
+		string $sourceMode,
+		?int $folderId,
+		?int $parentFolderId,
+		?string $folderName,
+		array $settings = [],
+	): Gallery {
+		$createdFolder = null;
+		try {
+			if ($sourceMode === 'new') {
+				if ($parentFolderId === null || $folderName === null) {
+					throw new InvalidArgumentException('A parent folder and folder name are required');
+				}
+				$createdFolder = $this->folders->createProjectFolder($ownerUid, $parentFolderId, $folderName);
+				$folderId = $createdFolder->getId();
+			} elseif ($sourceMode !== 'existing' && $sourceMode !== 'collection') {
+				throw new InvalidArgumentException('Unknown project source mode');
+			}
+			return $this->create(
+				$ownerUid,
+				$title,
+				$sourceMode === 'collection' ? null : $folderId,
+				$settings,
+				$sourceMode === 'collection' ? 'collection' : 'folder',
+				$purpose,
+			);
+		} catch (\Throwable $exception) {
+			if ($createdFolder !== null) {
+				try {
+					if ($createdFolder->getDirectoryListing() === []) $createdFolder->delete();
+				} catch (\Throwable) {
+					// Preserve the project creation error; cleanup is best effort.
 				}
 			}
 			throw $exception;
@@ -185,8 +232,9 @@ final class GalleryService {
 	}
 
 	/** @param array<string, mixed>|null $settings */
-	public function update(string $ownerUid, int $id, ?string $title, ?array $settings): Gallery {
+	public function update(string $ownerUid, int $id, ?string $title, ?array $settings, ?int $expectedRevision = null): Gallery {
 		$gallery = $this->access->edit($ownerUid, $id);
+		$revision = $expectedRevision ?? $gallery->getRevision();
 		if ($title !== null) {
 			$gallery->setTitle($this->validateTitle($title));
 		}
@@ -199,7 +247,7 @@ final class GalleryService {
 		}
 		$gallery->setUpdatedAt($this->clock->getTime());
 
-		return $this->mapper->update($gallery);
+		return $this->mapper->updateDocument($gallery, $revision);
 	}
 
 	public function archive(string $ownerUid, int $id): Gallery {
@@ -208,6 +256,7 @@ final class GalleryService {
 		$gallery->setStatus(GalleryStatus::Archived->value);
 		$gallery->setArchivedAt($now);
 		$gallery->setUpdatedAt($now);
+		$gallery->setRevision($gallery->getRevision() + 1);
 
 		return $this->mapper->update($gallery);
 	}
@@ -222,7 +271,18 @@ final class GalleryService {
 			: GalleryStatus::Published->value);
 		$gallery->setArchivedAt(null);
 		$gallery->setUpdatedAt($this->clock->getTime());
+		$gallery->setRevision($gallery->getRevision() + 1);
 
+		return $this->mapper->update($gallery);
+	}
+
+	public function complete(string $ownerUid, int $id): Gallery {
+		$gallery = $this->access->edit($ownerUid, $id);
+		$now = $this->clock->getTime();
+		$gallery->setWorkflowState('completed');
+		$gallery->setCompletedAt($now);
+		$gallery->setUpdatedAt($now);
+		$gallery->setRevision($gallery->getRevision() + 1);
 		return $this->mapper->update($gallery);
 	}
 

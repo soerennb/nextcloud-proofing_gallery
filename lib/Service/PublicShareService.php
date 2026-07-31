@@ -65,7 +65,11 @@ final class PublicShareService {
 		]), JSON_THROW_ON_ERROR));
 		$gallery->setShareToken($share->getToken());
 		$gallery->setStatus(GalleryStatus::Published->value);
+		$gallery->setWorkflowState('live');
+		$gallery->setPublishedAt($gallery->getPublishedAt() ?? $this->clock->getTime());
+		$gallery->setRevokedAt(null);
 		$gallery->setUpdatedAt($this->clock->getTime());
+		$gallery->setRevision($gallery->getRevision() + 1);
 
 		return $this->galleries->update($gallery);
 	}
@@ -76,7 +80,9 @@ final class PublicShareService {
 		}
 		$gallery->setShareToken(null);
 		$gallery->setStatus(GalleryStatus::Draft->value);
+		$gallery->setRevokedAt($this->clock->getTime());
 		$gallery->setUpdatedAt($this->clock->getTime());
+		$gallery->setRevision($gallery->getRevision() + 1);
 
 		return $this->galleries->update($gallery);
 	}
@@ -108,6 +114,7 @@ final class PublicShareService {
 		try {
 			$gallery->setFolderId($folderId);
 			$gallery->setUpdatedAt($this->clock->getTime());
+			$gallery->setRevision($gallery->getRevision() + 1);
 			$updated = $this->galleries->update($gallery);
 			$this->summaries->invalidate($gallery->getId());
 			return $updated;

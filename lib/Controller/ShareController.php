@@ -7,6 +7,8 @@ namespace OCA\ProofingGallery\Controller;
 use InvalidArgumentException;
 use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Exception\AuthorizationException;
+use OCA\ProofingGallery\Exception\GalleryConflictException;
+use OCA\ProofingGallery\Dto\GallerySettings;
 use OCA\ProofingGallery\Service\GalleryService;
 use OCA\ProofingGallery\Service\InvitationService;
 use OCA\ProofingGallery\Service\PublicShareService;
@@ -54,17 +56,31 @@ final class ShareController extends Controller {
 		?string $expiresAt = null,
 		?string $downloadScope = null,
 		?bool $allowDownloads = null,
+		?int $expectedRevision = null,
 	): DataResponse {
 		try {
-			$gallery = $this->galleries->get($this->userId(), $id);
-			$scope = $downloadScope ?? ($allowDownloads === true ? 'all' : 'none');
+			$userId = $this->userId();
+			$gallery = $this->galleries->get($userId, $id);
+			if ($expectedRevision !== null && $gallery->getRevision() !== $expectedRevision) {
+				throw new GalleryConflictException('The gallery changed before it could be published');
+			}
+			$currentSettings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
+			$scope = $downloadScope
+				?? ($allowDownloads === null ? $currentSettings->delivery['downloadScope'] : ($allowDownloads ? 'all' : 'none'));
 			$gallery = $this->shares->publish($gallery, $password, $expiresAt, $scope);
 			return new DataResponse([
-				'gallery' => $this->galleries->present($this->userId(), $gallery),
+				'gallery' => $this->galleries->present($userId, $gallery),
 				'url' => $this->urlGenerator->linkToRouteAbsolute('files_sharing.sharecontroller.showShare', [
 					'token' => $gallery->getShareToken(),
 				]),
 			]);
+		} catch (GalleryConflictException $exception) {
+			$userId = $this->userId();
+			return new DataResponse([
+				'code' => 'revision_conflict',
+				'message' => $exception->getMessage(),
+				'gallery' => $this->galleries->present($userId, $this->galleries->view($userId, $id)),
+			], Http::STATUS_CONFLICT);
 		} catch (DoesNotExistException|ShareNotFound|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery or share not found'], Http::STATUS_NOT_FOUND);
 		} catch (InvalidArgumentException $exception) {

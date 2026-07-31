@@ -31,6 +31,18 @@ use OCP\DB\Types;
  * @method void setUpdatedAt(int $updatedAt)
  * @method ?int getArchivedAt()
  * @method void setArchivedAt(?int $archivedAt)
+ * @method int getRevision()
+ * @method void setRevision(int $revision)
+ * @method string getPurpose()
+ * @method void setPurpose(string $purpose)
+ * @method string getWorkflowState()
+ * @method void setWorkflowState(string $workflowState)
+ * @method ?int getPublishedAt()
+ * @method void setPublishedAt(?int $publishedAt)
+ * @method ?int getCompletedAt()
+ * @method void setCompletedAt(?int $completedAt)
+ * @method ?int getRevokedAt()
+ * @method void setRevokedAt(?int $revokedAt)
  */
 final class Gallery extends Entity implements \JsonSerializable {
 	protected string $ownerUid = '';
@@ -44,12 +56,22 @@ final class Gallery extends Entity implements \JsonSerializable {
 	protected int $createdAt = 0;
 	protected int $updatedAt = 0;
 	protected ?int $archivedAt = null;
+	protected int $revision = 1;
+	protected string $purpose = 'custom';
+	protected string $workflowState = 'preparing';
+	protected ?int $publishedAt = null;
+	protected ?int $completedAt = null;
+	protected ?int $revokedAt = null;
 
 	public function __construct() {
 		$this->addType('folderId', Types::BIGINT);
 		$this->addType('createdAt', Types::BIGINT);
 		$this->addType('updatedAt', Types::BIGINT);
 		$this->addType('archivedAt', Types::BIGINT);
+		$this->addType('revision', Types::INTEGER);
+		$this->addType('publishedAt', Types::BIGINT);
+		$this->addType('completedAt', Types::BIGINT);
+		$this->addType('revokedAt', Types::BIGINT);
 	}
 
 	/** @return array<string, mixed> */
@@ -69,6 +91,12 @@ final class Gallery extends Entity implements \JsonSerializable {
 			'createdAt' => $this->getCreatedAt(),
 			'updatedAt' => $this->getUpdatedAt(),
 			'archivedAt' => $this->getArchivedAt(),
+			'revision' => $this->getRevision(),
+			'purpose' => $this->getPurpose(),
+			'workflowState' => $this->getWorkflowState(),
+			'publishedAt' => $this->getPublishedAt(),
+			'completedAt' => $this->getCompletedAt(),
+			'revokedAt' => $this->getRevokedAt(),
 		];
 	}
 }

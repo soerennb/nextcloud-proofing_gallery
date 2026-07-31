@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Db;
 
+use OCA\ProofingGallery\Exception\GalleryConflictException;
 use OCA\ProofingGallery\Service\CollectionAnchorReferences;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Db\MultipleObjectsReturnedException;
@@ -24,6 +25,26 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 			->from($this->tableName)
 			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)));
 		return $this->findEntity($qb);
+	}
+
+	/**
+	 * Persist the user-editable gallery document only when the caller still has
+	 * the current revision. This is deliberately separate from lifecycle writes.
+	 */
+	public function updateDocument(Gallery $gallery, int $expectedRevision): Gallery {
+		$qb = $this->db->getQueryBuilder();
+		$qb->update($this->tableName)
+			->set('title', $qb->createNamedParameter($gallery->getTitle()))
+			->set('settings', $qb->createNamedParameter($gallery->getSettings()))
+			->set('updated_at', $qb->createNamedParameter($gallery->getUpdatedAt(), IQueryBuilder::PARAM_INT))
+			->set('revision', $qb->createNamedParameter($expectedRevision + 1, IQueryBuilder::PARAM_INT))
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('revision', $qb->createNamedParameter($expectedRevision, IQueryBuilder::PARAM_INT)));
+
+		if ($qb->executeStatement() !== 1) {
+			throw new GalleryConflictException('The gallery changed in another session');
+		}
+		return $this->find($gallery->getId());
 	}
 
 	/** @throws DoesNotExistException|MultipleObjectsReturnedException */
@@ -89,6 +110,16 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 			->where($qb->expr()->eq('share_token', $qb->createNamedParameter($token)));
 
 		return $this->findEntity($qb);
+	}
+
+	/** @return list<Gallery> */
+	public function findLifecycleCandidates(int $limit = 200): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')->from($this->tableName)
+			->where($qb->expr()->neq('status', $qb->createNamedParameter('archived')))
+			->orderBy('updated_at', 'ASC')
+			->setMaxResults($limit);
+		return $this->findEntities($qb);
 	}
 
 	private function applyFilters(IQueryBuilder $qb, bool $archived, string $search): void {

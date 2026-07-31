@@ -9,7 +9,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion-v'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 import { canonicalGallerySettings } from '../domain/gallerySettings.ts'
-import { applyPreset, createPreset, deletePreset, fetchCollection, fetchGalleryMedia, fetchPresets, ownerPreviewUrl, updateGallery, updateGallerySource, updatePreset } from '../services/galleryApi.ts'
+import { applyPreset, completeGallery, createPreset, deletePreset, fetchCollection, fetchGalleryMedia, fetchPresets, ownerPreviewUrl, updateGallery, updateGallerySource, updatePreset } from '../services/galleryApi.ts'
 import type { Gallery, GalleryPreset, MediaItem } from '../types.ts'
 import GalleryActivity from './GalleryActivity.vue'
 import CollectionContent from './CollectionContent.vue'
@@ -20,6 +20,7 @@ import SharingModal from './SharingModal.vue'
 import SelectionManager from './SelectionManager.vue'
 
 type SettingsTab = 'overview' | 'content' | 'design' | 'access' | 'feedback' | 'activity'
+type SaveState = 'saved' | 'pending' | 'saving' | 'offline' | 'error' | 'conflict' | 'invalid'
 
 const props = defineProps<{ gallery: Gallery }>()
 const emit = defineEmits<{
@@ -29,13 +30,21 @@ const emit = defineEmits<{
 const reduceMotion = useReducedMotion()
 
 const allTabs: Array<{ id: SettingsTab; label: string }> = [
-	{ id: 'overview', label: t('proofing_gallery', 'Overview') },
-	{ id: 'content', label: t('proofing_gallery', 'Content') },
-	{ id: 'design', label: t('proofing_gallery', 'Design') },
-	{ id: 'access', label: t('proofing_gallery', 'Access') },
-	{ id: 'feedback', label: t('proofing_gallery', 'Feedback') },
-	{ id: 'activity', label: t('proofing_gallery', 'Activity') },
+	{ id: 'overview', label: t('proofing_gallery', 'Plan') },
+	{ id: 'content', label: t('proofing_gallery', 'Photos') },
+	{ id: 'design', label: t('proofing_gallery', 'Style') },
+	{ id: 'access', label: t('proofing_gallery', 'Deliver') },
+	{ id: 'feedback', label: t('proofing_gallery', 'Results') },
+	{ id: 'activity', label: t('proofing_gallery', 'History') },
 ]
+const purposeLabels = {
+	showcase: t('proofing_gallery', 'Show photos only'),
+	delivery: t('proofing_gallery', 'Deliver finished photos'),
+	selection: t('proofing_gallery', 'Collect a selection'),
+	proofing: t('proofing_gallery', 'Review together'),
+	uploads: t('proofing_gallery', 'Receive files'),
+	custom: t('proofing_gallery', 'Custom workflow'),
+}
 const publicMetadataOptions = [
 	{ value: 'capturedAt', label: t('proofing_gallery', 'Capture date') },
 	{ value: 'camera', label: t('proofing_gallery', 'Camera') },
@@ -46,7 +55,11 @@ const publicMetadataOptions = [
 	{ value: 'creator', label: t('proofing_gallery', 'Creator') },
 	{ value: 'copyright', label: t('proofing_gallery', 'Copyright') },
 ] as const
+const advancedOpen = ref(false)
 const availableTabs = computed(() => allTabs.filter(tab => {
+	const interactivePurpose = ['selection', 'proofing', 'uploads'].includes(props.gallery.purpose)
+	if (tab.id === 'feedback' && !interactivePurpose && !advancedOpen.value) return false
+	if (tab.id === 'activity' && !advancedOpen.value && props.gallery.permissions.canEdit) return false
 	if (tab.id === 'content') return props.gallery.permissions.role === 'owner'
 	if (props.gallery.permissions.canManageAccess) return true
 	if (props.gallery.permissions.canEdit) return tab.id !== 'access'
@@ -54,6 +67,11 @@ const availableTabs = computed(() => allTabs.filter(tab => {
 }))
 const activeTab = ref<SettingsTab>(tabFromHash())
 const saving = ref(false)
+const saveState = ref<SaveState>('saved')
+const saveTimer = ref<ReturnType<typeof setTimeout> | null>(null)
+const serverRevision = ref(props.gallery.revision)
+const conflictGallery = ref<Gallery | null>(null)
+let savePromise: Promise<boolean> | null = null
 const rebinding = ref(false)
 const showSharing = ref(false)
 const designPreviewOpen = ref(false)
@@ -73,15 +91,50 @@ const draft = reactive({
 })
 const serializedDraft = computed(() => JSON.stringify({ title: draft.title, settings: draft.settings }))
 const dirty = computed(() => serializedDraft.value !== baseline.value)
+const saveStateLabel = computed(() => ({
+	saved: t('proofing_gallery', 'Saved'),
+	pending: t('proofing_gallery', 'Changes pending'),
+	saving: t('proofing_gallery', 'Saving…'),
+	offline: t('proofing_gallery', 'Offline — changes are waiting'),
+	error: t('proofing_gallery', 'Could not save'),
+	conflict: t('proofing_gallery', 'Changed in another session'),
+	invalid: t('proofing_gallery', 'Enter a gallery title'),
+})[saveState.value])
 const accentStyle = computed(() => ({
 	'--gallery-accent': draft.settings.presentation.accentColor,
 	'--watermark-opacity': String(draft.settings.presentation.watermarkOpacity / 100),
 }))
 const previewMedia = computed(() => media.value.filter(item => !item.folder).slice(0, 8))
+const readiness = computed(() => [
+	{ label: t('proofing_gallery', 'Project folder is available'), ready: props.gallery.source.state === 'readable', action: 'overview' as SettingsTab },
+	{ label: t('proofing_gallery', 'At least one photo is ready'), ready: (mediaLoading.value ? props.gallery.mediaSummary.total : mediaTotal.value) > 0, action: 'content' as SettingsTab },
+	{ label: t('proofing_gallery', 'All changes are saved'), ready: !dirty.value && saveState.value === 'saved', action: 'overview' as SettingsTab },
+])
+const publishReady = computed(() => readiness.value.every(item => item.ready))
+const nextStep = computed(() => {
+	const missing = readiness.value.find(item => !item.ready)
+	if (missing) return { label: missing.label, tab: missing.action }
+	if (!props.gallery.shareToken) return { label: t('proofing_gallery', 'Publish and send'), tab: 'access' as SettingsTab }
+	if (['selection', 'proofing', 'uploads'].includes(props.gallery.purpose)) {
+		return { label: t('proofing_gallery', 'Review client results'), tab: 'feedback' as SettingsTab }
+	}
+	return { label: t('proofing_gallery', 'Manage delivery'), tab: 'access' as SettingsTab }
+})
 
 watch(() => props.gallery, gallery => {
+	if (gallery.revision < serverRevision.value) return
+	if (gallery.revision === serverRevision.value && dirty.value) return
 	resetDraft(gallery)
 	loadMedia()
+})
+
+watch(serializedDraft, () => {
+	if (!props.gallery.permissions.canEdit) return
+	if (!dirty.value) {
+		if (!saving.value) saveState.value = 'saved'
+		return
+	}
+	scheduleSave()
 })
 
 function tabFromHash(): SettingsTab {
@@ -94,14 +147,23 @@ function setTab(tab: SettingsTab) {
 	history.replaceState(null, '', `#gallery/${props.gallery.id}/${tab}`)
 }
 
+function toggleAdvanced() {
+	advancedOpen.value = !advancedOpen.value
+	if (!advancedOpen.value && !availableTabs.value.some(tab => tab.id === activeTab.value)) setTab('overview')
+}
+
 function resetDraft(gallery = props.gallery) {
 	draft.title = gallery.title
 	draft.settings = structuredClone(gallery.settings)
 	baseline.value = JSON.stringify({ title: draft.title, settings: draft.settings })
+	serverRevision.value = gallery.revision
+	conflictGallery.value = null
+	saveState.value = 'saved'
 }
 
-function leave() {
-	if (dirty.value && !window.confirm(t('proofing_gallery', 'Discard unsaved changes?'))) return
+async function leave() {
+	const saved = await flushSave()
+	if (!saved && dirty.value && !window.confirm(t('proofing_gallery', 'Leave with changes that could not be saved?'))) return
 	emit('back')
 }
 
@@ -195,22 +257,125 @@ async function chooseSource() {
 	}
 }
 
-async function save() {
-	if (!props.gallery.permissions.canEdit || !dirty.value || !draft.title.trim()) return
+function clearSaveTimer() {
+	if (saveTimer.value !== null) {
+		clearTimeout(saveTimer.value)
+		saveTimer.value = null
+	}
+}
+
+function scheduleSave(delay = 650) {
+	clearSaveTimer()
+	if (!draft.title.trim()) {
+		saveState.value = 'invalid'
+		return
+	}
+	if (!navigator.onLine) {
+		saveState.value = 'offline'
+		return
+	}
+	saveState.value = 'pending'
+	saveTimer.value = setTimeout(() => { save().catch(() => {}) }, delay)
+}
+
+function revisionConflict(error: unknown): Gallery | null {
+	if (typeof error !== 'object' || error === null || !('response' in error)) return null
+	const response = (error as { response?: { status?: number; data?: { code?: string; gallery?: Gallery } } }).response
+	return response?.status === 409 && response.data?.code === 'revision_conflict'
+		? response.data.gallery ?? null
+		: null
+}
+
+function save(showConfirmation = false): Promise<boolean> {
+	if (savePromise !== null) {
+		return savePromise.then(saved => dirty.value ? save(showConfirmation) : saved)
+	}
+	savePromise = persistSave(showConfirmation).finally(() => { savePromise = null })
+	return savePromise
+}
+
+async function persistSave(showConfirmation = false): Promise<boolean> {
+	if (!props.gallery.permissions.canEdit || !dirty.value) return true
+	if (!draft.title.trim()) {
+		saveState.value = 'invalid'
+		return false
+	}
+	clearSaveTimer()
+	const snapshot = serializedDraft.value
+	const title = draft.title.trim()
+	const settings = canonicalGallerySettings(draft.settings)
 	saving.value = true
+	saveState.value = 'saving'
 	try {
 		const gallery = await updateGallery(props.gallery.id, {
-			title: draft.title.trim(),
-			settings: canonicalGallerySettings(draft.settings),
+			title,
+			settings,
+			expectedRevision: serverRevision.value,
 		})
-		resetDraft(gallery)
+		serverRevision.value = gallery.revision
+		baseline.value = snapshot
 		emit('updated', gallery)
-		showSuccess(t('proofing_gallery', 'Gallery settings saved.'))
-	} catch {
-		showError(t('proofing_gallery', 'Gallery settings could not be saved.'))
+		if (serializedDraft.value === snapshot) {
+			saveState.value = 'saved'
+		} else {
+			scheduleSave(0)
+		}
+		if (showConfirmation) showSuccess(t('proofing_gallery', 'Gallery settings saved.'))
+		return true
+	} catch (error) {
+		const current = revisionConflict(error)
+		if (current) {
+			conflictGallery.value = current
+			saveState.value = 'conflict'
+		} else if (!navigator.onLine) {
+			saveState.value = 'offline'
+		} else {
+			saveState.value = 'error'
+		}
+		return false
 	} finally {
 		saving.value = false
 	}
+}
+
+async function flushSave(): Promise<boolean> {
+	clearSaveTimer()
+	return dirty.value ? save() : true
+}
+
+async function openSharing() {
+	if (await flushSave()) showSharing.value = true
+}
+
+function useServerVersion() {
+	if (!conflictGallery.value) return
+	const gallery = conflictGallery.value
+	resetDraft(gallery)
+	emit('updated', gallery)
+}
+
+function retrySave() {
+	save(true).catch(() => {})
+}
+
+async function completeProject() {
+	if (!window.confirm(t('proofing_gallery', 'Mark this project as completed?'))) return
+	if (!await flushSave()) return
+	try {
+		const gallery = await completeGallery(props.gallery.id)
+		emit('updated', gallery)
+		showSuccess(t('proofing_gallery', 'Project completed.'))
+	} catch {
+		showError(t('proofing_gallery', 'The project could not be completed.'))
+	}
+}
+
+function handleOnline() {
+	if (dirty.value && saveState.value === 'offline') scheduleSave(0)
+}
+
+function handleOffline() {
+	if (dirty.value) saveState.value = 'offline'
 }
 
 async function loadPresets() {
@@ -298,8 +463,15 @@ onMounted(() => {
 	loadMedia()
 	loadPresets()
 	window.addEventListener('beforeunload', beforeUnload)
+	window.addEventListener('online', handleOnline)
+	window.addEventListener('offline', handleOffline)
 })
-onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
+onBeforeUnmount(() => {
+	clearSaveTimer()
+	window.removeEventListener('beforeunload', beforeUnload)
+	window.removeEventListener('online', handleOnline)
+	window.removeEventListener('offline', handleOffline)
+})
 </script>
 
 <template>
@@ -318,10 +490,23 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 							? t('proofing_gallery', 'Archived')
 							: t('proofing_gallery', 'Draft') }}
 				</p>
+				<span class="purpose-name">{{ purposeLabels[gallery.purpose] }}</span>
 			</div>
-			<NcButton v-if="gallery.permissions.canManageAccess" @click="showSharing = true">
-				{{ t('proofing_gallery', 'Share') }}
-			</NcButton>
+			<div class="settings-header__actions">
+				<div class="save-indicator"
+					:data-state="saveState"
+					role="status"
+					aria-live="polite">
+					<span aria-hidden="true">{{ saveState === 'saved' ? '✓' : saveState === 'saving' ? '↻' : '•' }}</span>
+					{{ saveStateLabel }}
+				</div>
+				<NcButton v-if="gallery.permissions.canManageAccess" @click="openSharing">
+					{{ t('proofing_gallery', 'Share') }}
+				</NcButton>
+				<NcButton variant="primary" @click="setTab(nextStep.tab)">
+					{{ nextStep.label }}
+				</NcButton>
+			</div>
 		</header>
 
 		<nav class="settings-tabs" :aria-label="t('proofing_gallery', 'Gallery settings')">
@@ -332,6 +517,12 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 				:aria-current="activeTab === tab.id ? 'page' : undefined"
 				@click="setTab(tab.id)">
 				{{ tab.label }}
+			</button>
+			<button class="settings-tabs__advanced"
+				type="button"
+				:aria-expanded="advancedOpen"
+				@click="toggleAdvanced">
+				{{ advancedOpen ? t('proofing_gallery', 'Hide advanced') : t('proofing_gallery', 'Advanced') }}
 			</button>
 		</nav>
 
@@ -344,6 +535,22 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 				:exit="reduceMotion ? { opacity: 0 } : { opacity: 0, x: -18 }"
 				:transition="{ duration: reduceMotion ? 0 : 0.2, ease: [0.2, 0.75, 0.25, 1] }">
 				<section v-if="activeTab === 'overview'" class="settings-section">
+					<div class="production-status">
+						<div>
+							<strong>{{ publishReady ? t('proofing_gallery', 'Ready to deliver') : t('proofing_gallery', 'Prepare for delivery') }}</strong>
+							<span>{{ publishReady
+								? t('proofing_gallery', 'Preview the client experience, then publish the link.')
+								: t('proofing_gallery', 'Complete the open steps. Changes save automatically.') }}</span>
+						</div>
+						<ul>
+							<li v-for="item in readiness" :key="item.label" :class="{ ready: item.ready }">
+								<button type="button" @click="setTab(item.action)">
+									<span aria-hidden="true">{{ item.ready ? '✓' : '○' }}</span>
+									{{ item.label }}
+								</button>
+							</li>
+						</ul>
+					</div>
 					<div class="section-heading">
 						<h2>{{ t('proofing_gallery', 'Gallery details') }}</h2>
 						<p>{{ t('proofing_gallery', 'Choose the purpose and the title your clients will recognize.') }}</p>
@@ -674,7 +881,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 								: t('proofing_gallery', 'Publish the gallery when it is ready for clients.') }}
 						</p>
 					</div>
-					<NcButton variant="primary" @click="showSharing = true">
+					<NcButton variant="primary" @click="openSharing">
 						{{ gallery.shareToken ? t('proofing_gallery', 'Manage public link') : t('proofing_gallery', 'Publish gallery') }}
 					</NcButton>
 					<div class="settings-subsection">
@@ -719,11 +926,56 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 							{{ t('proofing_gallery', 'Let clients browse subfolders') }}
 						</NcCheckboxRadioSwitch>
 					</div>
+					<fieldset class="automation-settings">
+						<legend>{{ t('proofing_gallery', 'Project automation') }}</legend>
+						<NcCheckboxRadioSwitch v-model="draft.settings.lifecycle.enabled" type="switch">
+							{{ t('proofing_gallery', 'Automatically revoke and archive this gallery') }}
+						</NcCheckboxRadioSwitch>
+						<template v-if="draft.settings.lifecycle.enabled">
+							<label class="select-field">
+								<span>{{ t('proofing_gallery', 'Revoke the public link') }}</span>
+								<select v-model="draft.settings.lifecycle.trigger">
+									<option value="after_completion">{{ t('proofing_gallery', 'After the project is completed') }}</option>
+									<option value="fixed_date">{{ t('proofing_gallery', 'On a fixed date') }}</option>
+								</select>
+							</label>
+							<label v-if="draft.settings.lifecycle.trigger === 'fixed_date'" class="date-field">
+								<span>{{ t('proofing_gallery', 'Revoke on') }}</span>
+								<input v-model="draft.settings.lifecycle.revokeAt" type="date">
+							</label>
+							<label v-else class="number-field">
+								<span>{{ t('proofing_gallery', 'Days after completion') }}</span>
+								<input v-model.number="draft.settings.lifecycle.revokeAfterDays"
+									type="number"
+									min="0"
+									max="3650">
+							</label>
+							<label class="number-field">
+								<span>{{ t('proofing_gallery', 'Archive days after link revocation') }}</span>
+								<input v-model.number="draft.settings.lifecycle.archiveAfterDays"
+									type="number"
+									min="0"
+									max="3650">
+							</label>
+							<p>{{ t('proofing_gallery', 'Archiving never deletes original files and can be reversed.') }}</p>
+						</template>
+					</fieldset>
 					<ManagerPanel :gallery-id="gallery.id" @changed="notificationPanel?.load()" />
 					<NotificationPanel v-if="gallery.permissions.role === 'owner'" ref="notificationPanel" :gallery="gallery" />
 				</section>
 
 				<section v-else-if="activeTab === 'feedback'" class="settings-section">
+					<div class="workflow-completion">
+						<div>
+							<strong>{{ gallery.workflowState === 'completed' ? t('proofing_gallery', 'Project completed') : t('proofing_gallery', 'Finish the project') }}</strong>
+							<span>{{ gallery.workflowState === 'completed'
+								? t('proofing_gallery', 'Configured lifecycle rules now count from the completion date.')
+								: t('proofing_gallery', 'Confirm completion when the client result has been processed.') }}</span>
+						</div>
+						<NcButton v-if="gallery.workflowState !== 'completed'" variant="primary" @click="completeProject">
+							{{ t('proofing_gallery', 'Mark completed') }}
+						</NcButton>
+					</div>
 					<div class="section-heading">
 						<h2>{{ t('proofing_gallery', 'Review workflow') }}</h2>
 						<p>{{ t('proofing_gallery', 'Control what reviewers can contribute and whether they see each other.') }}</p>
@@ -775,13 +1027,21 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 			</motion.div>
 		</AnimatePresence>
 
-		<div v-if="dirty && gallery.permissions.canEdit" class="save-bar" role="status">
-			<span>{{ t('proofing_gallery', 'Unsaved changes') }}</span>
-			<NcButton :disabled="saving" @click="resetDraft()">
-				{{ t('proofing_gallery', 'Discard') }}
+		<div v-if="saveState === 'error' || saveState === 'conflict'" class="save-problem" role="alert">
+			<div>
+				<strong>{{ saveStateLabel }}</strong>
+				<span>{{ saveState === 'conflict'
+					? t('proofing_gallery', 'Review the newer server version before continuing.')
+					: t('proofing_gallery', 'Your changes remain in this browser.') }}</span>
+			</div>
+			<NcButton v-if="saveState === 'conflict'" @click="useServerVersion">
+				{{ t('proofing_gallery', 'Load server version') }}
 			</NcButton>
-			<NcButton variant="primary" :disabled="saving || !draft.title.trim()" @click="save">
-				{{ saving ? t('proofing_gallery', 'Saving…') : t('proofing_gallery', 'Save changes') }}
+			<NcButton v-else
+				variant="primary"
+				:disabled="saving"
+				@click="retrySave">
+				{{ t('proofing_gallery', 'Try again') }}
 			</NcButton>
 		</div>
 
@@ -819,6 +1079,46 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 	gap: 16px;
 }
 
+.settings-header__actions {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.save-indicator {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	min-height: 44px;
+	color: var(--color-text-maxcontrast);
+	font-size: 13px;
+}
+
+.save-indicator[data-state='saved'] { color: var(--color-success-text); }
+
+.save-indicator[data-state='error'],
+.save-indicator[data-state='conflict'],
+.save-indicator[data-state='invalid'] { color: var(--color-error-text); }
+
+.save-problem {
+	position: fixed;
+	z-index: 1100;
+	inset: auto 24px 24px auto;
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	max-width: min(620px, calc(100vw - 48px));
+	padding: 14px 16px;
+	border: 1px solid var(--color-border-error);
+	border-radius: 8px;
+	background: var(--color-main-background);
+	box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+}
+
+.save-problem > div { display: grid; gap: 2px; }
+
+.save-problem span { color: var(--color-text-maxcontrast); }
+
 .back-button {
 	margin: 0 0 8px;
 	padding: 0;
@@ -846,6 +1146,60 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 	font-weight: 600;
 }
 
+.purpose-name {
+	display: block;
+	margin-top: 8px;
+	color: var(--color-text-maxcontrast);
+	font-size: 13px;
+}
+
+.production-status {
+	display: grid;
+	grid-template-columns: minmax(200px, 0.8fr) 1.2fr;
+	gap: 28px;
+	padding: 20px 0 24px;
+	border-block: 1px solid var(--color-border);
+}
+
+.production-status > div { display: grid; align-content: start; gap: 5px; }
+
+.production-status > div strong { font-size: 22px; letter-spacing: -0.025em; }
+
+.production-status > div span { color: var(--color-text-maxcontrast); line-height: 1.45; }
+
+.production-status ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+
+.production-status button { display: flex; gap: 10px; align-items: center; width: 100%; min-height: 40px; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--color-main-text); text-align: start; cursor: pointer; }
+
+.production-status button:hover { background: var(--color-background-hover); }
+
+.production-status li.ready button { color: var(--color-text-maxcontrast); }
+
+.automation-settings {
+	display: grid;
+	gap: 14px;
+	margin: 0;
+	padding: 20px 0;
+	border: 0;
+	border-block: 1px solid var(--color-border);
+}
+
+.automation-settings legend { padding: 0 0 12px; font-size: 16px; font-weight: 650; }
+
+.automation-settings p { margin: 0; color: var(--color-text-maxcontrast); }
+
+.date-field, .number-field { display: grid; gap: 5px; color: var(--color-text-maxcontrast); font-size: 13px; }
+
+.date-field input, .number-field input { min-height: 44px; padding: 8px 10px; border: 1px solid var(--color-border-maxcontrast); border-radius: 8px; background: var(--color-main-background); color: var(--color-main-text); }
+
+.workflow-completion { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 16px 0 20px; border-bottom: 1px solid var(--color-border); }
+
+.workflow-completion > div { display: grid; gap: 4px; }
+
+.workflow-completion strong { font-size: 18px; }
+
+.workflow-completion span { color: var(--color-text-maxcontrast); }
+
 .settings-tabs {
 	display: flex;
 	overflow-x: auto;
@@ -870,6 +1224,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 	border-bottom-color: var(--color-primary-element);
 	color: var(--color-main-text);
 }
+
+.settings-tabs .settings-tabs__advanced { margin-inline-start: auto; color: var(--color-main-text); }
 
 .settings-content {
 	padding-top: 28px;
@@ -1327,6 +1683,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 }
 
 @media (max-width: 640px) {
+	.production-status { grid-template-columns: 1fr; gap: 14px; }
 	.option-grid,
 	.feedback-switches,
 	.color-labels {
@@ -1338,15 +1695,25 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 	}
 
 	.settings-header {
-		align-items: center;
+		align-items: stretch;
+		flex-direction: column;
 	}
 
 	.settings-header h1 {
-		max-width: 210px;
-		overflow: hidden;
+		max-width: 100%;
 		font-size: 32px;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		line-height: 1.05;
+	}
+
+	.settings-header__actions {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr);
+		width: 100%;
+	}
+
+	.save-indicator {
+		grid-column: 1 / -1;
+		min-height: 32px;
 	}
 
 	.settings-tabs {

@@ -72,9 +72,9 @@ compose exec -T --user www-data sqlite php -r '
 '
 version="$(compose exec -T --user www-data sqlite php occ app:list --enabled --output=json \
 	| php -r '$apps=json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR); echo $apps["enabled"]["proofing_gallery"];')"
-if [[ "${version}" != "0.3.0-alpha.1" ]]; then
+if [[ "${version}" != "0.4.0-alpha.1" ]]; then
 	echo "Unexpected upgraded version: ${version}" >&2
 	exit 4
 fi
 
-echo "Beta.3 -> 0.3 Alpha.1 schema and data upgrade passed (${version})."
+echo "Previous release -> 0.4 Alpha.1 schema and data upgrade passed (${version})."

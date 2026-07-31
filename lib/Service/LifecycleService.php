@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Service;
 
+use OCA\ProofingGallery\Db\GalleryMapper;
+use OCA\ProofingGallery\Dto\GallerySettings;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\Files\IAppData;
@@ -19,6 +21,8 @@ final class LifecycleService {
 		private PolicyService $policies,
 		private CollectionAnchorReconciler $collectionAnchors,
 		private VersionService $versions,
+		private GalleryMapper $galleries,
+		private PublicShareService $shares,
 	) {
 	}
 
@@ -37,7 +41,44 @@ final class LifecycleService {
 		$orphans = $this->cleanupOrphanMetadata();
 		$collectionAnchors = $this->collectionAnchors->reconcile(false)['deleted'];
 		$versions = $this->versions->cleanupExpired(self::BATCH_SIZE);
-		return compact('events', 'uploads', 'previews', 'versions', 'orphans', 'collectionAnchors');
+		['revoked' => $revoked, 'archived' => $archived] = $this->automateGalleries($now);
+		return compact('events', 'uploads', 'previews', 'versions', 'orphans', 'collectionAnchors', 'revoked', 'archived');
+	}
+
+	/** @return array{revoked: int, archived: int} */
+	private function automateGalleries(int $now): array {
+		$revoked = 0;
+		$archived = 0;
+		foreach ($this->galleries->findLifecycleCandidates() as $gallery) {
+			$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
+			$rule = $settings->lifecycle;
+			if (!$rule['enabled']) continue;
+
+			if ($gallery->getShareToken() !== null && $this->revokeDue($gallery->getCompletedAt(), $rule, $now)) {
+				$this->shares->revoke($gallery);
+				$revoked++;
+			}
+			if ($gallery->getShareToken() === null && $gallery->getRevokedAt() !== null
+				&& $gallery->getRevokedAt() + $rule['archiveAfterDays'] * 86400 <= $now) {
+				$gallery->setStatus('archived');
+				$gallery->setArchivedAt($now);
+				$gallery->setUpdatedAt($now);
+				$gallery->setRevision($gallery->getRevision() + 1);
+				$this->galleries->update($gallery);
+				$archived++;
+			}
+		}
+		return compact('revoked', 'archived');
+	}
+
+	/** @param array<string, mixed> $rule */
+	private function revokeDue(?int $completedAt, array $rule, int $now): bool {
+		if ($rule['trigger'] === 'after_completion') {
+			return $completedAt !== null && $completedAt + $rule['revokeAfterDays'] * 86400 <= $now;
+		}
+		if ($rule['revokeAt'] === '') return false;
+		$date = \DateTimeImmutable::createFromFormat('!Y-m-d', $rule['revokeAt'], new \DateTimeZone('UTC'));
+		return $date !== false && $date->setTime(23, 59, 59)->getTimestamp() <= $now;
 	}
 
 	private function deleteOldRows(string $table, string $column, int $before): int {

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0-alpha.1 — 2026-07-31
+
+- Added purpose-led project creation with safe in-app Nextcloud folder creation.
+- Added optimistic revisions, automatic settings saves, offline retry, and conflict recovery.
+- Reshaped gallery administration around Plan, Photos, Style, Delivery, and Results.
+- Added concurrent owner upload progress with partial success and per-file retry.
+- Added workflow completion plus opt-in automatic link revocation and recoverable archiving.
+- Unified download controls in the Delivery workspace and expanded German localization.
+
 ## 0.3.0-alpha.1 — 2026-07-31
 
 - Index bounded EXIF and IPTC image metadata into Nextcloud FilesMetadata and

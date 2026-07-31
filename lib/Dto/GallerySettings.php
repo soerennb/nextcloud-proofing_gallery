@@ -10,7 +10,7 @@ use OCA\ProofingGallery\Domain\FeedbackVisibility;
 use OCA\ProofingGallery\Domain\GalleryMode;
 
 final readonly class GallerySettings implements JsonSerializable {
-	public const SCHEMA_VERSION = 3;
+	public const SCHEMA_VERSION = 4;
 	public const PUBLIC_METADATA_FIELDS = [
 		'capturedAt', 'camera', 'lens', 'exposure', 'title', 'description', 'creator', 'copyright',
 	];
@@ -31,6 +31,7 @@ final readonly class GallerySettings implements JsonSerializable {
 	 * @param array{folders: bool, sortBy: string, sortDirection: string, groupBy: string} $navigation
 	 * @param array{allowModeSwitch: bool, hideRejectedInPresentation: bool} $security
 	 * @param array{publicFields: list<string>} $metadata
+	 * @param array{enabled: bool, trigger: string, revokeAt: string, revokeAfterDays: int, archiveAfterDays: int, reminderDays: list<int>} $lifecycle
 	 */
 	public function __construct(
 		public int $schemaVersion,
@@ -42,6 +43,7 @@ final readonly class GallerySettings implements JsonSerializable {
 		public array $navigation,
 		public array $security,
 		public array $metadata,
+		public array $lifecycle,
 	) {
 		$this->validate();
 		$this->feedbackVisibility = FeedbackVisibility::from($review['visibility']);
@@ -64,13 +66,14 @@ final readonly class GallerySettings implements JsonSerializable {
 			$defaults['navigation'],
 			$defaults['security'],
 			$defaults['metadata'],
+			$defaults['lifecycle'],
 		);
 	}
 
 	/** @param array<string, mixed> $input */
 	public static function fromArray(array $input): self {
 		$allowed = [
-			'schemaVersion', 'mode', 'publicLocale', 'review', 'presentation', 'delivery', 'navigation', 'security', 'metadata',
+			'schemaVersion', 'mode', 'publicLocale', 'review', 'presentation', 'delivery', 'navigation', 'security', 'metadata', 'lifecycle',
 			// Version 1 compatibility. These aliases can be removed after all supported releases write v2 settings.
 			'feedbackVisibility', 'allowDownloads', 'allowGuestUploads', 'showFilenames', 'colorLabels', 'appearance',
 		];
@@ -86,6 +89,7 @@ final readonly class GallerySettings implements JsonSerializable {
 		$navigation = self::object($input, 'navigation');
 		$security = self::object($input, 'security');
 		$metadata = self::object($input, 'metadata');
+		$lifecycle = self::object($input, 'lifecycle');
 		$heroWasProvided = array_key_exists('heroFileId', $presentation)
 			|| (is_array($input['appearance'] ?? null) && array_key_exists('heroFileId', $input['appearance']));
 
@@ -121,6 +125,7 @@ final readonly class GallerySettings implements JsonSerializable {
 		$navigation = self::mergeSection('navigation', $defaults['navigation'], $navigation);
 		$security = self::mergeSection('security', $defaults['security'], $security);
 		$metadata = self::mergeSection('metadata', $defaults['metadata'], $metadata);
+		$lifecycle = self::mergeSection('lifecycle', $defaults['lifecycle'], $lifecycle);
 
 		$openerWasProvided = array_key_exists('openerStyle', self::object($input, 'presentation'))
 			|| (is_array($input['appearance'] ?? null) && array_key_exists('openerStyle', $input['appearance']));
@@ -144,13 +149,14 @@ final readonly class GallerySettings implements JsonSerializable {
 			$navigation,
 			$security,
 			$metadata,
+			$lifecycle,
 		);
 	}
 
 	/** @param array<string, mixed> $patch */
 	public static function merge(self $current, array $patch): self {
 		$base = $current->canonical();
-		foreach (['review', 'presentation', 'delivery', 'navigation', 'security', 'metadata'] as $section) {
+		foreach (['review', 'presentation', 'delivery', 'navigation', 'security', 'metadata', 'lifecycle'] as $section) {
 			if (isset($patch[$section]) && is_array($patch[$section])) {
 				$base[$section] = array_replace($base[$section], $patch[$section]);
 				unset($patch[$section]);
@@ -185,6 +191,7 @@ final readonly class GallerySettings implements JsonSerializable {
 			'navigation' => $this->navigation,
 			'security' => $this->security,
 			'metadata' => $this->metadata,
+			'lifecycle' => $this->lifecycle,
 		];
 	}
 
@@ -275,9 +282,21 @@ final readonly class GallerySettings implements JsonSerializable {
 		if (count(array_unique($this->metadata['publicFields'])) !== count($this->metadata['publicFields'])) {
 			throw new InvalidArgumentException('Public metadata fields must be unique');
 		}
+		self::assertBoolean($this->lifecycle['enabled'], 'lifecycle.enabled');
+		if (!in_array($this->lifecycle['trigger'], ['fixed_date', 'after_completion'], true)
+			|| !is_string($this->lifecycle['revokeAt'])
+			|| ($this->lifecycle['revokeAt'] !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $this->lifecycle['revokeAt']))
+			|| !is_int($this->lifecycle['revokeAfterDays']) || $this->lifecycle['revokeAfterDays'] < 0 || $this->lifecycle['revokeAfterDays'] > 3650
+			|| !is_int($this->lifecycle['archiveAfterDays']) || $this->lifecycle['archiveAfterDays'] < 0 || $this->lifecycle['archiveAfterDays'] > 3650
+			|| !is_array($this->lifecycle['reminderDays']) || !array_is_list($this->lifecycle['reminderDays'])) {
+			throw new InvalidArgumentException('Invalid lifecycle settings');
+		}
+		foreach ($this->lifecycle['reminderDays'] as $days) {
+			if (!is_int($days) || $days < 0 || $days > 365) throw new InvalidArgumentException('Invalid lifecycle reminder');
+		}
 	}
 
-	/** @return array{review: array<string, mixed>, presentation: array<string, mixed>, delivery: array<string, mixed>, navigation: array<string, mixed>, security: array<string, mixed>, metadata: array<string, mixed>} */
+	/** @return array{review: array<string, mixed>, presentation: array<string, mixed>, delivery: array<string, mixed>, navigation: array<string, mixed>, security: array<string, mixed>, metadata: array<string, mixed>, lifecycle: array<string, mixed>} */
 	private static function defaultValues(): array {
 		return [
 			'review' => [
@@ -297,6 +316,14 @@ final readonly class GallerySettings implements JsonSerializable {
 			'navigation' => ['folders' => true, 'sortBy' => 'name', 'sortDirection' => 'asc', 'groupBy' => 'none'],
 			'security' => ['allowModeSwitch' => false, 'hideRejectedInPresentation' => false],
 			'metadata' => ['publicFields' => []],
+			'lifecycle' => [
+				'enabled' => false,
+				'trigger' => 'after_completion',
+				'revokeAt' => '',
+				'revokeAfterDays' => 30,
+				'archiveAfterDays' => 30,
+				'reminderDays' => [7, 1],
+			],
 		];
 	}
 
