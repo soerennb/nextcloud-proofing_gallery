@@ -45,4 +45,51 @@ final class PolicyServiceTest extends TestCase {
 
 		(new PolicyService($config))->save(['eventRetentionDays' => 90]);
 	}
+
+	public function testInstanceSettingsAreValidatedAndMergedWithSafeDefaults(): void {
+		$stored = '';
+		$config = $this->createMock(IConfig::class);
+		$config->method('getAppValue')->willReturnCallback(
+			static function (string $app, string $key, string $default) use (&$stored): string {
+				return $key === 'instanceSettingsV2' && $stored !== '' ? $stored : $default;
+			},
+		);
+		$config->method('setAppValue')->willReturnCallback(
+			static function (string $app, string $key, string $value) use (&$stored): void {
+				if ($key === 'instanceSettingsV2') $stored = $value;
+			},
+		);
+
+		$policies = new PolicyService($config);
+		$saved = $policies->saveInstanceSettings([
+			'access' => ['creatorGroups' => [' photographers ', 'photographers']],
+			'features' => ['downloads' => false],
+			'workflow' => ['defaultPurpose' => 'proofing'],
+			'branding' => ['logoAssetId' => str_repeat('A', 32) . '.png'],
+		]);
+
+		self::assertSame(['photographers'], $saved['access']['creatorGroups']);
+		self::assertFalse($saved['features']['downloads']);
+		self::assertTrue($saved['features']['comments']);
+		self::assertSame('proofing', $saved['workflow']['defaultPurpose']);
+		self::assertSame(str_repeat('A', 32) . '.png', $saved['branding']['logoAssetId']);
+	}
+
+	public function testInstanceSettingsRejectUnknownFeature(): void {
+		$policies = new PolicyService($this->createMock(IConfig::class));
+		$this->expectException(\InvalidArgumentException::class);
+		$policies->saveInstanceSettings(['features' => ['telepathy' => true]]);
+	}
+
+	public function testInstanceSettingsRejectUnsafeLogoAssetId(): void {
+		$policies = new PolicyService($this->createMock(IConfig::class));
+		$this->expectException(\InvalidArgumentException::class);
+		$policies->saveInstanceSettings(['branding' => ['logoAssetId' => 'https://tracker.invalid/logo.svg']]);
+	}
+
+	public function testInstanceSettingsRejectUnknownSectionKey(): void {
+		$policies = new PolicyService($this->createMock(IConfig::class));
+		$this->expectException(\InvalidArgumentException::class);
+		$policies->saveInstanceSettings(['branding' => ['trackingPixel' => 'https://invalid.test']]);
+	}
 }

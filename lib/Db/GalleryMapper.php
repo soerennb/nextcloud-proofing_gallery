@@ -122,6 +122,19 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 		return $this->findEntities($qb);
 	}
 
+	/** @param list<int> $ids
+	 * @return list<Gallery>
+	 */
+	public function findMany(array $ids, int $limit = 100): array {
+		$ids = array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0)));
+		if ($ids === []) return [];
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')->from($this->tableName)
+			->where($qb->expr()->in('id', $qb->createNamedParameter(array_slice($ids, 0, $limit), IQueryBuilder::PARAM_INT_ARRAY)))
+			->orderBy('id', 'ASC');
+		return $this->findEntities($qb);
+	}
+
 	private function applyFilters(IQueryBuilder $qb, bool $archived, string $search): void {
 		$archiveStatus = $qb->createNamedParameter('archived');
 		$qb->andWhere($archived

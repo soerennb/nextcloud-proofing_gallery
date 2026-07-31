@@ -1,7 +1,7 @@
 import axios from '@nextcloud/axios'
 import { generateOcsUrl, generateUrl } from '@nextcloud/router'
 
-import type { CollectionDocument, Gallery, GalleryManager, GalleryPage, GalleryPreset, GalleryPurpose, InvitationTemplate, MediaItem, MediaMetadata, MediaPage, MediaVersion, NotificationEventType, NotificationSubscription, OwnerSelection } from '../types'
+import type { CollectionDocument, EffectiveCapabilities, Gallery, GalleryManager, GalleryPage, GalleryPreset, GalleryPurpose, InvitationTemplate, MediaItem, MediaMetadata, MediaPage, MediaVersion, NotificationEventType, NotificationSubscription, OwnerSelection, UserPreferences } from '../types'
 import type { CanonicalGallerySettings, GallerySettings } from '../domain/gallerySettings'
 
 const galleriesUrl = generateOcsUrl('/apps/proofing_gallery/api/v1/galleries')
@@ -56,6 +56,16 @@ export async function createProject(payload: {
 }): Promise<Gallery> {
 	const { data } = await axios.post<Gallery>(generateOcsUrl('/apps/proofing_gallery/api/v1/projects'), payload)
 	return data
+}
+
+export async function fetchUserPreferences(): Promise<{ preferences: UserPreferences; effectiveCapabilities: EffectiveCapabilities; instanceDefaultPurpose: GalleryPurpose }> {
+	const { data } = await axios.get<{ preferences: UserPreferences; effectiveCapabilities: EffectiveCapabilities; instanceDefaultPurpose: GalleryPurpose }>(generateOcsUrl('/apps/proofing_gallery/api/v1/user/preferences'))
+	return data
+}
+
+export async function updateUserPreferences(preferences: Partial<UserPreferences>): Promise<UserPreferences> {
+	const { data } = await axios.put<{ preferences: UserPreferences }>(generateOcsUrl('/apps/proofing_gallery/api/v1/user/preferences'), { preferences })
+	return data.preferences
 }
 
 const presetsUrl = generateOcsUrl('/apps/proofing_gallery/api/v1/presets')

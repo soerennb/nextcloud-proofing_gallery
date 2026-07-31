@@ -5,6 +5,7 @@ export interface GalleryAppearance {
 	accentColor: string
 	welcomeMessage: string
 	logoFileId: number | null
+	instanceLogoAssetId: string | null
 	heroFileId: number | null
 	openerStyle: 'compact' | 'cinematic'
 	heroFocusX: number
@@ -25,7 +26,7 @@ export interface GalleryPresentation extends GalleryAppearance {
 }
 
 export interface GallerySettings {
-	schemaVersion?: 4
+	schemaVersion?: 5
 	mode: GalleryMode
 	feedbackVisibility: FeedbackVisibility
 	allowDownloads: boolean
@@ -80,7 +81,7 @@ export type CanonicalGallerySettings = Pick<GallerySettings,
 
 export function canonicalGallerySettings(settings: GallerySettings): CanonicalGallerySettings {
 	return {
-		schemaVersion: 4,
+		schemaVersion: 5,
 		mode: settings.mode,
 		publicLocale: settings.publicLocale,
 		review: structuredClone(settings.review),
@@ -105,6 +106,7 @@ export function createDefaultGallerySettings(): GallerySettings {
 		accentColor: '#1f6f8b',
 		welcomeMessage: '',
 		logoFileId: null,
+		instanceLogoAssetId: null,
 		heroFileId: null,
 		openerStyle: 'compact',
 		heroFocusX: 50,
@@ -121,7 +123,7 @@ export function createDefaultGallerySettings(): GallerySettings {
 		showFilenames: true,
 	}
 	return {
-		schemaVersion: 4,
+		schemaVersion: 5,
 		mode: 'presentation',
 		feedbackVisibility: 'collaborative',
 		allowDownloads: false,

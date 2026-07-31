@@ -48,6 +48,8 @@ final class PublicGalleryController extends PublicShareController {
 		private PublicGalleryDataService $galleryData,
 		private CollectionService $collections,
 		private PolicyService $policies,
+		private \OCA\ProofingGallery\Service\CapabilityPolicyService $capabilities,
+		private \OCA\ProofingGallery\Service\BrandingAssetService $branding,
 	) {
 		parent::__construct(Application::APP_ID, $request, $session);
 	}
@@ -237,6 +239,17 @@ final class PublicGalleryController extends PublicShareController {
 			flags: JSON_THROW_ON_ERROR,
 		))->jsonSerialize();
 		$fileId = $settings['appearance'][$kind . 'FileId'];
+		if ($kind === 'logo' && !is_int($fileId) && is_string($settings['appearance']['instanceLogoAssetId'])) {
+			try {
+				$asset = $this->branding->get($settings['appearance']['instanceLogoAssetId']);
+				return new DataDisplayResponse($asset->getContent(), Http::STATUS_OK, [
+					'Content-Type' => $this->branding->mimeType($settings['appearance']['instanceLogoAssetId']),
+					'Cache-Control' => 'private, max-age=86400, immutable',
+				]);
+			} catch (\OCP\Files\NotFoundException) {
+				return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
+			}
+		}
 		if (!is_int($fileId)) {
 			return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
 		}
@@ -354,6 +367,7 @@ final class PublicGalleryController extends PublicShareController {
 	}
 
 	private function downloadAllowed(string $kind): bool {
+		if (!$this->capabilities->feature('downloads')) return false;
 		$settings = GallerySettings::fromArray(json_decode(
 			$this->resolvedGallery()->getSettings(),
 			true,

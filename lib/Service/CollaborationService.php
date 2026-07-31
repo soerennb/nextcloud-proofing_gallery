@@ -21,6 +21,7 @@ final class CollaborationService {
 		private FolderService $folders,
 		private CollectionService $collections,
 		private NotificationService $notifications,
+		private CapabilityPolicyService $capabilities,
 	) {
 	}
 
@@ -77,11 +78,11 @@ final class CollaborationService {
 				'colorLabels' => $settings->colorLabels,
 				'requiresSession' => $guest === null,
 				'features' => [
-					'likes' => $settings->review['likes'],
-					'colors' => $settings->review['colors'],
-					'comments' => $settings->review['comments'],
-					'annotations' => $settings->review['annotations'],
-					'selections' => $settings->review['selections'],
+					'likes' => $settings->review['likes'] && $this->capabilities->feature('likes'),
+					'colors' => $settings->review['colors'] && $this->capabilities->feature('colors'),
+					'comments' => $settings->review['comments'] && $this->capabilities->feature('comments'),
+					'annotations' => $settings->review['annotations'] && $this->capabilities->feature('annotations'),
+					'selections' => $settings->review['selections'] && $this->capabilities->feature('selections'),
 				],
 			],
 			'guest' => $guest,
@@ -96,6 +97,7 @@ final class CollaborationService {
 	}
 
 	public function toggleLike(Gallery $gallery, Guest $guest, int $fileId): bool {
+		$this->capabilities->assertFeature('likes');
 		$settings = $this->assertCollaboration($gallery, $fileId);
 		if (!$settings->review['likes']) {
 			throw new InvalidArgumentException('Likes are disabled');
@@ -116,6 +118,7 @@ final class CollaborationService {
 	}
 
 	public function setColor(Gallery $gallery, Guest $guest, int $fileId, ?string $value): void {
+		$this->capabilities->assertFeature('colors');
 		$settings = $this->assertCollaboration($gallery, $fileId);
 		if (!$settings->review['colors']) {
 			throw new InvalidArgumentException('Color states are disabled');
@@ -149,6 +152,8 @@ final class CollaborationService {
 
 	/** @param array<string, int>|null $annotation */
 	public function addComment(Gallery $gallery, Guest $guest, int $fileId, string $body, ?array $annotation): int {
+		$this->capabilities->assertFeature('comments');
+		if ($annotation !== null) $this->capabilities->assertFeature('annotations');
 		$settings = $this->assertCollaboration($gallery, $fileId);
 		if (!$settings->review['comments']) {
 			throw new InvalidArgumentException('Comments are disabled');
@@ -182,6 +187,7 @@ final class CollaborationService {
 	}
 
 	public function deleteComment(Gallery $gallery, Guest $guest, int $commentId): void {
+		$this->capabilities->assertFeature('comments');
 		$qb = $this->db->getQueryBuilder();
 		$qb->update('proofing_comments')
 			->set('deleted_at', $qb->createNamedParameter($this->clock->getTime(), IQueryBuilder::PARAM_INT))
@@ -196,6 +202,7 @@ final class CollaborationService {
 	}
 
 	public function updateComment(Gallery $gallery, Guest $guest, int $commentId, string $body): void {
+		$this->capabilities->assertFeature('comments');
 		$body = trim($body);
 		if ($body === '' || mb_strlen($body) > 5000) {
 			throw new InvalidArgumentException('Comment must contain between 1 and 5000 characters');
@@ -216,6 +223,7 @@ final class CollaborationService {
 
 	/** @param list<int> $fileIds */
 	public function saveSelection(Gallery $gallery, Guest $guest, string $name, string $message, array $fileIds): string {
+		$this->capabilities->assertFeature('selections');
 		$this->assertCollaborationMode($gallery);
 		if (!$this->settings($gallery)->review['selections']) {
 			throw new InvalidArgumentException('Selections are disabled');
@@ -280,6 +288,7 @@ final class CollaborationService {
 
 	/** @return array{content: string, filename: string, mimeType: string} */
 	public function exportSelection(Gallery $gallery, ?Guest $guest, string $publicId, string $format): array {
+		$this->capabilities->assertFeature('selections');
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')->from('proofing_selections')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))

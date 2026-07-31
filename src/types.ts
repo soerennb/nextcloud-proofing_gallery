@@ -2,6 +2,12 @@ import type { GallerySettings } from './domain/gallerySettings'
 
 export type GalleryPurpose = 'showcase' | 'delivery' | 'selection' | 'proofing' | 'uploads' | 'custom'
 
+export type CapabilityName = 'galleryCreation' | 'publicPublishing' | 'guestUploads' | 'downloads'
+	| 'emailInvitations' | 'likes' | 'colors' | 'comments' | 'annotations' | 'selections'
+	| 'lifecycleAutomation' | 'xmpWriting'
+
+export type EffectiveCapabilities = Record<CapabilityName, { allowed: boolean; reason: string | null }>
+
 export interface Gallery {
 	id: number
 	ownerUid: string
@@ -43,6 +49,7 @@ export interface Gallery {
 		canManageAccess: boolean
 		canArchive: boolean
 	}
+	effectiveCapabilities: EffectiveCapabilities
 }
 
 export interface MediaMetadata {
@@ -157,6 +164,16 @@ export interface InvitationTemplate {
 
 export type NotificationEventType = 'comment.created' | 'comment.updated' | 'selection.created'
 	| 'like.changed' | 'color.changed' | 'upload.received' | 'upload.accepted' | 'upload.rejected'
+
+export interface UserPreferences {
+	schemaVersion: 1
+	defaultPurpose: GalleryPurpose | null
+	parentFolder: { id: number; name: string } | null
+	designPresetId: number | null
+	publicLocale: 'auto' | 'en' | 'de'
+	notifications: { email: boolean; events: NotificationEventType[] }
+	lifecycle: { enabled: boolean; trigger: 'fixed_date' | 'after_completion'; revokeAfterDays: number; archiveAfterDays: number }
+}
 
 export interface NotificationSubscription {
 	id: number

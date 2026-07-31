@@ -8,6 +8,16 @@ const auth = `Basic ${Buffer.from('admin:admin').toString('base64')}`
 export default async function globalSetup(config: FullConfig) {
 	const baseURL = String(config.projects[0].use.baseURL)
 	const headers = { Authorization: auth, 'OCS-APIRequest': 'true' }
+	const preferences = await fetch(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/user/preferences?format=json`, {
+		method: 'PUT',
+		headers: { ...headers, 'Content-Type': 'application/json' },
+		body: JSON.stringify({ preferences: {
+			defaultPurpose: null,
+			publicLocale: 'en',
+			notifications: { email: false, events: ['upload.received', 'comment.created', 'selection.created'] },
+		} }),
+	})
+	if (!preferences.ok) throw new Error(`E2E preferences could not be reset (${preferences.status})`)
 	const dav = `${baseURL}/remote.php/dav/files/admin/ProofingGalleryE2E`
 	await fetch(dav, { method: 'MKCOL', headers })
 	const png = Buffer.from(
@@ -32,7 +42,7 @@ export default async function globalSetup(config: FullConfig) {
 	const galleries = await fetch(galleriesUrl, { headers }).then(response => response.json()) as {
 		items: Array<{ id: number, title: string, shareToken: string | null }>
 	}
-	for (const stale of galleries.items.filter(item => item.title === 'E2E Gallery')) {
+	for (const stale of galleries.items.filter(item => item.title.startsWith('E2E Gallery'))) {
 		await fetch(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries/${stale.id}?format=json`, {
 			method: 'DELETE',
 			headers,
@@ -44,7 +54,7 @@ export default async function globalSetup(config: FullConfig) {
 		body: JSON.stringify({
 			folderId,
 			title: 'E2E Gallery',
-			settings: { mode: 'collaboration', allowGuestUploads: true },
+			settings: { mode: 'collaboration', allowGuestUploads: true, publicLocale: 'en' },
 		}),
 	})
 	const gallery = await response.json() as { id: number }

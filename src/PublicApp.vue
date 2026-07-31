@@ -357,7 +357,7 @@ function upOneLevel() {
 		:style="pageStyle">
 		<header class="public-gallery__topbar">
 			<img
-				v-if="settings.appearance.logoFileId"
+				v-if="settings.appearance.logoFileId || settings.appearance.instanceLogoAssetId"
 				class="public-gallery__logo"
 				:src="assetUrl('logo')"
 				:alt="t('proofing_gallery', 'Gallery logo')">

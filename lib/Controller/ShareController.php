@@ -8,6 +8,8 @@ use InvalidArgumentException;
 use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Exception\AuthorizationException;
 use OCA\ProofingGallery\Exception\GalleryConflictException;
+use OCA\ProofingGallery\Exception\PolicyViolationException;
+use OCA\ProofingGallery\Service\CapabilityPolicyService;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCA\ProofingGallery\Service\GalleryService;
 use OCA\ProofingGallery\Service\InvitationService;
@@ -31,6 +33,7 @@ final class ShareController extends Controller {
 		private InvitationService $invitations,
 		private IUserSession $userSession,
 		private IURLGenerator $urlGenerator,
+		private CapabilityPolicyService $capabilities,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -39,8 +42,11 @@ final class ShareController extends Controller {
 	#[ApiRoute(verb: 'POST', url: '/api/v1/galleries/{id}/invite')]
 	public function invite(int $id, string $recipient, string $message = ''): DataResponse {
 		try {
+			$this->capabilities->assertFeature('emailInvitations');
 			$this->invitations->send($this->galleries->get($this->userId(), $id), $recipient, $message);
 			return new DataResponse([], Http::STATUS_ACCEPTED);
+		} catch (PolicyViolationException $exception) {
+			return new DataResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
 		} catch (InvalidArgumentException $exception) {
@@ -81,6 +87,8 @@ final class ShareController extends Controller {
 				'message' => $exception->getMessage(),
 				'gallery' => $this->galleries->present($userId, $this->galleries->view($userId, $id)),
 			], Http::STATUS_CONFLICT);
+		} catch (PolicyViolationException $exception) {
+			return new DataResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
 		} catch (DoesNotExistException|ShareNotFound|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery or share not found'], Http::STATUS_NOT_FOUND);
 		} catch (InvalidArgumentException $exception) {

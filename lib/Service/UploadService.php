@@ -28,6 +28,7 @@ final class UploadService {
 		private FolderService $folders,
 		private ActivityService $activity,
 		private PolicyService $policies,
+		private CapabilityPolicyService $capabilities,
 	) {
 	}
 
@@ -204,6 +205,7 @@ final class UploadService {
 	}
 
 	private function assertEnabled(Gallery $gallery): void {
+		$this->capabilities->assertFeature('guestUploads');
 		if ($gallery->getSourceType() === 'collection') {
 			throw new InvalidArgumentException('Guest uploads are unavailable for collections');
 		}

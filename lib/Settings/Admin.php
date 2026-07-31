@@ -7,6 +7,7 @@ namespace OCA\ProofingGallery\Settings;
 use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Service\HealthService;
 use OCA\ProofingGallery\Service\PolicyService;
+use OCA\ProofingGallery\Service\CoreSharingPolicyService;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\Settings\ISettings;
 use OCP\Util;
@@ -15,6 +16,7 @@ final class Admin implements ISettings {
 	public function __construct(
 		private PolicyService $policies,
 		private HealthService $health,
+		private CoreSharingPolicyService $coreSharing,
 	) {
 	}
 
@@ -25,11 +27,13 @@ final class Admin implements ISettings {
 			'policies' => $this->policies->all(),
 			'galleryDefaults' => $this->policies->galleryDefaults(),
 			'health' => $this->health->status(),
+			'instanceSettings' => $this->policies->instanceSettings(),
+			'coreSharing' => $this->coreSharing->status(),
 		]);
 	}
 
 	public function getSection(): string {
-		return 'additional';
+		return Application::APP_ID;
 	}
 
 	public function getPriority(): int {

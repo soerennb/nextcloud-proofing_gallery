@@ -14,6 +14,7 @@ final class PublicGalleryDataService {
 	public function __construct(
 		private CollectionService $collections,
 		private MediaMetadataService $metadata,
+		private CapabilityPolicyService $capabilities,
 	) {
 	}
 
@@ -127,15 +128,26 @@ final class PublicGalleryDataService {
 		string $sortDirection,
 		string $groupBy,
 	): array {
+		$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
+		$effective = $this->capabilities->effective($settings);
+		$serialized = $settings->jsonSerialize();
+		if (!$effective['downloads']['allowed']) {
+			$serialized['delivery']['downloadScope'] = 'none';
+			$serialized['allowDownloads'] = false;
+		}
+		if (!$effective['guestUploads']['allowed']) {
+			$serialized['delivery']['guestUploads'] = false;
+			$serialized['allowGuestUploads'] = false;
+		}
+		foreach (['likes', 'colors', 'comments', 'annotations', 'selections'] as $feature) {
+			if (!$effective[$feature]['allowed']) $serialized['review'][$feature] = false;
+		}
 		return [
 			'gallery' => [
 				'id' => $gallery->getId(),
 				'title' => $gallery->getTitle(),
-				'settings' => GallerySettings::fromArray(json_decode(
-					$gallery->getSettings(),
-					true,
-					flags: JSON_THROW_ON_ERROR,
-				)),
+				'settings' => $serialized,
+				'effectiveCapabilities' => $effective,
 			],
 			'items' => $items,
 			'total' => $total,

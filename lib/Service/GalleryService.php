@@ -7,6 +7,7 @@ namespace OCA\ProofingGallery\Service;
 use InvalidArgumentException;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\GalleryMapper;
+use OCA\ProofingGallery\Db\PresetMapper;
 use OCA\ProofingGallery\Domain\GalleryStatus;
 use OCA\ProofingGallery\Domain\GalleryPurpose;
 use OCA\ProofingGallery\Dto\GallerySettings;
@@ -22,6 +23,10 @@ final class GalleryService {
 		private PublicShareService $shares,
 		private ITimeFactory $clock,
 		private PolicyService $policies,
+		private CapabilityPolicyService $capabilities,
+		private UserPreferenceService $preferences,
+		private PresetMapper $presets,
+		private NotificationService $notifications,
 	) {
 	}
 
@@ -34,6 +39,7 @@ final class GalleryService {
 		string $sourceType = 'folder',
 		string $purpose = 'custom',
 	): Gallery {
+		$this->capabilities->assertCanCreate($ownerUid);
 		$galleryPurpose = GalleryPurpose::tryFrom($purpose) ?? throw new InvalidArgumentException('Unknown gallery purpose');
 		if (!in_array($sourceType, ['folder', 'collection'], true)) {
 			throw new InvalidArgumentException('Unknown gallery source type');
@@ -61,10 +67,32 @@ final class GalleryService {
 		$gallery->setStatus(GalleryStatus::Draft->value);
 		$gallery->setPurpose($galleryPurpose->value);
 		$gallery->setWorkflowState('preparing');
-		$gallery->setSettings(json_encode(GallerySettings::merge(
-			GallerySettings::fromArray($this->policies->galleryDefaults()),
-			array_replace_recursive($galleryPurpose->settings(), $settings),
-		), JSON_THROW_ON_ERROR));
+		$preferences = $this->preferences->get($ownerUid);
+		$personalDesign = [];
+		if ($preferences['designPresetId'] !== null) {
+			try {
+				$preset = json_decode($this->presets->findOwned((int)$preferences['designPresetId'], $ownerUid)->getSettings(), true, flags: JSON_THROW_ON_ERROR);
+				if (is_array($preset['presentation'] ?? null)) $personalDesign['presentation'] = $preset['presentation'];
+			} catch (\Throwable) {
+				// A removed personal preset cleanly falls back to instance defaults.
+			}
+		}
+		$personalDefaults = [
+			'publicLocale' => $preferences['publicLocale'],
+			'lifecycle' => $preferences['lifecycle'],
+		];
+		$composed = array_replace_recursive(
+			$galleryPurpose->settings(),
+			$this->policies->galleryDefaults(),
+			['presentation' => [
+				'accentColor' => $this->policies->instanceSettings()['branding']['accentColor'],
+				'instanceLogoAssetId' => $this->policies->instanceSettings()['branding']['logoAssetId'],
+			]],
+			$personalDefaults,
+			$personalDesign,
+			$settings,
+		);
+		$gallery->setSettings(json_encode(GallerySettings::merge(GallerySettings::defaults(), $composed), JSON_THROW_ON_ERROR));
 		$gallery->setCreatedAt($now);
 		$gallery->setUpdatedAt($now);
 
@@ -72,6 +100,20 @@ final class GalleryService {
 			$gallery = $this->mapper->insert($gallery);
 			if ($sourceType === 'collection') {
 				$this->collections->initialize($gallery);
+			}
+			if ($preferences['notifications']['email'] && $preferences['notifications']['events'] !== []) {
+				try {
+					$this->notifications->save(
+						$ownerUid,
+						(int)$gallery->getId(),
+						$ownerUid,
+						$preferences['notifications']['events'],
+						'immediate',
+						$preferences['publicLocale'],
+					);
+				} catch (\Throwable) {
+					// Missing email addresses must not make gallery creation fail.
+				}
 			}
 			return $gallery;
 		} catch (\Throwable $exception) {
@@ -102,6 +144,13 @@ final class GalleryService {
 		?string $folderName,
 		array $settings = [],
 	): Gallery {
+		$preferences = $this->preferences->get($ownerUid);
+		if ($purpose === '') {
+			$purpose = (string)($preferences['defaultPurpose'] ?? $this->policies->instanceSettings()['workflow']['defaultPurpose']);
+		}
+		if ($sourceMode === 'new' && $parentFolderId === null && is_array($preferences['parentFolder'])) {
+			$parentFolderId = (int)$preferences['parentFolder']['id'];
+		}
 		$createdFolder = null;
 		try {
 			if ($sourceMode === 'new') {
@@ -178,12 +227,15 @@ final class GalleryService {
 	/** @return array<string, mixed> */
 	public function present(string $userId, Gallery $gallery): array {
 		$permissions = $this->access->permissions($userId, $gallery);
+		$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
+		$effectiveCapabilities = $this->capabilities->effective($settings, $userId);
 		if ($gallery->getSourceType() === 'collection') {
 			return [
 				...$gallery->jsonSerialize(),
 				'source' => $this->collections->sourceStatus($gallery),
 				'mediaSummary' => $this->collections->summary($gallery),
 				'permissions' => $permissions,
+				'effectiveCapabilities' => $effectiveCapabilities,
 			];
 		}
 		try {
@@ -219,6 +271,7 @@ final class GalleryService {
 			'source' => $source,
 			'mediaSummary' => $mediaSummary,
 			'permissions' => $permissions,
+			'effectiveCapabilities' => $effectiveCapabilities,
 		];
 	}
 

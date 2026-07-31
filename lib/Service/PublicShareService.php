@@ -24,6 +24,7 @@ final class PublicShareService {
 		private MediaSummaryService $summaries,
 		private CollectionService $collections,
 		private ITimeFactory $clock,
+		private CapabilityPolicyService $capabilities,
 	) {
 	}
 
@@ -33,6 +34,8 @@ final class PublicShareService {
 		?string $expiresAt,
 		string $downloadScope,
 	): Gallery {
+		$this->capabilities->assertCanPublish($gallery->getOwnerUid());
+		if ($downloadScope !== 'none') $this->capabilities->assertFeature('downloads');
 		if ($gallery->getStatus() === GalleryStatus::Archived->value) {
 			throw new InvalidArgumentException('Archived galleries cannot be published');
 		}

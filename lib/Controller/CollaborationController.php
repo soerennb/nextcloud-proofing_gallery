@@ -11,6 +11,7 @@ use OCA\ProofingGallery\Db\GalleryMapper;
 use OCA\ProofingGallery\Db\Guest;
 use OCA\ProofingGallery\Service\CollaborationService;
 use OCA\ProofingGallery\Service\GuestService;
+use OCA\ProofingGallery\Exception\PolicyViolationException;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
@@ -136,6 +137,8 @@ final class CollaborationController extends PublicShareController {
 			);
 		} catch (DoesNotExistException) {
 			return new JSONResponse(['message' => 'Guest session required'], Http::STATUS_UNAUTHORIZED);
+		} catch (PolicyViolationException $exception) {
+			return new JSONResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
 		} catch (InvalidArgumentException $exception) {
 			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_NOT_FOUND);
 		}

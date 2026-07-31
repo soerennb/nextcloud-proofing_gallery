@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0-alpha.2 — 2026-07-31
+
+- Added a dedicated global administration area with server-enforced feature,
+  publishing, group-access, retention, branding, and gallery-default policies.
+- Added personal cross-device defaults for project creation, design, language,
+  lifecycle suggestions, folders, and automatic activity subscriptions.
+- Surface effective capabilities from Proofing Gallery and inherited Nextcloud
+  sharing policies while preserving existing public links until explicit revoke.
+- Added conflict-aware APIs to preview and apply selected defaults to existing
+  galleries, plus bounded bulk revocation and reusable instance logos.
+
 ## 0.4.0-alpha.1 — 2026-07-31
 
 - Added purpose-led project creation with safe in-app Nextcloud folder creation.

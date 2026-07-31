@@ -10,7 +10,7 @@ use OCA\ProofingGallery\Domain\FeedbackVisibility;
 use OCA\ProofingGallery\Domain\GalleryMode;
 
 final readonly class GallerySettings implements JsonSerializable {
-	public const SCHEMA_VERSION = 4;
+	public const SCHEMA_VERSION = 5;
 	public const PUBLIC_METADATA_FIELDS = [
 		'capturedAt', 'camera', 'lens', 'exposure', 'title', 'description', 'creator', 'copyright',
 	];
@@ -26,7 +26,7 @@ final readonly class GallerySettings implements JsonSerializable {
 
 	/**
 	 * @param array{visibility: string, likes: bool, colors: bool, comments: bool, annotations: bool, selections: bool, colorLabels: list<string>, colorEnabled: list<bool>, selectionWarningThreshold: int} $review
-	 * @param array{accentColor: string, welcomeMessage: string, logoFileId: ?int, heroFileId: ?int, openerStyle: string, heroFocusX: int, heroFocusY: int, fontPreset: string, watermarkText: string, watermarkOpacity: int, theme: string, layout: string, tileSize: string, tileGap: string, tileRadius: string, titleAlignment: string, showFilenames: bool} $presentation
+	 * @param array{accentColor: string, welcomeMessage: string, logoFileId: ?int, instanceLogoAssetId: ?string, heroFileId: ?int, openerStyle: string, heroFocusX: int, heroFocusY: int, fontPreset: string, watermarkText: string, watermarkOpacity: int, theme: string, layout: string, tileSize: string, tileGap: string, tileRadius: string, titleAlignment: string, showFilenames: bool} $presentation
 	 * @param array{downloadScope: string, contactSheet: bool, guestUploads: bool} $delivery
 	 * @param array{folders: bool, sortBy: string, sortDirection: string, groupBy: string} $navigation
 	 * @param array{allowModeSwitch: bool, hideRejectedInPresentation: bool} $security
@@ -180,7 +180,7 @@ final readonly class GallerySettings implements JsonSerializable {
 	}
 
 	/** @return array<string, mixed> */
-	private function canonical(): array {
+	public function canonical(): array {
 		return [
 			'schemaVersion' => self::SCHEMA_VERSION,
 			'mode' => $this->mode->value,
@@ -236,6 +236,10 @@ final readonly class GallerySettings implements JsonSerializable {
 			if ($p[$key] !== null && !is_int($p[$key])) {
 				throw new InvalidArgumentException('presentation.' . $key . ' must be a file ID or null');
 			}
+		}
+		if ($p['instanceLogoAssetId'] !== null
+			&& (!is_string($p['instanceLogoAssetId']) || preg_match('/^[A-Za-z0-9]{32}\.(png|jpg|webp|svg)$/', $p['instanceLogoAssetId']) !== 1)) {
+			throw new InvalidArgumentException('presentation.instanceLogoAssetId must be a branding asset ID or null');
 		}
 		foreach (['heroFocusX', 'heroFocusY', 'watermarkOpacity'] as $key) {
 			if (!is_int($p[$key])) {
@@ -306,7 +310,7 @@ final readonly class GallerySettings implements JsonSerializable {
 				'colorEnabled' => [true, true, true, true], 'selectionWarningThreshold' => 0,
 			],
 			'presentation' => [
-				'accentColor' => '#1f6f8b', 'welcomeMessage' => '', 'logoFileId' => null, 'heroFileId' => null,
+				'accentColor' => '#1f6f8b', 'welcomeMessage' => '', 'logoFileId' => null, 'instanceLogoAssetId' => null, 'heroFileId' => null,
 				'openerStyle' => 'compact', 'heroFocusX' => 50, 'heroFocusY' => 50, 'fontPreset' => 'system',
 				'watermarkText' => '', 'watermarkOpacity' => 24, 'theme' => 'dark', 'layout' => 'grid',
 				'tileSize' => 'medium', 'tileGap' => 'normal', 'tileRadius' => 'soft', 'titleAlignment' => 'left',

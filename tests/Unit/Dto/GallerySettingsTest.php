@@ -20,7 +20,8 @@ final class GallerySettingsTest extends TestCase {
 		self::assertSame('system', $settings['appearance']['fontPreset']);
 		self::assertSame('compact', $settings['appearance']['openerStyle']);
 		self::assertSame('auto', $settings['publicLocale']);
-		self::assertSame(4, $settings['schemaVersion']);
+		self::assertSame(5, $settings['schemaVersion']);
+		self::assertNull($settings['presentation']['instanceLogoAssetId']);
 		self::assertFalse($settings['lifecycle']['enabled']);
 		self::assertSame([], $settings['metadata']['publicFields']);
 		self::assertSame('dark', $settings['presentation']['theme']);
@@ -105,6 +106,19 @@ final class GallerySettingsTest extends TestCase {
 
 		self::assertSame('light', $settings['presentation']['theme']);
 		self::assertSame('#1f6f8b', $settings['presentation']['accentColor']);
+	}
+
+	public function testAcceptsValidInstanceLogoAsset(): void {
+		$settings = GallerySettings::fromArray([
+			'presentation' => ['instanceLogoAssetId' => str_repeat('a', 32) . '.svg'],
+		])->jsonSerialize();
+
+		self::assertSame(str_repeat('a', 32) . '.svg', $settings['presentation']['instanceLogoAssetId']);
+	}
+
+	public function testRejectsUnsafeInstanceLogoAssetPath(): void {
+		$this->expectException(InvalidArgumentException::class);
+		GallerySettings::fromArray(['presentation' => ['instanceLogoAssetId' => '../logo.svg']]);
 	}
 
 	public function testAcceptsOnlyPrivacySafePublicMetadataFields(): void {

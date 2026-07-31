@@ -4,9 +4,9 @@ import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 
-import { createProject } from '../services/galleryApi.ts'
+import { createProject, fetchUserPreferences, updateUserPreferences } from '../services/galleryApi.ts'
 import type { Gallery, GalleryPurpose } from '../types.ts'
 
 defineProps<{ show: boolean }>()
@@ -34,6 +34,28 @@ const parentFolderId = ref<number | null>(null)
 const parentFolderName = ref('')
 const newFolderName = ref('')
 const saving = ref(false)
+const creationAllowed = ref(true)
+
+onMounted(async () => {
+	try {
+		const { preferences, effectiveCapabilities, instanceDefaultPurpose } = await fetchUserPreferences()
+		creationAllowed.value = effectiveCapabilities.galleryCreation.allowed
+		const preferredPurpose = preferences.defaultPurpose ?? instanceDefaultPurpose
+		if (preferredPurpose !== 'custom') purpose.value = preferredPurpose
+		if (preferences.parentFolder) {
+			parentFolderId.value = preferences.parentFolder.id
+			parentFolderName.value = preferences.parentFolder.name
+			return
+		}
+		const stored = JSON.parse(localStorage.getItem('proofing-gallery:last-parent') ?? 'null') as { id?: number; name?: string } | null
+		if (stored?.id) {
+			parentFolderId.value = stored.id
+			parentFolderName.value = stored.name ?? ''
+			await updateUserPreferences({ parentFolder: { id: stored.id, name: stored.name ?? '' } })
+			localStorage.removeItem('proofing-gallery:last-parent')
+		}
+	} catch { /* Preferences are optional; creation remains available if they cannot be loaded. */ }
+})
 
 const canSubmit = computed(() => title.value.trim() !== '' && !saving.value && (
 	sourceMode.value === 'collection'
@@ -68,7 +90,7 @@ async function chooseFolder(kind: 'source' | 'parent') {
 		} else {
 			parentFolderId.value = folder.fileid
 			parentFolderName.value = folder.displayname
-			localStorage.setItem('proofing-gallery:last-parent', JSON.stringify({ id: folder.fileid, name: folder.displayname }))
+			updateUserPreferences({ parentFolder: { id: folder.fileid, name: folder.displayname } }).catch(() => undefined)
 		}
 	} catch {
 		// Closing the picker is not an error.
@@ -89,7 +111,7 @@ function continueToSource() {
 }
 
 async function submit() {
-	if (!canSubmit.value) return
+	if (!canSubmit.value || !creationAllowed.value) return
 	saving.value = true
 	try {
 		const gallery = await createProject({
@@ -134,6 +156,9 @@ function updateOpen(open: boolean) {
 		size="large"
 		@update:open="updateOpen">
 		<form class="project-wizard" @submit.prevent="submit">
+			<p v-if="!creationAllowed" class="wizard-policy-message" role="alert">
+				{{ t('proofing_gallery', 'Gallery creation was disabled by the administrator.') }}
+			</p>
 			<div class="wizard-progress" :aria-label="t('proofing_gallery', 'Project setup progress')">
 				<span :aria-current="step === 1 ? 'step' : undefined">{{ t('proofing_gallery', 'Purpose') }}</span>
 				<span :aria-current="step === 2 ? 'step' : undefined">{{ t('proofing_gallery', 'Files and title') }}</span>
@@ -198,7 +223,7 @@ function updateOpen(open: boolean) {
 				<NcButton v-else
 					type="submit"
 					variant="primary"
-					:disabled="!canSubmit">
+					:disabled="!canSubmit || !creationAllowed">
 					{{ saving ? t('proofing_gallery', 'Creating…') : t('proofing_gallery', 'Create project') }}
 				</NcButton>
 			</footer>
@@ -208,6 +233,8 @@ function updateOpen(open: boolean) {
 
 <style scoped>
 .project-wizard { padding: 0 32px 28px; }
+
+.wizard-policy-message { margin: 0 0 14px; padding: 10px 12px; border-inline-start: 4px solid var(--color-warning); background: var(--color-background-dark); }
 
 .wizard-progress { display: grid; grid-template-columns: 1fr 1fr; margin-bottom: 16px; border-bottom: 1px solid var(--color-border); color: var(--color-text-maxcontrast); }
 

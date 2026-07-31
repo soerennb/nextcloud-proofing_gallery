@@ -19,6 +19,7 @@ use OCA\ProofingGallery\Http\TemporaryFileResponse;
 use OCA\ProofingGallery\Exception\CollectionConflictException;
 use OCA\ProofingGallery\Exception\MetadataConflictException;
 use OCA\ProofingGallery\Exception\GalleryConflictException;
+use OCA\ProofingGallery\Exception\PolicyViolationException;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCP\AppFramework\Controller;
@@ -87,6 +88,8 @@ final class GalleryController extends Controller {
 			$userId = $this->userId();
 			$gallery = $this->galleries->create($userId, $title, $folderId, $settings, $sourceType);
 			return new DataResponse($this->galleries->present($userId, $gallery), Http::STATUS_CREATED);
+		} catch (PolicyViolationException $exception) {
+			return new DataResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
 		} catch (InvalidArgumentException|FolderAccessException $exception) {
 			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
@@ -110,6 +113,8 @@ final class GalleryController extends Controller {
 				$userId, $title, $purpose, $sourceMode, $folderId, $parentFolderId, $folderName, $settings,
 			);
 			return new DataResponse($this->galleries->present($userId, $gallery), Http::STATUS_CREATED);
+		} catch (PolicyViolationException $exception) {
+			return new DataResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
 		} catch (InvalidArgumentException|FolderAccessException $exception) {
 			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}

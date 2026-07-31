@@ -46,9 +46,8 @@ final class PublicShareTemplateProvider implements IPublicShareTemplateProvider 
 		$this->initialState->provideInitialState('public-gallery', [
 			'id' => $gallery->getId(),
 			'title' => $gallery->getTitle(),
-			'settings' => GallerySettings::fromArray(
-				json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR),
-			),
+			'settings' => $initialPage['gallery']['settings'],
+			'effectiveCapabilities' => $initialPage['gallery']['effectiveCapabilities'],
 			'token' => $token,
 			'path' => $path,
 			'initialPage' => $initialPage,

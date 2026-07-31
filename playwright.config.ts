@@ -5,6 +5,9 @@ export default defineConfig({
 	globalSetup: './tests/e2e/global-setup.ts',
 	outputDir: './test-results',
 	fullyParallel: false,
+	// The suite deliberately shares one Nextcloud tenant and its seeded gallery.
+	// Serial execution prevents revision conflicts between spec files.
+	workers: 1,
 	retries: 0,
 	reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
 	use: {

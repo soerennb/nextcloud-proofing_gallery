@@ -23,6 +23,7 @@ final class LifecycleService {
 		private VersionService $versions,
 		private GalleryMapper $galleries,
 		private PublicShareService $shares,
+		private CapabilityPolicyService $capabilities,
 	) {
 	}
 
@@ -47,6 +48,7 @@ final class LifecycleService {
 
 	/** @return array{revoked: int, archived: int} */
 	private function automateGalleries(int $now): array {
+		if (!$this->capabilities->feature('lifecycleAutomation')) return ['revoked' => 0, 'archived' => 0];
 		$revoked = 0;
 		$archived = 0;
 		foreach ($this->galleries->findLifecycleCandidates() as $gallery) {

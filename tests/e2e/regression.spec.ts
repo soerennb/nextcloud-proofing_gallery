@@ -123,22 +123,84 @@ test('administrator policies reject out-of-range API values and health remains a
 		},
 	})
 	expect(invalid.status()).toBe(422)
+	const settings = await request.get(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/admin/settings?format=json`, {
+		headers: apiHeaders,
+	})
+	expect(settings.status()).toBe(200)
+	const settingsDocument = await settings.json() as { instanceSettings: { schemaVersion: number }, coreSharing: { publicLinksAllowed: boolean } }
+	expect(settingsDocument.instanceSettings.schemaVersion).toBe(2)
+	expect(typeof settingsDocument.coreSharing.publicLinksAllowed).toBe('boolean')
+	const logoEndpoint = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/admin/branding/logo?format=json`
+	const uploadedLogo = await request.post(logoEndpoint, {
+		headers: apiHeaders,
+		multipart: {
+			logo: {
+				name: 'studio.svg',
+				mimeType: 'image/svg+xml',
+				buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="#9b4a32"/></svg>'),
+			},
+		},
+	})
+	expect(uploadedLogo.status()).toBe(201)
+	expect((await uploadedLogo.json() as { asset: { id: string } }).asset.id).toMatch(/^[A-Za-z0-9]{32}\.svg$/)
+	expect((await request.delete(logoEndpoint, { headers: apiHeaders })).status()).toBe(200)
 
 	const context = await browser.newContext()
 	const page = await context.newPage()
-	await page.goto(`${baseURL}/settings/admin/additional`)
+	await page.goto(`${baseURL}/settings/admin/proofing_gallery`)
 	await page.getByRole('textbox', { name: /Account name/ }).fill('admin')
 	await page.getByRole('textbox', { name: 'Password' }).fill('admin')
 	await page.getByRole('button', { name: 'Log in', exact: true }).click()
-	await expect(page.getByRole('heading', { name: 'Proofing Gallery' })).toBeVisible()
+	await expect(page.getByRole('heading', { level: 2, name: 'Proofing Gallery' })).toBeVisible()
 	await expect(page.getByText('Cleanup status')).toBeVisible()
 	await expect(page.getByText(/Not run yet|Healthy|Overdue|Failed/).first()).toBeVisible()
 	const adminStyles = page.locator('link[rel="stylesheet"][href*="proofing_gallery-admin"]')
 	await expect(adminStyles).toHaveCount(1)
-	const healthRow = page.locator('.proofing-gallery-admin__health > div').first()
-	await expect(healthRow).toHaveCSS('display', 'grid')
+	const healthRow = page.locator('.proofing-settings__health dl > div').first()
+	await expect(healthRow).toHaveCSS('display', 'flex')
 	expect(await healthRow.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+	let violations = await new AxeBuilder({ page }).include('#proofing-gallery-admin').analyze()
+	expect(violations.violations).toEqual([])
+	await page.setViewportSize({ width: 390, height: 844 })
+	expect(await page.locator('#proofing-gallery-admin').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+	violations = await new AxeBuilder({ page }).include('#proofing-gallery-admin').analyze()
+	expect(violations.violations).toEqual([])
 	await context.close()
+})
+
+test('photographer preferences persist through the personal settings API and page', async ({ browser, request, baseURL }) => {
+	const endpoint = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/user/preferences?format=json`
+	const before = await request.get(endpoint, { headers: apiHeaders })
+	expect(before.status()).toBe(200)
+	const original = await before.json() as { preferences: Record<string, unknown> }
+	try {
+		const saved = await request.put(endpoint, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+			data: { preferences: { defaultPurpose: 'selection', publicLocale: 'de' } },
+		})
+		expect(saved.status()).toBe(200)
+		const current = await request.get(endpoint, { headers: apiHeaders }).then(response => response.json()) as {
+			preferences: { defaultPurpose: string, publicLocale: string }
+			effectiveCapabilities: { galleryCreation: { allowed: boolean } }
+		}
+		expect(current.preferences).toMatchObject({ defaultPurpose: 'selection', publicLocale: 'de' })
+		expect(typeof current.effectiveCapabilities.galleryCreation.allowed).toBe('boolean')
+
+		const context = await browser.newContext()
+		const page = await context.newPage()
+		await page.goto(`${baseURL}/settings/user/additional`)
+		await page.getByRole('textbox', { name: /Account name/ }).fill('admin')
+		await page.getByRole('textbox', { name: 'Password' }).fill('admin')
+		await page.getByRole('button', { name: 'Log in', exact: true }).click()
+		await expect(page.locator('#proofing-gallery-personal').getByRole('heading', { name: 'Proofing Gallery' })).toBeVisible()
+		await expect(page.getByLabel('Preferred purpose')).toHaveValue('selection')
+		await context.close()
+	} finally {
+		await request.put(endpoint, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+			data: { preferences: original.preferences },
+		})
+	}
 })
 
 test('collection anchor reconciliation is admin-only and preserves recent and referenced anchors', async ({ request, baseURL }) => {
@@ -250,14 +312,18 @@ test('owner preset and locale controls remain clear and responsive', async ({ pa
 	await page.getByRole('textbox', { name: /Account name/ }).fill('admin')
 	await page.getByRole('textbox', { name: 'Password' }).fill('admin')
 	await page.getByRole('button', { name: 'Log in', exact: true }).click()
-	await page.getByRole('button', { name: /^E2E Gallery / }).click()
+	await page.getByRole('button', { name: /^E2E Gallery (?:Presentation|Proofing)/ }).click()
 	await expect(page.getByRole('heading', { name: 'Reusable preset' })).toBeVisible()
 
 	const locale = page.getByRole('combobox', { name: 'Public gallery language' })
-	await locale.selectOption('de')
-	await expect(page.getByText('Unsaved changes')).toBeVisible()
-	await page.getByRole('button', { name: 'Discard', exact: true }).click()
-	await expect(locale).toHaveValue('auto')
+	const originalLocale = await locale.inputValue()
+	await locale.selectOption(originalLocale === 'de' ? 'en' : 'de')
+	await expect(page.locator('.save-indicator[data-state="pending"]')).toBeVisible()
+	await expect(page.locator('.save-indicator[data-state="saved"]')).toBeVisible()
+	await locale.selectOption(originalLocale)
+	await expect(page.locator('.save-indicator[data-state="pending"]')).toBeVisible()
+	await expect(page.locator('.save-indicator[data-state="saved"]')).toBeVisible()
+	await expect(locale).toHaveValue(originalLocale)
 
 	await page.getByRole('button', { name: 'Reusable preset' }).click()
 	await page.getByRole('textbox', { name: 'Preset name' }).fill(presetName)
@@ -480,8 +546,8 @@ test('notification and invitation controls stay understandable and responsive', 
 	await page.getByRole('textbox', { name: /Account name/ }).fill('admin')
 	await page.getByRole('textbox', { name: 'Password' }).fill('admin')
 	await page.getByRole('button', { name: 'Log in', exact: true }).click()
-	await page.getByRole('button', { name: /^E2E Gallery / }).click()
-	await page.getByRole('button', { name: 'Access', exact: true }).click()
+	await page.getByRole('button', { name: /^E2E Gallery (?:Presentation|Proofing)/ }).click()
+	await page.getByRole('button', { name: 'Deliver', exact: true }).click()
 	await expect(page.getByRole('heading', { name: 'Email notifications' })).toBeVisible()
 	await expect(page.getByText('Notifications are off until you explicitly subscribe an eligible person.')).toBeVisible()
 	await expect(page.getByRole('combobox', { name: 'Delivery' })).toHaveValue('daily')
