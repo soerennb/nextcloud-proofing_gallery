@@ -17,7 +17,7 @@ function formattedDate(timestamp: number): string {
 }
 
 function previewUrl(gallery: Gallery): string {
-	const fileId = gallery.settings.appearance.heroFileId ?? gallery.mediaSummary.coverFileId
+	const fileId = gallery.settings.presentation.heroFileId ?? gallery.mediaSummary.coverFileId
 	return fileId
 		? ownerPreviewUrl(gallery.id, fileId, 360, 204)
 		: ''

@@ -37,6 +37,13 @@ export interface CollaborationState {
 		visibility: 'private' | 'collaborative'
 		colorLabels: string[]
 		requiresSession: boolean
+		features?: {
+			likes: boolean
+			colors: boolean
+			comments: boolean
+			annotations: boolean
+			selections: boolean
+		}
 	}
 	guest: GuestIdentity | null
 	likes: Record<number, { count: number; mine: boolean }>

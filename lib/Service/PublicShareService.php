@@ -8,6 +8,7 @@ use DateTime;
 use InvalidArgumentException;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\GalleryMapper;
+use OCA\ProofingGallery\Dto\GallerySettings;
 use OCA\ProofingGallery\Domain\GalleryStatus;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Constants;
@@ -30,7 +31,7 @@ final class PublicShareService {
 		Gallery $gallery,
 		?string $password,
 		?string $expiresAt,
-		bool $allowDownloads,
+		string $downloadScope,
 	): Gallery {
 		if ($gallery->getStatus() === GalleryStatus::Archived->value) {
 			throw new InvalidArgumentException('Archived galleries cannot be published');
@@ -45,7 +46,10 @@ final class PublicShareService {
 
 		$share->setLabel($gallery->getTitle());
 		$share->setPermissions(Constants::PERMISSION_READ);
-		$share->setHideDownload(!$allowDownloads);
+		if (!in_array($downloadScope, ['none', 'individual', 'selection', 'all'], true)) {
+			throw new InvalidArgumentException('Invalid download scope');
+		}
+		$share->setHideDownload(!in_array($downloadScope, ['individual', 'all'], true));
 		if ($gallery->getShareToken() === null || $password !== null) {
 			$share->setPassword($password === '' ? null : $password);
 		}
@@ -55,9 +59,10 @@ final class PublicShareService {
 			? $this->shareManager->createShare($share)
 			: $this->shareManager->updateShare($share);
 
-		$settings = json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR);
-		$settings['allowDownloads'] = $allowDownloads;
-		$gallery->setSettings(json_encode($settings, JSON_THROW_ON_ERROR));
+		$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
+		$gallery->setSettings(json_encode(GallerySettings::merge($settings, [
+			'delivery' => ['downloadScope' => $downloadScope],
+		]), JSON_THROW_ON_ERROR));
 		$gallery->setShareToken($share->getToken());
 		$gallery->setStatus(GalleryStatus::Published->value);
 		$gallery->setUpdatedAt($this->clock->getTime());

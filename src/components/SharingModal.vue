@@ -30,7 +30,7 @@ const emit = defineEmits<{
 const password = ref('')
 const removePassword = ref(false)
 const expiresAt = ref('')
-const allowDownloads = ref(props.gallery.settings.allowDownloads)
+const downloadScope = ref(props.gallery.settings.delivery.downloadScope)
 const publicUrl = ref(props.gallery.shareToken ? absoluteShareUrl(props.gallery.shareToken) : '')
 const publishing = ref(false)
 const recipient = ref('')
@@ -47,7 +47,7 @@ const publishDisabled = computed(() => publishing.value
 
 watch(() => props.gallery, gallery => {
 	publicUrl.value = gallery.shareToken ? absoluteShareUrl(gallery.shareToken) : ''
-	allowDownloads.value = gallery.settings.allowDownloads
+	downloadScope.value = gallery.settings.delivery.downloadScope
 })
 
 watch(() => props.show, async show => {
@@ -118,7 +118,7 @@ async function publish() {
 		const result = await publishGallery(props.gallery.id, {
 			password: removePassword.value ? '' : password.value || null,
 			expiresAt: expiresAt.value,
-			allowDownloads: allowDownloads.value,
+			downloadScope: downloadScope.value,
 		})
 		publicUrl.value = result.url
 		password.value = ''
@@ -230,9 +230,15 @@ function updateOpen(open: boolean) {
 				<NcCheckboxRadioSwitch v-if="published" v-model="removePassword" type="checkbox">
 					{{ t('proofing_gallery', 'Remove the current password') }}
 				</NcCheckboxRadioSwitch>
-				<NcCheckboxRadioSwitch v-model="allowDownloads" type="switch">
-					{{ t('proofing_gallery', 'Allow original downloads') }}
-				</NcCheckboxRadioSwitch>
+				<label class="date-field">
+					<span>{{ t('proofing_gallery', 'Downloads') }}</span>
+					<select v-model="downloadScope" name="downloadScope">
+						<option value="none">{{ t('proofing_gallery', 'Disabled') }}</option>
+						<option value="individual">{{ t('proofing_gallery', 'Individual files') }}</option>
+						<option value="selection">{{ t('proofing_gallery', 'Saved selections') }}</option>
+						<option value="all">{{ t('proofing_gallery', 'Files and selections') }}</option>
+					</select>
+				</label>
 				<p v-if="!published && gallery.sourceType === 'collection' && gallery.mediaSummary.total === 0" class="sharing-dialog__hint">
 					{{ t('proofing_gallery', 'Add at least one available file before publishing this collection.') }}
 				</p>
@@ -385,7 +391,8 @@ function updateOpen(open: boolean) {
 	font-size: 13px;
 }
 
-.date-field input {
+.date-field input,
+.date-field select {
 	min-height: 44px;
 	padding: 8px 10px;
 	border: 1px solid var(--color-border-maxcontrast);

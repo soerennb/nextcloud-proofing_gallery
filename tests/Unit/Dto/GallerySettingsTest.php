@@ -20,6 +20,10 @@ final class GallerySettingsTest extends TestCase {
 		self::assertSame('system', $settings['appearance']['fontPreset']);
 		self::assertSame('compact', $settings['appearance']['openerStyle']);
 		self::assertSame('auto', $settings['publicLocale']);
+		self::assertSame(2, $settings['schemaVersion']);
+		self::assertSame('dark', $settings['presentation']['theme']);
+		self::assertSame('none', $settings['delivery']['downloadScope']);
+		self::assertTrue($settings['review']['likes']);
 	}
 
 	public function testRejectsUnknownKeys(): void {
@@ -73,5 +77,31 @@ final class GallerySettingsTest extends TestCase {
 	public function testRejectsUnknownPublicLocale(): void {
 		$this->expectException(InvalidArgumentException::class);
 		GallerySettings::fromArray(['publicLocale' => 'fr']);
+	}
+
+	public function testAcceptsVersionTwoSectionsAndKeepsLegacyAliases(): void {
+		$settings = GallerySettings::fromArray([
+			'mode' => 'collaboration',
+			'presentation' => ['theme' => 'light', 'layout' => 'masonry', 'tileGap' => 'tight'],
+			'review' => ['comments' => false, 'selectionWarningThreshold' => 12],
+			'delivery' => ['downloadScope' => 'selection'],
+			'navigation' => ['sortBy' => 'modified', 'sortDirection' => 'desc'],
+		])->jsonSerialize();
+
+		self::assertSame('light', $settings['presentation']['theme']);
+		self::assertSame('masonry', $settings['presentation']['layout']);
+		self::assertFalse($settings['review']['comments']);
+		self::assertSame('selection', $settings['delivery']['downloadScope']);
+		self::assertTrue($settings['allowDownloads']);
+		self::assertSame($settings['presentation'], $settings['appearance']);
+	}
+
+	public function testDeepMergesOneSettingsSection(): void {
+		$settings = GallerySettings::merge(GallerySettings::defaults(), [
+			'presentation' => ['theme' => 'light'],
+		])->jsonSerialize();
+
+		self::assertSame('light', $settings['presentation']['theme']);
+		self::assertSame('#1f6f8b', $settings['presentation']['accentColor']);
 	}
 }

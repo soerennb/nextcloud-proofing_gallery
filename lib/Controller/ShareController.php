@@ -52,11 +52,13 @@ final class ShareController extends Controller {
 		int $id,
 		?string $password = null,
 		?string $expiresAt = null,
-		bool $allowDownloads = false,
+		?string $downloadScope = null,
+		?bool $allowDownloads = null,
 	): DataResponse {
 		try {
 			$gallery = $this->galleries->get($this->userId(), $id);
-			$gallery = $this->shares->publish($gallery, $password, $expiresAt, $allowDownloads);
+			$scope = $downloadScope ?? ($allowDownloads === true ? 'all' : 'none');
+			$gallery = $this->shares->publish($gallery, $password, $expiresAt, $scope);
 			return new DataResponse([
 				'gallery' => $this->galleries->present($this->userId(), $gallery),
 				'url' => $this->urlGenerator->linkToRouteAbsolute('files_sharing.sharecontroller.showShare', [

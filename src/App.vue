@@ -7,7 +7,7 @@ import NcContent from '@nextcloud/vue/components/NcContent'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
-import { defineAsyncComponent, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 
 import GalleryList from './components/GalleryList.vue'
 import { archiveGallery, fetchGalleries, restoreGallery } from './services/galleryApi.ts'
@@ -21,10 +21,24 @@ const galleries = ref<Gallery[]>([])
 const loading = ref(true)
 const archived = ref(false)
 const search = ref('')
+const modeFilter = ref<'all' | 'presentation' | 'collaboration'>('all')
+const sourceFilter = ref<'all' | 'folder' | 'collection'>('all')
+const statusFilter = ref<'all' | 'draft' | 'published'>('all')
+const gallerySort = ref<'updated' | 'title' | 'created'>('updated')
 const showCreate = ref(false)
 const selectedGallery = ref<Gallery | null>(null)
 const shareGallery = ref<Gallery | null>(null)
 let searchTimer: ReturnType<typeof setTimeout> | undefined
+
+const visibleGalleries = computed(() => [...galleries.value]
+	.filter(gallery => modeFilter.value === 'all' || gallery.settings.mode === modeFilter.value)
+	.filter(gallery => sourceFilter.value === 'all' || gallery.sourceType === sourceFilter.value)
+	.filter(gallery => archived.value || statusFilter.value === 'all' || gallery.status === statusFilter.value)
+	.sort((left, right) => {
+		if (gallerySort.value === 'title') return left.title.localeCompare(right.title)
+		if (gallerySort.value === 'created') return right.createdAt - left.createdAt
+		return right.updatedAt - left.updatedAt
+	}))
 
 async function notify(kind: 'error' | 'success', message: string) {
 	const dialogs = await import('@nextcloud/dialogs')
@@ -149,7 +163,39 @@ onMounted(load)
 						v-model="search"
 						type="search"
 						:label="t('proofing_gallery', 'Search galleries')" />
-					<p>{{ n('proofing_gallery', '%n gallery', '%n galleries', galleries.length) }}</p>
+					<label>
+						<span>{{ t('proofing_gallery', 'Mode') }}</span>
+						<select v-model="modeFilter">
+							<option value="all">{{ t('proofing_gallery', 'All') }}</option>
+							<option value="presentation">{{ t('proofing_gallery', 'Presentation') }}</option>
+							<option value="collaboration">{{ t('proofing_gallery', 'Proofing') }}</option>
+						</select>
+					</label>
+					<label>
+						<span>{{ t('proofing_gallery', 'Source') }}</span>
+						<select v-model="sourceFilter">
+							<option value="all">{{ t('proofing_gallery', 'All') }}</option>
+							<option value="folder">{{ t('proofing_gallery', 'Folder') }}</option>
+							<option value="collection">{{ t('proofing_gallery', 'Collection') }}</option>
+						</select>
+					</label>
+					<label v-if="!archived">
+						<span>{{ t('proofing_gallery', 'Status') }}</span>
+						<select v-model="statusFilter">
+							<option value="all">{{ t('proofing_gallery', 'All') }}</option>
+							<option value="draft">{{ t('proofing_gallery', 'Draft') }}</option>
+							<option value="published">{{ t('proofing_gallery', 'Published') }}</option>
+						</select>
+					</label>
+					<label>
+						<span>{{ t('proofing_gallery', 'Sort') }}</span>
+						<select v-model="gallerySort">
+							<option value="updated">{{ t('proofing_gallery', 'Last changed') }}</option>
+							<option value="created">{{ t('proofing_gallery', 'Newest') }}</option>
+							<option value="title">{{ t('proofing_gallery', 'Title') }}</option>
+						</select>
+					</label>
+					<p>{{ n('proofing_gallery', '%n gallery', '%n galleries', visibleGalleries.length) }}</p>
 				</div>
 
 				<div v-if="loading" class="gallery-loading">
@@ -158,8 +204,8 @@ onMounted(load)
 				</div>
 
 				<GalleryList
-					v-else-if="galleries.length > 0"
-					:galleries="galleries"
+					v-else-if="visibleGalleries.length > 0"
+					:galleries="visibleGalleries"
 					:archived="archived"
 					@select="selectGallery"
 					@share="shareGallery = $event"
@@ -259,13 +305,30 @@ onMounted(load)
 .gallery-toolbar {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	gap: 20px;
+	flex-wrap: wrap;
+	gap: 10px;
 	margin-bottom: 20px;
 }
 
 .gallery-toolbar > :first-child {
-	width: min(360px, 100%);
+	width: min(320px, 100%);
+	margin-inline-end: auto;
+}
+
+.gallery-toolbar label {
+	display: grid;
+	gap: 3px;
+	color: var(--color-text-maxcontrast);
+	font-size: 11px;
+}
+
+.gallery-toolbar select {
+	min-height: 36px;
+	padding: 0 8px;
+	border: 1px solid var(--color-border-maxcontrast);
+	border-radius: 6px;
+	background: var(--color-main-background);
+	color: var(--color-main-text);
 }
 
 .gallery-toolbar p {

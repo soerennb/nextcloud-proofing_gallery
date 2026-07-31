@@ -28,6 +28,10 @@ const currentPath = ref(props.gallery.initialPage?.path ?? '')
 const settings = ref(props.gallery.initialPage?.gallery.settings ?? props.gallery.settings)
 const title = ref(props.gallery.initialPage?.gallery.title ?? props.gallery.title)
 const hasMore = computed(() => items.value.length < total.value)
+const selectedItems = computed(() => mediaItems.value.filter(item => selectedIds.value.includes(item.id)))
+const canDownloadSelection = computed(() => ['selection', 'all'].includes(
+	settings.value.delivery?.downloadScope ?? (settings.value.allowDownloads ? 'all' : 'none'),
+))
 const pageStyle = computed(() => ({
 	'--gallery-accent': settings.value.appearance.accentColor,
 	'--hero-focus': `${settings.value.appearance.heroFocusX}% ${settings.value.appearance.heroFocusY}%`,
@@ -46,7 +50,15 @@ const collaborationError = ref('')
 const selectionName = ref('')
 const selectionMessage = ref('')
 const savingSelection = ref(false)
+const guestDialogOpen = ref(false)
+const pendingMutation = ref<{ path: string; method: 'POST' | 'PUT' | 'DELETE'; body?: unknown } | null>(null)
+const search = ref('')
+const sortBy = ref(settings.value.navigation?.sortBy ?? 'name')
+const sortDirection = ref(settings.value.navigation?.sortDirection ?? 'asc')
+const groupBy = ref(settings.value.navigation?.groupBy ?? 'none')
+const layout = ref(settings.value.presentation?.layout ?? settings.value.appearance.layout ?? 'grid')
 const nonce = ref(sessionStorage.getItem(`proofing-gallery-nonce:${props.gallery.token}`) ?? '')
+let searchTimer: number | undefined
 
 onMounted(() => {
 	if (props.gallery.initialPage) {
@@ -59,6 +71,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
 	document.removeEventListener('visibilitychange', onVisibilityChange)
 	window.clearInterval(collaborationTimer)
+	window.clearTimeout(searchTimer)
 })
 
 function deferCollaborationInitialization() {
@@ -72,6 +85,10 @@ async function loadPage(offset: number) {
 			limit: '60',
 			offset: String(offset),
 			path: currentPath.value,
+			search: search.value,
+			sortBy: sortBy.value,
+			sortDirection: sortDirection.value,
+			groupBy: groupBy.value,
 		})
 		const response = await fetch(publicEndpoint(`gallery?${query}`), {
 			credentials: 'same-origin',
@@ -106,6 +123,12 @@ async function initializeCollaboration() {
 		// A visitor may not have a guest identity yet.
 	}
 	await loadCollaboration()
+	guestDialogOpen.value = false
+	if (pendingMutation.value) {
+		const pending = pendingMutation.value
+		pendingMutation.value = null
+		await performMutation(pending.path, pending.method, pending.body)
+	}
 	startCollaborationPolling()
 }
 
@@ -164,7 +187,15 @@ async function loadCollaboration() {
 }
 
 async function mutateCollaboration(path: string, method: 'POST' | 'PUT' | 'DELETE', body?: unknown) {
-	if (!guest.value || !nonce.value) return false
+	if (!guest.value || !nonce.value) {
+		pendingMutation.value = { path, method, body }
+		guestDialogOpen.value = true
+		return false
+	}
+	return performMutation(path, method, body)
+}
+
+async function performMutation(path: string, method: 'POST' | 'PUT' | 'DELETE', body?: unknown) {
 	const response = await fetch(publicEndpoint(`collaboration/${path}`), {
 		method,
 		credentials: 'same-origin',
@@ -182,6 +213,16 @@ async function mutateCollaboration(path: string, method: 'POST' | 'PUT' | 'DELET
 	}
 	await loadCollaboration()
 	return true
+}
+
+function applyView() {
+	error.value = false
+	loadPage(0)
+}
+
+function queueSearch() {
+	window.clearTimeout(searchTimer)
+	searchTimer = window.setTimeout(applyView, 250)
 }
 
 async function saveSelection() {
@@ -251,7 +292,17 @@ function upOneLevel() {
 </script>
 
 <template>
-	<main class="public-gallery" :class="`public-gallery--font-${settings.appearance.fontPreset}`" :style="pageStyle">
+	<main
+		class="public-gallery"
+		:class="[
+			`public-gallery--font-${settings.appearance.fontPreset}`,
+			`public-gallery--theme-${settings.presentation?.theme ?? settings.appearance.theme ?? 'dark'}`,
+			`public-gallery--layout-${layout}`,
+			`public-gallery--tiles-${settings.presentation?.tileSize ?? settings.appearance.tileSize ?? 'medium'}`,
+			`public-gallery--gap-${settings.presentation?.tileGap ?? settings.appearance.tileGap ?? 'normal'}`,
+			`public-gallery--radius-${settings.presentation?.tileRadius ?? settings.appearance.tileRadius ?? 'soft'}`,
+		]"
+		:style="pageStyle">
 		<header class="public-gallery__topbar">
 			<img
 				v-if="settings.appearance.logoFileId"
@@ -273,7 +324,7 @@ function upOneLevel() {
 				'public-gallery__hero--cinematic': cinematicOpener,
 			}"
 			:style="settings.appearance.heroFileId ? { backgroundImage: `url(${assetUrl('hero')})` } : undefined">
-			<div>
+			<div :class="`public-gallery__hero-copy--${settings.presentation?.titleAlignment ?? settings.appearance.titleAlignment ?? 'left'}`">
 				<h2 class="public-gallery__title">
 					{{ title }}
 				</h2>
@@ -284,36 +335,7 @@ function upOneLevel() {
 		</section>
 
 		<section class="public-gallery__content" :aria-busy="loading">
-			<form
-				v-if="settings.mode === 'collaboration' && !guest"
-				class="guest-onboarding"
-				@submit.prevent="joinCollaboration">
-				<div>
-					<strong>{{ t('proofing_gallery', 'Join the review') }}</strong>
-					<span>{{ t('proofing_gallery', 'Your name identifies your feedback in this gallery.') }}</span>
-				</div>
-				<input
-					id="proofing-gallery-guest-name"
-					v-model="guestName"
-					name="displayName"
-					autocomplete="name"
-					required
-					maxlength="120"
-					:placeholder="t('proofing_gallery', 'Your name')"
-					:aria-label="t('proofing_gallery', 'Your name')">
-				<input
-					id="proofing-gallery-guest-email"
-					v-model="guestEmail"
-					name="email"
-					autocomplete="email"
-					type="email"
-					:placeholder="t('proofing_gallery', 'Email (optional)')"
-					:aria-label="t('proofing_gallery', 'Email (optional)')">
-				<button type="submit" :disabled="joining">
-					{{ joining ? t('proofing_gallery', 'Joining…') : t('proofing_gallery', 'Start review') }}
-				</button>
-			</form>
-			<div v-else-if="settings.mode === 'collaboration' && guest" class="guest-identity">
+			<div v-if="settings.mode === 'collaboration' && guest" class="guest-identity">
 				<div>
 					<span>{{ t('proofing_gallery', 'Reviewing as {name}', { name: guest.displayName }) }}</span>
 					<small>
@@ -331,6 +353,48 @@ function upOneLevel() {
 			<p v-if="collaborationError" class="collaboration-error" role="status">
 				{{ collaborationError }}
 			</p>
+			<div class="gallery-toolbar" :aria-label="t('proofing_gallery', 'Gallery tools')">
+				<label class="gallery-toolbar__search">
+					<span class="visually-hidden">{{ t('proofing_gallery', 'Filter by filename') }}</span>
+					<input
+						v-model="search"
+						type="search"
+						:placeholder="t('proofing_gallery', 'Filter by filename')"
+						@input="queueSearch">
+				</label>
+				<label>
+					<span>{{ t('proofing_gallery', 'Sort') }}</span>
+					<select v-model="sortBy" @change="applyView">
+						<option value="name">{{ t('proofing_gallery', 'Filename') }}</option>
+						<option value="modified">{{ t('proofing_gallery', 'Last changed') }}</option>
+						<option value="size">{{ t('proofing_gallery', 'File size') }}</option>
+					</select>
+				</label>
+				<button
+					type="button"
+					:aria-label="t('proofing_gallery', 'Reverse order')"
+					@click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'; applyView()">
+					{{ sortDirection === 'asc' ? '↑' : '↓' }}
+				</button>
+				<label>
+					<span>{{ t('proofing_gallery', 'Group') }}</span>
+					<select v-model="groupBy" @change="applyView">
+						<option value="none">{{ t('proofing_gallery', 'None') }}</option>
+						<option value="type">{{ t('proofing_gallery', 'File type') }}</option>
+					</select>
+				</label>
+				<label>
+					<span>{{ t('proofing_gallery', 'View') }}</span>
+					<select v-model="layout">
+						<option value="grid">{{ t('proofing_gallery', 'Grid') }}</option>
+						<option value="masonry">{{ t('proofing_gallery', 'Masonry') }}</option>
+						<option value="list">{{ t('proofing_gallery', 'List') }}</option>
+					</select>
+				</label>
+				<button v-if="settings.mode === 'collaboration' && !guest" type="button" @click="guestDialogOpen = true">
+					{{ t('proofing_gallery', 'Identify for feedback') }}
+				</button>
+			</div>
 			<div class="public-gallery__summary">
 				<p>
 					<button v-if="currentPath" type="button" @click="upOneLevel">
@@ -343,11 +407,17 @@ function upOneLevel() {
 					{{ t('proofing_gallery', 'Select an image to review it.') }}
 				</p>
 			</div>
-			<div v-if="(settings.allowDownloads || settings.mode === 'collaboration') && selectedIds.length" class="delivery-bar">
+			<div v-if="(canDownloadSelection || (settings.mode === 'collaboration' && settings.review?.selections !== false)) && selectedIds.length" class="delivery-bar proof-rail">
+				<div class="proof-rail__previews" aria-hidden="true">
+					<img v-for="item in selectedItems.slice(0, 6)"
+						:key="item.id"
+						:src="previewUrl(item, 96, 72)"
+						alt="">
+				</div>
 				<span>{{ n('proofing_gallery', '%n item selected', '%n items selected', selectedIds.length) }}</span>
-				<a v-if="settings.allowDownloads" :href="selectionUrl('download/selection')">{{ t('proofing_gallery', 'Download ZIP') }}</a>
-				<a v-if="settings.allowDownloads" :href="selectionUrl('contact-sheet')" target="_blank">{{ t('proofing_gallery', 'Print contact sheet') }}</a>
-				<template v-if="settings.mode === 'collaboration' && guest">
+				<a v-if="canDownloadSelection" :href="selectionUrl('download/selection')">{{ t('proofing_gallery', 'Download ZIP') }}</a>
+				<a v-if="canDownloadSelection && settings.delivery?.contactSheet !== false" :href="selectionUrl('contact-sheet')" target="_blank">{{ t('proofing_gallery', 'Print contact sheet') }}</a>
+				<template v-if="settings.mode === 'collaboration' && settings.review?.selections !== false">
 					<input
 						id="proofing-gallery-selection-name"
 						v-model="selectionName"
@@ -387,7 +457,7 @@ function upOneLevel() {
 				<p>{{ t('proofing_gallery', 'New photographs will appear here automatically.') }}</p>
 			</div>
 
-			<div v-else class="media-grid">
+			<div v-else class="media-grid" :class="`media-grid--${layout}`">
 				<article
 					v-for="(item, index) in items"
 					:key="item.id"
@@ -405,7 +475,7 @@ function upOneLevel() {
 							:fetchpriority="index === 0 ? 'high' : 'auto'">
 						<span v-else-if="item.folder" class="media-tile__folder" aria-hidden="true" />
 						<span v-else class="media-tile__video" aria-hidden="true">▶</span>
-						<span v-if="settings.showFilenames" class="media-tile__name" aria-hidden="true">
+						<span v-if="settings.presentation?.showFilenames ?? settings.showFilenames" class="media-tile__name" aria-hidden="true">
 							{{ item.name }}
 						</span>
 						<span
@@ -416,7 +486,7 @@ function upOneLevel() {
 						</span>
 					</button>
 					<button
-						v-if="(settings.allowDownloads || (settings.mode === 'collaboration' && guest)) && !item.folder"
+						v-if="(canDownloadSelection || (settings.mode === 'collaboration' && settings.review?.selections !== false)) && !item.folder"
 						class="media-tile__select"
 						:class="{ 'media-tile__select--active': selectedIds.includes(item.id) }"
 						type="button"
@@ -439,6 +509,45 @@ function upOneLevel() {
 		<div class="public-gallery__footer">
 			<span>{{ title }}</span>
 			<span>{{ t('proofing_gallery', 'Shared securely with Nextcloud') }}</span>
+		</div>
+
+		<div v-if="guestDialogOpen"
+			class="guest-dialog"
+			role="presentation"
+			@click.self="guestDialogOpen = false; pendingMutation = null">
+			<form role="dialog"
+				aria-modal="true"
+				:aria-label="t('proofing_gallery', 'Identify for feedback')"
+				@submit.prevent="joinCollaboration">
+				<header>
+					<h2>{{ t('proofing_gallery', 'Who is giving feedback?') }}</h2>
+					<button type="button" :aria-label="t('proofing_gallery', 'Close')" @click="guestDialogOpen = false; pendingMutation = null">
+						×
+					</button>
+				</header>
+				<p>{{ t('proofing_gallery', 'Your name keeps comments and selections clear for everyone.') }}</p>
+				<label>
+					<span>{{ t('proofing_gallery', 'Your name') }}</span>
+					<input id="proofing-gallery-guest-name"
+						v-model="guestName"
+						name="displayName"
+						autocomplete="name"
+						required
+						maxlength="120"
+						autofocus>
+				</label>
+				<label>
+					<span>{{ t('proofing_gallery', 'Email (optional)') }}</span>
+					<input id="proofing-gallery-guest-email"
+						v-model="guestEmail"
+						name="email"
+						autocomplete="email"
+						type="email">
+				</label>
+				<button class="guest-dialog__submit" type="submit" :disabled="joining">
+					{{ joining ? t('proofing_gallery', 'Saving…') : t('proofing_gallery', 'Continue') }}
+				</button>
+			</form>
 		</div>
 
 		<PublicLightbox
@@ -469,12 +578,53 @@ function upOneLevel() {
 	display: none;
 }
 
+:global(body.proofing-gallery-public-page #header) {
+	display: none;
+}
+
+:global(body.proofing-gallery-public-page #content) {
+	height: 100vh;
+	padding-top: 0 !important;
+}
+
 .public-gallery {
 	--gallery-accent: #1f6f8b;
 	--gallery-accent-readable: #79bdd6;
+	--gallery-bg: #111315;
+	--gallery-surface: #1b1d1f;
+	--gallery-surface-raised: #24272a;
+	--gallery-border: #34383b;
+	--gallery-text: #f4f5f2;
+	--gallery-muted: #a5aaad;
+	--tile-min: 240px;
+	--tile-gap: 6px;
+	--tile-radius: 6px;
 	min-height: 100vh;
-	background: #111;
-	color: #f7f7f7;
+	background: var(--gallery-bg);
+	color: var(--gallery-text);
+	font-family: Avenir, Montserrat, Corbel, 'URW Gothic', source-sans-pro, sans-serif;
+}
+
+.public-gallery--theme-light {
+	--gallery-bg: #f5f5f2;
+	--gallery-surface: #fff;
+	--gallery-surface-raised: #e9eae6;
+	--gallery-border: #d2d4d0;
+	--gallery-text: #181a1b;
+	--gallery-muted: #64696c;
+	--gallery-accent-readable: var(--gallery-accent);
+}
+
+@media (prefers-color-scheme: light) {
+	.public-gallery--theme-auto {
+		--gallery-bg: #f5f5f2;
+		--gallery-surface: #fff;
+		--gallery-surface-raised: #e9eae6;
+		--gallery-border: #d2d4d0;
+		--gallery-text: #181a1b;
+		--gallery-muted: #64696c;
+		--gallery-accent-readable: var(--gallery-accent);
+	}
 }
 
 .public-gallery__topbar {
@@ -483,8 +633,8 @@ function upOneLevel() {
 	align-items: center;
 	justify-content: space-between;
 	padding: 0 clamp(20px, 4vw, 64px);
-	border-bottom: 1px solid #2b2b2b;
-	background: #111;
+	border-bottom: 1px solid var(--gallery-border);
+	background: var(--gallery-bg);
 }
 
 .public-gallery__logo {
@@ -501,7 +651,7 @@ function upOneLevel() {
 }
 
 .public-gallery__mode {
-	color: #999;
+	color: var(--gallery-muted);
 }
 
 .public-gallery__hero {
@@ -524,16 +674,18 @@ function upOneLevel() {
 	padding-block: clamp(48px, 8vw, 110px);
 }
 
-.public-gallery--font-editorial {
-	font-family: Charter, 'Bitstream Charter', serif;
-}
+.public-gallery--font-editorial { font-family: Optima, Candara, 'Noto Sans', sans-serif; }
 
-.public-gallery--font-modern {
-	font-family: 'Roboto Condensed', ui-sans-serif, system-ui, sans-serif;
-}
+.public-gallery--font-modern { font-family: Avenir, Montserrat, Corbel, sans-serif; }
 
 .public-gallery__hero > div {
 	max-width: 840px;
+}
+
+.public-gallery__hero-copy--center {
+	width: 100%;
+	margin-inline: auto;
+	text-align: center;
 }
 
 .public-gallery__title {
@@ -562,53 +714,96 @@ function upOneLevel() {
 	padding: 32px clamp(8px, 2vw, 28px) 80px;
 }
 
+.gallery-toolbar {
+	display: flex;
+	min-height: 54px;
+	align-items: center;
+	gap: 12px;
+	margin: 0 4px 18px;
+	padding: 7px 10px;
+	border: 1px solid var(--gallery-border);
+	background: var(--gallery-surface);
+}
+
+.gallery-toolbar label {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--gallery-muted);
+	font-size: 12px;
+}
+
+.gallery-toolbar__search {
+	min-width: 180px;
+	max-width: 360px;
+	flex: 1;
+}
+
+.gallery-toolbar input,
+.gallery-toolbar select,
+.gallery-toolbar button {
+	min-height: 38px;
+	padding: 0 10px;
+	border: 1px solid var(--gallery-border);
+	border-radius: 5px;
+	background: var(--gallery-bg);
+	color: var(--gallery-text);
+}
+
+.gallery-toolbar input { width: 100%; }
+
+.gallery-toolbar button { cursor: pointer; }
+
+.visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+	border: 0;
+}
+
 .public-gallery__summary {
 	display: flex;
 	justify-content: space-between;
 	padding: 0 4px 18px;
-	color: #999;
+	color: var(--gallery-muted);
 	font-size: 13px;
 }
 
-.guest-onboarding,
 .guest-identity {
 	display: flex;
 	align-items: center;
 	gap: 12px;
 	margin: 0 4px 24px;
 	padding: 14px;
-	border: 1px solid #343434;
-	background: #191919;
+	border: 1px solid var(--gallery-border);
+	background: var(--gallery-surface);
 }
 
-.guest-onboarding > div {
-	display: grid;
-	margin-inline-end: auto;
-}
-
-.guest-onboarding span,
 .guest-identity small {
-	color: #999;
+	color: var(--gallery-muted);
 }
 
-.guest-onboarding input,
 .delivery-bar input {
 	min-height: 38px;
 	padding: 0 10px;
 	border: 1px solid #484848;
 	border-radius: 4px;
-	background: #101010;
-	color: #fff;
+	background: var(--gallery-bg);
+	color: var(--gallery-text);
 }
 
-.guest-onboarding button,
 .delivery-bar button {
 	min-height: 38px;
 	padding: 0 12px;
 	border: 1px solid #555;
 	border-radius: 4px;
-	background: #222;
-	color: #fff;
+	background: var(--gallery-surface-raised);
+	color: var(--gallery-text);
 	cursor: pointer;
 }
 
@@ -646,9 +841,22 @@ function upOneLevel() {
 	gap: 12px;
 	margin: 0 4px 18px;
 	padding: 10px 12px;
-	border: 1px solid #343434;
-	background: #191919;
+	border: 1px solid var(--gallery-border);
+	background: var(--gallery-surface);
 	font-size: 13px;
+}
+
+.proof-rail__previews {
+	display: flex;
+	height: 38px;
+}
+
+.proof-rail__previews img {
+	width: 46px;
+	height: 38px;
+	margin-inline-end: -10px;
+	border: 2px solid var(--gallery-surface);
+	object-fit: cover;
 }
 
 .delivery-bar a {
@@ -666,8 +874,47 @@ function upOneLevel() {
 .media-grid,
 .public-gallery__skeleton {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-	gap: 4px;
+	grid-template-columns: repeat(auto-fill, minmax(var(--tile-min), 1fr));
+	gap: var(--tile-gap);
+}
+
+.public-gallery--tiles-small { --tile-min: 170px; }
+
+.public-gallery--tiles-large { --tile-min: 320px; }
+
+.public-gallery--gap-tight { --tile-gap: 2px; }
+
+.public-gallery--gap-wide { --tile-gap: 16px; }
+
+.public-gallery--radius-square { --tile-radius: 0; }
+
+.media-grid--masonry {
+	grid-template-columns: repeat(auto-fill, minmax(var(--tile-min), 1fr));
+	grid-auto-flow: dense;
+}
+
+.media-grid--list {
+	grid-template-columns: 1fr;
+}
+
+.media-grid--list .media-tile {
+	height: 92px;
+	aspect-ratio: auto;
+}
+
+.media-grid--list .media-tile__open img {
+	width: 132px;
+	object-fit: cover;
+}
+
+.media-grid--list .media-tile__name {
+	inset: 0 48px 0 132px;
+	display: flex;
+	align-items: center;
+	padding: 0 16px;
+	background: transparent;
+	color: var(--gallery-text);
+	font-size: 13px;
 }
 
 .public-gallery__skeleton span {
@@ -679,8 +926,9 @@ function upOneLevel() {
 	position: relative;
 	overflow: hidden;
 	aspect-ratio: 4 / 3;
-	background: #242424;
-	color: #fff;
+	border-radius: var(--tile-radius);
+	background: var(--gallery-surface-raised);
+	color: var(--gallery-text);
 }
 
 .media-tile:hover,
@@ -707,11 +955,6 @@ function upOneLevel() {
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
-	transition: transform 180ms ease;
-}
-
-.media-tile:hover .media-tile__open img {
-	transform: scale(1.015);
 }
 
 .media-tile__folder {
@@ -814,9 +1057,70 @@ function upOneLevel() {
 	justify-content: space-between;
 	gap: 20px;
 	padding: 24px clamp(20px, 4vw, 64px);
-	border-top: 1px solid #2b2b2b;
-	color: #888;
+	border-top: 1px solid var(--gallery-border);
+	color: var(--gallery-muted);
 	font-size: 12px;
+}
+
+.guest-dialog {
+	position: fixed;
+	z-index: 2500;
+	inset: 0;
+	display: grid;
+	padding: 20px;
+	background: rgb(0 0 0 / 62%);
+	place-items: center;
+}
+
+.guest-dialog form {
+	display: grid;
+	width: min(440px, 100%);
+	gap: 16px;
+	padding: 24px;
+	border: 1px solid var(--gallery-border);
+	border-radius: 8px;
+	background: var(--gallery-surface);
+	color: var(--gallery-text);
+	box-shadow: 0 2px 8px rgb(0 0 0 / 18%);
+}
+
+.guest-dialog header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.guest-dialog h2,
+.guest-dialog p { margin: 0; }
+
+.guest-dialog p { color: var(--gallery-muted); line-height: 1.5; }
+
+.guest-dialog label { display: grid; gap: 6px; }
+
+.guest-dialog label span { font-size: 13px; }
+
+.guest-dialog input {
+	min-height: 42px;
+	padding: 0 10px;
+	border: 1px solid var(--gallery-border);
+	border-radius: 5px;
+	background: var(--gallery-bg);
+	color: var(--gallery-text);
+}
+
+.guest-dialog button {
+	min-width: 40px;
+	min-height: 40px;
+	border: 1px solid var(--gallery-border);
+	border-radius: 5px;
+	background: transparent;
+	color: var(--gallery-text);
+	cursor: pointer;
+}
+
+.guest-dialog .guest-dialog__submit {
+	background: var(--gallery-accent);
+	color: #fff;
 }
 
 @media (max-width: 640px) {
@@ -846,6 +1150,19 @@ function upOneLevel() {
 		padding-top: 20px;
 	}
 
+	.gallery-toolbar {
+		overflow-x: auto;
+		align-items: flex-end;
+	}
+
+	.gallery-toolbar label:not(.gallery-toolbar__search) span {
+		display: none;
+	}
+
+	.gallery-toolbar__search {
+		min-width: 150px;
+	}
+
 	.media-grid,
 	.public-gallery__skeleton {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -856,7 +1173,6 @@ function upOneLevel() {
 		display: none;
 	}
 
-	.guest-onboarding,
 	.guest-identity,
 	.delivery-bar {
 		align-items: stretch;

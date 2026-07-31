@@ -190,8 +190,8 @@ final class GalleryService {
 			if ($gallery->getSourceType() === 'collection' && ($settings['allowGuestUploads'] ?? false) === true) {
 				throw new InvalidArgumentException('Guest uploads are unavailable for collections');
 			}
-			$current = json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR);
-			$gallery->setSettings(json_encode(GallerySettings::fromArray(array_merge($current, $settings)), JSON_THROW_ON_ERROR));
+			$current = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
+			$gallery->setSettings(json_encode(GallerySettings::merge($current, $settings), JSON_THROW_ON_ERROR));
 		}
 		$gallery->setUpdatedAt($this->clock->getTime());
 

@@ -24,6 +24,12 @@ const activeItem = computed(() => props.mediaItems[activeIndex.value] ?? null)
 const activeComments = computed(() => props.collaboration?.comments.filter(
 	comment => comment.fileId === activeItem.value?.id && comment.deletedAt === null,
 ) ?? [])
+const canDownloadIndividual = computed(() => !props.settings.delivery
+	? props.settings.allowDownloads
+	: ['individual', 'all'].includes(props.settings.delivery.downloadScope))
+const enabledColorLabels = computed(() => props.settings.review
+	? props.settings.review.colorLabels.filter((_, index) => props.settings.review.colorEnabled[index])
+	: props.settings.colorLabels)
 const slideshow = ref(false)
 const zoom = ref(1)
 const panX = ref(0)
@@ -158,7 +164,7 @@ async function saveEditedComment(commentId: number) {
 				<button class="lightbox__slideshow" type="button" @click="setSlideshow(!slideshow)">
 					{{ slideshow ? t('proofing_gallery', 'Pause') : t('proofing_gallery', 'Slideshow') }}
 				</button>
-				<a v-if="settings.allowDownloads" class="lightbox__download" :href="downloadUrl(activeItem)">{{ t('proofing_gallery', 'Download') }}</a>
+				<a v-if="canDownloadIndividual" class="lightbox__download" :href="downloadUrl(activeItem)">{{ t('proofing_gallery', 'Download') }}</a>
 				<button v-if="settings.mode === 'collaboration'"
 					class="lightbox__feedback-toggle"
 					type="button"
@@ -216,24 +222,24 @@ async function saveEditedComment(commentId: number) {
 					×
 				</button>
 			</div>
-			<template v-if="guest">
+			<template v-if="settings.review?.likes !== false || settings.review?.colors !== false || settings.review?.comments !== false">
 				<div class="feedback-actions">
-					<button type="button" @click="toggleLike">
+					<button v-if="settings.review?.likes !== false" type="button" @click="toggleLike">
 						{{ collaboration?.likes[activeItem.id]?.mine ? '♥' : '♡' }} {{ t('proofing_gallery', 'Like') }} {{ collaboration?.likes[activeItem.id]?.count || '' }}
 					</button>
-					<label>
+					<label v-if="settings.review?.colors !== false">
 						<span>{{ t('proofing_gallery', 'Color state') }}</span>
 						<select id="proofing-gallery-color-state"
 							name="colorState"
 							:value="collaboration?.colors[activeItem.id] || ''"
 							@change="setColor(($event.target as HTMLSelectElement).value)">
 							<option value="">{{ t('proofing_gallery', 'No state') }}</option>
-							<option v-for="label in settings.colorLabels" :key="label" :value="label">{{ label }}</option>
+							<option v-for="label in enabledColorLabels" :key="label" :value="label">{{ label }}</option>
 						</select>
 					</label>
 				</div>
-				<form class="comment-form" @submit.prevent="addComment">
-					<button v-if="activeItem.mimeType.startsWith('image/')"
+				<form v-if="settings.review?.comments !== false" class="comment-form" @submit.prevent="addComment">
+					<button v-if="settings.review?.annotations !== false && activeItem.mimeType.startsWith('image/')"
 						type="button"
 						:aria-pressed="marking"
 						@click="marking = !marking; if (marking) feedbackOpen = false">
@@ -251,10 +257,7 @@ async function saveEditedComment(commentId: number) {
 					</button>
 				</form>
 			</template>
-			<p v-else>
-				{{ t('proofing_gallery', 'Join the review to leave feedback.') }}
-			</p>
-			<ul class="comment-list">
+			<ul v-if="settings.review?.comments !== false" class="comment-list">
 				<li v-for="comment in activeComments" :key="comment.id">
 					<form v-if="editingCommentId === comment.id" class="comment-edit" @submit.prevent="saveEditedComment(comment.id)">
 						<textarea v-model="editingCommentBody" required maxlength="5000" />

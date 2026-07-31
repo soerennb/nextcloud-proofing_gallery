@@ -76,6 +76,13 @@ final class CollaborationService {
 				'visibility' => $settings->feedbackVisibility->value,
 				'colorLabels' => $settings->colorLabels,
 				'requiresSession' => $guest === null,
+				'features' => [
+					'likes' => $settings->review['likes'],
+					'colors' => $settings->review['colors'],
+					'comments' => $settings->review['comments'],
+					'annotations' => $settings->review['annotations'],
+					'selections' => $settings->review['selections'],
+				],
 			],
 			'guest' => $guest,
 			'likes' => $likes,
@@ -89,7 +96,10 @@ final class CollaborationService {
 	}
 
 	public function toggleLike(Gallery $gallery, Guest $guest, int $fileId): bool {
-		$this->assertCollaboration($gallery, $fileId);
+		$settings = $this->assertCollaboration($gallery, $fileId);
+		if (!$settings->review['likes']) {
+			throw new InvalidArgumentException('Likes are disabled');
+		}
 		$existing = $this->feedbackId($gallery->getId(), $guest->getId(), $fileId, 'like');
 		if ($existing !== null) {
 			$qb = $this->db->getQueryBuilder();
@@ -107,7 +117,15 @@ final class CollaborationService {
 
 	public function setColor(Gallery $gallery, Guest $guest, int $fileId, ?string $value): void {
 		$settings = $this->assertCollaboration($gallery, $fileId);
-		if ($value !== null && !in_array($value, $settings->colorLabels, true)) {
+		if (!$settings->review['colors']) {
+			throw new InvalidArgumentException('Color states are disabled');
+		}
+		$enabledLabels = array_values(array_filter(
+			$settings->colorLabels,
+			static fn (string $_label, int $index): bool => $settings->review['colorEnabled'][$index],
+			ARRAY_FILTER_USE_BOTH,
+		));
+		if ($value !== null && !in_array($value, $enabledLabels, true)) {
 			throw new InvalidArgumentException('Unknown color workflow state');
 		}
 		$id = $this->feedbackId($gallery->getId(), $guest->getId(), $fileId, 'color');
@@ -131,7 +149,13 @@ final class CollaborationService {
 
 	/** @param array<string, int>|null $annotation */
 	public function addComment(Gallery $gallery, Guest $guest, int $fileId, string $body, ?array $annotation): int {
-		$this->assertCollaboration($gallery, $fileId);
+		$settings = $this->assertCollaboration($gallery, $fileId);
+		if (!$settings->review['comments']) {
+			throw new InvalidArgumentException('Comments are disabled');
+		}
+		if ($annotation !== null && !$settings->review['annotations']) {
+			throw new InvalidArgumentException('Image annotations are disabled');
+		}
 		$body = trim($body);
 		if ($body === '' || mb_strlen($body) > 5000) {
 			throw new InvalidArgumentException('Comment must contain between 1 and 5000 characters');
@@ -193,6 +217,9 @@ final class CollaborationService {
 	/** @param list<int> $fileIds */
 	public function saveSelection(Gallery $gallery, Guest $guest, string $name, string $message, array $fileIds): string {
 		$this->assertCollaborationMode($gallery);
+		if (!$this->settings($gallery)->review['selections']) {
+			throw new InvalidArgumentException('Selections are disabled');
+		}
 		$name = trim($name);
 		$message = trim($message);
 		if ($name === '' || mb_strlen($name) > 120 || mb_strlen($message) > 2000) {

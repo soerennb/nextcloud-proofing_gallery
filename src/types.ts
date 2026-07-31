@@ -74,6 +74,15 @@ export interface MediaPage {
 	offset: number
 }
 
+export interface MediaVersion {
+	id: string
+	filename: string
+	mimeType: string
+	size: number
+	createdBy: string
+	createdAt: number
+}
+
 export interface GalleryManager {
 	id: number
 	type: 'user' | 'group'

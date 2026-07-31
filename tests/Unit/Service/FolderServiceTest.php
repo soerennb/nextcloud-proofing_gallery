@@ -47,6 +47,23 @@ final class FolderServiceTest extends TestCase {
 		self::assertCount(200, $page->items);
 	}
 
+	public function testSortsFilesByModifiedTimeDescendingWhileKeepingFoldersFirst(): void {
+		$old = $this->file(1, 'old.jpg', 'image/jpeg', 100);
+		$new = $this->file(2, 'new.jpg', 'image/jpeg', 300);
+		$page = $this->service([$old, $this->folder(3, 'folder'), $new])
+			->listMedia('owner', 42, 20, 0, '', '', 'modified', 'desc');
+
+		self::assertSame(['folder', 'new.jpg', 'old.jpg'], array_map(
+			static fn ($item): string => $item->name,
+			$page->items,
+		));
+	}
+
+	public function testRejectsUnknownSort(): void {
+		$this->expectException(\InvalidArgumentException::class);
+		$this->service([])->listMedia('owner', 42, sortBy: 'rating');
+	}
+
 	/** @param list<Node> $nodes */
 	private function service(array $nodes): FolderService {
 		$current = $this->createMock(Folder::class);
@@ -62,13 +79,13 @@ final class FolderServiceTest extends TestCase {
 		return new FolderService($root);
 	}
 
-	private function file(int $id, string $name, string $mime): File {
+	private function file(int $id, string $name, string $mime, int $modifiedAt = 1_700_000_000): File {
 		$file = $this->createMock(File::class);
 		$file->method('getId')->willReturn($id);
 		$file->method('getName')->willReturn($name);
 		$file->method('getMimeType')->willReturn($mime);
 		$file->method('getSize')->willReturn(10);
-		$file->method('getMTime')->willReturn(1_700_000_000);
+		$file->method('getMTime')->willReturn($modifiedAt);
 		$file->method('getEtag')->willReturn('etag-' . $id);
 		return $file;
 	}

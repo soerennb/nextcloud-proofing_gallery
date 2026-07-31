@@ -10,6 +10,8 @@ use OCA\ProofingGallery\Exception\FolderAccessException;
 use OCA\ProofingGallery\Exception\AuthorizationException;
 use OCA\ProofingGallery\Service\FolderService;
 use OCA\ProofingGallery\Service\GalleryService;
+use OCA\ProofingGallery\Service\MediaSummaryService;
+use OCA\ProofingGallery\Service\VersionService;
 use OCA\ProofingGallery\Service\CollectionService;
 use OCA\ProofingGallery\Exception\CollectionConflictException;
 use OCA\ProofingGallery\Dto\GallerySettings;
@@ -33,6 +35,8 @@ final class GalleryController extends Controller {
 		private FolderService $folders,
 		private CollectionService $collections,
 		private IPreview $preview,
+		private MediaSummaryService $summaries,
+		private VersionService $versions,
 		private IUserSession $userSession,
 	) {
 		parent::__construct(Application::APP_ID, $request);
@@ -146,7 +150,15 @@ final class GalleryController extends Controller {
 
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/galleries/{id}/media')]
-	public function media(int $id, int $limit = 60, int $offset = 0, string $path = '', string $search = ''): DataResponse {
+	public function media(
+		int $id,
+		int $limit = 60,
+		int $offset = 0,
+		string $path = '',
+		string $search = '',
+		string $sortBy = 'name',
+		string $sortDirection = 'asc',
+	): DataResponse {
 		try {
 			$gallery = $this->galleries->view($this->userId(), $id);
 			if ($gallery->getSourceType() !== 'folder') {
@@ -159,9 +171,132 @@ final class GalleryController extends Controller {
 				$offset,
 				$path,
 				$search,
+				$sortBy,
+				$sortDirection,
 			));
 		} catch (DoesNotExistException|FolderAccessException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery or folder not found'], Http::STATUS_NOT_FOUND);
+		} catch (InvalidArgumentException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'POST', url: '/api/v1/galleries/{id}/media/upload')]
+	public function uploadMedia(int $id, string $path = ''): DataResponse {
+		try {
+			$gallery = $this->galleries->get($this->userId(), $id);
+			if ($gallery->getSourceType() !== 'folder') {
+				throw new InvalidArgumentException('Files can only be uploaded to folder galleries');
+			}
+			$upload = $this->request->getUploadedFile('file');
+			if (!is_array($upload) || ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
+				|| !is_string($upload['tmp_name'] ?? null) || !is_string($upload['name'] ?? null)) {
+				throw new InvalidArgumentException('A valid file upload is required');
+			}
+			$item = $this->folders->uploadMedia(
+				$gallery->getOwnerUid(), $gallery->getFolderId(), $path, $upload['name'], $upload['tmp_name'],
+			);
+			$this->summaries->invalidate($gallery->getId());
+			return new DataResponse($item, Http::STATUS_CREATED);
+		} catch (DoesNotExistException|AuthorizationException) {
+			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		} catch (InvalidArgumentException|FolderAccessException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'POST', url: '/api/v1/galleries/{id}/folders')]
+	public function createFolder(int $id, string $name, string $path = ''): DataResponse {
+		try {
+			$gallery = $this->galleries->get($this->userId(), $id);
+			if ($gallery->getSourceType() !== 'folder') {
+				throw new InvalidArgumentException('Folders are unavailable for collections');
+			}
+			return new DataResponse($this->folders->createFolder(
+				$gallery->getOwnerUid(), $gallery->getFolderId(), $path, $name,
+			), Http::STATUS_CREATED);
+		} catch (DoesNotExistException|AuthorizationException) {
+			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		} catch (InvalidArgumentException|FolderAccessException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'PUT', url: '/api/v1/galleries/{id}/media/{fileId}')]
+	public function renameMedia(int $id, int $fileId, string $name): DataResponse {
+		try {
+			$gallery = $this->galleries->get($this->userId(), $id);
+			$item = $this->folders->renameNode($gallery->getOwnerUid(), $gallery->getFolderId(), $fileId, $name);
+			$this->summaries->invalidate($gallery->getId());
+			return new DataResponse($item);
+		} catch (DoesNotExistException|AuthorizationException|FolderAccessException) {
+			return new DataResponse(['message' => 'Gallery item not found'], Http::STATUS_NOT_FOUND);
+		} catch (InvalidArgumentException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'DELETE', url: '/api/v1/galleries/{id}/media/{fileId}')]
+	public function deleteMedia(int $id, int $fileId): DataResponse {
+		try {
+			$gallery = $this->galleries->get($this->userId(), $id);
+			$this->folders->deleteNode($gallery->getOwnerUid(), $gallery->getFolderId(), $fileId);
+			$this->summaries->invalidate($gallery->getId());
+			return new DataResponse([], Http::STATUS_NO_CONTENT);
+		} catch (DoesNotExistException|AuthorizationException|FolderAccessException) {
+			return new DataResponse(['message' => 'Gallery item not found'], Http::STATUS_NOT_FOUND);
+		}
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/v1/galleries/{id}/media/{fileId}/versions')]
+	public function versions(int $id, int $fileId): DataResponse {
+		try {
+			$gallery = $this->galleries->get($this->userId(), $id);
+			return new DataResponse(['items' => $this->versions->list($gallery, $fileId)]);
+		} catch (DoesNotExistException|AuthorizationException|FolderAccessException) {
+			return new DataResponse(['message' => 'Gallery item not found'], Http::STATUS_NOT_FOUND);
+		}
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'POST', url: '/api/v1/galleries/{id}/media/{fileId}/versions')]
+	public function replaceMedia(int $id, int $fileId): DataResponse {
+		try {
+			$userId = $this->userId();
+			$gallery = $this->galleries->get($userId, $id);
+			$upload = $this->request->getUploadedFile('file');
+			if (!is_array($upload) || ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
+				|| !is_string($upload['tmp_name'] ?? null)) {
+				throw new InvalidArgumentException('A valid replacement upload is required');
+			}
+			$this->versions->replace($gallery, $fileId, $upload['tmp_name'], $userId);
+			$this->summaries->invalidate($gallery->getId());
+			return new DataResponse(['items' => $this->versions->list($gallery, $fileId)], Http::STATUS_CREATED);
+		} catch (DoesNotExistException|AuthorizationException|FolderAccessException) {
+			return new DataResponse(['message' => 'Gallery item not found'], Http::STATUS_NOT_FOUND);
+		} catch (InvalidArgumentException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'POST', url: '/api/v1/galleries/{id}/media/{fileId}/versions/{versionId}/restore')]
+	public function restoreMediaVersion(int $id, int $fileId, string $versionId): DataResponse {
+		try {
+			$userId = $this->userId();
+			$gallery = $this->galleries->get($userId, $id);
+			$this->versions->restore($gallery, $fileId, $versionId, $userId);
+			$this->summaries->invalidate($gallery->getId());
+			return new DataResponse(['items' => $this->versions->list($gallery, $fileId)]);
+		} catch (DoesNotExistException|AuthorizationException|FolderAccessException) {
+			return new DataResponse(['message' => 'Gallery item not found'], Http::STATUS_NOT_FOUND);
+		} catch (InvalidArgumentException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
 	}
 

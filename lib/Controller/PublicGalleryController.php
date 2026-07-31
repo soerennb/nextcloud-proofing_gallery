@@ -55,14 +55,30 @@ final class PublicGalleryController extends PublicShareController {
 	#[PublicPage]
 	#[NoCSRFRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/gallery')]
-	public function gallery(int $limit = 60, int $offset = 0, string $path = ''): JSONResponse {
-		return new JSONResponse($this->galleryData->page(
-			$this->resolvedGallery(),
-			$this->folder(),
-			$limit,
-			$offset,
-			$path,
-		));
+	public function gallery(
+		int $limit = 60,
+		int $offset = 0,
+		string $path = '',
+		string $search = '',
+		string $sortBy = '',
+		string $sortDirection = '',
+		string $groupBy = '',
+	): JSONResponse {
+		try {
+			return new JSONResponse($this->galleryData->page(
+				$this->resolvedGallery(),
+				$this->folder(),
+				$limit,
+				$offset,
+				$path,
+				$search,
+				$sortBy,
+				$sortDirection,
+				$groupBy,
+			));
+		} catch (\InvalidArgumentException $exception) {
+			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
 	}
 
 	#[PublicPage]
@@ -128,7 +144,7 @@ final class PublicGalleryController extends PublicShareController {
 	#[NoCSRFRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/media/{fileId}/download')]
 	public function download(int $fileId): Response {
-		if (!$this->downloadsAllowed()) {
+		if (!$this->downloadAllowed('individual')) {
 			return new DataDisplayResponse('', Http::STATUS_FORBIDDEN);
 		}
 		$file = $this->fileInShare($fileId);
@@ -144,7 +160,7 @@ final class PublicGalleryController extends PublicShareController {
 	#[NoCSRFRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/download/selection')]
 	public function downloadSelection(string $fileIds): Response {
-		if (!$this->downloadsAllowed()) {
+		if (!$this->downloadAllowed('selection')) {
 			return new DataDisplayResponse('', Http::STATUS_FORBIDDEN);
 		}
 		$files = $this->selectedFiles($fileIds);
@@ -175,7 +191,7 @@ final class PublicGalleryController extends PublicShareController {
 	#[NoCSRFRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/contact-sheet')]
 	public function contactSheet(string $fileIds): DataDisplayResponse {
-		if (!$this->downloadsAllowed()) {
+		if (!$this->downloadAllowed('contactSheet')) {
 			return new DataDisplayResponse('', Http::STATUS_FORBIDDEN);
 		}
 		$files = array_values(array_filter(
@@ -321,13 +337,19 @@ final class PublicGalleryController extends PublicShareController {
 			|| in_array($file->getMimeType(), ['video/mp4', 'video/webm'], true);
 	}
 
-	private function downloadsAllowed(): bool {
+	private function downloadAllowed(string $kind): bool {
 		$settings = GallerySettings::fromArray(json_decode(
 			$this->resolvedGallery()->getSettings(),
 			true,
 			flags: JSON_THROW_ON_ERROR,
 		));
-		return $settings->allowDownloads && $this->share?->getHideDownload() !== true;
+		$scope = $settings->delivery['downloadScope'];
+		return match ($kind) {
+			'individual' => $this->share?->getHideDownload() !== true && in_array($scope, ['individual', 'all'], true),
+			'selection' => in_array($scope, ['selection', 'all'], true),
+			'contactSheet' => $settings->delivery['contactSheet'] && in_array($scope, ['selection', 'all'], true),
+			default => false,
+		};
 	}
 
 	/** @return list<File> */
