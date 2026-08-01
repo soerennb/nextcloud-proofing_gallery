@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Service;
 
+use OCA\ProofingGallery\Db\QueryResult;
+
 use InvalidArgumentException;
 use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Db\Gallery;
@@ -48,13 +50,15 @@ final class NotificationService {
 	public function list(string $ownerUid, int $galleryId): array {
 		$this->access->owner($ownerUid, $galleryId);
 		$qb = $this->db->getQueryBuilder();
-		$rows = $qb->select('*')->from('proofing_notify_subs')
+		$rows = QueryResult::rows($qb->select('*')->from('proofing_notify_subs')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
-			->orderBy('user_uid')->executeQuery()->fetchAllAssociative();
+			->orderBy('user_uid')->executeQuery());
 		return array_map(fn (array $row): array => $this->present($row), $rows);
 	}
 
-	/** @param list<string> $eventTypes
+	/**
+	 * @param list<string> $eventTypes
+	 * @param list<string> $nativeEventTypes
 	 * @return array<string, mixed>
 	 */
 	public function save(
@@ -126,10 +130,10 @@ final class NotificationService {
 	public function delete(string $ownerUid, int $galleryId, int $id): void {
 		$this->access->owner($ownerUid, $galleryId);
 		$qb = $this->db->getQueryBuilder();
-		$row = $qb->select('user_uid')->from('proofing_notify_subs')
+		$row = QueryResult::row($qb->select('user_uid')->from('proofing_notify_subs')
 			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
-			->executeQuery()->fetchAssociative();
+			->executeQuery());
 		if ($row === false) throw new DoesNotExistException('Notification subscription not found');
 		$this->native->processGalleryUser($galleryId, (string)$row['user_uid']);
 		$queue = $this->db->getQueryBuilder();
@@ -157,10 +161,10 @@ final class NotificationService {
 	public function queue(Gallery $gallery, int $eventId, string $eventType, int $createdAt): void {
 		if (!in_array($eventType, self::EVENT_TYPES, true)) return;
 		$qb = $this->db->getQueryBuilder();
-		$rows = $qb->select('id', 'user_uid', 'event_types', 'frequency', 'email_enabled', 'native_enabled', 'native_event_types')->from('proofing_notify_subs')
+		$rows = QueryResult::rows($qb->select('id', 'user_uid', 'event_types', 'frequency', 'email_enabled', 'native_enabled', 'native_event_types')->from('proofing_notify_subs')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('active', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL)))
-			->executeQuery()->fetchAllAssociative();
+			->executeQuery());
 		$rows = array_values(array_filter($rows, function (array $row) use ($gallery): bool {
 			try {
 				$this->access->view((string)$row['user_uid'], (int)$gallery->getId());
@@ -218,13 +222,13 @@ final class NotificationService {
 		$now = $this->clock->getTime();
 		$this->recoverStaleClaims($now);
 		$qb = $this->db->getQueryBuilder();
-		$rows = $qb->select('q.id', 'q.subscription_id')->from('proofing_notify_queue', 'q')
+		$rows = QueryResult::rows($qb->select('q.id', 'q.subscription_id')->from('proofing_notify_queue', 'q')
 			->innerJoin('q', 'proofing_notify_subs', 's', $qb->expr()->eq('q.subscription_id', 's.id'))
 			->where($qb->expr()->eq('q.status', $qb->createNamedParameter('pending')))
 			->andWhere($qb->expr()->lte('q.available_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('s.active', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL)))
 			->andWhere($qb->expr()->eq('s.email_enabled', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL)))
-			->orderBy('q.id')->setMaxResults(200)->executeQuery()->fetchAllAssociative();
+			->orderBy('q.id')->setMaxResults(200)->executeQuery());
 		$bySubscription = [];
 		foreach ($rows as $row) $bySubscription[(int)$row['subscription_id']][] = (int)$row['id'];
 		$sent = 0;
@@ -245,10 +249,10 @@ final class NotificationService {
 	/** @return array<string, mixed>|null */
 	private function findSubscription(int $galleryId, string $userUid): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$row = $qb->select('*')->from('proofing_notify_subs')
+		$row = QueryResult::row($qb->select('*')->from('proofing_notify_subs')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('user_uid', $qb->createNamedParameter($userUid)))
-			->executeQuery()->fetchAssociative();
+			->executeQuery());
 		return $row === false ? null : $row;
 	}
 
@@ -311,21 +315,21 @@ final class NotificationService {
 	/** @param list<int> $queueIds */
 	private function sendDigest(int $subscriptionId, array $queueIds): void {
 		$qb = $this->db->getQueryBuilder();
-		$row = $qb->select('s.*')->from('proofing_notify_subs', 's')
+		$row = QueryResult::row($qb->select('s.*')->from('proofing_notify_subs', 's')
 			->where($qb->expr()->eq('s.id', $qb->createNamedParameter($subscriptionId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('s.active', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL)))
 			->andWhere($qb->expr()->eq('s.email_enabled', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL)))
-			->executeQuery()->fetchAssociative();
+			->executeQuery());
 		if ($row === false) throw new \RuntimeException('Inactive subscription');
 		$gallery = $this->galleries->find((int)$row['gallery_id']);
 		$user = $this->users->get((string)$row['user_uid']);
 		$email = $user?->getEMailAddress();
 		if ($email === null || !$this->mailer->validateMailAddress($email)) throw new \RuntimeException('Recipient email unavailable');
 		$eventsQb = $this->db->getQueryBuilder();
-		$events = $eventsQb->select('e.event_type')->from('proofing_notify_queue', 'q')
+		$events = QueryResult::column($eventsQb->select('e.event_type')->from('proofing_notify_queue', 'q')
 			->innerJoin('q', 'proofing_events', 'e', $eventsQb->expr()->eq('q.event_id', 'e.id'))
 			->where($eventsQb->expr()->in('q.id', $eventsQb->createNamedParameter($queueIds, IQueryBuilder::PARAM_INT_ARRAY)))
-			->executeQuery()->fetchFirstColumn();
+			->executeQuery());
 		$locale = (string)$row['locale'];
 		if ($locale === 'auto') {
 			$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));

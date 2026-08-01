@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Service;
 
+use OCA\ProofingGallery\Db\QueryResult;
+
 use InvalidArgumentException;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\GalleryMapper;
@@ -248,7 +250,7 @@ final class CollectionService {
 		$qb->select('*')->from('proofing_collection_items')
 			->where($qb->expr()->eq('collection_id', $qb->createNamedParameter($collectionId, IQueryBuilder::PARAM_INT)))
 			->orderBy('position', 'ASC');
-		return $qb->executeQuery()->fetchAllAssociative();
+		return QueryResult::rows($qb->executeQuery());
 	}
 
 	private function revision(int $galleryId): int {

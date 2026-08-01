@@ -13,9 +13,9 @@ final class GallerySettingsTest extends TestCase {
 		$settings = GallerySettings::merge(GallerySettings::defaults(), [
 			'navigation' => ['recursive' => true, 'groupBy' => 'folder', 'groupDepth' => 3],
 		]);
-		self::assertTrue($settings->navigation['recursive']);
-		self::assertSame('folder', $settings->navigation['groupBy']);
-		self::assertSame(3, $settings->navigation['groupDepth']);
+		self::assertTrue($settings->navigation->recursive);
+		self::assertSame('folder', $settings->navigation->groupBy);
+		self::assertSame(3, $settings->navigation->groupDepth);
 	}
 
 	public function testRecursiveNavigationRejectsUnboundedDepth(): void {
@@ -141,6 +141,31 @@ final class GallerySettingsTest extends TestCase {
 		])->jsonSerialize();
 
 		self::assertSame(['camera', 'lens', 'exposure'], $settings['metadata']['publicFields']);
+	}
+
+	public function testCanonicalPayloadRoundTripsWithoutChangingItsWireShape(): void {
+		$canonical = GallerySettings::merge(GallerySettings::defaults(), [
+			'mode' => 'collaboration',
+			'publicLocale' => 'de',
+			'review' => ['ratings' => true, 'pick' => true],
+			'presentation' => ['layout' => 'masonry', 'theme' => 'light'],
+			'delivery' => ['downloadScope' => 'selection'],
+			'navigation' => ['recursive' => true, 'groupBy' => 'folder'],
+			'lifecycle' => ['enabled' => true, 'revokeAfterDays' => 14],
+		])->canonical();
+
+		self::assertSame($canonical, GallerySettings::fromArray($canonical)->canonical());
+		self::assertSame([
+			'schemaVersion', 'mode', 'publicLocale', 'review', 'presentation',
+			'delivery', 'navigation', 'security', 'metadata', 'lifecycle',
+		], array_keys($canonical));
+	}
+
+	public function testLegacySchemaMarkersAreUpgradedAtTheBoundary(): void {
+		$settings = GallerySettings::fromArray(['schemaVersion' => 2, 'publicLocale' => 'de']);
+
+		self::assertSame(GallerySettings::SCHEMA_VERSION, $settings->canonical()['schemaVersion']);
+		self::assertSame('de', $settings->publicLocale);
 	}
 
 	public function testRejectsUnknownPublicMetadataFields(): void {

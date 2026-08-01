@@ -11,8 +11,9 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { canonicalGallerySettings } from '../domain/gallerySettings.ts'
 import { availableGallerySettingsTabs, galleryPurposeLabels as purposeLabels, publicMetadataOptions } from '../domain/gallerySettingsOptions.ts'
 import type { SettingsTab } from '../domain/gallerySettingsOptions.ts'
-import { applyPreset, completeGallery, createPreset, deletePreset, fetchCollection, fetchGalleryMedia, fetchPresets, ownerPreviewUrl, updateGallery, updateGallerySource, updatePreset } from '../services/galleryApi.ts'
-import type { Gallery, GalleryPreset, MediaItem } from '../types.ts'
+import { useGalleryPresets } from '../composables/useGalleryPresets.ts'
+import { completeGallery, fetchCollection, fetchGalleryMedia, ownerPreviewUrl, updateGallery, updateGallerySource } from '../services/galleryApi.ts'
+import type { Gallery, MediaItem } from '../types.ts'
 import GalleryActivity from './GalleryActivity.vue'
 import CollectionContent from './CollectionContent.vue'
 import CullingWorkspace from './CullingWorkspace.vue'
@@ -48,11 +49,6 @@ const media = ref<MediaItem[]>([])
 const mediaTotal = ref(0)
 const mediaLoading = ref(true)
 const baseline = ref('')
-const presets = ref<GalleryPreset[]>([])
-const presetsLoading = ref(false)
-const presetSaving = ref(false)
-const selectedPresetId = ref<number | null>(null)
-const presetName = ref('')
 const draft = reactive({
 	title: props.gallery.title,
 	settings: structuredClone(props.gallery.settings),
@@ -87,6 +83,25 @@ const nextStep = computed(() => {
 		return { label: t('proofing_gallery', 'Review client results'), tab: 'feedback' as SettingsTab }
 	}
 	return { label: t('proofing_gallery', 'Manage delivery'), tab: 'access' as SettingsTab }
+})
+const {
+	presets,
+	presetsLoading,
+	presetSaving,
+	selectedPresetId,
+	presetName,
+	loadPresets,
+	selectPreset,
+	applySelectedPreset,
+	saveNewPreset,
+	updateSelectedPreset,
+	removeSelectedPreset,
+} = useGalleryPresets({
+	gallery: () => props.gallery,
+	settings: () => draft.settings,
+	dirty,
+	resetDraft,
+	onUpdated: gallery => emit('updated', gallery),
 })
 
 watch(() => props.gallery, gallery => {
@@ -344,86 +359,6 @@ function handleOnline() {
 
 function handleOffline() {
 	if (dirty.value) saveState.value = 'offline'
-}
-
-async function loadPresets() {
-	if (props.gallery.permissions.role !== 'owner') return
-	presetsLoading.value = true
-	try {
-		presets.value = await fetchPresets()
-	} catch {
-		showError(t('proofing_gallery', 'Presets could not be loaded.'))
-	} finally {
-		presetsLoading.value = false
-	}
-}
-
-function selectPreset() {
-	presetName.value = presets.value.find(preset => preset.id === selectedPresetId.value)?.name ?? ''
-}
-
-async function applySelectedPreset() {
-	if (selectedPresetId.value === null) return
-	if (dirty.value && !window.confirm(t('proofing_gallery', 'Apply the preset and discard unsaved changes?'))) return
-	presetSaving.value = true
-	try {
-		const gallery = await applyPreset(selectedPresetId.value, props.gallery.id)
-		resetDraft(gallery)
-		emit('updated', gallery)
-		showSuccess(t('proofing_gallery', 'Preset applied.'))
-	} catch {
-		showError(t('proofing_gallery', 'The preset could not be applied.'))
-	} finally {
-		presetSaving.value = false
-	}
-}
-
-async function saveNewPreset() {
-	if (!presetName.value.trim()) return
-	presetSaving.value = true
-	try {
-		const preset = await createPreset(presetName.value.trim(), canonicalGallerySettings(draft.settings))
-		presets.value = [...presets.value, preset].sort((left, right) => left.name.localeCompare(right.name))
-		selectedPresetId.value = preset.id
-		showSuccess(t('proofing_gallery', 'Preset created.'))
-	} catch {
-		showError(t('proofing_gallery', 'The preset could not be created. Check that its name is unique.'))
-	} finally {
-		presetSaving.value = false
-	}
-}
-
-async function updateSelectedPreset() {
-	if (selectedPresetId.value === null || !presetName.value.trim()) return
-	presetSaving.value = true
-	try {
-		const preset = await updatePreset(selectedPresetId.value, {
-			name: presetName.value.trim(),
-			settings: canonicalGallerySettings(draft.settings),
-		})
-		presets.value = presets.value.map(item => item.id === preset.id ? preset : item)
-		showSuccess(t('proofing_gallery', 'Preset updated from the current settings.'))
-	} catch {
-		showError(t('proofing_gallery', 'The preset could not be updated.'))
-	} finally {
-		presetSaving.value = false
-	}
-}
-
-async function removeSelectedPreset() {
-	if (selectedPresetId.value === null || !window.confirm(t('proofing_gallery', 'Delete this preset? Existing galleries will not change.'))) return
-	presetSaving.value = true
-	try {
-		await deletePreset(selectedPresetId.value)
-		presets.value = presets.value.filter(preset => preset.id !== selectedPresetId.value)
-		selectedPresetId.value = null
-		presetName.value = ''
-		showSuccess(t('proofing_gallery', 'Preset deleted.'))
-	} catch {
-		showError(t('proofing_gallery', 'The preset could not be deleted.'))
-	} finally {
-		presetSaving.value = false
-	}
 }
 
 onMounted(() => {

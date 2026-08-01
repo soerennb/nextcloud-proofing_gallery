@@ -20,6 +20,8 @@ galleries instead share a generated, permanently empty folder below
 and file IDs. Every delivery request revalidates collection membership, source
 ownership, source type, file containment, and current readability. The anchor is
 only a native token/password/expiry authority and cannot expose the originals.
+`PublicMediaResolver` is the single file-ID boundary for both folder and
+collection shares; controllers do not reproduce containment or MIME checks.
 
 Public mutations require both a hashed guest-session secret in an HttpOnly
 cookie and a separately hashed nonce in `X-Proofing-Nonce`. Media endpoints
@@ -65,6 +67,13 @@ primary-link change is atomic inside the app database. Updates spanning the
 Nextcloud share API and app data snapshot the native share and compensate it if
 app persistence fails.
 
+Gallery settings are a typed aggregate of review, presentation, delivery,
+navigation, security, metadata, and lifecycle sections. Compatibility aliases
+are accepted and emitted only at this boundary. Public responses derive an
+effective copy from the resolved link policy before media metadata is read.
+Database reads use `QueryResult`, the app's narrow adapter around OCP's
+`IResult`; business services do not depend on Doctrine-only fetch helpers.
+
 ## Frontend
 
 Vite builds two Vue 3 entry points: the authenticated owner application and the
@@ -72,15 +81,18 @@ public gallery. The public interface is image-led, responsive, keyboard
 navigable, and supports reduced motion. All visible strings use Nextcloud l10n.
 Grid geometry and culling shortcuts are pure domain functions shared by runtime
 components and unit tests. Preview loading is a bounded, cancellable priority
-queue; aborting a queued request always settles its promise. Large component
+queue with starvation protection; aborting queued or running work always
+settles its promise. Preset orchestration lives in a composable. Large component
 styles live beside their owning components rather than inside orchestration
 files.
 
 `l10n/de.json` is the canonical German translation catalog. The localization
 builder discovers PHP, TypeScript and Vue sources recursively; local generation
 uses `npm run build:l10n`, while CI uses the non-mutating `check:l10n` path.
-PHPStan level 6, TypeScript, ESLint complexity/function-size checks and the
-source-size gate prevent renewed boundary and giant-file regressions.
+PHPStan level 6 runs without a generated baseline and fails on unmatched
+suppressions. TypeScript, ESLint complexity/function-size checks and per-language
+source budgets (PHP 650, TypeScript 500, Vue 950 significant lines) prevent
+renewed boundary and giant-file regressions.
 
 ## Background work
 

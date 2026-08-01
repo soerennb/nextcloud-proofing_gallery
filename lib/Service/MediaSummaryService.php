@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Service;
 
+use OCA\ProofingGallery\Db\QueryResult;
+
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\DB\QueryBuilder\IQueryBuilder;
@@ -66,7 +68,7 @@ final class MediaSummaryService {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')->from('proofing_summaries')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
-		$row = $qb->executeQuery()->fetchAssociative();
+		$row = QueryResult::row($qb->executeQuery());
 		return $row === false ? null : $row;
 	}
 

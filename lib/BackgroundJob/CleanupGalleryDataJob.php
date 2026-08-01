@@ -21,6 +21,7 @@ final class CleanupGalleryDataJob extends TimedJob {
 		$this->setTimeSensitivity(IJob::TIME_INSENSITIVE);
 	}
 
+	/** @param mixed $argument */
 	protected function run($argument): void {
 		$this->telemetry->recordAttempt();
 		try {

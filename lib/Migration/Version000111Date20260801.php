@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ProofingGallery\Migration;
 
 use Closure;
+use OCA\ProofingGallery\Db\QueryResult;
 use OCP\DB\ISchemaWrapper;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\DB\Types;
@@ -23,7 +24,8 @@ final class Version000111Date20260801 extends SimpleMigrationStep {
 	public function __construct(private IDBConnection $db) {
 	}
 
-	public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ?ISchemaWrapper {
+	/** @param array<string, mixed> $options */
+	public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ISchemaWrapper {
 		$schema = $schemaClosure();
 
 		if (!$schema->hasTable('proofing_media_index')) {
@@ -127,13 +129,14 @@ final class Version000111Date20260801 extends SimpleMigrationStep {
 		return $schema;
 	}
 
+	/** @param array<string, mixed> $options */
 	public function postSchemaChange(IOutput $output, Closure $schemaClosure, array $options): void {
 		$select = $this->db->getQueryBuilder();
 		$select->select('id', 'share_token', 'created_at', 'updated_at')
 			->from('proofing_galleries')
 			->where($select->expr()->isNotNull('share_token'));
 		$result = $select->executeQuery();
-		while ($row = $result->fetchAssociative()) {
+		while (($row = QueryResult::row($result)) !== false) {
 			$token = trim((string)$row['share_token']);
 			if ($token === '' || $this->linkExists($token)) {
 				continue;

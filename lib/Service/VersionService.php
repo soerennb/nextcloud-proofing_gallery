@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Service;
 
+use OCA\ProofingGallery\Db\QueryResult;
+
 use InvalidArgumentException;
 use OCA\ProofingGallery\Db\Gallery;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -41,7 +43,7 @@ final class VersionService {
 			'size' => (int)$row['size'],
 			'createdBy' => $row['created_by'],
 			'createdAt' => (int)$row['created_at'],
-		], $qb->executeQuery()->fetchAllAssociative());
+		], QueryResult::rows($qb->executeQuery()));
 	}
 
 	public function replace(Gallery $gallery, int $fileId, string $temporaryPath, string $userId): void {
@@ -79,7 +81,7 @@ final class VersionService {
 
 	private function snapshot(Gallery $gallery, File $file, string $userId): void {
 		$versionId = $this->random->generate(40, ISecureRandom::CHAR_ALPHANUMERIC);
-		$stream = $file->read();
+		$stream = $file->fopen('rb');
 		if (!is_resource($stream)) {
 			throw new InvalidArgumentException('The current file could not be archived');
 		}
@@ -113,7 +115,7 @@ final class VersionService {
 		$qb->select('id', 'gallery_id', 'file_id', 'version_id')->from('proofing_versions')
 			->where($qb->expr()->lt('created_at', $qb->createNamedParameter($before, IQueryBuilder::PARAM_INT)))
 			->orderBy('id', 'ASC')->setMaxResults(max(1, min(1000, $limit)));
-		return $this->deleteRows($qb->executeQuery()->fetchAllAssociative());
+		return $this->deleteRows(QueryResult::rows($qb->executeQuery()));
 	}
 
 	private function pruneFile(int $galleryId, int $fileId): void {
@@ -123,7 +125,7 @@ final class VersionService {
 			->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
 			->orderBy('created_at', 'DESC')
 			->setFirstResult($this->policies->get('maxVersionsPerFile'));
-		$this->deleteRows($qb->executeQuery()->fetchAllAssociative());
+		$this->deleteRows(QueryResult::rows($qb->executeQuery()));
 	}
 
 	/** @param list<array<string, mixed>> $rows */
@@ -149,7 +151,7 @@ final class VersionService {
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('version_id', $qb->createNamedParameter($versionId)));
-		$row = $qb->executeQuery()->fetchAssociative();
+		$row = QueryResult::row($qb->executeQuery());
 		if ($row === false) {
 			throw new InvalidArgumentException('Archived version not found');
 		}

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Service;
 
+use OCA\ProofingGallery\Db\QueryResult;
+
 use OCP\App\IAppManager;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\Files\IAppData;
@@ -37,7 +39,7 @@ final class HealthService {
 			)))
 			->groupBy('status');
 		$counts = ['pending' => 0, 'awaiting_review' => 0];
-		foreach ($qb->executeQuery()->fetchAllAssociative() as $row) {
+		foreach (QueryResult::rows($qb->executeQuery()) as $row) {
 			$counts[(string)$row['status']] = (int)$row['count'];
 		}
 
@@ -56,7 +58,7 @@ final class HealthService {
 			->where($qb->expr()->in('status', $qb->createNamedParameter(['pending', 'failed'], IQueryBuilder::PARAM_STR_ARRAY)))
 			->andWhere($qb->expr()->eq('active', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL)))
 			->groupBy('status');
-		foreach ($qb->executeQuery()->fetchAllAssociative() as $row) {
+		foreach (QueryResult::rows($qb->executeQuery()) as $row) {
 			$notificationCounts[(string)$row['status']] = (int)$row['count'];
 		}
 

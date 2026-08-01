@@ -62,7 +62,10 @@ final class MediaMetadataService {
 		return ['state' => 'ready', ...$details];
 	}
 
-	/** @param list<string> $fields @return array<string, mixed> */
+	/**
+	 * @param list<string> $fields
+	 * @return array<string, mixed>
+	 */
 	public function publicSummary(File $file, array $fields): array {
 		$summary = $this->summary($file);
 		if (($summary['state'] ?? '') !== 'ready' || $fields === []) return ['state' => $summary['state'] ?? 'pending'];
@@ -274,7 +277,10 @@ final class MediaMetadataService {
 		$description->setAttributeNS(self::NS_PG, 'pg:PickState', $state['pick']);
 	}
 
-	/** @param array<string, mixed> $known @return array<string, mixed> */
+	/**
+	 * @param array<string, mixed> $known
+	 * @return array<string, mixed>
+	 */
 	private function extract(File $file, array $known): array {
 		$flat = $this->flatten($known);
 		$details = [
@@ -402,7 +408,10 @@ final class MediaMetadataService {
 		if (array_key_exists('keywords', $changes)) $this->setContainer($document, $description, 'subject', 'Bag', $changes['keywords'] ?? []);
 	}
 
-	/** @param array<string, mixed> $changes @return array<string, mixed> */
+	/**
+	 * @param array<string, mixed> $changes
+	 * @return array<string, mixed>
+	 */
 	private function validatedChanges(array $changes): array {
 		$unknown = array_diff(array_keys($changes), self::EDITABLE_FIELDS);
 		if ($unknown !== [] || $changes === []) throw new InvalidArgumentException('Invalid metadata fields');
@@ -584,7 +593,10 @@ final class MediaMetadataService {
 		}
 	}
 
-	/** @param array<string, mixed> $input @return array<string, mixed> */
+	/**
+	 * @param array<string, mixed> $input
+	 * @return array<string, mixed>
+	 */
 	private function flatten(array $input): array {
 		$result = [];
 		array_walk_recursive($input, static function (mixed $value, string|int $key) use (&$result): void {
@@ -594,7 +606,10 @@ final class MediaMetadataService {
 		return $result;
 	}
 
-	/** @param array<string, mixed> $values @param list<string> $keys */
+	/**
+	 * @param array<string, mixed> $values
+	 * @param list<string> $keys
+	 */
 	private function first(array $values, array $keys): mixed {
 		foreach ($keys as $key) {
 			$normalized = mb_strtolower(str_replace([' ', '-', '_'], '', $key));
@@ -622,7 +637,10 @@ final class MediaMetadataService {
 		return is_int($value) || (is_string($value) && is_numeric($value)) ? (int)$value : null;
 	}
 
-	/** @param array<string, mixed> $values @return ?array{latitude: float, longitude: float} */
+	/**
+	 * @param array<string, mixed> $values
+	 * @return ?array{latitude: float, longitude: float}
+	 */
 	private function gps(array $values): ?array {
 		$latitude = $this->coordinate(
 			$this->first($values, ['gpslatitude']),
@@ -659,11 +677,15 @@ final class MediaMetadataService {
 		return $parts === [] ? null : implode(' ', $parts);
 	}
 
+	/** @param array<string, list<mixed>>|false $iptc */
 	private function iptcFirst(array|false $iptc, string $key): ?string {
 		return is_array($iptc) ? $this->text($iptc[$key][0] ?? null) : null;
 	}
 
-	/** @return list<string> */
+	/**
+	 * @param array<string, list<mixed>>|false $iptc
+	 * @return list<string>
+	 */
 	private function iptcList(array|false $iptc, string $key): array {
 		if (!is_array($iptc) || !is_array($iptc[$key] ?? null)) return [];
 		return array_values(array_unique(array_filter(array_map(fn (mixed $value): ?string => $this->text($value), $iptc[$key]))));

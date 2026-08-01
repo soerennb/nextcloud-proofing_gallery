@@ -57,7 +57,7 @@ final class MediaIndexMapper extends QBMapper {
 			'file_id' => (int)$row['file_id'],
 			'relative_path' => (string)$row['relative_path'],
 			'mime_type' => (string)$row['mime_type'],
-		], $qb->executeQuery()->fetchAllAssociative());
+		], QueryResult::rows($qb->executeQuery()));
 	}
 
 	private function filteredQuery(MediaIndexQuery $query): IQueryBuilder {
@@ -104,7 +104,7 @@ final class MediaIndexMapper extends QBMapper {
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->orderBy('sort_key', 'ASC')->addOrderBy('file_id', 'ASC')
 			->setFirstResult(max(0, $offset))->setMaxResults(max(1, $limit));
-		return array_map('intval', $qb->executeQuery()->fetchFirstColumn());
+		return array_map('intval', QueryResult::column($qb->executeQuery()));
 	}
 
 	public function deleteOtherGenerations(int $galleryId, string $generation): int {

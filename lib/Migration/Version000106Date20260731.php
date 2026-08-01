@@ -11,7 +11,8 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 final class Version000106Date20260731 extends SimpleMigrationStep {
-	public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ?ISchemaWrapper {
+	/** @param array<string, mixed> $options */
+	public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ISchemaWrapper {
 		$schema = $schemaClosure();
 		if (!$schema->hasTable('proofing_inv_templates')) {
 			$table = $schema->createTable('proofing_inv_templates');

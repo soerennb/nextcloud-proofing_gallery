@@ -6,6 +6,7 @@ namespace OCA\ProofingGallery\Controller;
 
 use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Dto\PublicShareContext;
+use OCA\ProofingGallery\Domain\PublicLinkCapability;
 use OCA\ProofingGallery\Service\PublicShareContextResolver;
 use OCP\AppFramework\PublicShareController;
 use OCP\IRequest;
@@ -18,7 +19,7 @@ abstract class ResolvedPublicShareController extends PublicShareController {
 		IRequest $request,
 		ISession $session,
 		private PublicShareContextResolver $contextResolver,
-		private string $requiredPermission = 'view',
+		private PublicLinkCapability $requiredPermission = PublicLinkCapability::View,
 	) {
 		parent::__construct(Application::APP_ID, $request, $session);
 	}

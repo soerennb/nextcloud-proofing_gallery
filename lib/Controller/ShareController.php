@@ -72,7 +72,7 @@ final class ShareController extends Controller {
 			}
 			$currentSettings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
 			$scope = $downloadScope
-				?? ($allowDownloads === null ? $currentSettings->delivery['downloadScope'] : ($allowDownloads ? 'all' : 'none'));
+				?? ($allowDownloads === null ? $currentSettings->delivery->downloadScope->value : ($allowDownloads ? 'all' : 'none'));
 			$gallery = $this->shares->publish($gallery, $password, $expiresAt, $scope);
 			return new DataResponse([
 				'gallery' => $this->galleries->present($userId, $gallery),

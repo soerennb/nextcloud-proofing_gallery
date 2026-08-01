@@ -188,12 +188,6 @@ final class MediaIndexService {
 		return implode('/', array_slice($parts, 0, max(1, $groupDepth)));
 	}
 
-	private function normalizePath(string $path): string {
-		$path = trim($path, '/');
-		if (in_array('..', explode('/', $path), true) || str_contains($path, "\0")) throw new \InvalidArgumentException('Invalid gallery path');
-		return $path;
-	}
-
 	private function isSupported(File $file): bool {
 		return str_starts_with($file->getMimeType(), 'image/') || in_array($file->getMimeType(), self::SUPPORTED_VIDEO_MIMES, true);
 	}

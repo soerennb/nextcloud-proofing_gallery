@@ -45,7 +45,10 @@ final class GuestRatingMapper extends QBMapper {
 		return $this->findEntities($qb);
 	}
 
-	/** @param list<int> $fileIds @return list<GuestRating> */
+	/**
+	 * @param list<int> $fileIds
+	 * @return list<GuestRating>
+	 */
 	public function findForGalleryFiles(int $galleryId, array $fileIds): array {
 		$fileIds = array_values(array_unique(array_filter(array_map('intval', $fileIds), static fn (int $id): bool => $id > 0)));
 		if ($fileIds === []) return [];

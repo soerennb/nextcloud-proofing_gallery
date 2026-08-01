@@ -72,10 +72,10 @@ final class CapabilityPolicyService {
 
 	private function enabledInGallery(string $feature, GallerySettings $settings): bool {
 		return match ($feature) {
-			'guestUploads' => $settings->delivery['guestUploads'],
-			'downloads' => $settings->delivery['downloadScope'] !== 'none',
-			'likes', 'colors', 'comments', 'annotations', 'selections' => $settings->review[$feature],
-			'lifecycleAutomation' => $settings->lifecycle['enabled'],
+			'guestUploads' => $settings->delivery->guestUploads,
+			'downloads' => $settings->delivery->downloadScope->value !== 'none',
+			'likes', 'colors', 'comments', 'annotations', 'selections' => $settings->review->enabled($feature),
+			'lifecycleAutomation' => $settings->lifecycle->enabled,
 			default => true,
 		};
 	}

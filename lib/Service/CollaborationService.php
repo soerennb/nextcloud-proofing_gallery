@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Service;
 
+use OCA\ProofingGallery\Db\QueryResult;
+
 use InvalidArgumentException;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\Guest;
@@ -31,7 +33,7 @@ final class CollaborationService {
 	/** @return array<string, mixed> */
 	public function state(Gallery $gallery, ?Guest $guest, int $cursor): array {
 		$settings = $this->settings($gallery);
-		$visibleGuestId = $settings->feedbackVisibility === FeedbackVisibility::Private ? $guest?->getId() : null;
+		$visibleGuestId = $settings->review->visibility === FeedbackVisibility::Private ? $guest?->getId() : null;
 		$feedback = $this->rows('proofing_feedback', $gallery->getId(), $visibleGuestId);
 		$comments = $this->rows('proofing_comments', $gallery->getId(), $visibleGuestId, 'created_at');
 		$selections = $this->selectionRows($gallery->getId(), $visibleGuestId);
@@ -77,15 +79,15 @@ final class CollaborationService {
 		return [
 			'policy' => [
 				'enabled' => $settings->mode === GalleryMode::Collaboration,
-				'visibility' => $settings->feedbackVisibility->value,
-				'colorLabels' => $settings->colorLabels,
+				'visibility' => $settings->review->visibility->value,
+				'colorLabels' => $settings->review->colorLabels,
 				'requiresSession' => $guest === null,
 				'features' => [
-					'likes' => $settings->review['likes'] && $this->capabilities->feature('likes'),
-					'colors' => $settings->review['colors'] && $this->capabilities->feature('colors'),
-					'comments' => $settings->review['comments'] && $this->capabilities->feature('comments'),
-					'annotations' => $settings->review['annotations'] && $this->capabilities->feature('annotations'),
-					'selections' => $settings->review['selections'] && $this->capabilities->feature('selections'),
+					'likes' => $settings->review->likes && $this->capabilities->feature('likes'),
+					'colors' => $settings->review->colors && $this->capabilities->feature('colors'),
+					'comments' => $settings->review->comments && $this->capabilities->feature('comments'),
+					'annotations' => $settings->review->annotations && $this->capabilities->feature('annotations'),
+					'selections' => $settings->review->selections && $this->capabilities->feature('selections'),
 				],
 			],
 			'guest' => $guest,
@@ -102,7 +104,7 @@ final class CollaborationService {
 	public function toggleLike(Gallery $gallery, Guest $guest, int $fileId): bool {
 		$this->capabilities->assertFeature('likes');
 		$settings = $this->assertCollaboration($gallery, $fileId);
-		if (!$settings->review['likes']) {
+		if (!$settings->review->likes) {
 			throw new InvalidArgumentException('Likes are disabled');
 		}
 		$existing = $this->feedbackId($gallery->getId(), $guest->getId(), $fileId, 'like');
@@ -123,12 +125,12 @@ final class CollaborationService {
 	public function setColor(Gallery $gallery, Guest $guest, int $fileId, ?string $value): void {
 		$this->capabilities->assertFeature('colors');
 		$settings = $this->assertCollaboration($gallery, $fileId);
-		if (!$settings->review['colors']) {
+		if (!$settings->review->colors) {
 			throw new InvalidArgumentException('Color states are disabled');
 		}
 		$enabledLabels = array_values(array_filter(
-			$settings->colorLabels,
-			static fn (string $_label, int $index): bool => $settings->review['colorEnabled'][$index],
+			$settings->review->colorLabels,
+			static fn (string $_label, int $index): bool => $settings->review->colorEnabled[$index],
 			ARRAY_FILTER_USE_BOTH,
 		));
 		if ($value !== null && !in_array($value, $enabledLabels, true)) {
@@ -158,10 +160,10 @@ final class CollaborationService {
 		$this->capabilities->assertFeature('comments');
 		if ($annotation !== null) $this->capabilities->assertFeature('annotations');
 		$settings = $this->assertCollaboration($gallery, $fileId);
-		if (!$settings->review['comments']) {
+		if (!$settings->review->comments) {
 			throw new InvalidArgumentException('Comments are disabled');
 		}
-		if ($annotation !== null && !$settings->review['annotations']) {
+		if ($annotation !== null && !$settings->review->annotations) {
 			throw new InvalidArgumentException('Image annotations are disabled');
 		}
 		$body = trim($body);
@@ -240,7 +242,7 @@ final class CollaborationService {
 	public function saveSelection(Gallery $gallery, Guest $guest, string $name, string $message, array $fileIds): string {
 		$this->capabilities->assertFeature('selections');
 		$this->assertCollaborationMode($gallery);
-		if (!$this->settings($gallery)->review['selections']) {
+		if (!$this->settings($gallery)->review->selections) {
 			throw new InvalidArgumentException('Selections are disabled');
 		}
 		$name = trim($name);
@@ -301,16 +303,19 @@ final class CollaborationService {
 			->executeStatement();
 	}
 
-	/** @return array{content: string, filename: string, mimeType: string} */
+	/**
+	 * @param list<string> $requestedFields
+	 * @return array{content: string, filename: string, mimeType: string}
+	 */
 	public function exportSelection(Gallery $gallery, ?Guest $guest, string $publicId, string $format, array $requestedFields = []): array {
 		$this->capabilities->assertFeature('selections');
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')->from('proofing_selections')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('public_id', $qb->createNamedParameter($publicId)));
-		$row = $qb->executeQuery()->fetchAssociative();
+		$row = QueryResult::row($qb->executeQuery());
 		if ($row === false
-			|| ($guest !== null && $this->settings($gallery)->feedbackVisibility === FeedbackVisibility::Private
+			|| ($guest !== null && $this->settings($gallery)->review->visibility === FeedbackVisibility::Private
 				&& (int)$row['guest_id'] !== $guest->getId())) {
 			throw new InvalidArgumentException('Selection not found');
 		}
@@ -318,7 +323,7 @@ final class CollaborationService {
 		$qb->select('file_id')->from('proofing_selection_items')
 			->where($qb->expr()->eq('selection_id', $qb->createNamedParameter((int)$row['id'], IQueryBuilder::PARAM_INT)));
 		$fileIds = [];
-		foreach ($qb->executeQuery()->fetchFirstColumn() as $fileId) {
+		foreach (QueryResult::column($qb->executeQuery()) as $fileId) {
 			try {
 				$this->resolveMedia($gallery, (int)$fileId);
 				$fileIds[] = (int)$fileId;
@@ -365,17 +370,21 @@ final class CollaborationService {
 		$qb->select('id', 'guest_id')->from('proofing_selections')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('public_id', $qb->createNamedParameter($publicId)));
-		$row = $qb->executeQuery()->fetchAssociative();
-		if ($row === false || ($this->settings($gallery)->feedbackVisibility === FeedbackVisibility::Private && (int)$row['guest_id'] !== $guest->getId())) {
+		$row = QueryResult::row($qb->executeQuery());
+		if ($row === false || ($this->settings($gallery)->review->visibility === FeedbackVisibility::Private && (int)$row['guest_id'] !== $guest->getId())) {
 			throw new InvalidArgumentException('Selection not found');
 		}
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('file_id')->from('proofing_selection_items')
 			->where($qb->expr()->eq('selection_id', $qb->createNamedParameter((int)$row['id'], IQueryBuilder::PARAM_INT)));
-		return array_map('intval', $qb->executeQuery()->fetchFirstColumn());
+		return array_map('intval', QueryResult::column($qb->executeQuery()));
 	}
 
-	/** @param list<int> $fileIds @param list<string> $fields @return list<array<string, int|float|string>> */
+	/**
+	 * @param list<int> $fileIds
+	 * @param list<string> $fields
+	 * @return list<array<string, int|float|string>>
+	 */
 	private function composeExportRows(Gallery $gallery, ?Guest $guest, array $fileIds, array $fields, string $selectionName): array {
 		if ($fileIds === []) return [];
 		$culls = $guest === null ? $this->culling->forFiles($gallery->getOwnerUid(), $fileIds) : [];
@@ -389,7 +398,7 @@ final class CollaborationService {
 					->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
 					->andWhere($qb->expr()->in('file_id', $qb->createNamedParameter($chunk, IQueryBuilder::PARAM_INT_ARRAY)))
 					->andWhere($qb->expr()->isNull('deleted_at'))->orderBy('created_at', 'ASC');
-				foreach ($qb->executeQuery()->fetchAllAssociative() as $comment) $comments[(int)$comment['file_id']][] = trim((string)$comment['body']);
+				foreach (QueryResult::rows($qb->executeQuery()) as $comment) $comments[(int)$comment['file_id']][] = trim((string)$comment['body']);
 			}
 		}
 		$root = $gallery->getSourceType() === 'folder' ? $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId()) : null;
@@ -424,7 +433,10 @@ final class CollaborationService {
 		return array_reverse($this->presentSelections($this->selectionRows($gallery->getId(), null), null));
 	}
 
-	/** @return array{content: string, filename: string, mimeType: string} */
+	/**
+	 * @param list<string> $fields
+	 * @return array{content: string, filename: string, mimeType: string}
+	 */
 	public function exportOwnerSelection(Gallery $gallery, string $publicId, string $format, array $fields = []): array {
 		return $this->exportSelection($gallery, null, $publicId, $format, $fields);
 	}
@@ -550,7 +562,7 @@ final class CollaborationService {
 		if ($guestId !== null) {
 			$qb->andWhere($qb->expr()->eq('guest_id', $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT)));
 		}
-		return $qb->executeQuery()->fetchAllAssociative();
+		return QueryResult::rows($qb->executeQuery());
 	}
 
 	/** @return list<array<string, mixed>> */
@@ -560,7 +572,7 @@ final class CollaborationService {
 			$qb = $this->db->getQueryBuilder();
 			$qb->select('file_id')->from('proofing_selection_items')
 				->where($qb->expr()->eq('selection_id', $qb->createNamedParameter((int)$row['id'], IQueryBuilder::PARAM_INT)));
-			$row['fileIds'] = array_map('intval', $qb->executeQuery()->fetchFirstColumn());
+			$row['fileIds'] = array_map('intval', QueryResult::column($qb->executeQuery()));
 		}
 		return $rows;
 	}
@@ -584,7 +596,7 @@ final class CollaborationService {
 				'author' => $this->guestName((int)$row['guest_id']),
 				'annotations' => array_map(
 					static fn (array $annotation): array => array_map('intval', $annotation),
-					$qb->executeQuery()->fetchAllAssociative(),
+					QueryResult::rows($qb->executeQuery()),
 				),
 			];
 		}, $rows);
@@ -624,7 +636,7 @@ final class CollaborationService {
 		if ($guestId !== null) {
 			$qb->andWhere($qb->expr()->eq('guest_id', $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT)));
 		}
-		$rows = $qb->executeQuery()->fetchAllAssociative();
+		$rows = QueryResult::rows($qb->executeQuery());
 		return array_map(static fn (array $row): array => [
 			'id' => (int)$row['id'],
 			'type' => $row['event_type'],

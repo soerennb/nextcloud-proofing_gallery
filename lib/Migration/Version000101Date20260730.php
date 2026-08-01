@@ -11,7 +11,8 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 final class Version000101Date20260730 extends SimpleMigrationStep {
-	public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ?ISchemaWrapper {
+	/** @param array<string, mixed> $options */
+	public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ISchemaWrapper {
 		$schema = $schemaClosure();
 		$table = $schema->getTable('proofing_managers');
 		if (!$table->hasColumn('principal_type')) {

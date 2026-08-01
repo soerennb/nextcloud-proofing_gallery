@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Service;
 
+use OCA\ProofingGallery\Db\QueryResult;
+
 use OCA\ProofingGallery\AppInfo\Application;
 use OCP\App\IAppManager;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -99,12 +101,12 @@ final class NativeNotificationService {
 	public function dispatchPending(): int {
 		$now = $this->clock->getTime();
 		$qb = $this->db->getQueryBuilder();
-		$ids = $qb->select('id')->from('proofing_native_notify')
+		$ids = QueryResult::column($qb->select('id')->from('proofing_native_notify')
 			->where($qb->expr()->eq('active', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL)))
 			->andWhere($qb->expr()->eq('status', $qb->createNamedParameter('pending')))
 			->andWhere($qb->expr()->lt('attempts', $qb->createNamedParameter(5, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->lte('available_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT)))
-			->orderBy('id')->setMaxResults(100)->executeQuery()->fetchFirstColumn();
+			->orderBy('id')->setMaxResults(100)->executeQuery());
 		$sent = 0;
 		foreach ($ids as $id) if ($this->dispatchState((int)$id)) $sent++;
 		return $sent;
@@ -113,11 +115,11 @@ final class NativeNotificationService {
 	/** @return array<string, mixed>|null */
 	public function state(int $id, string $userUid): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$row = $qb->select('*')->from('proofing_native_notify')
+		$row = QueryResult::row($qb->select('*')->from('proofing_native_notify')
 			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('user_uid', $qb->createNamedParameter($userUid)))
 			->andWhere($qb->expr()->eq('active', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL)))
-			->executeQuery()->fetchAssociative();
+			->executeQuery());
 		return $row === false ? null : $row;
 	}
 
@@ -134,11 +136,11 @@ final class NativeNotificationService {
 
 	public function processGalleryUser(int $galleryId, string $userUid): void {
 		$qb = $this->db->getQueryBuilder();
-		$ids = array_map('intval', $qb->select('id')->from('proofing_native_notify')
+		$ids = array_map('intval', QueryResult::column($qb->select('id')->from('proofing_native_notify')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('user_uid', $qb->createNamedParameter($userUid)))
 			->andWhere($qb->expr()->eq('active', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL)))
-			->executeQuery()->fetchFirstColumn());
+			->executeQuery()));
 		foreach ($ids as $id) {
 			try {
 				$notification = $this->manager->createNotification()
@@ -163,9 +165,9 @@ final class NativeNotificationService {
 			->andWhere($qb->expr()->eq('active', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL)));
 		if ($qb->executeStatement() !== 1) return false;
 		$qb = $this->db->getQueryBuilder();
-		$row = $qb->select('*')->from('proofing_native_notify')
+		$row = QueryResult::row($qb->select('*')->from('proofing_native_notify')
 			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
-			->executeQuery()->fetchAssociative();
+			->executeQuery());
 		if ($row === false) return false;
 		try {
 			$notification = $this->manager->createNotification()
@@ -196,11 +198,11 @@ final class NativeNotificationService {
 	/** @return array<string, mixed>|null */
 	private function find(int $galleryId, string $userUid, string $category): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$row = $qb->select('*')->from('proofing_native_notify')
+		$row = QueryResult::row($qb->select('*')->from('proofing_native_notify')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('user_uid', $qb->createNamedParameter($userUid)))
 			->andWhere($qb->expr()->eq('category', $qb->createNamedParameter($category)))
-			->executeQuery()->fetchAssociative();
+			->executeQuery());
 		return $row === false ? null : $row;
 	}
 

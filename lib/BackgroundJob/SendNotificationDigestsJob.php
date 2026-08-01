@@ -14,6 +14,7 @@ final class SendNotificationDigestsJob extends TimedJob {
 		$this->setInterval(300);
 	}
 
+	/** @param mixed $argument */
 	protected function run($argument): void {
 		$this->notifications->dispatch();
 	}

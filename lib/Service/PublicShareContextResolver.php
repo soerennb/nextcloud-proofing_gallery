@@ -7,6 +7,7 @@ namespace OCA\ProofingGallery\Service;
 use OCA\ProofingGallery\Db\GalleryMapper;
 use OCA\ProofingGallery\Db\PublicLinkMapper;
 use OCA\ProofingGallery\Domain\PublicLinkPolicy;
+use OCA\ProofingGallery\Domain\PublicLinkCapability;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCA\ProofingGallery\Dto\PublicShareContext;
 use OCA\ProofingGallery\Exception\FolderAccessException;
@@ -26,11 +27,11 @@ final class PublicShareContextResolver {
 	) {
 	}
 
-	public function resolve(string $token, string $permission = 'view'): PublicShareContext {
+	public function resolve(string $token, PublicLinkCapability $permission = PublicLinkCapability::View): PublicShareContext {
 		return $this->resolveShare($this->shares->getShareByToken($token), $permission);
 	}
 
-	public function resolveShare(IShare $share, string $permission = 'view'): PublicShareContext {
+	public function resolveShare(IShare $share, PublicLinkCapability $permission = PublicLinkCapability::View): PublicShareContext {
 		$link = $this->links->findByToken($share->getToken());
 		if ($link->getStatus() !== 'active' || $link->getRevokedAt() !== null) throw new \InvalidArgumentException('Public link is inactive');
 		$gallery = $this->galleries->find($link->getGalleryId());
@@ -43,7 +44,7 @@ final class PublicShareContextResolver {
 		return new PublicShareContext($share, $gallery, $settings, $link, $policy, $expected);
 	}
 
-	public function tryResolve(string $token, string $permission = 'view'): ?PublicShareContext {
+	public function tryResolve(string $token, PublicLinkCapability $permission = PublicLinkCapability::View): ?PublicShareContext {
 		try {
 			return $this->resolve($token, $permission);
 		} catch (ShareNotFound|DoesNotExistException|MultipleObjectsReturnedException|FolderAccessException|\OCP\Files\NotFoundException|\InvalidArgumentException|\JsonException) {
@@ -51,7 +52,7 @@ final class PublicShareContextResolver {
 		}
 	}
 
-	public function tryResolveShare(IShare $share, string $permission = 'view'): ?PublicShareContext {
+	public function tryResolveShare(IShare $share, PublicLinkCapability $permission = PublicLinkCapability::View): ?PublicShareContext {
 		try {
 			return $this->resolveShare($share, $permission);
 		} catch (DoesNotExistException|MultipleObjectsReturnedException|FolderAccessException|\OCP\Files\NotFoundException|\InvalidArgumentException|\JsonException) {

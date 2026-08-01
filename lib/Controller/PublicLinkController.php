@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Exception\AuthorizationException;
 use OCA\ProofingGallery\Exception\MetadataConflictException;
+use OCA\ProofingGallery\Dto\PublicLinkConfiguration;
 use OCA\ProofingGallery\Service\GalleryService;
 use OCA\ProofingGallery\Service\GuestRatingService;
 use OCA\ProofingGallery\Service\PublicLinkManagerService;
@@ -97,8 +98,11 @@ final class PublicLinkController extends Controller {
 	): DataResponse {
 		try {
 			return new DataResponse($this->publicLinks->create(
-				$this->galleries->get($this->userId(), $id), $name, $policy, $startPath, $viewMode,
-				$groupDepth, $minOwnerRating, $publicLocale, $password, $expiresAt,
+				$this->galleries->get($this->userId(), $id),
+				PublicLinkConfiguration::fromArray(compact(
+					'name', 'policy', 'startPath', 'viewMode', 'groupDepth', 'minOwnerRating',
+					'publicLocale', 'password', 'expiresAt',
+				)),
 			), Http::STATUS_CREATED);
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
@@ -125,8 +129,12 @@ final class PublicLinkController extends Controller {
 	): DataResponse {
 		try {
 			return new DataResponse($this->publicLinks->update(
-				$this->galleries->get($this->userId(), $id), $linkId, $name, $policy, $startPath, $viewMode,
-				$groupDepth, $minOwnerRating, $publicLocale, $password, $expiresAt,
+				$this->galleries->get($this->userId(), $id),
+				$linkId,
+				PublicLinkConfiguration::fromArray(compact(
+					'name', 'policy', 'startPath', 'viewMode', 'groupDepth', 'minOwnerRating',
+					'publicLocale', 'password', 'expiresAt',
+				)),
 			));
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);

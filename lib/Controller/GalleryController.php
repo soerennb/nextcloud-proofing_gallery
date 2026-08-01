@@ -648,8 +648,8 @@ final class GalleryController extends Controller {
 						$gallery->getSettings(),
 						true,
 						flags: JSON_THROW_ON_ERROR,
-					))->appearance;
-					if (!in_array($fileId, [$appearance['heroFileId'], $appearance['logoFileId']], true)) {
+					))->presentation;
+					if (!in_array($fileId, [$appearance->heroFileId, $appearance->logoFileId], true)) {
 						throw $exception;
 					}
 					$file = $this->folders->resolveOwnerImage($gallery->getOwnerUid(), $fileId);

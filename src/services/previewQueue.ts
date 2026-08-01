@@ -10,20 +10,25 @@ type PreviewFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Re
 
 export class PreviewQueue {
 
-	private readonly pending: PreviewJob[] = []
+	private readonly priorityJobs: PreviewJob[] = []
+	private readonly normalJobs: PreviewJob[] = []
 	private active = 0
+	private consecutivePriorityJobs = 0
 	private readonly maximumConcurrency: () => number
 	private readonly request: PreviewFetch
 	private readonly createObjectUrl: (blob: Blob) => string
+	private readonly revokeObjectUrl: (url: string) => void
 
 	public constructor(
 		maximumConcurrency: () => number,
 		request: PreviewFetch = fetch,
 		createObjectUrl: (blob: Blob) => string = URL.createObjectURL,
+		revokeObjectUrl: (url: string) => void = URL.revokeObjectURL,
 	) {
 		this.maximumConcurrency = maximumConcurrency
 		this.request = request
 		this.createObjectUrl = createObjectUrl
+		this.revokeObjectUrl = revokeObjectUrl
 	}
 
 	public enqueue(source: string, controller: AbortController, priority = false): Promise<string> {
@@ -37,21 +42,24 @@ export class PreviewQueue {
 			}
 			if (controller.signal.aborted) return reject(this.abortError())
 			controller.signal.addEventListener('abort', job.abort, { once: true })
-			priority ? this.pending.unshift(job) : this.pending.push(job)
+			const queue = priority ? this.priorityJobs : this.normalJobs
+			queue.push(job)
 			this.drain()
 		})
 	}
 
-	private cancel(job: PreviewJob) {
-		const index = this.pending.indexOf(job)
+	private cancel(job: PreviewJob): void {
+		const queue = this.priorityJobs.includes(job) ? this.priorityJobs : this.normalJobs
+		const index = queue.indexOf(job)
 		if (index < 0) return
-		this.pending.splice(index, 1)
+		queue.splice(index, 1)
 		job.reject(this.abortError())
 	}
 
-	private drain() {
-		while (this.active < this.maximumConcurrency() && this.pending.length > 0) {
-			const job = this.pending.shift()!
+	private drain(): void {
+		while (this.active < this.maximumConcurrency()) {
+			const job = this.nextJob()
+			if (!job) return
 			job.controller.signal.removeEventListener('abort', job.abort)
 			if (job.controller.signal.aborted) {
 				job.reject(this.abortError())
@@ -63,13 +71,31 @@ export class PreviewQueue {
 					if (!response.ok) throw new Error(`Preview failed with ${response.status}`)
 					return response.blob()
 				})
-				.then(blob => job.resolve(this.createObjectUrl(blob)))
+				.then(blob => {
+					if (job.controller.signal.aborted) throw this.abortError()
+					const objectUrl = this.createObjectUrl(blob)
+					if (job.controller.signal.aborted) {
+						this.revokeObjectUrl(objectUrl)
+						throw this.abortError()
+					}
+					job.resolve(objectUrl)
+				})
 				.catch(job.reject)
 				.finally(() => {
 					this.active--
 					this.drain()
 				})
 		}
+	}
+
+	private nextJob(): PreviewJob | undefined {
+		if (this.priorityJobs.length > 0 && (this.normalJobs.length === 0 || this.consecutivePriorityJobs < 3)) {
+			this.consecutivePriorityJobs++
+			return this.priorityJobs.shift()
+		}
+		const job = this.normalJobs.shift()
+		if (job) this.consecutivePriorityJobs = 0
+		return job ?? this.priorityJobs.shift()
 	}
 
 	private abortError(): DOMException {

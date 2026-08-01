@@ -40,7 +40,10 @@ final class NotificationController extends Controller {
 		}
 	}
 
-	/** @param list<string> $eventTypes */
+	/**
+	 * @param list<string> $eventTypes
+	 * @param list<string> $nativeEventTypes
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'PUT', url: '/api/v1/galleries/{galleryId}/notification-subscriptions')]
 	public function save(

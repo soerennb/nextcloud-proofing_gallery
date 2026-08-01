@@ -6,13 +6,11 @@ namespace OCA\ProofingGallery\Service;
 
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\MediaCull;
-use OCA\ProofingGallery\Db\MediaCullMapper;
 use OCA\ProofingGallery\Db\MediaIndexMapper;
 
 final class CullingXmpService {
 	public function __construct(
 		private MediaIndexMapper $index,
-		private MediaCullMapper $culls,
 		private FolderService $folders,
 		private MediaMetadataService $metadata,
 		private CullingService $culling,

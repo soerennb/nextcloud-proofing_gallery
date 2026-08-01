@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Service;
 
+use OCA\ProofingGallery\Db\QueryResult;
+
 use OCA\ProofingGallery\Db\PublicLink;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\DB\QueryBuilder\IQueryBuilder;
@@ -60,6 +62,6 @@ final class ShareAuditService {
 			'outcome' => $row['outcome'],
 			'reasonCode' => $row['reason_code'],
 			'createdAt' => (int)$row['created_at'],
-		], $qb->executeQuery()->fetchAllAssociative());
+		], QueryResult::rows($qb->executeQuery()));
 	}
 }

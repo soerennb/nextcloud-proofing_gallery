@@ -6,6 +6,7 @@ namespace OCA\ProofingGallery\Share;
 
 use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Service\PublicGalleryDataService;
+use OCA\ProofingGallery\Dto\PublicGalleryQuery;
 use OCP\AppFramework\Http\Template\PublicTemplateResponse;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
@@ -29,10 +30,8 @@ final class PublicShareTemplateProvider implements IPublicShareTemplateProvider 
 
 	public function renderPage(IShare $share, string $token, string $path): TemplateResponse {
 		$context = $this->contexts->resolveShare($share);
-		$link = $context->link;
 		$gallery = $context->gallery;
-		$node = $context->root;
-		$initialPage = $this->galleryData->page($gallery, $node, 60, 0, $path, link: $link, nativeRootIsScope: true);
+		$initialPage = $this->galleryData->page($context, new PublicGalleryQuery(path: $path));
 		$this->initialState->provideInitialState('public-gallery', [
 			'id' => $gallery->getId(),
 			'title' => $gallery->getTitle(),

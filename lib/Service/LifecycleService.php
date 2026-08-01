@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Service;
 
+use OCA\ProofingGallery\Db\QueryResult;
+
 use OCA\ProofingGallery\Db\GalleryMapper;
 use OCA\ProofingGallery\Dto\GallerySettings;
+use OCA\ProofingGallery\Dto\Settings\LifecycleSettings;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\Files\IAppData;
@@ -60,7 +63,7 @@ final class LifecycleService {
 		foreach ($this->galleries->findLifecycleCandidates() as $gallery) {
 			$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
 			$rule = $settings->lifecycle;
-			if (!$rule['enabled']) continue;
+			if (!$rule->enabled) continue;
 
 			if ($gallery->getShareToken() !== null && $this->revokeDue($gallery->getCompletedAt(), $rule, $now)) {
 				$this->shares->revoke($gallery);
@@ -68,7 +71,7 @@ final class LifecycleService {
 				$revoked++;
 			}
 			if ($gallery->getShareToken() === null && $gallery->getRevokedAt() !== null
-				&& $gallery->getRevokedAt() + $rule['archiveAfterDays'] * 86400 <= $now) {
+				&& $gallery->getRevokedAt() + $rule->archiveAfterDays * 86400 <= $now) {
 				$gallery->setStatus('archived');
 				$gallery->setArchivedAt($now);
 				$gallery->setUpdatedAt($now);
@@ -80,13 +83,12 @@ final class LifecycleService {
 		return compact('revoked', 'archived');
 	}
 
-	/** @param array<string, mixed> $rule */
-	private function revokeDue(?int $completedAt, array $rule, int $now): bool {
-		if ($rule['trigger'] === 'after_completion') {
-			return $completedAt !== null && $completedAt + $rule['revokeAfterDays'] * 86400 <= $now;
+	private function revokeDue(?int $completedAt, LifecycleSettings $rule, int $now): bool {
+		if ($rule->trigger === 'after_completion') {
+			return $completedAt !== null && $completedAt + $rule->revokeAfterDays * 86400 <= $now;
 		}
-		if ($rule['revokeAt'] === '') return false;
-		$date = \DateTimeImmutable::createFromFormat('!Y-m-d', $rule['revokeAt'], new \DateTimeZone('UTC'));
+		if ($rule->revokeAt === '') return false;
+		$date = \DateTimeImmutable::createFromFormat('!Y-m-d', $rule->revokeAt, new \DateTimeZone('UTC'));
 		return $date !== false && $date->setTime(23, 59, 59)->getTimestamp() <= $now;
 	}
 
@@ -95,7 +97,7 @@ final class LifecycleService {
 		$qb->select('id')->from($table)
 			->where($qb->expr()->lt($column, $qb->createNamedParameter($before, IQueryBuilder::PARAM_INT)))
 			->orderBy('id', 'ASC')->setMaxResults(self::BATCH_SIZE);
-		$ids = array_map('intval', $qb->executeQuery()->fetchFirstColumn());
+		$ids = array_map('intval', QueryResult::column($qb->executeQuery()));
 		if ($ids === []) {
 			return 0;
 		}
@@ -125,7 +127,7 @@ final class LifecycleService {
 				),
 			))
 			->orderBy('id', 'ASC')->setMaxResults(self::BATCH_SIZE);
-		$rows = $qb->executeQuery()->fetchAllAssociative();
+		$rows = QueryResult::rows($qb->executeQuery());
 		if ($rows === []) {
 			return 0;
 		}
@@ -168,7 +170,7 @@ final class LifecycleService {
 		foreach (['proofing_events', 'proofing_uploads', 'proofing_collections', 'proofing_notify_subs', 'proofing_native_notify', 'proofing_media_index', 'proofing_public_links', 'proofing_guest_ratings', 'proofing_share_audit'] as $table) {
 			$qb = $this->db->getQueryBuilder();
 			$qb->selectDistinct('gallery_id')->from($table)->setMaxResults(100);
-			foreach ($qb->executeQuery()->fetchFirstColumn() as $galleryId) {
+			foreach (QueryResult::column($qb->executeQuery()) as $galleryId) {
 				$check = $this->db->getQueryBuilder();
 				$check->select('id')->from('proofing_galleries')
 					->where($check->expr()->eq('id', $check->createNamedParameter((int)$galleryId, IQueryBuilder::PARAM_INT)));
@@ -184,7 +186,7 @@ final class LifecycleService {
 
 		$qb = $this->db->getQueryBuilder();
 		$qb->selectDistinct('collection_id')->from('proofing_collection_items')->setMaxResults(100);
-		foreach ($qb->executeQuery()->fetchFirstColumn() as $collectionId) {
+		foreach (QueryResult::column($qb->executeQuery()) as $collectionId) {
 			$check = $this->db->getQueryBuilder();
 			$check->select('gallery_id')->from('proofing_collections')
 				->where($check->expr()->eq('gallery_id', $check->createNamedParameter((int)$collectionId, IQueryBuilder::PARAM_INT)));

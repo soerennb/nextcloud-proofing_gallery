@@ -10,7 +10,7 @@ use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\GalleryMapper;
 use OCA\ProofingGallery\Db\PublicLink;
 use OCA\ProofingGallery\Db\PublicLinkMapper;
-use OCA\ProofingGallery\Domain\DownloadScope;
+use OCA\ProofingGallery\Dto\PublicLinkConfiguration;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Db\TTransactional;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -20,6 +20,7 @@ use OCP\IURLGenerator;
 use OCP\IDBConnection;
 use OCP\Share\IManager;
 use OCP\Share\IShare;
+use OCP\Share\Exceptions\ShareNotFound;
 use Psr\Log\LoggerInterface;
 
 final class PublicLinkManagerService {
@@ -49,38 +50,27 @@ final class PublicLinkManagerService {
 		];
 	}
 
-	/** @param array<string, mixed> $policy */
-	public function create(
-		Gallery $gallery,
-		string $name,
-		array $policy,
-		string $startPath,
-		string $viewMode,
-		int $groupDepth,
-		int $minOwnerRating,
-		?string $publicLocale,
-		?string $password,
-		?string $expiresAt,
-	): array {
+	/** @return array<string, mixed> */
+	public function create(Gallery $gallery, PublicLinkConfiguration $config): array {
 		$this->primaryLinks->assertBelowLimit($gallery);
-		$config = $this->validate($gallery, $name, $policy, $startPath, $viewMode, $groupDepth, $minOwnerRating, $publicLocale);
+		$config = $this->validateScope($gallery, $config);
 		$share = $this->newShare($gallery);
-		$this->applyShare($share, $gallery, $config['name'], $config['policy'], $config['startPath'], $password, $expiresAt, true);
+		$this->applyShare($share, $gallery, $config, true);
 		$share = $this->shareManager->createShare($share);
 		$now = $this->clock->getTime();
 		$link = new PublicLink();
 		$link->setGalleryId($gallery->getId());
 		$link->setCoreShareId((int)$share->getId());
 		$link->setToken($share->getToken());
-		$link->setName($config['name']);
+		$link->setName($config->name);
 		$link->setStatus('active');
 		$link->setIsPrimary(false);
-		$link->setPolicy(json_encode($config['policy'], JSON_THROW_ON_ERROR));
-		$link->setStartPath($config['startPath']);
-		$link->setViewMode($config['viewMode']);
-		$link->setGroupDepth($config['groupDepth']);
-		$link->setMinOwnerRating($config['minOwnerRating']);
-		$link->setPublicLocale($config['publicLocale']);
+		$link->setPolicy(json_encode($config->policy, JSON_THROW_ON_ERROR));
+		$link->setStartPath($config->startPath);
+		$link->setViewMode($config->viewMode);
+		$link->setGroupDepth($config->groupDepth);
+		$link->setMinOwnerRating($config->minOwnerRating);
+		$link->setPublicLocale($config->publicLocale);
 		$link->setCreatedAt($now);
 		$link->setUpdatedAt($now);
 		try {
@@ -95,34 +85,22 @@ final class PublicLinkManagerService {
 		}
 	}
 
-	/** @param array<string, mixed> $policy */
-	public function update(
-		Gallery $gallery,
-		int $linkId,
-		string $name,
-		array $policy,
-		string $startPath,
-		string $viewMode,
-		int $groupDepth,
-		int $minOwnerRating,
-		?string $publicLocale,
-		?string $password,
-		?string $expiresAt,
-	): array {
+	/** @return array<string, mixed> */
+	public function update(Gallery $gallery, int $linkId, PublicLinkConfiguration $config): array {
 		$link = $this->owned($gallery, $linkId);
 		if ($link->getStatus() !== 'active') throw new \InvalidArgumentException('Revoked links cannot be edited');
-		$config = $this->validate($gallery, $name, $policy, $startPath, $viewMode, $groupDepth, $minOwnerRating, $publicLocale);
+		$config = $this->validateScope($gallery, $config);
 		$share = $this->shareManager->getShareByToken($link->getToken());
 		$snapshot = $this->shareSnapshot($share);
-		$this->applyShare($share, $gallery, $config['name'], $config['policy'], $config['startPath'], $password, $expiresAt, false);
+		$this->applyShare($share, $gallery, $config, false);
 		$this->shareManager->updateShare($share);
-		$link->setName($config['name']);
-		$link->setPolicy(json_encode($config['policy'], JSON_THROW_ON_ERROR));
-		$link->setStartPath($config['startPath']);
-		$link->setViewMode($config['viewMode']);
-		$link->setGroupDepth($config['groupDepth']);
-		$link->setMinOwnerRating($config['minOwnerRating']);
-		$link->setPublicLocale($config['publicLocale']);
+		$link->setName($config->name);
+		$link->setPolicy(json_encode($config->policy, JSON_THROW_ON_ERROR));
+		$link->setStartPath($config->startPath);
+		$link->setViewMode($config->viewMode);
+		$link->setGroupDepth($config->groupDepth);
+		$link->setMinOwnerRating($config->minOwnerRating);
+		$link->setPublicLocale($config->publicLocale);
 		$link->setUpdatedAt($this->clock->getTime());
 		try {
 			return $this->present($this->links->update($link));
@@ -132,6 +110,7 @@ final class PublicLinkManagerService {
 		}
 	}
 
+	/** @return array<string, mixed> */
 	public function makePrimary(Gallery $gallery, int $linkId): array {
 		$link = $this->owned($gallery, $linkId);
 		if ($link->getStatus() !== 'active') throw new \InvalidArgumentException('Only active links can be primary');
@@ -149,11 +128,16 @@ final class PublicLinkManagerService {
 		return $this->present($link);
 	}
 
+	/** @return array<string, mixed> */
 	public function revoke(Gallery $gallery, int $linkId, string $actorUid): array {
 		$link = $this->owned($gallery, $linkId);
 		if ($link->getIsPrimary()) throw new \InvalidArgumentException('Use the legacy revoke action for the primary link');
 		if ($link->getStatus() === 'active') {
-			try { $this->shareManager->deleteShare($this->shareManager->getShareByToken($link->getToken())); } catch (\Throwable) {}
+			try {
+				$this->shareManager->deleteShare($this->shareManager->getShareByToken($link->getToken()));
+			} catch (ShareNotFound) {
+				// An already absent native share is safe to finalize as revoked locally.
+			}
 			$this->audit->record($link, 'revoke', actorUid: $actorUid);
 			$link->setStatus('revoked');
 			$link->setRevokedAt($this->clock->getTime());
@@ -177,21 +161,14 @@ final class PublicLinkManagerService {
 		return $link;
 	}
 
-	/** @param array<string, mixed> $policy @return array{name: string, policy: array<string, bool|string>, startPath: string, viewMode: string, groupDepth: int, minOwnerRating: int, publicLocale: ?string} */
-	private function validate(Gallery $gallery, string $name, array $policy, string $startPath, string $viewMode, int $groupDepth, int $minOwnerRating, ?string $publicLocale): array {
-		$name = trim($name);
-		if ($name === '' || mb_strlen($name) > 120) throw new \InvalidArgumentException('Link name must contain 1 to 120 characters');
-		$policy = $this->policies->validate($policy);
-		if (!$policy['view']) throw new \InvalidArgumentException('Public links must allow viewing');
-		$startPath = $this->scopes->normalize($startPath);
-		if (!in_array($viewMode, ['folder', 'recursive'], true) || $groupDepth < 0 || $groupDepth > 8 || $minOwnerRating < 0 || $minOwnerRating > 5) throw new \InvalidArgumentException('Invalid public link view');
-		if ($publicLocale !== null && !in_array($publicLocale, ['en', 'de'], true)) throw new \InvalidArgumentException('Invalid public locale');
+	private function validateScope(Gallery $gallery, PublicLinkConfiguration $config): PublicLinkConfiguration {
+		$startPath = $this->scopes->normalize($config->startPath);
 		$root = $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId());
 		if ($startPath !== '') {
 			$node = $root->get($startPath);
 			if (!$node instanceof Folder || !$root->isSubNode($node)) throw new \InvalidArgumentException('Public link start folder not found');
 		}
-		return compact('name', 'policy', 'startPath', 'viewMode', 'groupDepth', 'minOwnerRating', 'publicLocale');
+		return $config->withStartPath($startPath);
 	}
 
 	private function newShare(Gallery $gallery): IShare {
@@ -203,22 +180,14 @@ final class PublicLinkManagerService {
 		return $share;
 	}
 
-	/** @param array<string, bool|string> $policy */
-	private function applyShare(IShare $share, Gallery $gallery, string $name, array $policy, string $startPath, ?string $password, ?string $expiresAt, bool $creating): void {
+	private function applyShare(IShare $share, Gallery $gallery, PublicLinkConfiguration $config, bool $creating): void {
 		$root = $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId());
-		$share->setNode($startPath === '' ? $root : $root->get($startPath));
-		$share->setLabel($gallery->getTitle() . ' · ' . $name);
+		$share->setNode($config->startPath === '' ? $root : $root->get($config->startPath));
+		$share->setLabel($gallery->getTitle() . ' · ' . $config->name);
 		$share->setPermissions(Constants::PERMISSION_READ);
-		$share->setHideDownload(!DownloadScope::from((string)$policy['downloadScope'])->allowsIndividual());
-		if ($creating || $password !== null) $share->setPassword($password === '' ? null : $password);
-		$share->setExpirationDate($this->expirationDate($expiresAt));
-	}
-
-	private function expirationDate(?string $value): ?DateTime {
-		if ($value === null || $value === '') return null;
-		$date = DateTime::createFromFormat('!Y-m-d', $value);
-		if ($date === false || $date->format('Y-m-d') !== $value) throw new \InvalidArgumentException('Expiration date must use YYYY-MM-DD');
-		return $date;
+		$share->setHideDownload(!$config->policy->downloadScope->allowsIndividual());
+		if ($creating || $config->password !== null) $share->setPassword($config->password === '' ? null : $config->password);
+		$share->setExpirationDate($config->expiresAt);
 	}
 
 	/** @return array{node: \OCP\Files\Node, label: string, permissions: int, hideDownload: bool, password: ?string, expiration: ?DateTime} */

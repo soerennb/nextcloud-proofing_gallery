@@ -91,19 +91,19 @@ final class PrimaryPublicLinkSynchronizer {
 		$settings = \OCA\ProofingGallery\Dto\GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
 		$link->setPolicy(json_encode($this->policies->validate([
 			'view' => true,
-			'likes' => $settings->review['likes'],
-			'colors' => $settings->review['colors'],
-			'comments' => $settings->review['comments'],
-			'annotations' => $settings->review['annotations'],
-			'selections' => $settings->review['selections'],
-			'ratings' => $settings->review['ratings'],
-			'pick' => $settings->review['pick'],
-			'upload' => $settings->delivery['guestUploads'],
+			'likes' => $settings->review->likes,
+			'colors' => $settings->review->colors,
+			'comments' => $settings->review->comments,
+			'annotations' => $settings->review->annotations,
+			'selections' => $settings->review->selections,
+			'ratings' => $settings->review->ratings,
+			'pick' => $settings->review->pick,
+			'upload' => $settings->delivery->guestUploads,
 			'export' => true,
-			'metadata' => $settings->metadata['publicFields'] !== [],
-			'downloadScope' => $settings->delivery['downloadScope'],
+			'metadata' => $settings->metadata->publicFields !== [],
+			'downloadScope' => $settings->delivery->downloadScope->value,
 		]), JSON_THROW_ON_ERROR));
-		$link->setViewMode($settings->navigation['recursive'] ? 'recursive' : 'folder');
-		$link->setGroupDepth($settings->navigation['groupBy'] === 'folder' ? $settings->navigation['groupDepth'] : 0);
+		$link->setViewMode($settings->navigation->recursive ? 'recursive' : 'folder');
+		$link->setGroupDepth($settings->navigation->groupBy === 'folder' ? $settings->navigation->groupDepth : 0);
 	}
 }

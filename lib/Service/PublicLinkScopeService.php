@@ -32,7 +32,7 @@ final class PublicLinkScopeService {
 			return false;
 		}
 		if ($startPath !== '' && $relativeFilePath !== $startPath && !str_starts_with($relativeFilePath, $startPath . '/')) return false;
-		if ($link->getViewMode() === 'recursive' || $settings->navigation['folders']) return true;
+		if ($link->getViewMode() === 'recursive' || $settings->navigation->folders) return true;
 		return trim(dirname($relativeFilePath), './') === $startPath;
 	}
 }

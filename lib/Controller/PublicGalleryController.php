@@ -6,8 +6,7 @@ namespace OCA\ProofingGallery\Controller;
 
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\PublicLink;
-use OCA\ProofingGallery\Dto\GallerySettings;
-use OCA\ProofingGallery\Domain\DownloadScope;
+use OCA\ProofingGallery\Dto\PublicGalleryQuery;
 use OCA\ProofingGallery\Http\TemporaryFileResponse;
 use OCA\ProofingGallery\Service\PolicyService;
 use OCA\ProofingGallery\Service\PublicGalleryDataService;
@@ -23,7 +22,6 @@ use OCP\AppFramework\Http\DataDownloadResponse;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\Files\File;
-use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\IPreview;
 use OCP\IRequest;
@@ -39,10 +37,10 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		private WatermarkPreviewService $watermarks,
 		private PublicGalleryDataService $galleryData,
 		private CollectionService $collections,
+		private \OCA\ProofingGallery\Service\PublicMediaResolver $publicMedia,
 		private PolicyService $policies,
 		private \OCA\ProofingGallery\Service\CapabilityPolicyService $capabilities,
 		private \OCA\ProofingGallery\Service\BrandingAssetService $branding,
-		private \OCA\ProofingGallery\Service\PublicLinkPolicyService $linkPolicies,
 		private \OCA\ProofingGallery\Service\ShareAuditService $shareAudit,
 	) {
 		parent::__construct($request, $session, $contextResolver);
@@ -62,20 +60,9 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		?string $cursor = null,
 	): JSONResponse {
 		try {
-			$result = $this->galleryData->page(
-				$this->resolvedGallery(),
-				$this->folder(),
-				$limit,
-				$offset,
-				$path,
-				$search,
-				$sortBy,
-				$sortDirection,
-				$groupBy,
-				$cursor,
-				$this->resolvedPublicLink(),
-				true,
-			);
+			$result = $this->galleryData->page($this->publicContext(), new PublicGalleryQuery(
+				$limit, $offset, $path, $search, $sortBy, $sortDirection, $groupBy, $cursor,
+			));
 			$this->shareAudit->record($this->resolvedPublicLink(), 'view');
 			return new JSONResponse($result);
 		} catch (\InvalidArgumentException $exception) {
@@ -236,24 +223,20 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		if (!in_array($kind, ['logo', 'hero'], true)) {
 			return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
 		}
-		$settings = GallerySettings::fromArray(json_decode(
-			$this->resolvedGallery()->getSettings(),
-			true,
-			flags: JSON_THROW_ON_ERROR,
-		))->jsonSerialize();
-		$fileId = $settings['appearance'][$kind . 'FileId'];
-		if ($kind === 'logo' && !is_int($fileId) && is_string($settings['appearance']['instanceLogoAssetId'])) {
+		$presentation = $this->publicContext()->settings->presentation;
+		$fileId = $kind === 'hero' ? $presentation->heroFileId : $presentation->logoFileId;
+		if ($kind === 'logo' && $fileId === null && $presentation->instanceLogoAssetId !== null) {
 			try {
-				$asset = $this->branding->get($settings['appearance']['instanceLogoAssetId']);
+				$asset = $this->branding->get($presentation->instanceLogoAssetId);
 				return new DataDisplayResponse($asset->getContent(), Http::STATUS_OK, [
-					'Content-Type' => $this->branding->mimeType($settings['appearance']['instanceLogoAssetId']),
+					'Content-Type' => $this->branding->mimeType($presentation->instanceLogoAssetId),
 					'Cache-Control' => 'private, max-age=86400, immutable',
 				]);
 			} catch (\OCP\Files\NotFoundException) {
 				return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
 			}
 		}
-		if (!is_int($fileId)) {
+		if ($fileId === null) {
 			return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
 		}
 		foreach ($this->rootFolder->getUserFolder($this->resolvedGallery()->getOwnerUid())->getById($fileId) as $node) {
@@ -272,24 +255,8 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		return $this->publicContext()->link;
 	}
 
-	private function folder(): Folder {
-		return $this->publicContext()->root;
-	}
-
 	private function fileInShare(int $fileId): File {
-		if ($this->resolvedGallery()->getSourceType() === 'collection') {
-			try {
-				return $this->collections->resolveMedia($this->resolvedGallery(), $fileId);
-			} catch (\Throwable) {
-				throw new \OCP\Files\NotFoundException('Media file not found');
-			}
-		}
-		foreach ($this->folder()->getById($fileId) as $node) {
-			if ($node instanceof File && $this->folder()->isSubNode($node) && $this->isSupported($node)) {
-				return $node;
-			}
-		}
-		throw new \OCP\Files\NotFoundException('Media file not found');
+		return $this->publicMedia->resolve($this->publicContext(), $fileId);
 	}
 
 	private function previewResponse(
@@ -305,18 +272,14 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 			return new DataDisplayResponse('', Http::STATUS_BAD_REQUEST);
 		}
 		try {
-			$appearance = GallerySettings::fromArray(json_decode(
-				$this->resolvedGallery()->getSettings(),
-				true,
-				flags: JSON_THROW_ON_ERROR,
-			))->appearance;
-			if ($applyWatermark && $appearance['watermarkText'] !== '') {
+			$appearance = $this->publicContext()->settings->presentation;
+			if ($applyWatermark && $appearance->watermarkText !== '') {
 				$watermarked = $this->watermarks->render(
 					$file,
 					$x,
 					$y,
-					$appearance['watermarkText'],
-					$appearance['watermarkOpacity'],
+					$appearance->watermarkText,
+					$appearance->watermarkOpacity,
 					$mode,
 				);
 				return new DataDisplayResponse($watermarked['content'], Http::STATUS_OK, [
@@ -342,25 +305,14 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		}
 	}
 
-	private function isSupported(File $file): bool {
-		return str_starts_with($file->getMimeType(), 'image/')
-			|| in_array($file->getMimeType(), ['video/mp4', 'video/webm'], true);
-	}
-
 	private function downloadAllowed(string $kind): bool {
 		if (!$this->capabilities->feature('downloads')) return false;
-		$settings = GallerySettings::fromArray(json_decode(
-			$this->resolvedGallery()->getSettings(),
-			true,
-			flags: JSON_THROW_ON_ERROR,
-		));
-		$scope = DownloadScope::from($settings->delivery['downloadScope'])->restrict(DownloadScope::from(
-			(string)$this->linkPolicies->validate(json_decode($this->resolvedPublicLink()->getPolicy(), true, flags: JSON_THROW_ON_ERROR))['downloadScope'],
-		));
+		$settings = $this->publicContext()->settings;
+		$scope = $settings->delivery->downloadScope->restrict($this->publicContext()->policy->downloadScope);
 		return match ($kind) {
 			'individual' => !$this->publicContext()->share->getHideDownload() && $scope->allowsIndividual(),
 			'selection' => $scope->allowsSelection(),
-			'contactSheet' => $settings->delivery['contactSheet'] && $scope->allowsSelection(),
+			'contactSheet' => $settings->delivery->contactSheet && $scope->allowsSelection(),
 			default => false,
 		};
 	}

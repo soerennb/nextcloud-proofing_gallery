@@ -34,7 +34,8 @@ final class PublicLinkPolicy implements \JsonSerializable {
 		return new self($permissions, DownloadScope::from($scope));
 	}
 
-	public function allows(string $permission): bool {
+	public function allows(PublicLinkCapability|string $permission): bool {
+		$permission = $permission instanceof PublicLinkCapability ? $permission->value : $permission;
 		if (!array_key_exists($permission, $this->permissions)) {
 			throw new \InvalidArgumentException('Unknown public link permission: ' . $permission);
 		}

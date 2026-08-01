@@ -28,7 +28,7 @@ final class CollaborationController extends ResolvedPublicShareController {
 		IRequest $request,
 		ISession $session,
 		PublicShareContextResolver $contextResolver,
-		private \OCA\ProofingGallery\Service\FolderService $folders,
+		private \OCA\ProofingGallery\Service\PublicMediaResolver $publicMedia,
 		private GuestService $guests,
 		private CollaborationService $collaboration,
 		private \OCA\ProofingGallery\Service\GuestRatingService $guestRatings,
@@ -212,6 +212,7 @@ final class CollaborationController extends ResolvedPublicShareController {
 		}
 	}
 
+	/** @param Http::STATUS_OK|Http::STATUS_CREATED $status */
 	private function mutation(string $feature, callable $callback, int $status = Http::STATUS_OK): JSONResponse {
 		if (!$this->policy()[$feature]) return new JSONResponse(['message' => 'This action is disabled for this link'], Http::STATUS_FORBIDDEN);
 		try {
@@ -244,26 +245,16 @@ final class CollaborationController extends ResolvedPublicShareController {
 
 	/** @return array{ratings: bool, pick: bool} */
 	private function ratingPermissions(): array {
-		$settings = \OCA\ProofingGallery\Dto\GallerySettings::fromArray(json_decode($this->resolvedGallery()->getSettings(), true, flags: JSON_THROW_ON_ERROR));
+		$settings = $this->publicContext()->settings;
 		$enabled = $this->capabilities->feature('guestRatings');
 		return [
-			'ratings' => $enabled && $settings->review['ratings'] && $this->policy()['ratings'],
-			'pick' => $enabled && $settings->review['pick'] && $this->policy()['pick'],
+			'ratings' => $enabled && $settings->review->ratings && $this->policy()['ratings'],
+			'pick' => $enabled && $settings->review->pick && $this->policy()['pick'],
 		];
 	}
 
 	private function allowsFile(int $fileId): bool {
-		if ($this->resolvedGallery()->getSourceType() === 'collection') {
-			if ($this->resolvedPublicLink()->getStartPath() !== '') return false;
-			try {
-				$this->collaboration->assertMediaAvailable($this->resolvedGallery(), $fileId);
-				return true;
-			} catch (InvalidArgumentException) { return false; }
-		}
-		try {
-			$file = $this->folders->resolveMedia($this->resolvedGallery()->getOwnerUid(), $this->resolvedGallery()->getFolderId(), $fileId);
-			return $this->publicContext()->root->isSubNode($file);
-		} catch (\Throwable) { return false; }
+		return $this->publicMedia->allows($this->publicContext(), $fileId);
 	}
 
 	private function resolvedPublicLink(): PublicLink {

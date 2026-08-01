@@ -17,6 +17,7 @@ final class RebuildMediaIndexJob extends QueuedJob {
 	) {
 	}
 
+	/** @param mixed $argument */
 	protected function run($argument): void {
 		$galleryId = (int)($argument['galleryId'] ?? 0);
 		if ($galleryId < 1) return;

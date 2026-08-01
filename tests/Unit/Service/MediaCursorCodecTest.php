@@ -29,6 +29,27 @@ final class MediaCursorCodecTest extends TestCase {
 		$codec->decode($cursor, $this->query(4));
 	}
 
+	public function testViewAndArrangementChangesInvalidateCursor(): void {
+		$entry = new MediaIndex();
+		$entry->setFileId(17);
+		$entry->setSortKey('portrait.jpg');
+		$codec = new MediaCursorCodec();
+		$cursor = $codec->encode($entry, $this->query(3));
+
+		foreach ([
+			new MediaIndexQuery(4, 'owner', 60, 'other', 'ada', 'name', 'asc', 3),
+			new MediaIndexQuery(4, 'owner', 60, 'portraits', 'other', 'name', 'asc', 3),
+			new MediaIndexQuery(4, 'owner', 60, 'portraits', 'ada', 'name', 'desc', 3),
+		] as $query) {
+			try {
+				$codec->decode($cursor, $query);
+				self::fail('A cursor must be bound to the complete view query');
+			} catch (\InvalidArgumentException) {
+				self::assertTrue(true);
+			}
+		}
+	}
+
 	private function query(int $rating): MediaIndexQuery {
 		return new MediaIndexQuery(4, 'owner', 60, 'portraits', 'ada', 'name', 'asc', $rating);
 	}

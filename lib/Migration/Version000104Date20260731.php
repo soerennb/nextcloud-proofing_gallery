@@ -11,7 +11,8 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 final class Version000104Date20260731 extends SimpleMigrationStep {
-	public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ?ISchemaWrapper {
+	/** @param array<string, mixed> $options */
+	public function changeSchema(IOutput $output, Closure $schemaClosure, array $options): ISchemaWrapper {
 		$schema = $schemaClosure();
 		$galleries = $schema->getTable('proofing_galleries');
 		if (!$galleries->hasColumn('source_type')) {

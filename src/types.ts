@@ -103,7 +103,7 @@ export interface MediaCull {
 	rating: number
 	color: CullColor
 	pick: CullPick
-	source: 'app' | 'xmp'
+	source: 'app' | 'xmp' | 'merge'
 	revision: number
 	sourceEtag: string | null
 	sidecarEtag: string | null

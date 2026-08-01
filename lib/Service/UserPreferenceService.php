@@ -54,7 +54,10 @@ final class UserPreferenceService {
 		}
 	}
 
-	/** @param array<string, mixed> $patch */
+	/**
+	 * @param array<string, mixed> $patch
+	 * @return array<string, mixed>
+	 */
 	public function save(string $userId, array $patch): array {
 		$allowed = ['defaultPurpose', 'parentFolder', 'designPresetId', 'publicLocale', 'notifications', 'lifecycle', 'savedViews'];
 		$unknown = array_diff(array_keys($patch), $allowed);

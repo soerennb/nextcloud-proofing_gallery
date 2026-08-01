@@ -5,9 +5,8 @@ declare(strict_types=1);
 namespace OCA\ProofingGallery\Service;
 
 use OCA\ProofingGallery\Db\Gallery;
-use OCA\ProofingGallery\Db\PublicLink;
-use OCA\ProofingGallery\Dto\GallerySettings;
-use OCA\ProofingGallery\Domain\DownloadScope;
+use OCA\ProofingGallery\Dto\PublicGalleryQuery;
+use OCA\ProofingGallery\Dto\PublicShareContext;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\Node;
@@ -20,33 +19,32 @@ final class PublicGalleryDataService {
 		private MediaIndexService $mediaIndex,
 		private PolicyService $policies,
 		private PublicLinkScopeService $linkScopes,
-		private PublicLinkPolicyService $linkPolicies,
+		private PublicMediaResolver $publicMedia,
+		private MediaTypePolicy $mediaTypes,
 	) {
 	}
 
 	/** @return array<string, mixed> */
-	public function page(
-		Gallery $gallery,
-		Folder $root,
-		int $limit = 60,
-		int $offset = 0,
-		string $path = '',
-		string $search = '',
-		string $sortBy = '',
-		string $sortDirection = '',
-		string $groupBy = '',
-		?string $cursor = null,
-		?PublicLink $link = null,
-		bool $nativeRootIsScope = false,
-	): array {
+	public function page(PublicShareContext $context, PublicGalleryQuery $query = new PublicGalleryQuery()): array {
+		$gallery = $context->gallery;
+		$root = $context->root;
+		$link = $context->link;
+		$limit = $query->limit;
+		$offset = $query->offset;
+		$path = $query->path;
+		$search = $query->search;
+		$sortBy = $query->sortBy;
+		$sortDirection = $query->sortDirection;
+		$groupBy = $query->groupBy;
+		$cursor = $query->cursor;
 		$limit = max(1, min(200, $limit));
 		$offset = max(0, $offset);
 		$path = trim($path, '/');
 		$search = mb_substr(trim($search), 0, 120);
-		$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
-		$sortBy = $sortBy !== '' ? $sortBy : $settings->navigation['sortBy'];
-		$sortDirection = $sortDirection !== '' ? $sortDirection : $settings->navigation['sortDirection'];
-		$groupBy = $groupBy !== '' ? $groupBy : $settings->navigation['groupBy'];
+		$settings = $context->settings->withPublicPolicy($context->policy);
+		$sortBy = $sortBy !== '' ? $sortBy : $settings->navigation->sortBy;
+		$sortDirection = $sortDirection !== '' ? $sortDirection : $settings->navigation->sortDirection;
+		$groupBy = $groupBy !== '' ? $groupBy : $settings->navigation->groupBy;
 		if (!in_array($sortBy, ['name', 'modified', 'size'], true)
 			|| !in_array($sortDirection, ['asc', 'desc'], true)
 			|| !in_array($groupBy, ['none', 'type', 'folder'], true)) {
@@ -64,7 +62,7 @@ final class PublicGalleryDataService {
 				try {
 					$item['metadata'] = $this->metadata->publicSummary(
 						$this->collections->resolveMedia($gallery, (int)$item['id']),
-						$settings->metadata['publicFields'],
+						$settings->metadata->publicFields,
 					);
 				} catch (\Throwable) {
 					$item['metadata'] = ['state' => 'unavailable'];
@@ -72,7 +70,7 @@ final class PublicGalleryDataService {
 				return $item;
 			}, $nodes);
 			return $this->response(
-				$gallery,
+				$context,
 				array_slice($nodes, $offset, $limit),
 				count($nodes),
 				$limit,
@@ -86,28 +84,27 @@ final class PublicGalleryDataService {
 				[],
 				['indexed' => count($nodes), 'limit' => count($nodes), 'limitReached' => false, 'complete' => true],
 				['startPath' => '', 'viewMode' => 'collection', 'groupDepth' => 1],
-				$link,
 			);
 		}
-		if (!$settings->navigation['folders'] && $path !== '') {
+		if (!$settings->navigation->folders && $path !== '') {
 			throw new \OCP\Files\NotFoundException('Folder navigation is disabled');
 		}
-		$startPath = $link === null ? '' : $this->linkScopes->normalize($link->getStartPath());
-		$scopedRoot = $nativeRootIsScope ? $root : $this->folderAt($root, $startPath);
-		$recursive = $link?->getViewMode() === 'recursive';
-		$groupDepth = max(1, min(8, $link?->getGroupDepth() ?: $settings->navigation['groupDepth']));
+		$startPath = $this->linkScopes->normalize($link->getStartPath());
+		$scopedRoot = $root;
+		$recursive = $link->getViewMode() === 'recursive';
+		$groupDepth = max(1, min(8, $link->getGroupDepth() ?: $settings->navigation->groupDepth));
 		if ($recursive) {
 			$relativePath = $this->linkScopes->normalize($path);
-			$indexPath = $link === null ? $relativePath : $this->linkScopes->indexPath($link, $relativePath);
-			$minOwnerRating = $link?->getMinOwnerRating() ?? 0;
+			$indexPath = $this->linkScopes->indexPath($link, $relativePath);
+			$minOwnerRating = $link->getMinOwnerRating();
 			$page = $this->mediaIndex->page($gallery, $limit, $cursor, $indexPath, $search, $sortBy, $sortDirection, $minOwnerRating);
 			$items = [];
 			foreach ($page['items'] as $item) {
 				try {
-					$file = $this->fileById($root, (int)$item['id']);
+					$file = $this->publicMedia->resolve($context, (int)$item['id']);
 					$item['folder'] = false;
 					$item['group'] = $this->indexedGroup((string)$item['relativePath'], (string)$item['mimeType'], $indexPath, $groupBy, $groupDepth);
-					$item['metadata'] = $this->metadata->publicSummary($file, $settings->metadata['publicFields']);
+					$item['metadata'] = $this->metadata->publicSummary($file, $settings->metadata->publicFields);
 					$items[] = $item;
 				} catch (\Throwable) {
 					// Stale index entries never become public through a missing node.
@@ -116,7 +113,7 @@ final class PublicGalleryDataService {
 			$summary = $this->mediaIndex->summary($gallery, $indexPath, $search, $groupBy, $groupDepth, $minOwnerRating);
 			$page['total'] = array_sum($summary['groups']);
 			return $this->response(
-				$gallery,
+				$context,
 				$items,
 				$page['total'],
 				$limit,
@@ -130,18 +127,17 @@ final class PublicGalleryDataService {
 				$summary['groups'],
 				array_diff_key($summary, ['groups' => true]),
 				['startPath' => $startPath, 'viewMode' => 'recursive', 'groupDepth' => $groupDepth],
-				$link,
 			);
 		}
 		$currentFolder = $this->folderAt($scopedRoot, $path);
 		$nodes = array_values(array_filter(
 			$currentFolder->getDirectoryListing(),
 			fn (Node $node): bool => !str_starts_with($node->getName(), '.')
-				&& ($node instanceof Folder || ($node instanceof File && $this->isSupported($node))),
+				&& ($node instanceof Folder || ($node instanceof File && $this->mediaTypes->supports($node))),
 		));
 		$nodes = array_values(array_filter(
 			$nodes,
-			static fn (Node $node): bool => ($settings->navigation['folders'] || !($node instanceof Folder))
+				static fn (Node $node): bool => ($settings->navigation->folders || !($node instanceof Folder))
 				&& ($search === '' || mb_stripos($node->getName(), $search) !== false),
 		));
 		usort($nodes, static function (Node $left, Node $right) use ($sortBy, $sortDirection, $groupBy): int {
@@ -172,7 +168,7 @@ final class PublicGalleryDataService {
 			'folder' => $node instanceof Folder,
 			'group' => self::group($node),
 			'metadata' => $node instanceof File
-				? $this->metadata->publicSummary($node, $settings->metadata['publicFields'])
+				? $this->metadata->publicSummary($node, $settings->metadata->publicFields)
 				: ['state' => 'unavailable'],
 		], array_slice($nodes, $offset, $limit));
 
@@ -182,7 +178,7 @@ final class PublicGalleryDataService {
 			$groups[$key] = ($groups[$key] ?? 0) + 1;
 		}
 		return $this->response(
-			$gallery,
+			$context,
 			$items,
 			count($nodes),
 			$limit,
@@ -196,15 +192,18 @@ final class PublicGalleryDataService {
 			$groups,
 			['indexed' => count($nodes), 'limit' => $this->policies->get('maxIndexedMedia'), 'limitReached' => false, 'complete' => true],
 			['startPath' => $startPath, 'viewMode' => 'folder', 'groupDepth' => $groupDepth],
-			$link,
 		);
 	}
 
-	/** @param list<array<string, mixed>> $items
+	/**
+	 * @param list<array<string, mixed>> $items
+	 * @param array<string, int> $groups
+	 * @param array<string, mixed> $indexState
+	 * @param array<string, mixed> $scope
 	 * @return array<string, mixed>
 	 */
 	private function response(
-		Gallery $gallery,
+		PublicShareContext $context,
 		array $items,
 		int $total,
 		int $limit,
@@ -218,9 +217,9 @@ final class PublicGalleryDataService {
 		array $groups = [],
 		array $indexState = [],
 		array $scope = [],
-		?PublicLink $link = null,
 	): array {
-		$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
+		$gallery = $context->gallery;
+		$settings = $context->settings->withPublicPolicy($context->policy);
 		$effective = $this->capabilities->effective($settings);
 		$serialized = $settings->jsonSerialize();
 		if (!$effective['downloads']['allowed']) {
@@ -234,25 +233,9 @@ final class PublicGalleryDataService {
 		foreach (['likes', 'colors', 'comments', 'annotations', 'selections'] as $feature) {
 			if (!$effective[$feature]['allowed']) $serialized['review'][$feature] = false;
 		}
-		if ($link !== null) {
-			$policy = $this->linkPolicies->validate(json_decode($link->getPolicy(), true, flags: JSON_THROW_ON_ERROR));
-			foreach (['likes', 'colors', 'comments', 'annotations', 'selections'] as $feature) {
-				$serialized['review'][$feature] = $serialized['review'][$feature] && $policy[$feature];
-			}
-			$serialized['review']['ratings'] = $serialized['review']['ratings'] && $policy['ratings'] && $this->capabilities->feature('guestRatings');
-			$serialized['review']['pick'] = $serialized['review']['pick'] && $policy['pick'] && $this->capabilities->feature('guestRatings');
-			$serialized['delivery']['guestUploads'] = $serialized['delivery']['guestUploads'] && $policy['upload'];
-			$serialized['allowGuestUploads'] = $serialized['delivery']['guestUploads'];
-			$serialized['delivery']['downloadScope'] = DownloadScope::from($serialized['delivery']['downloadScope'])
-				->restrict(DownloadScope::from((string)$policy['downloadScope']))
-				->value;
-			$serialized['allowDownloads'] = $serialized['delivery']['downloadScope'] !== 'none';
-			if (!$policy['metadata']) $serialized['metadata']['publicFields'] = [];
-			if ($link->getPublicLocale() !== null) $serialized['publicLocale'] = $link->getPublicLocale();
-			if (!$policy['likes'] && !$policy['colors'] && !$policy['comments'] && !$policy['annotations'] && !$policy['selections'] && !$policy['ratings'] && !$policy['pick']) {
-				$serialized['mode'] = 'presentation';
-			}
-		}
+		$serialized['review']['ratings'] = $serialized['review']['ratings'] && $this->capabilities->feature('guestRatings');
+		$serialized['review']['pick'] = $serialized['review']['pick'] && $this->capabilities->feature('guestRatings');
+		if ($context->link->getPublicLocale() !== null) $serialized['publicLocale'] = $context->link->getPublicLocale();
 		return [
 			'gallery' => [
 				'id' => $gallery->getId(),
@@ -292,13 +275,6 @@ final class PublicGalleryDataService {
 		return $node;
 	}
 
-	private function fileById(Folder $root, int $fileId): File {
-		foreach ($root->getById($fileId) as $node) {
-			if ($node instanceof File && $root->isSubNode($node) && $this->isSupported($node)) return $node;
-		}
-		throw new \OCP\Files\NotFoundException('Media file not found');
-	}
-
 	private function indexedGroup(string $relativePath, string $mimeType, string $pathPrefix, string $groupBy, int $groupDepth): string {
 		if ($groupBy === 'none') return 'all';
 		if ($groupBy === 'type') return str_starts_with($mimeType, 'video/') ? 'video' : 'image';
@@ -308,8 +284,4 @@ final class PublicGalleryDataService {
 		return $parts === [] ? 'root' : implode('/', array_slice($parts, 0, $groupDepth));
 	}
 
-	private function isSupported(File $file): bool {
-		return str_starts_with($file->getMimeType(), 'image/')
-			|| in_array($file->getMimeType(), ['video/mp4', 'video/webm'], true);
-	}
 }

@@ -11,6 +11,7 @@ use OCA\ProofingGallery\Service\GuestService;
 use OCA\ProofingGallery\Service\PublicShareContextResolver;
 use OCA\ProofingGallery\Service\UploadService;
 use OCA\ProofingGallery\Exception\PolicyViolationException;
+use OCA\ProofingGallery\Domain\PublicLinkCapability;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
@@ -28,7 +29,7 @@ final class UploadController extends ResolvedPublicShareController {
 		private GuestService $guests,
 		private UploadService $uploads,
 	) {
-		parent::__construct($request, $session, $contextResolver, 'upload');
+		parent::__construct($request, $session, $contextResolver, PublicLinkCapability::Upload);
 	}
 
 	#[PublicPage]
@@ -93,6 +94,7 @@ final class UploadController extends ResolvedPublicShareController {
 		return $this->publicContext()->gallery;
 	}
 
+	/** @param Http::STATUS_OK|Http::STATUS_CREATED $status */
 	private function mutation(callable $callback, int $status = Http::STATUS_OK): JSONResponse {
 		try {
 			$guest = $this->guests->authenticate(

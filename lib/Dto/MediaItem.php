@@ -7,6 +7,7 @@ namespace OCA\ProofingGallery\Dto;
 use JsonSerializable;
 
 final class MediaItem implements JsonSerializable {
+	/** @param array<string, mixed> $metadata */
 	public function __construct(
 		public readonly int $id,
 		public readonly string $name,
@@ -19,7 +20,7 @@ final class MediaItem implements JsonSerializable {
 	) {
 	}
 
-	/** @return array<string, bool|int|string> */
+	/** @return array<string, mixed> */
 	public function jsonSerialize(): array {
 		return [
 			'id' => $this->id,

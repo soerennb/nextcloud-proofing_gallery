@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Service;
 
+use OCA\ProofingGallery\Db\QueryResult;
+
 use InvalidArgumentException;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\Guest;
@@ -174,7 +176,7 @@ final class UploadService {
 			->leftJoin('u', 'proofing_guests', 'g', $qb->expr()->eq('u.guest_id', 'g.id'))
 			->where($qb->expr()->eq('u.gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
 			->orderBy('u.created_at', 'DESC');
-		return $qb->executeQuery()->fetchAllAssociative();
+		return QueryResult::rows($qb->executeQuery());
 	}
 
 	public function moderate(Gallery $gallery, string $uploadId, bool $accept): void {
@@ -210,7 +212,7 @@ final class UploadService {
 			throw new InvalidArgumentException('Guest uploads are unavailable for collections');
 		}
 		$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
-		if (!$settings->allowGuestUploads) {
+		if (!$settings->delivery->guestUploads) {
 			throw new InvalidArgumentException('Guest uploads are disabled');
 		}
 	}
@@ -222,7 +224,7 @@ final class UploadService {
 			->where($qb->expr()->eq('upload_id', $qb->createNamedParameter($uploadId)))
 			->andWhere($qb->expr()->eq('gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('guest_id', $qb->createNamedParameter($guest->getId(), IQueryBuilder::PARAM_INT)));
-		$row = $qb->executeQuery()->fetchAssociative();
+		$row = QueryResult::row($qb->executeQuery());
 		if ($row === false) {
 			throw new InvalidArgumentException('Upload not found');
 		}
@@ -235,7 +237,7 @@ final class UploadService {
 		$qb->select('*')->from('proofing_uploads')
 			->where($qb->expr()->eq('upload_id', $qb->createNamedParameter($uploadId)))
 			->andWhere($qb->expr()->eq('gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)));
-		$row = $qb->executeQuery()->fetchAssociative();
+		$row = QueryResult::row($qb->executeQuery());
 		if ($row === false) {
 			throw new InvalidArgumentException('Upload not found');
 		}

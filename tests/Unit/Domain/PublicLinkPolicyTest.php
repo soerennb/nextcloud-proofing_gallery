@@ -6,12 +6,14 @@ namespace OCA\ProofingGallery\Tests\Unit\Domain;
 
 use OCA\ProofingGallery\Domain\DownloadScope;
 use OCA\ProofingGallery\Domain\PublicLinkPolicy;
+use OCA\ProofingGallery\Domain\PublicLinkCapability;
 use PHPUnit\Framework\TestCase;
 
 final class PublicLinkPolicyTest extends TestCase {
 	public function testDefaultsAreViewOnly(): void {
 		$policy = PublicLinkPolicy::fromArray([]);
 		self::assertTrue($policy->allows('view'));
+		self::assertTrue($policy->allows(PublicLinkCapability::View));
 		self::assertFalse($policy->allows('comments'));
 		self::assertSame(DownloadScope::None, $policy->downloadScope);
 	}

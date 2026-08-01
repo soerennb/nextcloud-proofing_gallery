@@ -5,7 +5,11 @@ import path from 'node:path'
 
 const root = path.resolve(import.meta.dirname, '..')
 const extensions = new Set(['.php', '.ts', '.vue'])
-const limit = 1000
+const limits = new Map([
+	['.php', 650],
+	['.ts', 500],
+	['.vue', 950],
+])
 
 async function files(directory) {
 	const result = []
@@ -22,11 +26,14 @@ async function files(directory) {
 const oversized = []
 for (const file of (await Promise.all(['lib', 'src'].map(directory => files(path.join(root, directory))))).flat()) {
 	const source = await readFile(file, 'utf8')
+	const extension = path.extname(file)
+	const limit = limits.get(extension)
+	if (limit === undefined) continue
 	const significant = source.split('\n').filter(line => {
 		const value = line.trim()
 		return value !== '' && !value.startsWith('//') && !value.startsWith('/*') && !value.startsWith('*') && !value.startsWith('<!--')
 	}).length
-	if (significant > limit) oversized.push(`${path.relative(root, file)}: ${significant}`)
+	if (significant > limit) oversized.push(`${path.relative(root, file)}: ${significant} > ${limit}`)
 }
-if (oversized.length) throw new Error(`Source files exceed ${limit} significant lines:\n${oversized.join('\n')}`)
-console.log(`Source-size gate passed (${limit} significant lines maximum).`)
+if (oversized.length) throw new Error(`Source files exceed their significant-line budgets:\n${oversized.join('\n')}`)
+console.log(`Source-size gate passed (${[...limits].map(([extension, limit]) => `${extension} ${limit}`).join(', ')}).`)

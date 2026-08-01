@@ -6,6 +6,7 @@ namespace OCA\ProofingGallery\Service;
 
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\Guest;
+use OCA\ProofingGallery\Db\QueryResult;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
@@ -54,7 +55,7 @@ final class ActivityService {
 			'actor' => $row['display_name'] ?? $row['actor_uid'] ?? 'Gallery manager',
 			'payload' => json_decode($row['payload'], true, flags: JSON_THROW_ON_ERROR),
 			'createdAt' => (int)$row['created_at'],
-		], $qb->executeQuery()->fetchAllAssociative());
+		], QueryResult::rows($qb->executeQuery()));
 	}
 
 }

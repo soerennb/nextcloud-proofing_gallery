@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Service;
 
+use OCA\ProofingGallery\Db\QueryResult;
+
 use OCA\ProofingGallery\Db\Guest;
 use OCA\ProofingGallery\Db\GuestRating;
 use OCA\ProofingGallery\Db\GuestRatingMapper;
@@ -53,7 +55,10 @@ final class GuestRatingService {
 		return $this->ratings->findForGuest($guest->getGalleryId(), $guest->getId());
 	}
 
-	/** @return array{items: list<array<string, mixed>>, guests: array<int, string>} */
+	/**
+	 * @param list<int> $fileIds
+	 * @return array{items: list<array<string, mixed>>, guests: array<int, string>}
+	 */
 	public function aggregate(\OCA\ProofingGallery\Db\Gallery $gallery, array $fileIds = []): array {
 		$grouped = [];
 		$guests = [];
@@ -67,7 +72,7 @@ final class GuestRatingService {
 				$qb = $this->db->getQueryBuilder();
 				$qb->select('id', 'display_name')->from('proofing_guests')
 					->where($qb->expr()->in('id', $qb->createNamedParameter($guestIds, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT_ARRAY)));
-				foreach ($qb->executeQuery()->fetchAllAssociative() as $row) $guests[(int)$row['id']] = (string)$row['display_name'];
+				foreach (QueryResult::rows($qb->executeQuery()) as $row) $guests[(int)$row['id']] = (string)$row['display_name'];
 			}
 		}
 		$items = [];
@@ -77,7 +82,10 @@ final class GuestRatingService {
 		return ['items' => $items, 'guests' => $guests];
 	}
 
-	/** @param list<int> $fileIds @return list<array<string, mixed>> */
+	/**
+	 * @param list<int> $fileIds
+	 * @return list<array<string, mixed>>
+	 */
 	public function promotionPlan(\OCA\ProofingGallery\Db\Gallery $gallery, array $fileIds): array {
 		$fileIds = array_values(array_unique(array_filter(array_map('intval', $fileIds), static fn (int $id): bool => $id > 0)));
 		if (count($fileIds) > 200) throw new \InvalidArgumentException('Select no more than 200 media items');
@@ -102,7 +110,10 @@ final class GuestRatingService {
 		return $result;
 	}
 
-	/** @param list<array<string, mixed>> $items @return list<array<string, mixed>> */
+	/**
+	 * @param list<array<string, mixed>> $items
+	 * @return list<array<string, mixed>>
+	 */
 	public function promote(string $ownerUid, \OCA\ProofingGallery\Db\Gallery $gallery, array $items): array {
 		$plan = array_column($this->promotionPlan($gallery, array_map(static fn (array $item): int => (int)($item['fileId'] ?? 0), $items)), null, 'fileId');
 		$current = $this->culling->forFiles($ownerUid, array_keys($plan));

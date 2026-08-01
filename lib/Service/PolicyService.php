@@ -125,7 +125,10 @@ final class PolicyService {
 		}
 	}
 
-	/** @param array<string, mixed> $patch */
+	/**
+	 * @param array<string, mixed> $patch
+	 * @return array<string, mixed>
+	 */
 	public function saveInstanceSettings(array $patch): array {
 		$allowedSections = ['access', 'features', 'workflow', 'branding'];
 		$unknownSections = array_diff(array_keys($patch), $allowedSections);
