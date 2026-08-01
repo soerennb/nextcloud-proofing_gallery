@@ -17,6 +17,7 @@ use OCP\Share\IShare;
 use Throwable;
 use OCA\ProofingGallery\BackgroundJob\RebuildMediaIndexJob;
 use OCP\BackgroundJob\IJobList;
+use OCA\ProofingGallery\BackgroundJob\WarmGalleryPreviewJob;
 
 final class PublicShareService {
 	public function __construct(
@@ -29,6 +30,8 @@ final class PublicShareService {
 		private CapabilityPolicyService $capabilities,
 		private PrimaryPublicLinkSynchronizer $publicLinks,
 		private IJobList $jobs,
+		private GalleryReadinessService $readiness,
+		private PreviewWarmService $previewWarm,
 	) {
 	}
 
@@ -39,6 +42,7 @@ final class PublicShareService {
 		string $downloadScope,
 	): Gallery {
 		$this->capabilities->assertCanPublish($gallery->getOwnerUid());
+		$this->readiness->assertPublishable($gallery);
 		if ($downloadScope !== 'none') $this->capabilities->assertFeature('downloads');
 		if ($gallery->getStatus() === GalleryStatus::Archived->value) {
 			throw new InvalidArgumentException('Archived galleries cannot be published');
@@ -80,16 +84,19 @@ final class PublicShareService {
 
 		$updated = $this->galleries->update($gallery);
 		$this->publicLinks->ensurePrimary($updated, (int)$share->getId());
+		try {
+			$this->previewWarm->warm($updated);
+		} catch (\Throwable) {
+			// Publishing remains successful; the queued retry repairs derivatives.
+		}
+		$this->jobs->add(WarmGalleryPreviewJob::class, ['galleryId' => $updated->getId()]);
 		return $updated;
 	}
 
 	public function revoke(Gallery $gallery): Gallery {
 		foreach ($this->publicLinks->list($gallery) as $link) {
 			if ($link->getStatus() !== 'active') continue;
-			try {
-				$this->shareManager->deleteShare($this->shareManager->getShareByToken($link->getToken()));
-			} catch (\Throwable) {
-			}
+			$this->shareManager->deleteShare($this->shareManager->getShareByToken($link->getToken()));
 			$this->publicLinks->markRevoked($link);
 		}
 		$gallery->setShareToken(null);

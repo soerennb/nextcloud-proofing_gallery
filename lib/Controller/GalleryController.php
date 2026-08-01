@@ -37,6 +37,7 @@ use OCP\IPreview;
 use OCP\IRequest;
 use OCP\IUserSession;
 use OCP\Files\File;
+use OCA\ProofingGallery\Service\GalleryReadinessService;
 
 final class GalleryController extends Controller {
 	public function __construct(
@@ -50,9 +51,21 @@ final class GalleryController extends Controller {
 		private CollaborationService $collaboration,
 		private MediaMetadataService $metadata,
 		private \OCA\ProofingGallery\Service\PolicyService $policies,
+		private GalleryReadinessService $readiness,
 		private IUserSession $userSession,
 	) {
 		parent::__construct(Application::APP_ID, $request);
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/v1/galleries/{id}/readiness')]
+	public function readiness(int $id): DataResponse {
+		try {
+			$userId = $this->userId();
+			return new DataResponse($this->readiness->evaluate($this->galleries->view($userId, $id), $userId));
+		} catch (DoesNotExistException|AuthorizationException) {
+			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		}
 	}
 
 
@@ -96,7 +109,10 @@ final class GalleryController extends Controller {
 		}
 	}
 
-	/** @param array<string, mixed> $settings */
+	/**
+	 * @param array<string, mixed> $settings
+	 * @param array<string, mixed> $designPreset
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/projects')]
 	public function createProject(
@@ -107,11 +123,12 @@ final class GalleryController extends Controller {
 		?int $parentFolderId = null,
 		?string $folderName = null,
 		array $settings = [],
+		array $designPreset = ['mode' => 'inherit'],
 	): DataResponse {
 		try {
 			$userId = $this->userId();
 			$gallery = $this->galleries->createProject(
-				$userId, $title, $purpose, $sourceMode, $folderId, $parentFolderId, $folderName, $settings,
+				$userId, $title, $purpose, $sourceMode, $folderId, $parentFolderId, $folderName, $settings, $designPreset,
 			);
 			return new DataResponse($this->galleries->present($userId, $gallery), Http::STATUS_CREATED);
 		} catch (PolicyViolationException $exception) {

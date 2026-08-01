@@ -273,8 +273,8 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		}
 		try {
 			$appearance = $this->publicContext()->settings->presentation;
-			if ($applyWatermark && $appearance->watermarkText !== '') {
-				$watermarked = $this->watermarks->render(
+			if ($applyWatermark) {
+				$derivative = $this->watermarks->render(
 					$file,
 					$x,
 					$y,
@@ -282,10 +282,11 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 					$appearance->watermarkOpacity,
 					$mode,
 				);
-				return new DataDisplayResponse($watermarked['content'], Http::STATUS_OK, [
-					'Content-Type' => $watermarked['mimeType'],
+				return new DataDisplayResponse($derivative['content'], Http::STATUS_OK, [
+					'Content-Type' => $derivative['mimeType'],
 					'Cache-Control' => 'private, max-age=86400, immutable',
-					'ETag' => '"' . $watermarked['etag'] . '"',
+					'ETag' => '"' . $derivative['etag'] . '"',
+					'X-Proofing-Derivative-Cache' => $derivative['cached'] ? 'hit' : 'miss',
 				]);
 			}
 			$preview = $this->preview->getPreview(

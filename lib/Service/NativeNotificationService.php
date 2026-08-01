@@ -44,7 +44,7 @@ final class NativeNotificationService {
 	}
 
 	public function signalCategory(int $galleryId, string $userUid, string $category, ?int $eventId = null): void {
-		if (!in_array($category, ['comment', 'selection', 'upload', 'manager', 'revoked'], true)
+		if (!in_array($category, ['comment', 'selection', 'upload', 'manager', 'lifecycle', 'revoked'], true)
 			|| !$this->available($userUid)) return;
 
 		$now = $this->clock->getTime();

@@ -376,6 +376,10 @@ function previewUrl(item: MediaItem, width = 900, height = 900, mode: 'cover' | 
 	return publicEndpoint(`media/${item.id}/preview?x=${width}&y=${height}&mode=${mode}`)
 }
 
+function tilePreviewUrl(item: MediaItem): string {
+	return previewUrl(item, 900, 900, 'fit')
+}
+
 function rememberDimensions(item: MediaItem, event: Event) {
 	const image = event.currentTarget as HTMLImageElement
 	if (!image.naturalWidth || !image.naturalHeight) return
@@ -707,7 +711,7 @@ function upOneLevel() {
 					<template #default="{ item, index }">
 						<article
 							class="media-tile"
-							:class="{ 'media-tile--selected': selectedIds.includes(item.id) }">
+							:class="{ 'media-tile--selected': selectedIds.includes(item.id), 'media-tile--lead': item.id === mediaItems[0]?.id }">
 							<span v-if="startsGroup(item, index)" class="media-tile__group">{{ groupLabel(item.group) }}</span>
 							<button
 								class="media-tile__open"
@@ -716,8 +720,9 @@ function upOneLevel() {
 								@click="openItem(item)">
 								<ProgressiveImage
 									v-if="item.mimeType.startsWith('image/')"
-									:src="previewUrl(item, 900, 900, 'fit')"
+									:src="tilePreviewUrl(item)"
 									class="media-tile__image"
+									direct
 									:priority="item.id === mediaItems[0]?.id"
 									@load="rememberDimensions(item, $event)" />
 								<span v-else-if="item.folder" class="media-tile__folder" aria-hidden="true" />

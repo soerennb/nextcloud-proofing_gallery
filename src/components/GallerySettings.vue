@@ -12,12 +12,13 @@ import { canonicalGallerySettings } from '../domain/gallerySettings.ts'
 import { availableGallerySettingsTabs, galleryPurposeLabels as purposeLabels, publicMetadataOptions } from '../domain/gallerySettingsOptions.ts'
 import type { SettingsTab } from '../domain/gallerySettingsOptions.ts'
 import { useGalleryPresets } from '../composables/useGalleryPresets.ts'
-import { completeGallery, fetchCollection, fetchGalleryMedia, ownerPreviewUrl, updateGallery, updateGallerySource } from '../services/galleryApi.ts'
-import type { Gallery, MediaItem } from '../types.ts'
+import { completeGallery, fetchCollection, fetchGalleryMedia, fetchGalleryReadiness, ownerPreviewUrl, updateGallery, updateGallerySource } from '../services/galleryApi.ts'
+import type { Gallery, GalleryReadiness, MediaItem } from '../types.ts'
 import GalleryActivity from './GalleryActivity.vue'
 import CollectionContent from './CollectionContent.vue'
 import CullingWorkspace from './CullingWorkspace.vue'
 import FolderContent from './FolderContent.vue'
+import GalleryDesignPreview from './GalleryDesignPreview.vue'
 import ManagerPanel from './ManagerPanel.vue'
 import NotificationPanel from './NotificationPanel.vue'
 import SharingModal from './SharingModal.vue'
@@ -48,6 +49,7 @@ const notificationPanel = ref<InstanceType<typeof NotificationPanel> | null>(nul
 const media = ref<MediaItem[]>([])
 const mediaTotal = ref(0)
 const mediaLoading = ref(true)
+const serverReadiness = ref<GalleryReadiness | null>(null)
 const baseline = ref('')
 const draft = reactive({
 	title: props.gallery.title,
@@ -64,15 +66,24 @@ const saveStateLabel = computed(() => ({
 	conflict: t('proofing_gallery', 'Changed in another session'),
 	invalid: t('proofing_gallery', 'Enter a gallery title'),
 })[saveState.value])
-const accentStyle = computed(() => ({
-	'--gallery-accent': draft.settings.presentation.accentColor,
-	'--watermark-opacity': String(draft.settings.presentation.watermarkOpacity / 100),
-}))
 const previewMedia = computed(() => media.value.filter(item => !item.folder).slice(0, 8))
+const readinessLabels = computed<Record<GalleryReadiness['checks'][number]['code'], string>>(() => ({
+	source_readable: t('proofing_gallery', 'Project folder is available'),
+	media_available: t('proofing_gallery', 'At least one photo is ready'),
+	publishing_allowed: t('proofing_gallery', 'Publishing is allowed'),
+	collection_complete: t('proofing_gallery', 'All collection files are available'),
+}))
 const readiness = computed(() => [
-	{ label: t('proofing_gallery', 'Project folder is available'), ready: props.gallery.source.state === 'readable', action: 'overview' as SettingsTab },
-	{ label: t('proofing_gallery', 'At least one photo is ready'), ready: (mediaLoading.value ? props.gallery.mediaSummary.total : mediaTotal.value) > 0, action: 'content' as SettingsTab },
-	{ label: t('proofing_gallery', 'All changes are saved'), ready: !dirty.value && saveState.value === 'saved', action: 'overview' as SettingsTab },
+	...(serverReadiness.value?.checks ?? [
+		{ code: 'source_readable', state: props.gallery.source.state === 'readable' ? 'ready' : 'blocked', action: 'overview' },
+		{ code: 'media_available', state: (mediaLoading.value ? props.gallery.mediaSummary.total : mediaTotal.value) > 0 ? 'ready' : 'blocked', action: 'content' },
+	] as GalleryReadiness['checks']).map(check => ({
+		label: readinessLabels.value[check.code],
+		ready: check.state !== 'blocked',
+		warning: check.state === 'warning',
+		action: check.action as SettingsTab,
+	})),
+	{ label: t('proofing_gallery', 'All changes are saved'), ready: !dirty.value && saveState.value === 'saved', warning: false, action: 'overview' as SettingsTab },
 ])
 const publishReady = computed(() => readiness.value.every(item => item.ready))
 const nextStep = computed(() => {
@@ -183,6 +194,14 @@ async function loadMedia() {
 		mediaTotal.value = 0
 	} finally {
 		mediaLoading.value = false
+	}
+}
+
+async function loadReadiness() {
+	try {
+		serverReadiness.value = await fetchGalleryReadiness(props.gallery.id)
+	} catch {
+		serverReadiness.value = null
 	}
 }
 
@@ -304,6 +323,7 @@ async function persistSave(showConfirmation = false): Promise<boolean> {
 			scheduleSave(0)
 		}
 		if (showConfirmation) showSuccess(t('proofing_gallery', 'Gallery settings saved.'))
+		loadReadiness()
 		return true
 	} catch (error) {
 		const current = revisionConflict(error)
@@ -364,6 +384,7 @@ function handleOffline() {
 onMounted(() => {
 	resetDraft()
 	loadMedia()
+	loadReadiness()
 	loadPresets()
 	window.addEventListener('beforeunload', beforeUnload)
 	window.addEventListener('online', handleOnline)
@@ -740,48 +761,14 @@ onBeforeUnmount(() => {
 						</NcButton>
 					</div>
 
-					<aside class="gallery-preview"
-						:class="{ 'gallery-preview--expanded': designPreviewOpen }"
-						:style="accentStyle">
-						<div class="gallery-preview__bar">
-							<img
-								v-if="draft.settings.presentation.logoFileId"
-								:src="previewUrl(draft.settings.presentation.logoFileId, 240, 80)"
-								:alt="t('proofing_gallery', 'Gallery logo')">
-							<span v-else>Proofing Gallery</span>
-							<span>{{ t('proofing_gallery', 'Preview') }}</span>
-							<button class="gallery-preview__close"
-								type="button"
-								:aria-label="t('proofing_gallery', 'Close preview')"
-								@click="designPreviewOpen = false">
-								×
-							</button>
-						</div>
-						<div
-							class="gallery-preview__opener"
-							:class="{ 'gallery-preview__opener--cinematic': draft.settings.presentation.openerStyle === 'cinematic' }"
-							:style="draft.settings.presentation.heroFileId
-								? {
-									backgroundImage: `url(${previewUrl(draft.settings.presentation.heroFileId, 900, 560)})`,
-									backgroundPosition: `${draft.settings.presentation.heroFocusX}% ${draft.settings.presentation.heroFocusY}%`,
-								}
-								: undefined">
-							<div>
-								<h3>{{ draft.title || t('proofing_gallery', 'Untitled gallery') }}</h3>
-								<p>{{ draft.settings.presentation.welcomeMessage }}</p>
-							</div>
-						</div>
-						<div class="gallery-preview__grid">
-							<div v-for="item in previewMedia" :key="item.id">
-								<img :src="previewUrl(item.id, 300, 220)" alt="">
-								<span v-if="draft.settings.presentation.watermarkText">{{ draft.settings.presentation.watermarkText }}</span>
-								<small v-if="draft.settings.presentation.showFilenames">{{ item.name }}</small>
-							</div>
-							<p v-if="previewMedia.length === 0">
-								{{ t('proofing_gallery', 'Add images to the source folder to preview the gallery.') }}
-							</p>
-						</div>
-					</aside>
+					<GalleryDesignPreview
+						:gallery="gallery"
+						:title="draft.title"
+						:settings="draft.settings"
+						:media="previewMedia"
+						:expanded="designPreviewOpen"
+						:revision="serverRevision"
+						@close="designPreviewOpen = false" />
 				</section>
 
 				<section v-else-if="activeTab === 'access'" class="settings-section">

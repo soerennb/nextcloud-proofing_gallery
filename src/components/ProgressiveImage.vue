@@ -6,9 +6,11 @@ const props = withDefaults(defineProps<{
 	src: string
 	alt?: string
 	priority?: boolean
+	direct?: boolean
 }>(), {
 	alt: '',
 	priority: false,
+	direct: false,
 })
 const emit = defineEmits<{ load: [event: Event]; error: [] }>()
 const loadedSource = ref('')
@@ -25,7 +27,7 @@ function release() {
 
 watch(() => props.src, async source => {
 	release()
-	if (props.priority) {
+	if (props.priority || props.direct) {
 		// The server-rendered preload and the first image now share the exact URL,
 		// allowing the browser to reuse the response for LCP without a blob fetch.
 		loadedSource.value = source

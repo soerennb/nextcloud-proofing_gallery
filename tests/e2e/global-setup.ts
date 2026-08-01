@@ -23,6 +23,18 @@ export default async function globalSetup(config: FullConfig) {
 	if (!preferences.ok) throw new Error(`E2E preferences could not be reset (${preferences.status})`)
 	const dav = `${baseURL}/remote.php/dav/files/admin/ProofingGalleryE2E`
 	await fetch(dav, { method: 'MKCOL', headers })
+	const fixtureContents = await fetch(dav, {
+		method: 'PROPFIND',
+		headers: { ...headers, Depth: '1', 'Content-Type': 'application/xml' },
+		body: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>',
+	}).then(response => response.text())
+	for (const [, href] of fixtureContents.matchAll(/<(?:d:)?href>([^<]+)<\/(?:d:)?href>/g)) {
+		const pathname = new URL(href, baseURL).pathname
+		const filename = decodeURIComponent(pathname.split('/').at(-1) ?? '')
+		if (filename.startsWith('resumable-') && filename.endsWith('.png')) {
+			await fetch(new URL(pathname, baseURL), { method: 'DELETE', headers })
+		}
+	}
 	const png = Buffer.from(
 		'iVBORw0KGgoAAAANSUhEUgAAAUAAAADIEAIAAABG9nO/AAAAIGNIUk0AAHomAACAhAAA+gAAAIDoAAB1MAAA6mAAADqYAAAXcJy6UTwAAAAGYktHRP///////wlY99wAAAAHdElNRQfqBx4PEDAeqgs4AAAEbklEQVR42u3du60eVRSG4VloIyFSJESC3AbVkFCAq+AkbsOHgDKIICGyME4IEJa4+fCPE0RG8Pew32Cep4Kdjb5Zt3n27PnzFy8OAGCjNbd5OV/XzwCAa1nH7Xh5+AADwFZrTgkYAHZbIwEDwHZqwAAQWHMbCRgANltzOyRgANhszSkBA8BuasAAENAFDQABCRgAAmrAABDQBQ0AAXPAABBQAwaAgC5oAAi4hgQAAQkYAALrUAMGgO10QQNAwBwwAARswgKAgDlgAAj4BQ0AgXsT1kP9DAC4Fr+gASCw5rSIAwB2k4ABIGARBwAEdEEDQMAiDgAISMAAEFADBoDAmts8SsAAsNc6buaAAWC3Nac5YADYTQ0YAAK6oAEgIAEDQMAuaAAIuIYEAAEJGAACa8wBA8B2EjAABHRBA0BgzWkOGAB2k4ABIKAGDAABqygBILDm9AsaAHZbh1/QALCdRRwAENCEBQABY0gAELCIAwACEjAABMwBA0BAAgaAgC5oAAisOc0BA8BuEjAABNSAASCgCxoAAq4hAUBADRgAAq4hAUDAPWAACOiCBoCAa0gAEJCAASBgDhgAAhIwAATMAQNAwDUkAAjcE/BD/QwAuBa/oAEgYBUlAAQkYAAIOEcIAAGLOAAgYBEHAAQkYAAIqAEDQGAduqABYDtzwAAQMAcMAAFd0AAQWHPqggaA3SRgAAioAQNAQBc0AAQkYAAI2IQFAAG7oAEgoAsaAAISMAAEJGAACKw5dUEDwG7mgAEgsI7bPErAALCXRRwAEFhz+gUNALtJwAAQMIYEAAGLOAAgIAEDQGDNKQEDwG4SMAAEdEEDQMAqSgAISMAAEFhzqgEDwG7mgAEgoAsaAAJqwAAQWIcuaADYbs0pAQPAbmrAABDQBQ0AAQkYAAKuIQFAQAIGgIA5YAAIuIYEAIF7An6onwEA12IRBwAE/IIGgIAmLAAIGEMCgIBVlAAQWHNKwACw2zrUgAFgO13QABDQBQ0AAQkYAAI2YQFAwBwwAATMAQNAQAIGgIAaMAAEdEEDQMAcMAAE1IABIKALGgACriEBQEACBoCAGjAABNwDBoDAfPv049uf/62fAQDXYhMWAAQs4gCAgFWUABCQgAEgYBEHAAQs4gCAgEUcABBQAwaAgC5oAAhYxAEAAQkYAAJqwAAQ0AUNAAFzwAAQsAkLAALrUAMGgO3W3I5HCRgA9tIFDQABXdAAEFhz6oIGgN0kYAAImAMGgIAEDAAB15AAIOAaEgAE7nPAD/UzAOBa1IABIKALGgACmrAAIOAXNAAE5vsPf/3uj0/qZwDAtaxDAgaA7eaHt799/Ofn9TMA4FrWnBZxAMBu90UcPsAAsJVVlAAQkIABIGAOGAACa06rKAFgNwkYAAJqwAAQ0AUNAAHXkAAgMK+++OvTf17VzwCAa1lz0wUNALvNT5/9/eXtl/oZAHAt8/qjdx+cX9XPAIBrmdf/vfvm/L1+BgBcizlgAAjMmzdPT+/f188AgGv5H9wnuYCImXEZAAAAAElFTkSuQmCC',
 		'base64',

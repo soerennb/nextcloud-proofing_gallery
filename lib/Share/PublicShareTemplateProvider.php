@@ -32,6 +32,25 @@ final class PublicShareTemplateProvider implements IPublicShareTemplateProvider 
 		$context = $this->contexts->resolveShare($share);
 		$gallery = $context->gallery;
 		$initialPage = $this->galleryData->page($context, new PublicGalleryQuery(path: $path));
+		$firstImage = null;
+		foreach ($initialPage['items'] as $item) {
+			if (!$item['folder'] && str_starts_with($item['mimeType'], 'image/')) {
+				$firstImage = $item;
+				break;
+			}
+		}
+		$firstPaintImage = $firstImage === null ? null : $this->urlGenerator->linkToRouteAbsolute(
+			'proofing_gallery.PublicGallery.preview',
+			['token' => $token, 'fileId' => $firstImage['id'], 'x' => 900, 'y' => 900, 'mode' => 'fit'],
+		);
+		if ($firstPaintImage !== null) {
+			Util::addHeader('link', [
+				'rel' => 'preload',
+				'as' => 'image',
+				'href' => $firstPaintImage,
+				'fetchpriority' => 'high',
+			]);
+		}
 		$this->initialState->provideInitialState('public-gallery', [
 			'id' => $gallery->getId(),
 			'title' => $gallery->getTitle(),
@@ -45,28 +64,13 @@ final class PublicShareTemplateProvider implements IPublicShareTemplateProvider 
 		Util::addStyle(Application::APP_ID, 'proofing_gallery-public');
 
 		$response = new PublicTemplateResponse(Application::APP_ID, 'public');
-		$response->setHeaderTitle($gallery->getTitle());
-		$heroImage = ($initialPage['gallery']['settings']['appearance']['heroFileId'] ?? null) !== null
-			? $this->urlGenerator->linkToRouteAbsolute(
-				'proofing_gallery.PublicGallery.asset',
-				['token' => $token, 'kind' => 'hero'],
-			)
-			: null;
-		$firstImage = null;
-		foreach ($initialPage['items'] as $item) {
-			if (!$item['folder'] && str_starts_with($item['mimeType'], 'image/')) {
-				$firstImage = $item;
-				break;
-			}
+		if ($firstPaintImage !== null) {
+			$response->addHeader('Link', sprintf('<%s>; rel=preload; as=image', $firstPaintImage));
 		}
+		$response->setHeaderTitle($gallery->getTitle());
 		$response->setParams([
 			'pageTitle' => $gallery->getTitle(),
-			'preloadImage' => $heroImage ?? ($firstImage === null
-				? null
-				: $this->urlGenerator->linkToRouteAbsolute(
-					'proofing_gallery.PublicGallery.preview',
-					['token' => $token, 'fileId' => $firstImage['id'], 'x' => 900, 'y' => 900, 'mode' => 'fit'],
-				)),
+			'lcpPreviewUrl' => $firstPaintImage,
 		]);
 		return $response;
 	}

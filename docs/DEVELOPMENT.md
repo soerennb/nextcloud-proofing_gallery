@@ -28,9 +28,21 @@ npm run test:e2e
 make test-compat
 ```
 
+`npm run test:e2e` prepares only the repository's running loopback Compose
+instance: it resets local brute-force state and disables Nextcloud request
+throttling in that disposable development container before Playwright starts.
+Remote `NEXTCLOUD_URL` targets and production installations are never changed.
+Use `npm run test:e2e:raw` when the target manages its own isolation.
+
 Playwright global setup creates and later supersedes its own E2E gallery.
 Snapshots are intentionally versioned. Update them only after reviewing the
 rendered change with `npm run test:e2e:update`.
+
+`npm run perf:public` enforces the documented Slow-4G/4× CPU public-gallery
+budgets: at most 12 seconds for the first cacheless browser visit and 4 seconds
+for the warm median in the same browser context. `LCP_COLD_BUDGET_MS`,
+`LCP_WARM_BUDGET_MS`, and `LCP_ROUNDS` are
+available for explicit diagnostic runs; release validation uses the defaults.
 
 The compatibility harness uses isolated Compose project names and deletes only
 containers, networks, and volumes it created. Restrict a local run with, for

@@ -562,6 +562,12 @@
 	object-fit: cover;
 }
 
+.media-tile:not(.media-tile--lead) .media-tile__image {
+	width: calc(100% - 4px);
+	height: calc(100% - 4px);
+	margin: 2px;
+}
+
 .media-tile__open :deep(.media-tile__image img) {
 	object-fit: cover;
 	transition: filter 180ms ease, transform 360ms cubic-bezier(.2,.75,.25,1);

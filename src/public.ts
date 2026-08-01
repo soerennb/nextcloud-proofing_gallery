@@ -1,6 +1,7 @@
 import { loadState } from '@nextcloud/initial-state'
 import { register, setLanguage, setLocale, unregister } from '@nextcloud/l10n'
 import { createApp } from 'vue'
+import './public-shell.css'
 
 import PublicApp from './PublicApp.vue'
 import type { GallerySettings } from './domain/gallerySettings'
@@ -42,6 +43,8 @@ async function mount() {
 	document.body.classList.add('proofing-gallery-public-page')
 	document.documentElement.classList.add('proofing-gallery-public-page')
 	createApp(PublicApp, { gallery: state }).mount('#proofing_gallery_public')
+	const serverPreview = document.querySelector<HTMLElement>('#proofing-gallery-server-preview')
+	serverPreview?.remove()
 }
 
 mount()

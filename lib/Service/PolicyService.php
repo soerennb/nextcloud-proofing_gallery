@@ -87,9 +87,9 @@ final class PolicyService {
 		$raw = $this->config->getAppValue(Application::APP_ID, 'galleryDefaults', '');
 		try {
 			$values = $raw === '' ? [] : json_decode($raw, true, flags: JSON_THROW_ON_ERROR);
-			return GallerySettings::fromArray(is_array($values) ? $values : [])->jsonSerialize();
+			return GallerySettings::fromArray(is_array($values) ? $values : [])->canonical();
 		} catch (\Throwable) {
-			return GallerySettings::defaults()->jsonSerialize();
+			return GallerySettings::defaults()->canonical();
 		}
 	}
 

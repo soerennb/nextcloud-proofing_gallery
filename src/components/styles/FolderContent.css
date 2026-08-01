@@ -8,6 +8,10 @@
 
 .folder-workspace__actions, .folder-toolbar, .breadcrumbs { display: flex; align-items: center; gap: 8px; }
 
+.folder-workspace__actions { flex-wrap: wrap; justify-content: flex-end; }
+
+.upload-resume-hint { flex-basis: 100%; max-width: 340px; color: var(--color-text-maxcontrast); text-align: end; }
+
 .owner-upload-queue { display: grid; gap: 6px; margin: 0; padding: 12px 0; border-block: 1px solid var(--color-border); list-style: none; }
 
 .owner-upload-queue li { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(120px, 0.8fr) auto; align-items: center; gap: 12px; min-height: 42px; }

@@ -9,6 +9,7 @@ use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Exception\AuthorizationException;
 use OCA\ProofingGallery\Exception\GalleryConflictException;
 use OCA\ProofingGallery\Exception\PolicyViolationException;
+use OCA\ProofingGallery\Exception\GalleryNotReadyException;
 use OCA\ProofingGallery\Service\CapabilityPolicyService;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCA\ProofingGallery\Service\GalleryService;
@@ -89,6 +90,12 @@ final class ShareController extends Controller {
 			], Http::STATUS_CONFLICT);
 		} catch (PolicyViolationException $exception) {
 			return new DataResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
+		} catch (GalleryNotReadyException $exception) {
+			return new DataResponse([
+				'code' => 'gallery_not_ready',
+				'message' => $exception->getMessage(),
+				...$exception->report,
+			], Http::STATUS_UNPROCESSABLE_ENTITY);
 		} catch (DoesNotExistException|ShareNotFound|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery or share not found'], Http::STATUS_NOT_FOUND);
 		} catch (InvalidArgumentException $exception) {

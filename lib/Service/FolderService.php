@@ -54,12 +54,16 @@ final class FolderService {
 		throw new FolderAccessException('Media file was not found in the gallery');
 	}
 
-	public function uploadMedia(string $userId, int $folderId, string $path, string $filename, string $temporaryPath): MediaItem {
+	public function uploadMedia(string $userId, int $folderId, string $path, string $filename, string $temporaryPath, string $conflict = 'fail'): ?MediaItem {
 		$root = $this->resolveFolder($userId, $folderId);
 		$target = $this->folderAt($root, trim($path, '/'));
 		$filename = $this->safeName($filename);
-		if (!$target->isUpdateable() || $target->nodeExists($filename)) {
-			throw new FolderAccessException('The destination is not writable or the filename already exists');
+		if (!$target->isUpdateable()) throw new FolderAccessException('The destination is not writable');
+		if ($target->nodeExists($filename)) {
+			if ($conflict === 'skip') return null;
+			if ($conflict === 'overwrite') $target->get($filename)->delete();
+			elseif ($conflict === 'rename') $filename = $this->conflictFreeName($target, $filename);
+			else throw new FolderAccessException('The filename already exists');
 		}
 		$stream = fopen($temporaryPath, 'rb');
 		if ($stream === false) {
@@ -68,13 +72,23 @@ final class FolderService {
 		try {
 			$file = $target->newFile($filename, $stream);
 		} finally {
-			fclose($stream);
+			if (is_resource($stream)) fclose($stream);
 		}
 		if (!$this->isSupported($file)) {
 			$file->delete();
 			throw new \InvalidArgumentException('Only images, MP4 and WebM files are accepted');
 		}
 		return $this->mediaItem($file);
+	}
+
+	private function conflictFreeName(Folder $folder, string $filename): string {
+		$extension = pathinfo($filename, PATHINFO_EXTENSION);
+		$stem = pathinfo($filename, PATHINFO_FILENAME);
+		for ($copy = 2; $copy < 10000; $copy++) {
+			$candidate = $stem . ' (' . $copy . ')' . ($extension === '' ? '' : '.' . $extension);
+			if (!$folder->nodeExists($candidate)) return $candidate;
+		}
+		throw new FolderAccessException('A conflict-free filename could not be created');
 	}
 
 	public function createFolder(string $userId, int $folderId, string $path, string $name): MediaItem {

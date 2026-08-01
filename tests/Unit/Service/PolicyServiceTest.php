@@ -49,6 +49,21 @@ final class PolicyServiceTest extends TestCase {
 		(new PolicyService($config))->save(['eventRetentionDays' => 90]);
 	}
 
+	public function testGalleryDefaultsExposeOneCanonicalSourceOfTruth(): void {
+		$config = $this->createMock(IConfig::class);
+		$config->method('getAppValue')->willReturnCallback(
+			static fn (string $app, string $key, string $default): string => $key === 'galleryDefaults'
+				? json_encode(['showFilenames' => false], JSON_THROW_ON_ERROR)
+				: $default,
+		);
+
+		$defaults = (new PolicyService($config))->galleryDefaults();
+
+		self::assertFalse($defaults['presentation']['showFilenames']);
+		self::assertArrayNotHasKey('showFilenames', $defaults);
+		self::assertArrayNotHasKey('appearance', $defaults);
+	}
+
 	public function testInstanceSettingsAreValidatedAndMergedWithSafeDefaults(): void {
 		$stored = '';
 		$config = $this->createMock(IConfig::class);

@@ -267,6 +267,16 @@ export interface GalleryPage {
 	offset: number
 }
 
+export interface GalleryReadiness {
+	ready: boolean
+	revision: number
+	checks: Array<{
+		code: 'source_readable' | 'media_available' | 'publishing_allowed' | 'collection_complete'
+		state: 'ready' | 'warning' | 'blocked'
+		action: 'overview' | 'content' | 'access'
+	}>
+}
+
 export interface GalleryPreset {
 	id: number
 	name: string

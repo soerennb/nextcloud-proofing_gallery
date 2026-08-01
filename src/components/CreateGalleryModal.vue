@@ -6,8 +6,8 @@ import NcDialog from '@nextcloud/vue/components/NcDialog'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { computed, onMounted, ref, watch } from 'vue'
 
-import { createProject, fetchUserPreferences, updateUserPreferences } from '../services/galleryApi.ts'
-import type { Gallery, GalleryPurpose } from '../types.ts'
+import { createProject, fetchPresets, fetchUserPreferences, updateUserPreferences } from '../services/galleryApi.ts'
+import type { Gallery, GalleryPreset, GalleryPurpose } from '../types.ts'
 
 defineProps<{ show: boolean }>()
 
@@ -35,13 +35,19 @@ const parentFolderName = ref('')
 const newFolderName = ref('')
 const saving = ref(false)
 const creationAllowed = ref(true)
+const presets = ref<GalleryPreset[]>([])
+const presetMode = ref<'inherit' | 'instance' | 'preset'>('inherit')
+const presetId = ref<number | null>(null)
+const rememberPreset = ref(false)
 
 onMounted(async () => {
 	try {
 		const { preferences, effectiveCapabilities, instanceDefaultPurpose } = await fetchUserPreferences()
+		presets.value = await fetchPresets()
 		creationAllowed.value = effectiveCapabilities.galleryCreation.allowed
 		const preferredPurpose = preferences.defaultPurpose ?? instanceDefaultPurpose
 		if (preferredPurpose !== 'custom') purpose.value = preferredPurpose
+		if (preferences.designPresetId !== null) presetId.value = preferences.designPresetId
 		if (preferences.parentFolder) {
 			parentFolderId.value = preferences.parentFolder.id
 			parentFolderName.value = preferences.parentFolder.name
@@ -57,7 +63,8 @@ onMounted(async () => {
 	} catch { /* Preferences are optional; creation remains available if they cannot be loaded. */ }
 })
 
-const canSubmit = computed(() => title.value.trim() !== '' && !saving.value && (
+const canSubmit = computed(() => title.value.trim() !== '' && !saving.value
+	&& (presetMode.value !== 'preset' || presetId.value !== null) && (
 	sourceMode.value === 'collection'
 		|| (sourceMode.value === 'existing' && folderId.value !== null)
 		|| (sourceMode.value === 'new' && parentFolderId.value !== null && newFolderName.value.trim() !== '')
@@ -121,7 +128,11 @@ async function submit() {
 			folderId: sourceMode.value === 'existing' ? folderId.value : null,
 			parentFolderId: sourceMode.value === 'new' ? parentFolderId.value : null,
 			folderName: sourceMode.value === 'new' ? newFolderName.value.trim() : undefined,
+			designPreset: selectedDesignPreset(),
 		})
+		if (rememberPreset.value && presetMode.value !== 'inherit') {
+			await updateUserPreferences({ designPresetId: presetMode.value === 'preset' ? presetId.value : null })
+		}
 		emit('created', gallery)
 		reset()
 	} catch (error) {
@@ -134,6 +145,14 @@ async function submit() {
 	}
 }
 
+function selectedDesignPreset(): { mode: 'inherit' | 'instance' } | { mode: 'preset'; id: number } {
+	if (presetMode.value === 'preset') {
+		if (presetId.value === null) return { mode: 'inherit' }
+		return { mode: 'preset', id: presetId.value }
+	}
+	return { mode: presetMode.value }
+}
+
 function reset() {
 	step.value = 1
 	purpose.value = 'delivery'
@@ -142,6 +161,9 @@ function reset() {
 	folderId.value = null
 	folderName.value = ''
 	newFolderName.value = ''
+	presetMode.value = 'inherit'
+	presetId.value = null
+	rememberPreset.value = false
 }
 
 function updateOpen(open: boolean) {
@@ -208,6 +230,29 @@ function updateOpen(open: boolean) {
 					</button>
 					<NcTextField id="proofing-gallery-folder-name" v-model="newFolderName" :label="t('proofing_gallery', 'New folder name')" />
 				</div>
+
+				<fieldset class="design-choice">
+					<legend>{{ t('proofing_gallery', 'Starting design') }}</legend>
+					<label>
+						<span>{{ t('proofing_gallery', 'Design source') }}</span>
+						<select v-model="presetMode">
+							<option value="inherit">{{ t('proofing_gallery', 'My default design') }}</option>
+							<option value="instance">{{ t('proofing_gallery', 'Studio default') }}</option>
+							<option v-if="presets.length" value="preset">{{ t('proofing_gallery', 'Choose a saved design') }}</option>
+						</select>
+					</label>
+					<label v-if="presetMode === 'preset'">
+						<span>{{ t('proofing_gallery', 'Saved design') }}</span>
+						<select v-model.number="presetId" required>
+							<option :value="null" disabled>{{ t('proofing_gallery', 'Choose a design') }}</option>
+							<option v-for="preset in presets" :key="preset.id" :value="preset.id">{{ preset.name }}</option>
+						</select>
+					</label>
+					<label v-if="presetMode !== 'inherit'" class="remember-design">
+						<input v-model="rememberPreset" type="checkbox">
+						{{ t('proofing_gallery', 'Use this design for new projects') }}
+					</label>
+				</fieldset>
 			</div>
 
 			<footer>
@@ -286,10 +331,22 @@ function updateOpen(open: boolean) {
 
 .new-folder-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
 
+.design-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding-top: 18px; border-top: 1px solid var(--color-border); }
+
+.design-choice legend { grid-column: 1 / -1; }
+
+.design-choice label { display: grid; gap: 6px; }
+
+.design-choice select { min-height: 44px; padding: 0 10px; border: 1px solid var(--color-border-maxcontrast); border-radius: 8px; background: var(--color-main-background); color: var(--color-main-text); }
+
+.design-choice select:focus-visible { outline: 2px solid var(--color-primary-element); outline-offset: 2px; }
+
+.design-choice .remember-design { display: flex; grid-column: 1 / -1; align-items: center; gap: 8px; }
+
 footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 24px; }
 @media (max-width: 700px) {
 	.project-wizard { padding: 0 18px 20px; }
-	.source-options, .new-folder-fields { grid-template-columns: 1fr; }
+	.source-options, .new-folder-fields, .design-choice { grid-template-columns: 1fr; }
 	.source-options label { min-height: 88px; border-inline-end: 0; border-bottom: 1px solid var(--color-border); }
 	.purpose-list label { grid-template-columns: 36px 1fr 24px; min-height: 88px; }
 }

@@ -3,9 +3,16 @@ import path from 'node:path'
 
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
+import type { Page } from '@playwright/test'
 
 async function state(): Promise<{ galleryId: number, token: string }> {
 	return JSON.parse(await readFile(path.join(process.cwd(), 'test-results-e2e-state.json'), 'utf8'))
+}
+
+async function waitForGalleryImages(page: Page): Promise<void> {
+	await page.locator('.media-tile__open img').evaluateAll(images => Promise.all(
+		images.map(image => (image as HTMLImageElement).decode()),
+	))
 }
 
 test('owner can move through the focused gallery workspace', async ({ browser, baseURL }) => {
@@ -60,6 +67,8 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await page.setViewportSize({ width: 390, height: 844 })
 	await page.getByRole('button', { name: 'Preview gallery' }).click()
 	await expect(page.locator('.gallery-preview--expanded')).toBeVisible()
+	await expect(page.getByTitle('Exact client preview')).toBeVisible()
+	await expect(page.getByTitle('Exact client preview').contentFrame().getByRole('button', { name: 'Open proof.png' })).toBeVisible()
 	await page.getByRole('button', { name: 'Close preview' }).click()
 	await page.setViewportSize({ width: 1440, height: 1000 })
 	await page.getByRole('button', { name: 'Deliver', exact: true }).click()
@@ -100,6 +109,7 @@ test('guest completes an accessible proofing flow', async ({ page, baseURL }) =>
 
 	const accessibility = await new AxeBuilder({ page }).include('.public-gallery').analyze()
 	expect(accessibility.violations).toEqual([])
+	await waitForGalleryImages(page)
 	await expect(page).toHaveScreenshot('public-gallery-desktop.png', {
 		animations: 'disabled',
 		fullPage: true,
@@ -140,6 +150,7 @@ test('public gallery remains usable on a narrow viewport', async ({ page, baseUR
 	const publicFooter = page.locator('.public-gallery__footer')
 	await expect(publicFooter).toBeVisible()
 	expect(await publicFooter.evaluate(element => getComputedStyle(element).position)).not.toBe('fixed')
+	await waitForGalleryImages(page)
 	await expect(page).toHaveScreenshot('public-gallery-mobile.png', {
 		animations: 'disabled',
 		fullPage: true,

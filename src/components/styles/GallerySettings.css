@@ -465,6 +465,16 @@
 	font-size: 12px;
 }
 
+.gallery-preview__bar--exact { grid-template-columns: 1fr auto auto auto; }
+
+.gallery-preview__bar--exact small { color: var(--color-text-maxcontrast); }
+
+.gallery-preview__bar--exact a { color: var(--gallery-accent); font-weight: 600; text-decoration: none; }
+
+.gallery-preview__bar--exact a:focus-visible { outline: 2px solid var(--gallery-accent); outline-offset: 3px; }
+
+.gallery-preview__exact-frame { display: block; width: 100%; min-height: 650px; border: 0; background: #111; }
+
 .gallery-preview__bar img {
 	max-width: 140px;
 	height: 28px;

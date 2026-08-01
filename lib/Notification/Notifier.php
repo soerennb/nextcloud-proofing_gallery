@@ -52,7 +52,7 @@ final class Notifier implements IDismissableNotifier {
 		$category = (string)$state['category'];
 		$tab = match ($category) {
 			'comment', 'selection', 'upload' => 'feedback',
-			'revoked' => 'delivery',
+			'lifecycle', 'revoked' => 'delivery',
 			default => 'overview',
 		};
 		$link = $this->url->linkToRouteAbsolute('proofing_gallery.page.index') . '#gallery/' . $gallery->getId() . '/' . $tab;
@@ -61,6 +61,7 @@ final class Notifier implements IDismissableNotifier {
 			'selection' => $l->n('%n new client selection in {gallery}', '%n new client selections in {gallery}', $count),
 			'upload' => $l->n('%n new upload in {gallery}', '%n new uploads in {gallery}', $count),
 			'manager' => $l->t('You can now manage {gallery}'),
+			'lifecycle' => $l->t('Public access to {gallery} will end soon'),
 			'revoked' => $l->t('Public access to {gallery} was revoked'),
 			default => throw new UnknownNotificationException(),
 		};

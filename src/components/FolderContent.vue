@@ -406,6 +406,7 @@ onBeforeUnmount(() => {
 				<NcButton :disabled="uploading" @click="fileInput?.click()">
 					{{ uploading ? t('proofing_gallery', 'Uploading…') : t('proofing_gallery', 'Upload files') }}
 				</NcButton>
+				<small class="upload-resume-hint">{{ t('proofing_gallery', 'Interrupted uploads resume when you select the same files again.') }}</small>
 				<NcButton variant="tertiary" @click="addFolder">
 					{{ t('proofing_gallery', 'New folder') }}
 				</NcButton>

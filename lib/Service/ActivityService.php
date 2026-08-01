@@ -36,6 +36,19 @@ final class ActivityService {
 
 	}
 
+	/** @param array<string, mixed> $payload */
+	public function recordOnce(Gallery $gallery, string $type, string $dedupeKey, array $payload): bool {
+		$qb = $this->db->getQueryBuilder();
+		$existing = $qb->select('id')->from('proofing_events')
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('event_type', $qb->createNamedParameter($type)))
+			->andWhere($qb->expr()->like('payload', $qb->createNamedParameter('%' . $this->db->escapeLikeParameter('"dedupeKey":"' . $dedupeKey . '"') . '%')))
+			->setMaxResults(1)->executeQuery()->fetchOne();
+		if ($existing !== false) return false;
+		$this->record($gallery, null, $type, ['dedupeKey' => $dedupeKey, ...$payload]);
+		return true;
+	}
+
 	/** @return list<array<string, mixed>> */
 	public function list(Gallery $gallery, int $cursor = 0, string $type = ''): array {
 		$qb = $this->db->getQueryBuilder();

@@ -28,6 +28,7 @@ final class LifecycleService {
 		private PublicShareService $shares,
 		private CapabilityPolicyService $capabilities,
 		private NativeNotificationService $notifications,
+		private ActivityService $activity,
 	) {
 	}
 
@@ -65,8 +66,19 @@ final class LifecycleService {
 			$rule = $settings->lifecycle;
 			if (!$rule->enabled) continue;
 
-			if ($gallery->getShareToken() !== null && $this->revokeDue($gallery->getCompletedAt(), $rule, $now)) {
+			$revokeAt = $this->revokeTimestamp($gallery->getCompletedAt(), $rule);
+			if ($gallery->getShareToken() !== null && $revokeAt !== null && $now < $revokeAt) {
+				foreach (array_values(array_unique($rule->reminderDays)) as $days) {
+					if ($now < $revokeAt - $days * 86400) continue;
+					$key = $revokeAt . ':' . $days;
+					if ($this->activity->recordOnce($gallery, 'lifecycle.reminder', $key, ['days' => $days, 'actionAt' => $revokeAt])) {
+						$this->notifications->signalCategory((int)$gallery->getId(), $gallery->getOwnerUid(), 'lifecycle');
+					}
+				}
+			}
+			if ($gallery->getShareToken() !== null && $revokeAt !== null && $revokeAt <= $now) {
 				$this->shares->revoke($gallery);
+				$this->activity->recordOnce($gallery, 'lifecycle.revoked', (string)$revokeAt, ['actionAt' => $revokeAt]);
 				$this->notifications->signalCategory((int)$gallery->getId(), $gallery->getOwnerUid(), 'revoked');
 				$revoked++;
 			}
@@ -77,19 +89,20 @@ final class LifecycleService {
 				$gallery->setUpdatedAt($now);
 				$gallery->setRevision($gallery->getRevision() + 1);
 				$this->galleries->update($gallery);
+				$this->activity->recordOnce($gallery, 'lifecycle.archived', (string)$gallery->getArchivedAt(), ['actionAt' => $gallery->getArchivedAt()]);
 				$archived++;
 			}
 		}
 		return compact('revoked', 'archived');
 	}
 
-	private function revokeDue(?int $completedAt, LifecycleSettings $rule, int $now): bool {
+	private function revokeTimestamp(?int $completedAt, LifecycleSettings $rule): ?int {
 		if ($rule->trigger === 'after_completion') {
-			return $completedAt !== null && $completedAt + $rule->revokeAfterDays * 86400 <= $now;
+			return $completedAt === null ? null : $completedAt + $rule->revokeAfterDays * 86400;
 		}
-		if ($rule->revokeAt === '') return false;
+		if ($rule->revokeAt === '') return null;
 		$date = \DateTimeImmutable::createFromFormat('!Y-m-d', $rule->revokeAt, new \DateTimeZone('UTC'));
-		return $date !== false && $date->setTime(23, 59, 59)->getTimestamp() <= $now;
+		return $date === false ? null : $date->setTime(23, 59, 59)->getTimestamp();
 	}
 
 	private function deleteOldRows(string $table, string $column, int $before): int {

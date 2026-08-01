@@ -95,6 +95,47 @@ test('public HTML bootstraps media without a gallery discovery request', async (
 	expect(failedAppResponses).toEqual([])
 })
 
+test('owner chunk uploads expose resumable state and finalize into the gallery', async ({ request, baseURL }) => {
+	const stable = await state()
+	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
+	const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+	let galleryId: number | null = null
+	let fileId: number | null = null
+
+	try {
+		const created = await request.post(`${galleries}?format=json`, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+			data: { folderId: stable.folderId, title: `Owner upload ${Date.now()}` },
+		})
+		galleryId = (await created.json() as { id: number }).id
+		const uploads = `${galleries}/${galleryId}/owner-uploads`
+		const initiated = await request.post(`${uploads}?format=json`, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+			data: { filename: `resumable-${Date.now()}.png`, mimeType: 'image/png', size: image.length, conflict: 'rename' },
+		})
+		expect(initiated.status()).toBe(201)
+		const session = await initiated.json() as { id: string; chunkSize: number; chunks: number; uploadedChunks: number[] }
+		expect(session).toEqual(expect.objectContaining({ chunks: 1, uploadedChunks: [] }))
+
+		const chunk = await request.put(`${uploads}/${session.id}/chunks/0?format=json`, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/octet-stream' },
+			data: image,
+		})
+		expect(chunk.status()).toBe(200)
+		const resumable = await request.get(`${uploads}/${session.id}?format=json`, { headers: apiHeaders })
+		expect(await resumable.json()).toEqual(expect.objectContaining({ uploadedChunks: [0] }))
+
+		const finalized = await request.post(`${uploads}/${session.id}/finalize?format=json`, { headers: apiHeaders })
+		expect(finalized.status()).toBe(200)
+		const result = await finalized.json() as { status: string; item: { id: number; mimeType: string } }
+		expect(result).toEqual(expect.objectContaining({ status: 'completed', item: expect.objectContaining({ mimeType: 'image/png' }) }))
+		fileId = result.item.id
+	} finally {
+		if (galleryId !== null && fileId !== null) await request.delete(`${galleries}/${galleryId}/media/${fileId}?format=json`, { headers: apiHeaders })
+		if (galleryId !== null) await request.delete(`${galleries}/${galleryId}?format=json`, { headers: apiHeaders })
+	}
+})
+
 test('administrator policies reject out-of-range API values and health remains accessible', async ({ browser, request, baseURL }) => {
 	const unauthorized = await request.put(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/admin/policies?format=json`, {
 		headers: { 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' },
@@ -254,6 +295,7 @@ test('owner presets preserve gallery identity and explicit public language', asy
 	let presetId: number | null = null
 	let galleryId: number | null = null
 	let collectionId: number | null = null
+	let projectId: number | null = null
 
 	try {
 		const created = await request.post(`${galleries}?format=json`, {
@@ -277,6 +319,23 @@ test('owner presets preserve gallery identity and explicit public language', asy
 			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
 			data: { name, settings },
 		})).status()).toBe(422)
+
+		const projectResponse = await request.post(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/projects?format=json`, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+			data: {
+				title: `Preset project ${Date.now()}`,
+				purpose: 'delivery',
+				sourceMode: 'existing',
+				folderId: stable.folderId,
+				designPreset: { mode: 'preset', id: presetId },
+			},
+		})
+		expect(projectResponse.status()).toBe(201)
+		const project = await projectResponse.json() as { id: number; settings: { presentation: { showFilenames: boolean } } }
+		projectId = project.id
+		expect(project.settings.presentation.showFilenames).toBe(false)
+		const readiness = await request.get(`${galleries}/${projectId}/readiness?format=json`, { headers: apiHeaders })
+		expect(await readiness.json()).toEqual(expect.objectContaining({ ready: true, revision: expect.any(Number) }))
 
 		const published = await request.post(`${galleries}/${galleryId}/publish?format=json`, {
 			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
@@ -303,6 +362,7 @@ test('owner presets preserve gallery identity and explicit public language', asy
 		if (presetId !== null) await request.delete(`${presets}/${presetId}?format=json`, { headers: apiHeaders })
 		if (galleryId !== null) await request.delete(`${galleries}/${galleryId}?format=json`, { headers: apiHeaders })
 		if (collectionId !== null) await request.delete(`${galleries}/${collectionId}?format=json`, { headers: apiHeaders })
+		if (projectId !== null) await request.delete(`${galleries}/${projectId}?format=json`, { headers: apiHeaders })
 	}
 })
 

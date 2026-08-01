@@ -33,7 +33,9 @@ final class GalleryService {
 	) {
 	}
 
-	/** @param array<string, mixed> $settings */
+	/**
+	 * @param array<string, mixed> $settings
+	 */
 	public function create(
 		string $ownerUid,
 		string $title,
@@ -143,7 +145,10 @@ final class GalleryService {
 		}
 	}
 
-	/** @param array<string, mixed> $settings */
+	/**
+	 * @param array<string, mixed> $settings
+	 * @param array<string, mixed> $designPreset
+	 */
 	public function createProject(
 		string $ownerUid,
 		string $title,
@@ -153,8 +158,10 @@ final class GalleryService {
 		?int $parentFolderId,
 		?string $folderName,
 		array $settings = [],
+		array $designPreset = ['mode' => 'inherit'],
 	): Gallery {
 		$preferences = $this->preferences->get($ownerUid);
+		$settings = array_replace_recursive($this->selectedDesign($ownerUid, $preferences, $designPreset), $settings);
 		if ($purpose === '') {
 			$purpose = (string)($preferences['defaultPurpose'] ?? $this->policies->instanceSettings()['workflow']['defaultPurpose']);
 		}
@@ -189,6 +196,29 @@ final class GalleryService {
 				}
 			}
 			throw $exception;
+		}
+	}
+
+	/**
+	 * @param array<string, mixed> $preferences
+	 * @param array<string, mixed> $selection
+	 * @return array<string, mixed>
+	 */
+	private function selectedDesign(string $ownerUid, array $preferences, array $selection): array {
+		$mode = (string)($selection['mode'] ?? 'inherit');
+		if (!in_array($mode, ['inherit', 'instance', 'preset'], true)) {
+			throw new InvalidArgumentException('Unknown design preset mode');
+		}
+		if ($mode === 'instance') return [];
+		$presetId = $mode === 'preset' ? (int)($selection['id'] ?? 0) : (int)($preferences['designPresetId'] ?? 0);
+		if ($mode === 'preset' && $presetId < 1) throw new InvalidArgumentException('A design preset is required');
+		if ($presetId < 1) return [];
+		try {
+			$preset = json_decode($this->presets->findOwned($presetId, $ownerUid)->getSettings(), true, flags: JSON_THROW_ON_ERROR);
+			return is_array($preset['presentation'] ?? null) ? ['presentation' => $preset['presentation']] : [];
+		} catch (\OCP\AppFramework\Db\DoesNotExistException) {
+			if ($mode === 'preset') throw new InvalidArgumentException('The selected design preset no longer exists');
+			return [];
 		}
 	}
 
