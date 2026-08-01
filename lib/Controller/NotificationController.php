@@ -81,7 +81,7 @@ final class NotificationController extends Controller {
 	#[FrontpageRoute(verb: 'GET', url: '/notifications/unsubscribe/{token}')]
 	public function unsubscribe(string $token): DataDisplayResponse {
 		$changed = $this->notifications->unsubscribe($token);
-		$body = $changed ? 'Gallery notifications have been disabled.' : 'This unsubscribe link is invalid or already used.';
+		$body = $changed ? 'Gallery email notifications have been disabled.' : 'This unsubscribe link is invalid or already used.';
 		return new DataDisplayResponse($body, $changed ? Http::STATUS_OK : Http::STATUS_NOT_FOUND, ['Content-Type' => 'text/plain; charset=utf-8']);
 	}
 

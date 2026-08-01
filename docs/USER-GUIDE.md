@@ -6,15 +6,18 @@
 2. Open **Proofing Gallery**, choose **Create gallery**, select **Folder
    gallery**, select the folder, and choose Presentation or Proofing.
 3. Open the gallery and use the focused workspaces:
-   - **Overview** shows the source folder, media count, gallery mode, and a
+   - **Plan** shows the source folder, media count, gallery mode, and a
      preview of the files clients will see.
-   - **Design** controls title, opener, typography, colors, logo, cover, and
+   - **Photos** manages files and folder-backed delivery content.
+   - **Cull** provides ratings, picks/rejects, color labels, saved views, client
+     rating signals, and explicit XMP synchronization.
+   - **Style** controls title, opener, typography, colors, logo, cover, and
      preview watermarking. Watermarks never alter originals.
-   - **Access** publishes the link and manages Nextcloud users or groups.
-   - **Feedback** controls review visibility, workflow labels, uploads, and the
+   - **Deliver** publishes one or more independently configured client links.
+   - **Results** controls review visibility, workflow labels, uploads, and the
      moderation inbox.
-   - **Activity** provides the gallery audit trail.
-4. Publish the gallery from **Access**. Proofing Gallery creates a regular
+   - **History** provides the gallery audit trail.
+4. Publish the gallery from **Deliver**. Proofing Gallery creates a regular
    Nextcloud public-link share for the source folder.
 5. Optionally add a password and expiry date, then copy the link or send an
    email invitation. Leaving the password field empty preserves an existing
@@ -23,6 +26,30 @@
 Revoking the public link immediately removes guest access. Archiving a gallery
 removes it from the active list without touching its source folder. The archive
 view can restore it; a restored published gallery keeps its link.
+
+## Cull, rate, and deliver to different audiences
+
+The **Cull** workspace is optimized for keyboard work: arrow keys move between
+photos, 0–5 sets a rating, P and X toggle pick/reject, Space selects, and
+Ctrl/Command+Z undoes the last batch. Filters and sort order can be saved as a
+named view; saved views follow the Nextcloud user across devices. App culling is
+stored separately from XMP until **XMP sync** is explicitly opened and applied.
+
+In **Deliver**, create separate links for clients, internal reviewers, or a
+finished presentation. Each link can start at a different subfolder and can use
+folder or recursive browsing, its own language, password, expiry, download
+scope, metadata visibility, upload permission, feedback capabilities, and
+minimum owner rating. Revoking one link does not revoke the others.
+
+Private client star ratings and pick/reject decisions remain visible only to
+that client and gallery managers. **Client signal** shows anonymization-safe
+aggregates and named individual votes to authorized owners. Applying them to
+owner culling always requires a fresh preview and never updates XMP by itself.
+
+Named selections can be exported through **Export composer**. Owners choose
+among paths, culling values, client aggregates, selection names, and comments.
+Guests can export only filenames and their own rating/decision. Inspect the
+RFC 4180 UTF-8 preview before copying or downloading it.
 
 ## Build a collection across galleries
 

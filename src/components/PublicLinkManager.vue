@@ -1,0 +1,263 @@
+<script setup lang="ts">
+import { showError, showSuccess } from '@nextcloud/dialogs'
+import { t } from '@nextcloud/l10n'
+import NcButton from '@nextcloud/vue/components/NcButton'
+import QRCode from 'qrcode'
+import { onMounted, ref } from 'vue'
+import { fetchGallery, fetchPublicLinks, fetchShareAudit, makePublicLinkPrimary, revokePublicLink, savePublicLink } from '../services/galleryApi.ts'
+import type { Gallery, GalleryPublicLink, PublicLinkPolicy, ShareAuditItem } from '../types.ts'
+
+const props = defineProps<{ gallery: Gallery }>()
+const emit = defineEmits<{ 'gallery-updated': [gallery: Gallery] }>()
+const links = ref<GalleryPublicLink[]>([])
+const presets = ref<Record<string, PublicLinkPolicy>>({})
+const audit = ref<ShareAuditItem[]>([])
+const loading = ref(true)
+const saving = ref(false)
+const editingId = ref<number | null | 'new'>(null)
+const qrUrl = ref('')
+const qrData = ref('')
+const permissionKeys: Array<Exclude<keyof PublicLinkPolicy, 'view' | 'downloadScope'>> = ['likes', 'colors', 'comments', 'annotations', 'selections', 'ratings', 'pick', 'upload', 'export', 'metadata']
+const draft = ref(createDraft())
+
+function createDraft() {
+	return {
+		name: '',
+		preset: 'presentation',
+		startPath: '',
+		viewMode: 'folder' as 'folder' | 'recursive',
+		groupDepth: 1,
+		minOwnerRating: 0,
+		publicLocale: null as 'en' | 'de' | null,
+		password: '',
+		expiresAt: '',
+		policy: ({ view: true, likes: false, colors: false, comments: false, annotations: false, selections: false, ratings: false, pick: false, upload: false, export: false, metadata: false, downloadScope: 'none' }) as PublicLinkPolicy,
+	}
+}
+
+async function load() {
+	loading.value = true
+	try {
+		const [linkData, auditData] = await Promise.all([fetchPublicLinks(props.gallery.id), fetchShareAudit(props.gallery.id)])
+		links.value = linkData.items
+		presets.value = linkData.presets
+		audit.value = auditData
+	} catch { showError(t('proofing_gallery', 'Public links could not be loaded.')) } finally { loading.value = false }
+}
+
+function startNew() {
+	draft.value = createDraft()
+	applyPreset('presentation')
+	editingId.value = 'new'
+}
+
+function edit(link: GalleryPublicLink) {
+	draft.value = { ...createDraft(), name: link.name, startPath: link.startPath, viewMode: link.viewMode, groupDepth: link.groupDepth, minOwnerRating: link.minOwnerRating, publicLocale: link.publicLocale, policy: structuredClone(link.policy) }
+	editingId.value = link.id
+}
+
+function applyPreset(name: string) {
+	draft.value.preset = name
+	if (presets.value[name]) draft.value.policy = structuredClone(presets.value[name])
+}
+
+async function save() {
+	saving.value = true
+	try {
+		const link = await savePublicLink(props.gallery.id, editingId.value === 'new' ? null : editingId.value as number, {
+			...draft.value, password: draft.value.password || null, expiresAt: draft.value.expiresAt || null,
+		})
+		links.value = editingId.value === 'new' ? [...links.value, link] : links.value.map(item => item.id === link.id ? link : item)
+		editingId.value = null
+		showSuccess(t('proofing_gallery', 'Public link saved.'))
+	} catch { showError(t('proofing_gallery', 'The public link could not be saved. Check its scope and permissions.')) } finally { saving.value = false }
+}
+
+async function makePrimary(link: GalleryPublicLink) {
+	try {
+		await makePublicLinkPrimary(props.gallery.id, link.id)
+		links.value = links.value.map(item => ({ ...item, primary: item.id === link.id }))
+		emit('gallery-updated', await fetchGallery(props.gallery.id))
+		showSuccess(t('proofing_gallery', 'Primary link changed.'))
+	} catch { showError(t('proofing_gallery', 'The primary link could not be changed.')) }
+}
+
+async function revoke(link: GalleryPublicLink) {
+	if (!window.confirm(t('proofing_gallery', 'Revoke {name}? Guests using this URL will immediately lose access.', { name: link.name }))) return
+	try {
+		const updated = await revokePublicLink(props.gallery.id, link.id)
+		links.value = links.value.map(item => item.id === updated.id ? updated : item)
+		audit.value = await fetchShareAudit(props.gallery.id)
+	} catch { showError(t('proofing_gallery', 'The public link could not be revoked.')) }
+}
+
+async function showQr(link: GalleryPublicLink) {
+	qrUrl.value = link.url
+	qrData.value = await QRCode.toDataURL(link.url, { width: 360, margin: 2 })
+}
+
+async function copy(link: GalleryPublicLink) {
+	await navigator.clipboard.writeText(link.url)
+	showSuccess(t('proofing_gallery', 'Gallery link copied.'))
+}
+
+function formatDate(timestamp: number) { return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(timestamp * 1000) }
+onMounted(load)
+</script>
+
+<template>
+	<section class="link-manager" aria-labelledby="public-link-manager-title">
+		<header>
+			<div>
+				<span>{{ t('proofing_gallery', 'LINK PORTFOLIO') }}</span><h3 id="public-link-manager-title">
+					{{ t('proofing_gallery', 'Client links') }}
+				</h3>
+			</div>
+			<NcButton variant="primary" :disabled="loading" @click="startNew">
+				{{ t('proofing_gallery', 'New client link') }}
+			</NcButton>
+		</header>
+		<p class="link-manager__lead">
+			{{ t('proofing_gallery', 'Give every audience its own URL, permissions and folder scope. No password or token is written to the audit log.') }}
+		</p>
+		<div v-if="loading" role="status">
+			{{ t('proofing_gallery', 'Loading…') }}
+		</div>
+		<div v-else class="link-cards">
+			<article v-for="link in links" :key="link.id" :class="{ 'is-revoked': link.status === 'revoked' }">
+				<div class="link-card__top">
+					<div><strong>{{ link.name }}</strong><span v-if="link.primary">{{ t('proofing_gallery', 'PRIMARY') }}</span></div><small>{{ link.status === 'active' ? t('proofing_gallery', 'Active') : t('proofing_gallery', 'Revoked') }}</small>
+				</div>
+				<p>{{ link.viewMode === 'recursive' ? t('proofing_gallery', 'Recursive') : t('proofing_gallery', 'Folder view') }} · {{ link.startPath || t('proofing_gallery', 'Gallery root') }} · {{ link.policy.downloadScope }}</p>
+				<div v-if="link.status === 'active'" class="link-card__actions">
+					<NcButton variant="tertiary" @click="copy(link)">
+						{{ t('proofing_gallery', 'Copy') }}
+					</NcButton>
+					<NcButton variant="tertiary" @click="showQr(link)">
+						{{ t('proofing_gallery', 'QR code') }}
+					</NcButton>
+					<a :href="`mailto:?subject=${encodeURIComponent(gallery.title)}&body=${encodeURIComponent(link.url)}`">{{ t('proofing_gallery', 'Email') }}</a>
+					<NcButton variant="tertiary" @click="edit(link)">
+						{{ t('proofing_gallery', 'Edit') }}
+					</NcButton>
+					<NcButton v-if="!link.primary" variant="tertiary" @click="makePrimary(link)">
+						{{ t('proofing_gallery', 'Make primary') }}
+					</NcButton>
+					<NcButton v-if="!link.primary" variant="error" @click="revoke(link)">
+						{{ t('proofing_gallery', 'Revoke') }}
+					</NcButton>
+				</div>
+			</article>
+		</div>
+
+		<form v-if="editingId !== null" class="link-editor" @submit.prevent="save">
+			<h4>{{ editingId === 'new' ? t('proofing_gallery', 'Create client link') : t('proofing_gallery', 'Edit client link') }}</h4>
+			<div class="link-editor__grid">
+				<label><span>{{ t('proofing_gallery', 'Link name') }}</span><input v-model="draft.name"
+					name="linkName"
+					required
+					maxlength="120"></label>
+				<label><span>{{ t('proofing_gallery', 'Permission preset') }}</span><select v-model="draft.preset" name="linkPreset" @change="applyPreset(draft.preset)"><option v-for="(_, name) in presets" :key="name" :value="name">{{ name }}</option></select></label>
+				<label><span>{{ t('proofing_gallery', 'Start folder') }}</span><input v-model="draft.startPath" name="linkStartPath" placeholder="Client / Finals"></label>
+				<label><span>{{ t('proofing_gallery', 'View mode') }}</span><select v-model="draft.viewMode" name="linkViewMode"><option value="folder">{{ t('proofing_gallery', 'Folder view') }}</option><option value="recursive">{{ t('proofing_gallery', 'Recursive') }}</option></select></label>
+				<label><span>{{ t('proofing_gallery', 'Minimum owner rating') }}</span><select v-model.number="draft.minOwnerRating" name="linkMinRating"><option v-for="rating in 6" :key="rating - 1" :value="rating - 1">{{ rating - 1 }} ★</option></select></label>
+				<label><span>{{ t('proofing_gallery', 'Public language') }}</span><select v-model="draft.publicLocale" name="linkLocale"><option :value="null">{{ t('proofing_gallery', 'Gallery default') }}</option><option value="de">Deutsch</option><option value="en">English</option></select></label>
+				<label><span>{{ t('proofing_gallery', 'Password') }}</span><input v-model="draft.password"
+					name="linkPassword"
+					type="password"
+					autocomplete="new-password"></label>
+				<label><span>{{ t('proofing_gallery', 'Expires on') }}</span><input v-model="draft.expiresAt" name="linkExpiry" type="date"></label>
+			</div>
+			<fieldset><legend>{{ t('proofing_gallery', 'Permissions') }}</legend><label v-for="key in permissionKeys" :key="key"><input v-model="draft.policy[key]" type="checkbox" :name="`policy-${key}`">{{ key }}</label><label><span>{{ t('proofing_gallery', 'Downloads') }}</span><select v-model="draft.policy.downloadScope" name="linkDownloads"><option value="none">none</option><option value="individual">individual</option><option value="selection">selection</option><option value="all">all</option></select></label></fieldset>
+			<div class="link-editor__actions">
+				<NcButton type="submit" variant="primary" :disabled="saving">
+					{{ saving ? t('proofing_gallery', 'Saving…') : t('proofing_gallery', 'Save link') }}
+				</NcButton><NcButton type="button" variant="tertiary" @click="editingId = null">
+					{{ t('proofing_gallery', 'Cancel') }}
+				</NcButton>
+			</div>
+		</form>
+
+		<div v-if="qrData" class="link-qr">
+			<img :src="qrData" :alt="t('proofing_gallery', 'QR code for the selected client link')"><div>
+				<strong>{{ t('proofing_gallery', 'Ready to scan') }}</strong><a :href="qrUrl" target="_blank">{{ qrUrl }}</a><NcButton variant="tertiary" @click="qrData = ''">
+					{{ t('proofing_gallery', 'Close') }}
+				</NcButton>
+			</div>
+		</div>
+		<details class="link-audit">
+			<summary>{{ t('proofing_gallery', 'Access audit') }} <span>{{ audit.length }}</span></summary><p v-if="!audit.length">
+				{{ t('proofing_gallery', 'No audited link activity yet.') }}
+			</p><ol v-else>
+				<li v-for="(item, index) in audit" :key="`${item.createdAt}-${index}`">
+					<strong>{{ item.event }}</strong><span>{{ item.outcome }} · {{ formatDate(item.createdAt) }}</span><small>{{ t('proofing_gallery', 'Link #{id}', { id: item.publicLinkId }) }}<template v-if="item.fileId"> · {{ t('proofing_gallery', 'File #{id}', { id: item.fileId }) }}</template></small>
+				</li>
+			</ol>
+		</details>
+	</section>
+</template>
+
+<style scoped>
+.link-manager { display: grid; gap: 16px; padding: 24px 0; border-top: 1px solid var(--color-border); }
+
+.link-manager > header { display: flex; align-items: end; justify-content: space-between; gap: 16px; }
+
+.link-manager > header span { color: var(--color-primary-element); font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+
+.link-manager h3 { margin: 2px 0 0; font-size: 24px; }
+
+.link-manager__lead { max-width: 68ch; margin: 0; color: var(--color-text-maxcontrast); }
+
+.link-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 10px; }
+
+.link-cards article { display: grid; gap: 12px; min-width: 0; padding: 16px; border: 1px solid var(--color-border); border-top: 4px solid var(--color-primary-element); background: var(--color-main-background); }
+
+.link-cards article.is-revoked { opacity: .55; border-top-color: var(--color-text-maxcontrast); }
+
+.link-card__top, .link-card__top > div, .link-card__actions { display: flex; align-items: center; gap: 8px; }
+
+.link-card__top { justify-content: space-between; }
+
+.link-card__top span { padding: 3px 6px; background: var(--color-primary-element-light); color: var(--color-primary-element); font-size: 10px; font-weight: 800; }
+
+.link-cards p { margin: 0; overflow-wrap: anywhere; color: var(--color-text-maxcontrast); font-size: 12px; }
+
+.link-card__actions { flex-wrap: wrap; }
+
+.link-card__actions a { padding: 7px 10px; color: var(--color-main-text); }
+
+.link-editor { display: grid; gap: 16px; padding: 20px; border: 2px solid var(--color-primary-element); background: var(--color-background-dark); }
+
+.link-editor h4 { margin: 0; font-size: 20px; }
+
+.link-editor__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+
+.link-editor label { display: grid; gap: 5px; min-width: 0; font-size: 12px; }
+
+.link-editor :is(input,select) { box-sizing: border-box; min-height: 42px; width: 100%; padding: 8px 10px; border: 1px solid var(--color-border-maxcontrast); border-radius: var(--border-radius-large); background: var(--color-main-background); color: var(--color-main-text); }
+
+.link-editor fieldset { display: flex; flex-wrap: wrap; gap: 10px 16px; padding: 14px; border: 1px solid var(--color-border); }
+
+.link-editor fieldset label { display: flex; align-items: center; }
+
+.link-editor fieldset input { width: auto; min-height: 0; }
+
+.link-editor__actions { display: flex; gap: 8px; }
+
+.link-qr { display: flex; gap: 18px; padding: 18px; background: #111; color: #fff; }
+
+.link-qr img { width: 144px; height: 144px; }
+
+.link-qr div { display: grid; align-content: center; gap: 8px; min-width: 0; }
+
+.link-qr a { overflow: hidden; color: #fff; text-overflow: ellipsis; }
+
+.link-audit { padding: 14px; border: 1px solid var(--color-border); }
+
+.link-audit summary { cursor: pointer; font-weight: 700; }
+
+.link-audit ol { display: grid; gap: 8px; padding: 12px 0 0; margin: 0; list-style: none; }
+
+.link-audit li { display: grid; grid-template-columns: 100px 1fr auto; gap: 10px; font-size: 12px; }
+@media (max-width: 640px) { .link-manager > header { align-items: stretch; flex-direction: column; }.link-editor__grid { grid-template-columns: 1fr; }.link-qr { flex-direction: column; }.link-audit li { grid-template-columns: 80px 1fr; }.link-audit li small { grid-column: 1 / -1; } }
+</style>

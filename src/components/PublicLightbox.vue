@@ -23,7 +23,7 @@ const props = defineProps<{
 	previewUrl(item: MediaItem, width?: number, height?: number, mode?: 'cover' | 'fit'): string
 	streamUrl(item: MediaItem): string
 	downloadUrl(item: MediaItem): string
-	selectionExportUrl(selectionId: string, format: 'csv' | 'plain' | 'search'): string
+	selectionExportUrl(selectionId: string, format: 'csv' | 'plain' | 'search', fields?: string[]): string
 }>()
 const emit = defineEmits<{ close: [] }>()
 
@@ -38,6 +38,8 @@ const canDownloadIndividual = computed(() => !props.settings.delivery
 const enabledColorLabels = computed(() => props.settings.review
 	? props.settings.review.colorLabels.filter((_, index) => props.settings.review.colorEnabled[index])
 	: props.settings.colorLabels)
+const activeGuestRating = computed(() => props.collaboration?.ratings?.find(value => value.fileId === activeItem.value?.id)
+	?? { rating: 0, pick: 'none' as const })
 
 const shell = ref<HTMLElement | null>(null)
 const closeButton = ref<HTMLButtonElement | null>(null)
@@ -45,11 +47,13 @@ const annotationHost = ref<HTMLElement | null>(null)
 const feedbackOpen = ref(false)
 const metadataOpen = ref(false)
 const slideshow = ref(false)
+const shortcutsOpen = ref(false)
 const commentBody = ref('')
 const marking = ref(false)
 const annotationDraft = ref<{ x: number; y: number; width: number; height: number } | null>(null)
 const editingCommentId = ref<number | null>(null)
 const editingCommentBody = ref('')
+const guestExportFields = ref(['filename', 'rating', 'pick'])
 const reduceMotion = useReducedMotion()
 const sheetInitial = computed(() => reduceMotion.value ? { opacity: 0 } : { opacity: 0, y: 48 })
 const sheetExit = computed(() => reduceMotion.value ? { opacity: 0 } : { opacity: 0, y: 36 })
@@ -70,6 +74,7 @@ onMounted(async () => {
 	previousBodyOverflow = document.body.style.overflow
 	document.body.style.overflow = 'hidden'
 	window.addEventListener('keydown', onKeydown, true)
+	document.addEventListener('visibilitychange', onSlideshowVisibility)
 
 	const { default: PhotoSwipeConstructor } = await import('photoswipe')
 	if (unmounting || !shell.value) return
@@ -129,6 +134,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
 	unmounting = true
 	window.removeEventListener('keydown', onKeydown, true)
+	document.removeEventListener('visibilitychange', onSlideshowVisibility)
 	window.clearInterval(slideshowTimer)
 	pswp?.destroy()
 	pswp = null
@@ -212,14 +218,25 @@ function zoom(direction: number) {
 
 function setSlideshow(enabled: boolean) {
 	slideshow.value = enabled
+	scheduleSlideshow()
+}
+
+function scheduleSlideshow() {
 	window.clearInterval(slideshowTimer)
-	slideshowTimer = enabled ? window.setInterval(() => pswp?.next(), 4500) : undefined
+	slideshowTimer = slideshow.value && !document.hidden
+		? window.setInterval(() => pswp?.next(), Math.max(3, Math.min(15, props.settings.presentation?.slideshowInterval ?? 5)) * 1000)
+		: undefined
+}
+
+function onSlideshowVisibility() {
+	scheduleSlideshow()
 }
 
 function onKeydown(event: KeyboardEvent) {
 	if (event.key === 'Escape') {
 		event.preventDefault()
-		if (feedbackOpen.value) feedbackOpen.value = false
+		if (shortcutsOpen.value) shortcutsOpen.value = false
+		else if (feedbackOpen.value) feedbackOpen.value = false
 		else close()
 		return
 	}
@@ -231,6 +248,7 @@ function onKeydown(event: KeyboardEvent) {
 	if (target?.matches('input, textarea, select, [contenteditable="true"]')) return
 	if (event.key === 'ArrowLeft') step(-1)
 	if (event.key === 'ArrowRight') step(1)
+	if (event.key === '?' || (event.key === '/' && event.shiftKey)) shortcutsOpen.value = !shortcutsOpen.value
 	if (event.key === ' ') {
 		event.preventDefault()
 		setSlideshow(!slideshow.value)
@@ -268,6 +286,12 @@ async function setColor(value: string) {
 	const item = activeItem.value
 	if (!item || !props.collaboration) return
 	await props.mutate(`media/${item.id}/color`, 'PUT', { value: value || null })
+}
+
+async function setGuestRating(rating: number, pick = activeGuestRating.value.pick) {
+	const item = activeItem.value
+	if (!item) return
+	await props.mutate(`media/${item.id}/rating`, 'PUT', { rating, pick })
 }
 
 async function addComment() {
@@ -330,6 +354,13 @@ async function saveEditedComment(commentId: number) {
 					@click="setSlideshow(!slideshow)">
 					{{ slideshow ? t('proofing_gallery', 'Pause') : t('proofing_gallery', 'Slideshow') }}
 				</button>
+				<button class="lightbox-bar__shortcuts"
+					type="button"
+					:aria-expanded="shortcutsOpen"
+					:aria-label="t('proofing_gallery', 'Keyboard shortcuts')"
+					@click="shortcutsOpen = !shortcutsOpen">
+					?
+				</button>
 				<button v-if="settings.mode === 'collaboration' && settings.review?.likes !== false"
 					type="button"
 					@click="openFeedbackAndLike">
@@ -384,6 +415,29 @@ async function saveEditedComment(commentId: number) {
 				:style="{ left: `${annotationDraft.x / 100}%`, top: `${annotationDraft.y / 100}%`, width: `${annotationDraft.width / 100}%`, height: `${annotationDraft.height / 100}%` }" />
 		</Teleport>
 
+		<AnimatePresence>
+			<motion.aside v-if="shortcutsOpen"
+				key="shortcut-help"
+				class="lightbox-shortcuts"
+				role="dialog"
+				:aria-label="t('proofing_gallery', 'Keyboard shortcuts')"
+				:initial="sheetInitial"
+				:animate="{ opacity: 1, y: 0 }"
+				:exit="sheetExit">
+				<header>
+					<strong>{{ t('proofing_gallery', 'Keyboard shortcuts') }}</strong><button type="button" :aria-label="t('proofing_gallery', 'Close')" @click="shortcutsOpen = false">
+						×
+					</button>
+				</header>
+				<dl>
+					<div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>{{ t('proofing_gallery', 'Previous or next photograph') }}</dd></div>
+					<div><dt><kbd>Space</kbd></dt><dd>{{ t('proofing_gallery', 'Start or pause slideshow') }}</dd></div>
+					<div><dt><kbd>Esc</kbd></dt><dd>{{ t('proofing_gallery', 'Close panel or lightbox') }}</dd></div>
+					<div><dt><kbd>?</kbd></dt><dd>{{ t('proofing_gallery', 'Show this help') }}</dd></div>
+				</dl>
+				<small>{{ t('proofing_gallery', 'Slideshow interval: {seconds} seconds', { seconds: settings.presentation?.slideshowInterval ?? 5 }) }}</small>
+			</motion.aside>
+		</AnimatePresence>
 		<AnimatePresence>
 			<motion.aside v-if="metadataOpen && activeMetadata?.state === 'ready'"
 				key="metadata-sheet"
@@ -464,6 +518,28 @@ async function saveEditedComment(commentId: number) {
 							</select>
 						</label>
 					</div>
+					<div v-if="settings.review?.ratings || settings.review?.pick" class="guest-rating" aria-label="Private rating">
+						<div v-if="settings.review?.ratings" class="guest-rating__stars">
+							<span>{{ t('proofing_gallery', 'Your private rating') }}</span>
+							<button v-for="rating in 6"
+								:key="rating - 1"
+								type="button"
+								:aria-pressed="activeGuestRating.rating === rating - 1"
+								:aria-label="n('proofing_gallery', '%n star', '%n stars', rating - 1)"
+								@click="setGuestRating(rating - 1)">
+								{{ rating === 1 ? '×' : '★' }}
+							</button>
+						</div>
+						<div v-if="settings.review?.pick" class="guest-rating__decision">
+							<button type="button" :aria-pressed="activeGuestRating.pick === 'pick'" @click="setGuestRating(activeGuestRating.rating, activeGuestRating.pick === 'pick' ? 'none' : 'pick')">
+								{{ t('proofing_gallery', 'Pick') }}
+							</button>
+							<button type="button" :aria-pressed="activeGuestRating.pick === 'reject'" @click="setGuestRating(activeGuestRating.rating, activeGuestRating.pick === 'reject' ? 'none' : 'reject')">
+								{{ t('proofing_gallery', 'Reject') }}
+							</button>
+						</div>
+						<small>{{ t('proofing_gallery', 'Only you and the gallery owner can see this rating.') }}</small>
+					</div>
 					<form v-if="settings.review?.comments !== false" class="comment-form" @submit.prevent="addComment">
 						<button v-if="settings.review?.annotations !== false && activeItem.mimeType.startsWith('image/')"
 							type="button"
@@ -515,7 +591,13 @@ async function saveEditedComment(commentId: number) {
 								{{ selection.message }}
 							</p>
 							<div>
-								<a :href="selectionExportUrl(selection.id, 'csv')">CSV</a>
+								<details class="guest-export-composer">
+									<summary>{{ t('proofing_gallery', 'Customize CSV') }}</summary>
+									<label><input checked disabled type="checkbox"> {{ t('proofing_gallery', 'Filename') }}</label>
+									<label><input v-model="guestExportFields" type="checkbox" value="rating"> {{ t('proofing_gallery', 'My rating') }}</label>
+									<label><input v-model="guestExportFields" type="checkbox" value="pick"> {{ t('proofing_gallery', 'My pick') }}</label>
+									<a :href="selectionExportUrl(selection.id, 'csv', ['filename', ...guestExportFields.filter(field => field !== 'filename')])">{{ t('proofing_gallery', 'Download UTF-8 CSV') }}</a>
+								</details>
 								<a :href="selectionExportUrl(selection.id, 'plain')">{{ t('proofing_gallery', 'List') }}</a>
 								<a :href="selectionExportUrl(selection.id, 'search')">{{ t('proofing_gallery', 'Search') }}</a>
 							</div>
@@ -580,6 +662,24 @@ async function saveEditedComment(commentId: number) {
 
 .lightbox-feedback { position: absolute; z-index: 7; inset: 64px 0 0 auto; overflow: hidden; width: 380px; border-inline-start: 1px solid #333; background: #101010; pointer-events: auto; }
 
+.lightbox-shortcuts { position: absolute; z-index: 9; inset: 78px 18px auto auto; width: min(360px, calc(100% - 36px)); padding: 18px; border: 1px solid #454545; border-radius: 10px; background: #141414; color: #fff; box-shadow: 0 20px 60px rgb(0 0 0 / 55%); pointer-events: auto; }
+
+.lightbox-shortcuts header, .lightbox-shortcuts dl div { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+
+.lightbox-shortcuts header button { border: 0; background: transparent; font-size: 24px; }
+
+.lightbox-shortcuts dl { display: grid; gap: 10px; margin: 16px 0; }
+
+.lightbox-shortcuts dl div { padding-block-end: 8px; border-bottom: 1px solid #303030; }
+
+.lightbox-shortcuts dt { min-width: 92px; }
+
+.lightbox-shortcuts dd { margin: 0; color: #ccc; text-align: end; }
+
+.lightbox-shortcuts kbd { padding: 3px 6px; border: 1px solid #555; border-radius: 4px; background: #242424; }
+
+.lightbox-shortcuts small { color: #aaa; }
+
 .lightbox-feedback > header { display: flex; min-height: 62px; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px 10px 18px; border-bottom: 1px solid #303030; }
 
 .lightbox-feedback > header div { display: grid; overflow: hidden; }
@@ -589,6 +689,48 @@ async function saveEditedComment(commentId: number) {
 .lightbox-feedback__body { overflow-y: auto; height: calc(100% - 62px); padding: 18px; }
 
 .feedback-actions { display: grid; gap: 12px; }
+
+.guest-rating {
+	display: grid;
+	gap: 10px;
+	margin-top: 16px;
+	padding: 14px;
+	border: 1px solid #494949;
+	border-inline-start: 4px solid var(--gallery-accent, #47a3c5);
+	background: #171717;
+}
+
+.guest-rating__stars,
+.guest-rating__decision {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.guest-rating__stars span { margin-inline-end: auto; font-size: 12px; font-weight: 700; }
+
+.guest-rating button {
+	min-width: 34px;
+	min-height: 34px;
+	border: 1px solid #555;
+	border-radius: 4px;
+	background: #252525;
+	color: #ddd;
+}
+
+.guest-rating button[aria-pressed='true'] { border-color: #f4be41; background: #f4be41; color: #161616; }
+
+.guest-rating small { color: #aaa; }
+
+.guest-export-composer { display: grid; gap: 7px; padding: 9px; border: 1px solid #444; border-radius: 6px; }
+
+.guest-export-composer summary { cursor: pointer; font-weight: 700; }
+
+.guest-export-composer label { display: flex; align-items: center; gap: 6px; color: #ccc; }
+
+.guest-export-composer input { width: 18px; height: 18px; }
+
+.guest-export-composer a { width: fit-content; margin-top: 4px; color: #fff; }
 
 .feedback-actions label { display: grid; gap: 5px; color: #aaa; font-size: 12px; }
 
@@ -652,6 +794,9 @@ async function saveEditedComment(commentId: number) {
 	.lightbox-feedback { inset: auto 0 0; width: auto; max-height: min(72dvh, 620px); padding-bottom: env(safe-area-inset-bottom); border-top: 3px solid var(--gallery-accent); border-inline-start: 0; }
 	.lightbox-metadata { inset: auto 0 0; width: auto; max-height: min(72dvh, 620px); padding-bottom: calc(18px + env(safe-area-inset-bottom)); border-top: 3px solid var(--gallery-accent); border-inline-start: 0; }
 	.lightbox-feedback__body { max-height: calc(min(72dvh, 620px) - 62px - env(safe-area-inset-bottom)); }
+	.guest-rating__stars { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+	.guest-rating__stars span { grid-column: 1 / -1; margin-inline-end: 0; }
+	.guest-rating__stars button { width: 100%; min-width: 0; padding-inline: 0; }
 	.lightbox-nav { top: auto; bottom: max(8px, env(safe-area-inset-bottom)); width: calc(50% - 14px); height: 48px; transform: none; }
 	.lightbox-nav--previous { inset-inline-start: 8px; }
 	.lightbox-nav--next { inset-inline-end: 8px; }

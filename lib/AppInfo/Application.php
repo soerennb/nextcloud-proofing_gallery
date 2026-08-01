@@ -10,12 +10,16 @@ use OCA\ProofingGallery\BackgroundJob\CleanupGalleryDataJob;
 use OCA\ProofingGallery\BackgroundJob\SendNotificationDigestsJob;
 use OCA\ProofingGallery\Db\GalleryMapper;
 use OCA\ProofingGallery\Notification\Notifier;
+use OCA\ProofingGallery\Listener\MediaIndexCacheListener;
 use OCA\ProofingGallery\Service\CollectionAnchorReferences;
 use OCP\BackgroundJob\IJobList;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
+use OCP\Files\Events\FileCacheUpdated;
+use OCP\Files\Events\NodeAddedToCache;
+use OCP\Files\Events\NodeRemovedFromCache;
 
 final class Application extends App implements IBootstrap {
 	public const APP_ID = 'proofing_gallery';
@@ -28,6 +32,9 @@ final class Application extends App implements IBootstrap {
 		$context->registerPublicShareTemplateProvider(PublicShareTemplateProvider::class);
 		$context->registerNotifierService(Notifier::class);
 		$context->registerServiceAlias(CollectionAnchorReferences::class, GalleryMapper::class);
+		$context->registerEventListener(FileCacheUpdated::class, MediaIndexCacheListener::class);
+		$context->registerEventListener(NodeAddedToCache::class, MediaIndexCacheListener::class);
+		$context->registerEventListener(NodeRemovedFromCache::class, MediaIndexCacheListener::class);
 	}
 
 	public function boot(IBootContext $context): void {

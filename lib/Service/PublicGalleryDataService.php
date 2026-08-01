@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ProofingGallery\Service;
 
 use OCA\ProofingGallery\Db\Gallery;
+use OCA\ProofingGallery\Db\PublicLink;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCP\Files\File;
 use OCP\Files\Folder;
@@ -15,6 +16,10 @@ final class PublicGalleryDataService {
 		private CollectionService $collections,
 		private MediaMetadataService $metadata,
 		private CapabilityPolicyService $capabilities,
+		private MediaIndexService $mediaIndex,
+		private PolicyService $policies,
+		private PublicLinkScopeService $linkScopes,
+		private PublicLinkPolicyService $linkPolicies,
 	) {
 	}
 
@@ -29,6 +34,9 @@ final class PublicGalleryDataService {
 		string $sortBy = '',
 		string $sortDirection = '',
 		string $groupBy = '',
+		?string $cursor = null,
+		?PublicLink $link = null,
+		bool $nativeRootIsScope = false,
 	): array {
 		$limit = max(1, min(200, $limit));
 		$offset = max(0, $offset);
@@ -40,7 +48,7 @@ final class PublicGalleryDataService {
 		$groupBy = $groupBy !== '' ? $groupBy : $settings->navigation['groupBy'];
 		if (!in_array($sortBy, ['name', 'modified', 'size'], true)
 			|| !in_array($sortDirection, ['asc', 'desc'], true)
-			|| !in_array($groupBy, ['none', 'type'], true)) {
+			|| !in_array($groupBy, ['none', 'type', 'folder'], true)) {
 			throw new \InvalidArgumentException('Invalid gallery arrangement');
 		}
 		if ($gallery->getSourceType() === 'collection') {
@@ -62,12 +70,69 @@ final class PublicGalleryDataService {
 				}
 				return $item;
 			}, $nodes);
-			return $this->response($gallery, array_slice($nodes, $offset, $limit), count($nodes), $limit, $offset, '', $search, 'collection', 'asc', 'none');
+			return $this->response(
+				$gallery,
+				array_slice($nodes, $offset, $limit),
+				count($nodes),
+				$limit,
+				$offset,
+				'',
+				$search,
+				'collection',
+				'asc',
+				'none',
+				null,
+				[],
+				['indexed' => count($nodes), 'limit' => count($nodes), 'limitReached' => false, 'complete' => true],
+				['startPath' => '', 'viewMode' => 'collection', 'groupDepth' => 1],
+				$link,
+			);
 		}
 		if (!$settings->navigation['folders'] && $path !== '') {
 			throw new \OCP\Files\NotFoundException('Folder navigation is disabled');
 		}
-		$currentFolder = $this->folderAt($root, $path);
+		$startPath = $link === null ? '' : $this->linkScopes->normalize($link->getStartPath());
+		$scopedRoot = $nativeRootIsScope ? $root : $this->folderAt($root, $startPath);
+		$recursive = $link?->getViewMode() === 'recursive';
+		$groupDepth = max(1, min(8, $link?->getGroupDepth() ?: $settings->navigation['groupDepth']));
+		if ($recursive) {
+			$relativePath = $this->linkScopes->normalize($path);
+			$indexPath = $link === null ? $relativePath : $this->linkScopes->indexPath($link, $relativePath);
+			$minOwnerRating = $link?->getMinOwnerRating() ?? 0;
+			$page = $this->mediaIndex->page($gallery, $limit, $cursor, $indexPath, $search, $sortBy, $sortDirection, $minOwnerRating);
+			$items = [];
+			foreach ($page['items'] as $item) {
+				try {
+					$file = $this->fileById($root, (int)$item['id']);
+					$item['folder'] = false;
+					$item['group'] = $this->indexedGroup((string)$item['relativePath'], (string)$item['mimeType'], $indexPath, $groupBy, $groupDepth);
+					$item['metadata'] = $this->metadata->publicSummary($file, $settings->metadata['publicFields']);
+					$items[] = $item;
+				} catch (\Throwable) {
+					// Stale index entries never become public through a missing node.
+				}
+			}
+			$summary = $this->mediaIndex->summary($gallery, $indexPath, $search, $groupBy, $groupDepth, $minOwnerRating);
+			$page['total'] = array_sum($summary['groups']);
+			return $this->response(
+				$gallery,
+				$items,
+				$page['total'],
+				$limit,
+				0,
+				$relativePath,
+				$search,
+				$sortBy,
+				$sortDirection,
+				$groupBy,
+				$page['nextCursor'],
+				$summary['groups'],
+				array_diff_key($summary, ['groups' => true]),
+				['startPath' => $startPath, 'viewMode' => 'recursive', 'groupDepth' => $groupDepth],
+				$link,
+			);
+		}
+		$currentFolder = $this->folderAt($scopedRoot, $path);
 		$nodes = array_values(array_filter(
 			$currentFolder->getDirectoryListing(),
 			fn (Node $node): bool => !str_starts_with($node->getName(), '.')
@@ -110,7 +175,28 @@ final class PublicGalleryDataService {
 				: ['state' => 'unavailable'],
 		], array_slice($nodes, $offset, $limit));
 
-		return $this->response($gallery, $items, count($nodes), $limit, $offset, $path, $search, $sortBy, $sortDirection, $groupBy);
+		$groups = [];
+		foreach ($nodes as $node) {
+			$key = $groupBy === 'none' ? 'all' : self::group($node);
+			$groups[$key] = ($groups[$key] ?? 0) + 1;
+		}
+		return $this->response(
+			$gallery,
+			$items,
+			count($nodes),
+			$limit,
+			$offset,
+			$path,
+			$search,
+			$sortBy,
+			$sortDirection,
+			$groupBy,
+			null,
+			$groups,
+			['indexed' => count($nodes), 'limit' => $this->policies->get('maxIndexedMedia'), 'limitReached' => false, 'complete' => true],
+			['startPath' => $startPath, 'viewMode' => 'folder', 'groupDepth' => $groupDepth],
+			$link,
+		);
 	}
 
 	/** @param list<array<string, mixed>> $items
@@ -127,6 +213,11 @@ final class PublicGalleryDataService {
 		string $sortBy,
 		string $sortDirection,
 		string $groupBy,
+		?string $nextCursor = null,
+		array $groups = [],
+		array $indexState = [],
+		array $scope = [],
+		?PublicLink $link = null,
 	): array {
 		$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
 		$effective = $this->capabilities->effective($settings);
@@ -142,6 +233,30 @@ final class PublicGalleryDataService {
 		foreach (['likes', 'colors', 'comments', 'annotations', 'selections'] as $feature) {
 			if (!$effective[$feature]['allowed']) $serialized['review'][$feature] = false;
 		}
+		if ($link !== null) {
+			$policy = $this->linkPolicies->validate(json_decode($link->getPolicy(), true, flags: JSON_THROW_ON_ERROR));
+			foreach (['likes', 'colors', 'comments', 'annotations', 'selections'] as $feature) {
+				$serialized['review'][$feature] = $serialized['review'][$feature] && $policy[$feature];
+			}
+			$serialized['review']['ratings'] = $serialized['review']['ratings'] && $policy['ratings'] && $this->capabilities->feature('guestRatings');
+			$serialized['review']['pick'] = $serialized['review']['pick'] && $policy['pick'] && $this->capabilities->feature('guestRatings');
+			$serialized['delivery']['guestUploads'] = $serialized['delivery']['guestUploads'] && $policy['upload'];
+			$serialized['allowGuestUploads'] = $serialized['delivery']['guestUploads'];
+			$allowedDownloads = ['none' => [], 'individual' => ['individual'], 'selection' => ['selection'], 'all' => ['individual', 'selection']];
+			$intersection = array_values(array_intersect($allowedDownloads[$serialized['delivery']['downloadScope']], $allowedDownloads[$policy['downloadScope']]));
+			$serialized['delivery']['downloadScope'] = match ($intersection) {
+				['individual'] => 'individual',
+				['selection'] => 'selection',
+				['individual', 'selection'] => 'all',
+				default => 'none',
+			};
+			$serialized['allowDownloads'] = $serialized['delivery']['downloadScope'] !== 'none';
+			if (!$policy['metadata']) $serialized['metadata']['publicFields'] = [];
+			if ($link->getPublicLocale() !== null) $serialized['publicLocale'] = $link->getPublicLocale();
+			if (!$policy['likes'] && !$policy['colors'] && !$policy['comments'] && !$policy['annotations'] && !$policy['selections'] && !$policy['ratings'] && !$policy['pick']) {
+				$serialized['mode'] = 'presentation';
+			}
+		}
 		return [
 			'gallery' => [
 				'id' => $gallery->getId(),
@@ -153,7 +268,11 @@ final class PublicGalleryDataService {
 			'total' => $total,
 			'limit' => $limit,
 			'offset' => $offset,
+			'nextCursor' => $nextCursor,
 			'path' => $path,
+			'groups' => $groups,
+			'indexState' => $indexState,
+			'scope' => $scope,
 			'view' => compact('search', 'sortBy', 'sortDirection', 'groupBy'),
 		];
 	}
@@ -175,6 +294,22 @@ final class PublicGalleryDataService {
 			throw new \OCP\Files\NotFoundException('Gallery folder not found');
 		}
 		return $node;
+	}
+
+	private function fileById(Folder $root, int $fileId): File {
+		foreach ($root->getById($fileId) as $node) {
+			if ($node instanceof File && $root->isSubNode($node) && $this->isSupported($node)) return $node;
+		}
+		throw new \OCP\Files\NotFoundException('Media file not found');
+	}
+
+	private function indexedGroup(string $relativePath, string $mimeType, string $pathPrefix, string $groupBy, int $groupDepth): string {
+		if ($groupBy === 'none') return 'all';
+		if ($groupBy === 'type') return str_starts_with($mimeType, 'video/') ? 'video' : 'image';
+		$relative = $pathPrefix === '' ? $relativePath : substr($relativePath, strlen($pathPrefix) + 1);
+		$parts = explode('/', $relative);
+		array_pop($parts);
+		return $parts === [] ? 'root' : implode('/', array_slice($parts, 0, $groupDepth));
 	}
 
 	private function isSupported(File $file): bool {

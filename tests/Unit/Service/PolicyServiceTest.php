@@ -28,6 +28,9 @@ final class PolicyServiceTest extends TestCase {
 		self::assertSame(67108864, $policies->get('metadataMaxBytes'));
 		self::assertSame(100, $policies->get('metadataBatchSize'));
 		self::assertSame(1, $policies->get('xmpWritingEnabled'));
+		self::assertSame(25000, $policies->get('maxIndexedMedia'));
+		self::assertSame(10, $policies->get('maxPublicLinks'));
+		self::assertSame(90, $policies->get('shareAuditRetentionDays'));
 	}
 
 	public function testSaveRejectsOutOfRangeValues(): void {

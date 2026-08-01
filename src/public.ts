@@ -40,6 +40,7 @@ async function mount() {
 		}
 	}
 	document.body.classList.add('proofing-gallery-public-page')
+	document.documentElement.classList.add('proofing-gallery-public-page')
 	createApp(PublicApp, { gallery: state }).mount('#proofing_gallery_public')
 }
 

@@ -5,10 +5,12 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { bulkGalleryMedia, createGalleryFolder, deleteGalleryMedia, fetchGalleryMedia, fetchMediaMetadata, fetchMediaVersions, indexGalleryMetadata, ownerMediaDownloadUrl, ownerPreviewUrl, renameGalleryMedia, replaceGalleryMedia, restoreMediaVersion, updateMediaMetadata, uploadGalleryMedia } from '../services/galleryApi.ts'
 import type { Gallery, MediaItem, MediaMetadata, MediaVersion } from '../types.ts'
+import ProgressiveImage from './ProgressiveImage.vue'
+import VirtualMediaGrid from './VirtualMediaGrid.vue'
 
 const props = defineProps<{ gallery: Gallery }>()
 const emit = defineEmits<{ changed: [] }>()
@@ -20,6 +22,7 @@ const search = ref('')
 const sortBy = ref<'name' | 'modified' | 'size' | 'capturedAt'>('name')
 const sortDirection = ref<'asc' | 'desc'>('asc')
 const loading = ref(false)
+const loadingMore = ref(false)
 const uploading = ref(false)
 type UploadQueueItem = { id: string; file: File; progress: number; state: 'waiting' | 'uploading' | 'done' | 'failed'; attempts: number }
 const uploadQueue = ref<UploadQueueItem[]>([])
@@ -43,28 +46,55 @@ const lens = ref('')
 const keyword = ref('')
 const ratingMin = ref(0)
 let searchTimer: ReturnType<typeof setTimeout> | undefined
+let loadController: AbortController | undefined
+let scrollTimer: ReturnType<typeof setTimeout> | undefined
 
 const crumbs = computed(() => path.value.split('/').filter(Boolean))
+const hasMore = computed(() => items.value.length < total.value)
 
-async function load() {
-	loading.value = true
+async function load(offset = 0) {
+	if (offset > 0 && loadingMore.value) return
+	if (offset === 0) loadController?.abort()
+	const controller = new AbortController()
+	loadController = controller
+	offset === 0 ? loading.value = true : loadingMore.value = true
 	try {
-		const page = await fetchGalleryMedia(props.gallery.id, 200, 0, path.value, search.value, sortBy.value, sortDirection.value, {
+		const page = await fetchGalleryMedia(props.gallery.id, 200, offset, path.value, search.value, sortBy.value, sortDirection.value, {
 			capturedFrom: capturedFrom.value,
 			capturedTo: capturedTo.value,
 			camera: camera.value,
 			lens: lens.value,
 			keyword: keyword.value,
 			ratingMin: ratingMin.value,
-		})
-		items.value = page.items
+		}, controller.signal)
+		items.value = offset === 0 ? page.items : [...items.value, ...page.items]
 		total.value = page.total
-		selectedIds.value = selectedIds.value.filter(id => page.items.some(item => item.id === id))
-	} catch {
+		selectedIds.value = selectedIds.value.filter(id => items.value.some(item => item.id === id))
+		if (offset === 0) await nextTick(restoreScroll)
+	} catch (error) {
+		if ((error instanceof DOMException && error.name === 'AbortError')
+			|| (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ERR_CANCELED')) return
 		showError(t('proofing_gallery', 'Gallery files could not be loaded.'))
 	} finally {
-		loading.value = false
+		if (loadController === controller) {
+			loading.value = false
+			loadingMore.value = false
+		}
 	}
+}
+
+function scrollStorageKey(): string {
+	return `proofing-gallery-owner-scroll:${props.gallery.id}:${path.value}`
+}
+
+function rememberScroll() {
+	clearTimeout(scrollTimer)
+	scrollTimer = setTimeout(() => sessionStorage.setItem(scrollStorageKey(), String(window.scrollY)), 80)
+}
+
+function restoreScroll() {
+	const saved = Number(sessionStorage.getItem(scrollStorageKey()) ?? 0)
+	if (Number.isFinite(saved) && saved > 0) requestAnimationFrame(() => window.scrollTo({ top: saved }))
 }
 
 async function indexMetadata() {
@@ -337,7 +367,7 @@ function formatSize(size: number): string {
 	return `${(size / 1024 / 1024).toFixed(1)} MB`
 }
 
-watch([sortBy, sortDirection], load)
+watch([sortBy, sortDirection], () => load())
 watch([capturedFrom, capturedTo, camera, lens, keyword, ratingMin], () => {
 	clearTimeout(searchTimer)
 	searchTimer = setTimeout(load, 300)
@@ -346,7 +376,16 @@ watch(search, () => {
 	clearTimeout(searchTimer)
 	searchTimer = setTimeout(load, 250)
 })
-onMounted(load)
+onMounted(() => {
+	window.addEventListener('scroll', rememberScroll, { passive: true })
+	load()
+})
+onBeforeUnmount(() => {
+	loadController?.abort()
+	clearTimeout(searchTimer)
+	clearTimeout(scrollTimer)
+	window.removeEventListener('scroll', rememberScroll)
+})
 </script>
 
 <template>
@@ -447,50 +486,64 @@ onMounted(load)
 			<NcLoadingIcon :size="28" /> {{ t('proofing_gallery', 'Loading files…') }}
 		</div>
 		<NcEmptyContent v-else-if="items.length === 0" :name="t('proofing_gallery', 'This folder is empty')" :description="t('proofing_gallery', 'Upload images or videos to start the gallery.')" />
-		<ul v-else class="file-grid">
-			<li v-for="item in items" :key="item.id" class="file-card">
-				<label v-if="!item.folder" class="file-card__select" :aria-label="t('proofing_gallery', 'Select {name}', { name: item.name })">
-					<input v-model="selectedIds" type="checkbox" :value="item.id">
-				</label>
-				<button v-if="item.folder"
-					class="file-card__preview file-card__folder"
-					type="button"
-					@click="openFolder(item)">
-					<span aria-hidden="true">▰</span><span>{{ t('proofing_gallery', 'Open folder') }}</span>
-				</button>
-				<img v-else-if="item.mimeType.startsWith('image/')"
-					class="file-card__preview"
-					:src="ownerPreviewUrl(gallery.id, item.id, 440, 320)"
-					:alt="item.name">
-				<div v-else class="file-card__preview file-card__video">
-					▶ <span>{{ t('proofing_gallery', 'Video') }}</span>
-				</div>
-				<div class="file-card__meta">
-					<strong :title="item.name">{{ item.name }}</strong><small>{{ item.folder ? t('proofing_gallery', 'Folder') : formatSize(item.size) }}</small>
-					<span v-if="item.metadata?.state === 'ready' && (item.metadata.capturedAt || item.metadata.camera)" class="file-card__capture">
-						{{ [formatCapture(item.metadata.capturedAt), item.metadata.camera].filter(Boolean).join(' · ') }}
-					</span>
-				</div>
-				<details class="file-card__actions">
-					<summary role="button" :aria-label="t('proofing_gallery', 'Actions for {name}', { name: item.name })">
-						•••
-					</summary>
-					<div>
-						<button v-if="!item.folder && item.mimeType.startsWith('image/')" type="button" @click="showMetadata(item)">
-							{{ t('proofing_gallery', 'Metadata') }}
-						</button>
-						<button v-if="!item.folder" type="button" @click="showVersions(item)">
-							{{ t('proofing_gallery', 'Versions') }}
-						</button>
-						<button type="button" @click="rename(item)">
-							{{ t('proofing_gallery', 'Rename') }}
-						</button><button type="button" class="danger" @click="remove(item)">
-							{{ t('proofing_gallery', 'Delete') }}
-						</button>
+		<VirtualMediaGrid v-else
+			class="file-grid"
+			:items="items"
+			contained
+			:min-item-width="190"
+			:item-extra-height="102"
+			:has-more="hasMore"
+			:loading-more="loadingMore"
+			:aria-label="t('proofing_gallery', 'Gallery files')"
+			@load-more="load(items.length)">
+			<template #default="{ item }">
+				<article class="file-card">
+					<label v-if="!item.folder" class="file-card__select" :aria-label="t('proofing_gallery', 'Select {name}', { name: item.name })">
+						<input v-model="selectedIds" type="checkbox" :value="item.id">
+					</label>
+					<button v-if="item.folder"
+						class="file-card__preview file-card__folder"
+						type="button"
+						@click="openFolder(item)">
+						<span aria-hidden="true">▰</span><span>{{ t('proofing_gallery', 'Open folder') }}</span>
+					</button>
+					<ProgressiveImage v-else-if="item.mimeType.startsWith('image/')"
+						class="file-card__preview"
+						:src="ownerPreviewUrl(gallery.id, item.id, 440, 320)"
+						:alt="item.name" />
+					<div v-else class="file-card__preview file-card__video">
+						▶ <span>{{ t('proofing_gallery', 'Video') }}</span>
 					</div>
-				</details>
-			</li>
-		</ul>
+					<div class="file-card__meta">
+						<strong :title="item.name">{{ item.name }}</strong><small>{{ item.folder ? t('proofing_gallery', 'Folder') : formatSize(item.size) }}</small>
+						<span v-if="item.metadata?.state === 'ready' && (item.metadata.capturedAt || item.metadata.camera)" class="file-card__capture">
+							{{ [formatCapture(item.metadata.capturedAt), item.metadata.camera].filter(Boolean).join(' · ') }}
+						</span>
+					</div>
+					<details class="file-card__actions">
+						<summary role="button" :aria-label="t('proofing_gallery', 'Actions for {name}', { name: item.name })">
+							•••
+						</summary>
+						<div>
+							<button v-if="!item.folder && item.mimeType.startsWith('image/')" type="button" @click="showMetadata(item)">
+								{{ t('proofing_gallery', 'Metadata') }}
+							</button>
+							<button v-if="!item.folder" type="button" @click="showVersions(item)">
+								{{ t('proofing_gallery', 'Versions') }}
+							</button>
+							<button type="button" @click="rename(item)">
+								{{ t('proofing_gallery', 'Rename') }}
+							</button><button type="button" class="danger" @click="remove(item)">
+								{{ t('proofing_gallery', 'Delete') }}
+							</button>
+						</div>
+					</details>
+				</article>
+			</template>
+		</VirtualMediaGrid>
+		<div v-if="loadingMore" class="workspace-status workspace-status--more" role="status">
+			<NcLoadingIcon :size="20" /> {{ t('proofing_gallery', 'Loading files…') }}
+		</div>
 
 		<aside v-if="metadataItem" class="metadata-panel">
 			<header>
@@ -628,6 +681,16 @@ onMounted(load)
 
 .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
 
+.file-grid.virtual-media { display: block; min-height: 240px; }
+
+.file-grid :deep(.virtual-media__cell .file-card) { height: 100%; }
+
+.file-card :deep(.progressive-image.file-card__preview) { height: auto; }
+
+.file-card :deep(.progressive-image img) { object-fit: cover; }
+
+.workspace-status--more { min-height: 48px; }
+
 .file-card { position: relative; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-main-background); }
 
 .file-card__select { position: absolute; z-index: 2; inset-block-start: 8px; inset-inline-start: 8px; display: grid; width: 32px; height: 32px; place-items: center; border-radius: 6px; background: var(--color-main-background); box-shadow: 0 1px 5px var(--color-box-shadow); cursor: pointer; }
@@ -658,7 +721,7 @@ onMounted(load)
 
 .file-card__actions summary:focus-visible { outline: 2px solid var(--color-primary-element); outline-offset: -2px; }
 
-.file-card__actions > div { display: grid; border-top: 1px solid var(--color-border); }
+.file-card__actions > div { position: absolute; z-index: 4; inset: auto 8px 46px auto; display: grid; min-width: 150px; overflow: hidden; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-main-background); box-shadow: 0 8px 24px var(--color-box-shadow); }
 
 .file-card__actions button { min-height: 40px; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--color-border); background: transparent; color: var(--color-text-maxcontrast); text-align: start; cursor: pointer; }
 

@@ -26,6 +26,7 @@ final class UserPreferenceService {
 				'email' => ['enabled' => false, 'events' => ['upload.received', 'comment.created', 'selection.created'], 'frequency' => 'immediate'],
 			],
 			'lifecycle' => ['enabled' => false, 'trigger' => 'after_completion', 'revokeAfterDays' => 30, 'archiveAfterDays' => 30],
+			'savedViews' => [],
 		];
 		$raw = $this->config->getUserValue($userId, Application::APP_ID, self::KEY, '');
 		if ($raw === '') return $defaults;
@@ -55,7 +56,7 @@ final class UserPreferenceService {
 
 	/** @param array<string, mixed> $patch */
 	public function save(string $userId, array $patch): array {
-		$allowed = ['defaultPurpose', 'parentFolder', 'designPresetId', 'publicLocale', 'notifications', 'lifecycle'];
+		$allowed = ['defaultPurpose', 'parentFolder', 'designPresetId', 'publicLocale', 'notifications', 'lifecycle', 'savedViews'];
 		$unknown = array_diff(array_keys($patch), $allowed);
 		if ($unknown !== []) throw new \InvalidArgumentException('Unknown preference: ' . reset($unknown));
 		$defaults = $this->get($userId);
@@ -85,6 +86,30 @@ final class UserPreferenceService {
 			}
 		}
 		if (is_array($patch['lifecycle'] ?? null)) $current['lifecycle'] = array_replace($defaults['lifecycle'], $patch['lifecycle']);
+		if (!is_array($current['savedViews']) || !array_is_list($current['savedViews']) || count($current['savedViews']) > 20) {
+			throw new \InvalidArgumentException('savedViews must contain no more than 20 presets');
+		}
+		$viewIds = [];
+		$current['savedViews'] = array_map(static function (mixed $view) use (&$viewIds): array {
+			if (!is_array($view)) throw new \InvalidArgumentException('Invalid saved view');
+			$id = (string)($view['id'] ?? '');
+			$name = trim((string)($view['name'] ?? ''));
+			$galleryId = (int)($view['galleryId'] ?? 0);
+			$filters = is_array($view['filters'] ?? null) ? $view['filters'] : [];
+			if (preg_match('/^[a-zA-Z0-9_-]{8,64}$/', $id) !== 1 || isset($viewIds[$id]) || $name === '' || mb_strlen($name) > 80 || $galleryId < 1
+				|| !in_array($filters['sortBy'] ?? null, ['name', 'modified', 'size'], true)
+				|| !in_array($filters['sortDirection'] ?? null, ['asc', 'desc'], true)
+				|| !in_array($filters['rating'] ?? null, [-1, 0, 1, 2, 3, 4, 5], true)
+				|| !in_array($filters['pick'] ?? null, ['all', 'none', 'pick', 'reject'], true)
+				|| !in_array($filters['color'] ?? null, ['all', 'none', 'red', 'yellow', 'green', 'blue', 'purple'], true)) {
+				throw new \InvalidArgumentException('Invalid saved view');
+			}
+			$viewIds[$id] = true;
+			return ['id' => $id, 'name' => $name, 'galleryId' => $galleryId, 'filters' => [
+				'sortBy' => $filters['sortBy'], 'sortDirection' => $filters['sortDirection'],
+				'rating' => $filters['rating'], 'pick' => $filters['pick'], 'color' => $filters['color'],
+			], 'updatedAt' => max(0, (int)($view['updatedAt'] ?? time()))];
+		}, $current['savedViews']);
 		if ($current['defaultPurpose'] !== null && !in_array($current['defaultPurpose'], ['showcase', 'delivery', 'selection', 'proofing', 'uploads', 'custom'], true)) {
 			throw new \InvalidArgumentException('Invalid default gallery purpose');
 		}

@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\GalleryMapper;
+use OCA\ProofingGallery\Db\PublicLinkMapper;
 use OCA\ProofingGallery\Service\GuestService;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
@@ -31,6 +32,7 @@ final class GuestController extends PublicShareController {
 		ISession $session,
 		private IManager $shareManager,
 		private GalleryMapper $galleries,
+		private PublicLinkMapper $publicLinks,
 		private GuestService $guests,
 	) {
 		parent::__construct(Application::APP_ID, $request, $session);
@@ -92,8 +94,10 @@ final class GuestController extends PublicShareController {
 	public function isValidToken(): bool {
 		try {
 			$this->share = $this->shareManager->getShareByToken($this->getToken());
-			$this->gallery = $this->galleries->findByShareToken($this->getToken());
-			return $this->share->getNodeId() === $this->gallery->getFolderId();
+			$link = $this->publicLinks->findByToken($this->getToken());
+			if ($link->getStatus() !== 'active') return false;
+			$this->gallery = $this->galleries->find($link->getGalleryId());
+			return $this->share->getNode() instanceof \OCP\Files\Folder;
 		} catch (ShareNotFound|DoesNotExistException) {
 			return false;
 		}

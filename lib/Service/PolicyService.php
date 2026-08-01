@@ -23,6 +23,10 @@ final class PolicyService {
 		'annotations' => true,
 		'selections' => true,
 		'lifecycleAutomation' => true,
+		'ownerCulling' => true,
+		'guestRatings' => false,
+		'recursiveGalleries' => true,
+		'multiplePublicLinks' => true,
 	];
 	/** @var array<string, array{default: int, min: int, max: int}> */
 	private const DEFINITIONS = [
@@ -38,6 +42,9 @@ final class PolicyService {
 		'metadataMaxBytes' => ['default' => 67108864, 'min' => 1048576, 'max' => 536870912],
 		'metadataBatchSize' => ['default' => 100, 'min' => 1, 'max' => 200],
 		'xmpWritingEnabled' => ['default' => 1, 'min' => 0, 'max' => 1],
+		'maxIndexedMedia' => ['default' => 25000, 'min' => 100, 'max' => 100000],
+		'maxPublicLinks' => ['default' => 10, 'min' => 1, 'max' => 100],
+		'shareAuditRetentionDays' => ['default' => 90, 'min' => 7, 'max' => 3650],
 	];
 
 	public function __construct(private IConfig $config) {

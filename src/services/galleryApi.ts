@@ -1,7 +1,7 @@
 import axios from '@nextcloud/axios'
 import { generateOcsUrl, generateUrl } from '@nextcloud/router'
 
-import type { CollectionDocument, EffectiveCapabilities, Gallery, GalleryManager, GalleryPage, GalleryPreset, GalleryPurpose, InvitationTemplate, MediaItem, MediaMetadata, MediaPage, MediaVersion, NotificationEventType, NotificationSubscription, OwnerSelection, UserPreferences } from '../types'
+import type { CollectionDocument, CullingXmpReport, EffectiveCapabilities, Gallery, GalleryManager, GalleryPage, GalleryPreset, GalleryPublicLink, GalleryPurpose, GuestRatingAggregate, GuestRatingPromotion, IndexedMediaPage, InvitationTemplate, MediaCull, MediaItem, MediaMetadata, MediaPage, MediaVersion, NotificationEventType, NotificationSubscription, OwnerSelection, PublicLinkPolicy, ShareAuditItem, UserPreferences } from '../types'
 import type { CanonicalGallerySettings, GallerySettings } from '../domain/gallerySettings'
 
 const galleriesUrl = generateOcsUrl('/apps/proofing_gallery/api/v1/galleries')
@@ -27,6 +27,11 @@ export async function fetchGalleries(query: GalleryQuery = {}): Promise<GalleryP
 			format: 'json',
 		},
 	})
+	return data
+}
+
+export async function fetchGallery(id: number): Promise<Gallery> {
+	const { data } = await axios.get<Gallery>(`${galleriesUrl}/${id}`)
 	return data
 }
 
@@ -107,6 +112,42 @@ export async function updateGallerySource(id: number, folderId: number): Promise
 	return data
 }
 
+export async function fetchPublicLinks(id: number): Promise<{ items: GalleryPublicLink[]; presets: Record<string, PublicLinkPolicy> }> {
+	const { data } = await axios.get(`${galleriesUrl}/${id}/public-links`)
+	return data
+}
+
+export async function savePublicLink(id: number, linkId: number | null, payload: {
+	name: string
+	policy: PublicLinkPolicy
+	startPath: string
+	viewMode: 'folder' | 'recursive'
+	groupDepth: number
+	minOwnerRating: number
+	publicLocale: 'en' | 'de' | null
+	password?: string | null
+	expiresAt?: string | null
+}): Promise<GalleryPublicLink> {
+	const url = linkId === null ? `${galleriesUrl}/${id}/public-links` : `${galleriesUrl}/${id}/public-links/${linkId}`
+	const { data } = linkId === null ? await axios.post(url, payload) : await axios.put(url, payload)
+	return data
+}
+
+export async function makePublicLinkPrimary(id: number, linkId: number): Promise<GalleryPublicLink> {
+	const { data } = await axios.post(`${galleriesUrl}/${id}/public-links/${linkId}/primary`)
+	return data
+}
+
+export async function revokePublicLink(id: number, linkId: number): Promise<GalleryPublicLink> {
+	const { data } = await axios.delete(`${galleriesUrl}/${id}/public-links/${linkId}`)
+	return data
+}
+
+export async function fetchShareAudit(id: number): Promise<ShareAuditItem[]> {
+	const { data } = await axios.get<{ items: ShareAuditItem[] }>(`${galleriesUrl}/${id}/share-audit`)
+	return data.items
+}
+
 export async function fetchGalleryMedia(
 	id: number,
 	limit = 8,
@@ -123,9 +164,11 @@ export async function fetchGalleryMedia(
 		keyword?: string
 		ratingMin?: number
 	} = {},
+	signal?: AbortSignal,
 ): Promise<MediaPage> {
 	const { data } = await axios.get<MediaPage>(`${galleriesUrl}/${id}/media`, {
 		params: { limit, offset, path, search, sortBy, sortDirection, ...metadataFilters },
+		signal,
 	})
 	return data
 }
@@ -160,6 +203,61 @@ export async function updateMediaMetadata(
 
 export async function indexGalleryMetadata(id: number, path = ''): Promise<{ indexed: number; limit: number }> {
 	const { data } = await axios.post<{ indexed: number; limit: number }>(`${galleriesUrl}/${id}/metadata/index`, { path })
+	return data
+}
+
+export async function rebuildGalleryMediaIndex(id: number): Promise<{ indexed: number; removed: number; truncated: boolean; generation: string }> {
+	const { data } = await axios.post(`${galleriesUrl}/${id}/media/index`)
+	return data
+}
+
+export async function fetchIndexedMedia(id: number, limit = 200, cursor?: string | null, path = '', signal?: AbortSignal, sortBy: 'name' | 'modified' | 'size' = 'name', sortDirection: 'asc' | 'desc' = 'asc'): Promise<IndexedMediaPage> {
+	const { data } = await axios.get<IndexedMediaPage>(`${galleriesUrl}/${id}/indexed-media`, {
+		params: { limit, cursor: cursor || undefined, path, sortBy, sortDirection },
+		signal,
+	})
+	return data
+}
+
+export async function fetchMediaCulling(id: number, fileIds: number[]): Promise<MediaCull[]> {
+	if (fileIds.length === 0) return []
+	const { data } = await axios.get<{ items: MediaCull[] }>(`${galleriesUrl}/${id}/media/cull`, {
+		params: { fileIds },
+	})
+	return data.items
+}
+
+export async function updateMediaCulling(id: number, items: Array<MediaCull & { expectedRevision: number }>): Promise<MediaCull[]> {
+	const { data } = await axios.put<{ items: MediaCull[] }>(`${galleriesUrl}/${id}/media/cull`, { items })
+	return data.items
+}
+
+export async function fetchGuestRatings(id: number): Promise<GuestRatingAggregate[]> {
+	const { data } = await axios.get<{ items: GuestRatingAggregate[] }>(`${galleriesUrl}/${id}/guest-ratings`)
+	return data.items
+}
+
+export async function previewGuestRatingPromotion(id: number, fileIds: number[]): Promise<GuestRatingPromotion[]> {
+	const { data } = await axios.post<{ items: GuestRatingPromotion[] }>(`${galleriesUrl}/${id}/guest-ratings/promotion-preview`, { fileIds })
+	return data.items
+}
+
+export async function promoteGuestRatings(id: number, items: GuestRatingPromotion[]): Promise<MediaCull[]> {
+	const { data } = await axios.post<{ items: MediaCull[] }>(`${galleriesUrl}/${id}/guest-ratings/promote`, {
+		items: items.map(item => ({ fileId: item.fileId, guestUpdatedAt: item.guestUpdatedAt, expectedOwnerRevision: item.owner.revision, target: item.target })),
+	})
+	return data.items
+}
+
+export async function synchronizeCullingXmp(id: number, payload: {
+	mode: 'report' | 'app' | 'xmp' | 'merge'
+	dryRun: boolean
+	fileIds?: number[]
+	limit?: number
+	offset?: number
+	fieldChoices?: Partial<Record<'rating' | 'color' | 'pick', 'app' | 'xmp'>>
+}): Promise<CullingXmpReport> {
+	const { data } = await axios.post<CullingXmpReport>(`${galleriesUrl}/${id}/culling/xmp`, payload)
 	return data
 }
 
@@ -211,10 +309,16 @@ export async function deleteOwnerSelection(galleryId: number, selectionId: strin
 	await axios.delete(`${galleriesUrl}/${galleryId}/selections/${selectionId}`)
 }
 
-export function ownerSelectionExportUrl(galleryId: number, selectionId: string, format: 'csv' | 'plain' | 'search'): string {
+export function ownerSelectionExportUrl(galleryId: number, selectionId: string, format: 'csv' | 'plain' | 'search' | 'preview', fields: string[] = []): string {
 	const url = new URL(`${galleriesUrl}/${galleryId}/selections/${selectionId}/export`, window.location.origin)
 	url.searchParams.set('format', format)
+	if (fields.length) url.searchParams.set('fields', fields.join(','))
 	return url.toString()
+}
+
+export async function fetchOwnerSelectionExportPreview(galleryId: number, selectionId: string, fields: string[]): Promise<string> {
+	const { data } = await axios.get<string>(ownerSelectionExportUrl(galleryId, selectionId, 'preview', fields), { responseType: 'text' })
+	return data.replace(/^\uFEFF/, '')
 }
 
 export async function exportOwnerSelectionXmp(galleryId: number, selectionId: string): Promise<{ written: number; failed: number }> {

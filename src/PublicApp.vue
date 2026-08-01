@@ -1,13 +1,19 @@
 <script setup lang="ts">
 import { n, t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import type { GallerySettings } from './domain/gallerySettings.ts'
 import type { CollaborationState, GuestIdentity, MediaItem, PublicGallery } from './publicTypes.ts'
 
 const PublicLightbox = defineAsyncComponent(() => import('./components/PublicLightbox.vue'))
 const PublicUploadAction = defineAsyncComponent(() => import('./components/PublicUploadAction.vue'))
+const ProgressiveImage = defineAsyncComponent(() => import('./components/ProgressiveImage.vue'))
+const virtualGridResolved = ref(false)
+const VirtualMediaGrid = defineAsyncComponent(() => import('./components/VirtualMediaGrid.vue').then(module => {
+	virtualGridResolved.value = true
+	return module
+}))
 
 interface GalleryResponse {
 	gallery: { id: number; title: string; settings: GallerySettings }
@@ -15,7 +21,11 @@ interface GalleryResponse {
 	total: number
 	limit: number
 	offset: number
+	nextCursor: string | null
 	path: string
+	groups: Record<string, number>
+	indexState: { indexed: number; limit: number; limitReached: boolean; complete: boolean; state?: 'unindexed' | 'limit_reached' | 'ready'; lastIndexedAt?: number | null }
+	scope: { startPath: string; viewMode: 'folder' | 'recursive'; groupDepth: number }
 }
 
 const props = defineProps<{ gallery: PublicGallery }>()
@@ -25,9 +35,13 @@ const loading = ref(!props.gallery.initialPage)
 const loadingMore = ref(false)
 const error = ref(false)
 const currentPath = ref(props.gallery.initialPage?.path ?? '')
+const nextCursor = ref(props.gallery.initialPage?.nextCursor ?? null)
+const groups = ref(props.gallery.initialPage?.groups ?? {})
+const indexState = ref(props.gallery.initialPage?.indexState ?? null)
+const scope = ref(props.gallery.initialPage?.scope ?? null)
 const settings = ref(props.gallery.initialPage?.gallery.settings ?? props.gallery.settings)
 const title = ref(props.gallery.initialPage?.gallery.title ?? props.gallery.title)
-const hasMore = computed(() => items.value.length < total.value)
+const hasMore = computed(() => scope.value?.viewMode === 'recursive' ? nextCursor.value !== null : items.value.length < total.value)
 const selectedItems = computed(() => mediaItems.value.filter(item => selectedIds.value.includes(item.id)))
 const canDownloadSelection = computed(() => ['selection', 'all'].includes(
 	settings.value.delivery?.downloadScope ?? (settings.value.allowDownloads ? 'all' : 'none'),
@@ -52,40 +66,83 @@ const selectionMessage = ref('')
 const savingSelection = ref(false)
 const guestDialogOpen = ref(false)
 const pendingMutation = ref<{ path: string; method: 'POST' | 'PUT' | 'DELETE'; body?: unknown } | null>(null)
-const search = ref('')
-const sortBy = ref(settings.value.navigation?.sortBy ?? 'name')
-const sortDirection = ref(settings.value.navigation?.sortDirection ?? 'asc')
-const groupBy = ref(settings.value.navigation?.groupBy ?? 'none')
+const savedView = loadSavedView()
+const search = ref(savedView?.search ?? '')
+const sortBy = ref(savedView?.sortBy ?? settings.value.navigation?.sortBy ?? 'name')
+const sortDirection = ref(savedView?.sortDirection ?? settings.value.navigation?.sortDirection ?? 'asc')
+const groupBy = ref(savedView?.groupBy === 'folder' && !settings.value.navigation?.recursive
+	? settings.value.navigation?.groupBy ?? 'none'
+	: savedView?.groupBy ?? settings.value.navigation?.groupBy ?? 'none')
 const savedLayout = localStorage.getItem(`proofing-gallery-layout:${props.gallery.token}`)
 const layout = ref<'grid' | 'masonry' | 'list'>(
-	savedLayout === 'grid' || savedLayout === 'masonry' || savedLayout === 'list'
-		? savedLayout
-		: settings.value.presentation?.layout ?? settings.value.appearance.layout ?? 'grid',
+	 savedView?.layout === 'grid' || savedView?.layout === 'masonry' || savedView?.layout === 'list'
+		? savedView.layout
+		: savedLayout === 'grid' || savedLayout === 'masonry' || savedLayout === 'list'
+			? savedLayout
+			: settings.value.presentation?.layout ?? settings.value.appearance.layout ?? 'grid',
 )
 const mobileToolsOpen = ref(false)
 const mediaDimensions = ref<Record<number, { width: number; height: number }>>({})
 const mobileViewportQuery = window.matchMedia('(max-width: 640px)')
 const mobileViewport = ref(mobileViewportQuery.matches)
+const viewportWidth = ref(window.innerWidth)
 const nonce = ref(sessionStorage.getItem(`proofing-gallery-nonce:${props.gallery.token}`) ?? '')
 let searchTimer: number | undefined
+let scrollTimer: number | undefined
+let pageController: AbortController | undefined
 const activeFilterCount = computed(() => Number(groupBy.value !== 'none') + Number(layout.value !== 'grid'))
+const tileGap = computed(() => settings.value.presentation?.tileGap === 'tight' ? 2 : settings.value.presentation?.tileGap === 'wide' ? 16 : 8)
+const featuredGrid = computed(() => mediaItems.value.length <= 3 && layout.value !== 'list')
+const tileMinWidth = computed(() => featuredGrid.value
+	? 360
+	: settings.value.presentation?.tileSize === 'large' ? 320 : settings.value.presentation?.tileSize === 'small' ? 170 : 230)
+const gridPlaceholderStyle = computed(() => {
+	if (virtualGridResolved.value) return undefined
+	const horizontalPadding = Math.max(8, Math.min(viewportWidth.value * 0.02, 28)) * 2
+	const available = Math.max(1, viewportWidth.value - horizontalPadding)
+	const maximumColumns = featuredGrid.value ? Math.max(1, mediaItems.value.length) : Number.POSITIVE_INFINITY
+	const columns = layout.value === 'list'
+		? 1
+		: Math.min(maximumColumns, Math.max(1, Math.floor((available + tileGap.value) / (tileMinWidth.value + tileGap.value))))
+	const rows = Math.ceil(items.value.length / columns)
+	const rawItemWidth = (available - tileGap.value * (columns - 1)) / columns
+	const itemWidth = featuredGrid.value ? Math.min(rawItemWidth, 520) : rawItemWidth
+	const aspectRatio = featuredGrid.value && mobileViewport.value ? 16 / 10 : 4 / 3
+	const rowHeight = layout.value === 'list' ? 94 : Math.max(120, itemWidth / aspectRatio)
+	return { minHeight: `${Math.max(0, rows * (rowHeight + tileGap.value) - tileGap.value)}px` }
+})
 
-watch(layout, value => localStorage.setItem(`proofing-gallery-layout:${props.gallery.token}`, value))
+watch([layout, sortBy, sortDirection, groupBy, search], () => {
+	localStorage.setItem(`proofing-gallery-view:${props.gallery.token}`, JSON.stringify({
+		layout: layout.value,
+		sortBy: sortBy.value,
+		sortDirection: sortDirection.value,
+		groupBy: groupBy.value,
+		search: search.value,
+	}))
+})
 
 onMounted(() => {
-	if (props.gallery.initialPage) {
+	if (props.gallery.initialPage && !savedView) {
 		deferCollaborationInitialization()
 	} else {
 		loadPage(0).then(() => deferCollaborationInitialization())
 	}
 	document.addEventListener('visibilitychange', onVisibilityChange)
 	mobileViewportQuery.addEventListener('change', onMobileViewportChange)
+	window.addEventListener('resize', onViewportResize, { passive: true })
+	window.addEventListener('scroll', rememberScroll, { passive: true })
+	restoreScroll()
 })
 onBeforeUnmount(() => {
 	document.removeEventListener('visibilitychange', onVisibilityChange)
 	mobileViewportQuery.removeEventListener('change', onMobileViewportChange)
+	window.removeEventListener('resize', onViewportResize)
 	window.clearInterval(collaborationTimer)
 	window.clearTimeout(searchTimer)
+	window.clearTimeout(scrollTimer)
+	window.removeEventListener('scroll', rememberScroll)
+	pageController?.abort()
 })
 
 function onMobileViewportChange(event: MediaQueryListEvent) {
@@ -93,11 +150,45 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 	if (!event.matches) mobileToolsOpen.value = false
 }
 
+function onViewportResize() {
+	viewportWidth.value = window.innerWidth
+}
+
+function loadSavedView(): {
+	layout: 'grid' | 'masonry' | 'list'
+	sortBy: 'name' | 'modified' | 'size'
+	sortDirection: 'asc' | 'desc'
+	groupBy: 'none' | 'type' | 'folder'
+	search: string
+} | null {
+	try {
+		const value = JSON.parse(localStorage.getItem(`proofing-gallery-view:${props.gallery.token}`) ?? 'null') as Record<string, unknown> | null
+		if (!value
+			|| !['grid', 'masonry', 'list'].includes(String(value.layout))
+			|| !['name', 'modified', 'size'].includes(String(value.sortBy))
+			|| !['asc', 'desc'].includes(String(value.sortDirection))
+			|| !['none', 'type', 'folder'].includes(String(value.groupBy))) return null
+		return {
+			layout: value.layout as 'grid' | 'masonry' | 'list',
+			sortBy: value.sortBy as 'name' | 'modified' | 'size',
+			sortDirection: value.sortDirection as 'asc' | 'desc',
+			groupBy: value.groupBy as 'none' | 'type' | 'folder',
+			search: typeof value.search === 'string' ? value.search.slice(0, 120) : '',
+		}
+	} catch {
+		return null
+	}
+}
+
 function deferCollaborationInitialization() {
 	requestAnimationFrame(() => requestAnimationFrame(() => initializeCollaboration()))
 }
 
 async function loadPage(offset: number) {
+	if (offset > 0 && loadingMore.value) return
+	if (offset === 0) pageController?.abort()
+	const controller = new AbortController()
+	pageController = controller
 	offset === 0 ? loading.value = true : loadingMore.value = true
 	try {
 		const query = new URLSearchParams({
@@ -109,9 +200,11 @@ async function loadPage(offset: number) {
 			sortDirection: sortDirection.value,
 			groupBy: groupBy.value,
 		})
+		if (offset > 0 && nextCursor.value) query.set('cursor', nextCursor.value)
 		const response = await fetch(publicEndpoint(`gallery?${query}`), {
 			credentials: 'same-origin',
 			headers: { Accept: 'application/json' },
+			signal: controller.signal,
 		})
 		if (!response.ok) {
 			throw new Error('Gallery request failed')
@@ -122,12 +215,34 @@ async function loadPage(offset: number) {
 		settings.value = payload.gallery.settings
 		title.value = payload.gallery.title
 		currentPath.value = payload.path
-	} catch {
+		nextCursor.value = payload.nextCursor
+		groups.value = payload.groups
+		indexState.value = payload.indexState
+		scope.value = payload.scope
+		if (offset === 0) await nextTick(restoreScroll)
+	} catch (exception) {
+		if (exception instanceof DOMException && exception.name === 'AbortError') return
 		error.value = true
 	} finally {
-		loading.value = false
-		loadingMore.value = false
+		if (pageController === controller) {
+			loading.value = false
+			loadingMore.value = false
+		}
 	}
+}
+
+function scrollStorageKey(): string {
+	return `proofing-gallery-scroll:${props.gallery.token}:${currentPath.value}`
+}
+
+function rememberScroll() {
+	window.clearTimeout(scrollTimer)
+	scrollTimer = window.setTimeout(() => sessionStorage.setItem(scrollStorageKey(), String(window.scrollY)), 80)
+}
+
+function restoreScroll() {
+	const saved = Number(sessionStorage.getItem(scrollStorageKey()) ?? 0)
+	if (Number.isFinite(saved) && saved > 0) requestAnimationFrame(() => window.scrollTo({ top: saved }))
 }
 
 async function initializeCollaboration() {
@@ -301,8 +416,11 @@ function selectionUrl(kind: 'download/selection' | 'contact-sheet'): string {
 	return publicEndpoint(`${kind}?fileIds=${selectedIds.value.join(',')}`)
 }
 
-function selectionExportUrl(selectionId: string, format: 'csv' | 'plain' | 'search'): string {
-	return publicEndpoint(`collaboration/selections/${selectionId}/export?format=${format}`)
+function selectionExportUrl(selectionId: string, format: 'csv' | 'plain' | 'search', fields: string[] = []): string {
+	const url = new URL(publicEndpoint(`collaboration/selections/${selectionId}/export`), window.location.origin)
+	url.searchParams.set('format', format)
+	if (fields.length) url.searchParams.set('fields', fields.join(','))
+	return url.toString()
 }
 
 function toggleSelection(item: MediaItem) {
@@ -334,6 +452,17 @@ function mediaAccessibleName(item: MediaItem): string {
 	return likeCount > 0
 		? `${action}. ${n('proofing_gallery', '%n like', '%n likes', likeCount)}`
 		: action
+}
+
+function startsGroup(item: MediaItem, index: number): boolean {
+	return groupBy.value !== 'none' && (index === 0 || items.value[index - 1]?.group !== item.group)
+}
+
+function groupLabel(group: string | undefined): string {
+	if (group === 'image') return t('proofing_gallery', 'Images')
+	if (group === 'video') return t('proofing_gallery', 'Videos')
+	if (group === 'root') return t('proofing_gallery', 'Main folder')
+	return group || t('proofing_gallery', 'Other')
 }
 
 function upOneLevel() {
@@ -411,6 +540,7 @@ function upOneLevel() {
 					<span class="visually-hidden">{{ t('proofing_gallery', 'Filter by filename') }}</span>
 					<input
 						v-model="search"
+						name="gallerySearch"
 						type="search"
 						:aria-label="t('proofing_gallery', 'Filter by filename')"
 						:placeholder="t('proofing_gallery', 'Filter by filename')"
@@ -418,7 +548,10 @@ function upOneLevel() {
 				</label>
 				<label class="gallery-toolbar__sort">
 					<span>{{ t('proofing_gallery', 'Sort') }}</span>
-					<select v-model="sortBy" :aria-label="t('proofing_gallery', 'Sort gallery')" @change="applyView">
+					<select v-model="sortBy"
+						name="gallerySort"
+						:aria-label="t('proofing_gallery', 'Sort gallery')"
+						@change="applyView">
 						<option value="name">{{ t('proofing_gallery', 'Filename') }}</option>
 						<option value="modified">{{ t('proofing_gallery', 'Last changed') }}</option>
 						<option value="size">{{ t('proofing_gallery', 'File size') }}</option>
@@ -447,14 +580,18 @@ function upOneLevel() {
 					:inert="mobileViewport && !mobileToolsOpen">
 					<label>
 						<span>{{ t('proofing_gallery', 'Group') }}</span>
-						<select v-model="groupBy" :aria-label="t('proofing_gallery', 'Group gallery')" @change="applyView">
+						<select v-model="groupBy"
+							name="galleryGroup"
+							:aria-label="t('proofing_gallery', 'Group gallery')"
+							@change="applyView">
 							<option value="none">{{ t('proofing_gallery', 'None') }}</option>
 							<option value="type">{{ t('proofing_gallery', 'File type') }}</option>
+							<option v-if="scope?.viewMode === 'recursive'" value="folder">{{ t('proofing_gallery', 'Folder') }}</option>
 						</select>
 					</label>
 					<label>
 						<span>{{ t('proofing_gallery', 'View') }}</span>
-						<select v-model="layout" :aria-label="t('proofing_gallery', 'Gallery view')">
+						<select v-model="layout" name="galleryLayout" :aria-label="t('proofing_gallery', 'Gallery view')">
 							<option value="grid">{{ t('proofing_gallery', 'Grid') }}</option>
 							<option value="masonry">{{ t('proofing_gallery', 'Masonry') }}</option>
 							<option value="list">{{ t('proofing_gallery', 'List') }}</option>
@@ -466,11 +603,14 @@ function upOneLevel() {
 					<button v-if="activeFilterCount" type="button" @click="resetViewFilters">
 						{{ t('proofing_gallery', 'Reset') }}
 					</button>
+					<button v-if="mobileViewport" type="button" @click="mobileToolsOpen = false">
+						{{ t('proofing_gallery', 'Close view options') }}
+					</button>
 				</div>
 			</div>
 			<div v-if="activeFilterCount" class="gallery-filter-chips" :aria-label="t('proofing_gallery', 'Gallery tools')">
 				<button v-if="groupBy !== 'none'" type="button" @click="groupBy = 'none'; applyView()">
-					{{ t('proofing_gallery', 'File type') }} ×
+					{{ groupBy === 'folder' ? t('proofing_gallery', 'Folder') : t('proofing_gallery', 'File type') }} ×
 				</button>
 				<button v-if="layout !== 'grid'" type="button" @click="layout = 'grid'">
 					{{ layout === 'masonry' ? t('proofing_gallery', 'Masonry') : t('proofing_gallery', 'List') }} ×
@@ -488,6 +628,17 @@ function upOneLevel() {
 					{{ t('proofing_gallery', 'Select an image to review it.') }}
 				</p>
 			</div>
+			<div v-if="groupBy !== 'none' && Object.keys(groups).length" class="gallery-group-summary" :aria-label="t('proofing_gallery', 'Gallery groups')">
+				<span v-for="(count, group) in groups" :key="group">
+					<strong>{{ groupLabel(group) }}</strong>{{ count }}
+				</span>
+			</div>
+			<p v-if="indexState?.limitReached" class="gallery-index-warning" role="status">
+				{{ t('proofing_gallery', 'This recursive gallery reached its media index limit. Ask the gallery owner to raise the limit or narrow the link scope.') }}
+			</p>
+			<p v-else-if="scope?.viewMode === 'recursive' && indexState?.state === 'unindexed'" class="gallery-index-warning" role="status">
+				{{ t('proofing_gallery', 'This recursive gallery is still being indexed. Reload shortly or ask the gallery owner to rebuild the media index.') }}
+			</p>
 			<Transition name="proof-rail">
 				<div v-if="(canDownloadSelection || (settings.mode === 'collaboration' && settings.review?.selections !== false)) && selectedIds.length" class="delivery-bar proof-rail">
 					<TransitionGroup name="proof-preview"
@@ -543,59 +694,70 @@ function upOneLevel() {
 				<p>{{ t('proofing_gallery', 'New photographs will appear here automatically.') }}</p>
 			</div>
 
-			<div v-else
-				class="media-grid"
-				:class="[
-					`media-grid--${layout}`,
-					{ 'media-grid--featured': mediaItems.length <= 3 && layout !== 'list' },
-				]">
-				<article
-					v-for="(item, index) in items"
-					:key="item.id"
-					class="media-tile"
-					:class="{ 'media-tile--selected': selectedIds.includes(item.id) }">
-					<button
-						class="media-tile__open"
-						type="button"
-						:aria-label="mediaAccessibleName(item)"
-						@click="openItem(item)">
-						<img
-							v-if="item.mimeType.startsWith('image/')"
-							:src="previewUrl(item, 900, 900, 'fit')"
-							alt=""
-							:loading="index === 0 ? 'eager' : 'lazy'"
-							:fetchpriority="index === 0 ? 'high' : 'auto'"
-							@load="rememberDimensions(item, $event)">
-						<span v-else-if="item.folder" class="media-tile__folder" aria-hidden="true" />
-						<span v-else class="media-tile__video" aria-hidden="true">▶</span>
-						<span v-if="settings.presentation?.showFilenames ?? settings.showFilenames" class="media-tile__name" aria-hidden="true">
-							{{ item.name }}
-						</span>
-						<span
-							v-if="settings.mode === 'collaboration' && !item.folder && collaboration?.likes[item.id]?.count"
-							class="media-tile__likes"
-							aria-hidden="true">
-							♥ {{ collaboration.likes[item.id].count }}
-						</span>
-					</button>
-					<button
-						v-if="(canDownloadSelection || (settings.mode === 'collaboration' && settings.review?.selections !== false)) && !item.folder"
-						class="media-tile__select"
-						:class="{ 'media-tile__select--active': selectedIds.includes(item.id) }"
-						type="button"
-						:aria-checked="selectedIds.includes(item.id)"
-						role="checkbox"
-						:aria-label="t('proofing_gallery', 'Select {name}', { name: item.name })"
-						@click="toggleSelection(item)">
-						{{ selectedIds.includes(item.id) ? '✓' : '+' }}
-					</button>
-				</article>
+			<div v-else class="media-grid-shell" :style="gridPlaceholderStyle">
+				<VirtualMediaGrid
+					class="media-grid"
+					:class="[
+						`media-grid--${layout}`,
+						{ 'media-grid--featured': featuredGrid },
+					]"
+					:items="items"
+					:min-item-width="tileMinWidth"
+					:max-item-width="featuredGrid ? 520 : undefined"
+					:max-columns="featuredGrid ? Math.max(1, mediaItems.length) : undefined"
+					:mobile-item-aspect-ratio="featuredGrid ? 16 / 10 : undefined"
+					:gap="tileGap"
+					:list="layout === 'list'"
+					:has-more="hasMore"
+					:loading-more="loadingMore"
+					:aria-label="t('proofing_gallery', 'Gallery files')"
+					@load-more="loadPage(items.length)">
+					<template #default="{ item, index }">
+						<article
+							class="media-tile"
+							:class="{ 'media-tile--selected': selectedIds.includes(item.id) }">
+							<span v-if="startsGroup(item, index)" class="media-tile__group">{{ groupLabel(item.group) }}</span>
+							<button
+								class="media-tile__open"
+								type="button"
+								:aria-label="mediaAccessibleName(item)"
+								@click="openItem(item)">
+								<ProgressiveImage
+									v-if="item.mimeType.startsWith('image/')"
+									:src="previewUrl(item, 900, 900, 'fit')"
+									class="media-tile__image"
+									:priority="item.id === mediaItems[0]?.id"
+									@load="rememberDimensions(item, $event)" />
+								<span v-else-if="item.folder" class="media-tile__folder" aria-hidden="true" />
+								<span v-else class="media-tile__video" aria-hidden="true">▶</span>
+								<span v-if="settings.presentation?.showFilenames ?? settings.showFilenames" class="media-tile__name" aria-hidden="true">
+									{{ item.name }}
+								</span>
+								<span
+									v-if="settings.mode === 'collaboration' && !item.folder && collaboration?.likes[item.id]?.count"
+									class="media-tile__likes"
+									aria-hidden="true">
+									♥ {{ collaboration.likes[item.id].count }}
+								</span>
+							</button>
+							<button
+								v-if="(canDownloadSelection || (settings.mode === 'collaboration' && settings.review?.selections !== false)) && !item.folder"
+								class="media-tile__select"
+								:class="{ 'media-tile__select--active': selectedIds.includes(item.id) }"
+								type="button"
+								:aria-checked="selectedIds.includes(item.id)"
+								role="checkbox"
+								:aria-label="t('proofing_gallery', 'Select {name}', { name: item.name })"
+								@click="toggleSelection(item)">
+								{{ selectedIds.includes(item.id) ? '✓' : '+' }}
+							</button>
+						</article>
+					</template>
+				</VirtualMediaGrid>
 			</div>
 
-			<div v-if="hasMore" class="public-gallery__more">
-				<button type="button" :disabled="loadingMore" @click="loadPage(items.length)">
-					{{ loadingMore ? t('proofing_gallery', 'Loading…') : t('proofing_gallery', 'Load more') }}
-				</button>
+			<div v-if="loadingMore" class="public-gallery__more" role="status">
+				{{ t('proofing_gallery', 'Loading…') }}
 			</div>
 		</section>
 
@@ -672,16 +834,27 @@ function upOneLevel() {
 	display: none;
 }
 
+:global(html.proofing-gallery-public-page),
+:global(body.proofing-gallery-public-page) {
+	position: static !important;
+	width: 100%;
+	height: auto !important;
+	min-height: 100%;
+	overflow: visible !important;
+}
+
 :global(body.proofing-gallery-public-page #header) {
 	display: none;
 }
 
 :global(body.proofing-gallery-public-page #content) {
+	position: relative !important;
 	min-height: 100dvh;
 	height: auto !important;
 	margin-top: 0 !important;
 	padding-top: 0 !important;
 	border-radius: 0 !important;
+	overflow: visible !important;
 }
 
 .public-gallery {
@@ -938,6 +1111,37 @@ function upOneLevel() {
 	cursor: pointer;
 }
 
+.gallery-group-summary {
+	display: flex;
+	gap: 8px;
+	margin: -4px 4px 20px;
+	overflow-x: auto;
+	scrollbar-width: thin;
+}
+
+.gallery-group-summary span {
+	display: inline-flex;
+	min-width: max-content;
+	align-items: baseline;
+	gap: 12px;
+	padding: 9px 12px;
+	border: 1px solid var(--gallery-border);
+	border-inline-start: 4px solid var(--gallery-accent);
+	background: var(--gallery-surface);
+	color: var(--gallery-muted);
+	font-size: 12px;
+}
+
+.gallery-group-summary strong { color: var(--gallery-text); }
+
+.gallery-index-warning {
+	margin: 0 4px 18px;
+	padding: 12px 14px;
+	border: 1px solid #d69e2e;
+	background: color-mix(in srgb, #d69e2e 14%, var(--gallery-bg));
+	color: var(--gallery-text);
+}
+
 .guest-identity {
 	display: flex;
 	align-items: center;
@@ -1057,6 +1261,15 @@ function upOneLevel() {
 	gap: var(--tile-gap);
 }
 
+.media-grid.virtual-media {
+	display: block;
+}
+
+.media-grid :deep(.virtual-media__cell .media-tile) {
+	height: 100%;
+	aspect-ratio: auto;
+}
+
 .public-gallery--tiles-small { --tile-min: 170px; }
 
 .public-gallery--tiles-large { --tile-min: 320px; }
@@ -1116,6 +1329,26 @@ function upOneLevel() {
 	transition: outline-color 140ms ease, transform 220ms cubic-bezier(.2,.75,.25,1);
 }
 
+.media-tile__group {
+	position: absolute;
+	z-index: 2;
+	top: 8px;
+	inset-inline-start: 8px;
+	max-width: calc(100% - 56px);
+	padding: 5px 8px;
+	background: color-mix(in srgb, var(--gallery-bg) 82%, transparent);
+	box-shadow: inset 3px 0 0 var(--gallery-accent);
+	color: var(--gallery-text);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: .04em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	text-transform: uppercase;
+	white-space: nowrap;
+	pointer-events: none;
+}
+
 .media-tile:hover,
 .media-tile:focus-within {
 	z-index: 1;
@@ -1146,6 +1379,23 @@ function upOneLevel() {
 	height: 100%;
 	object-fit: cover;
 	transition: filter 180ms ease, transform 360ms cubic-bezier(.2,.75,.25,1);
+}
+
+.media-tile__image {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.media-tile__open :deep(.media-tile__image img) {
+	object-fit: cover;
+	transition: filter 180ms ease, transform 360ms cubic-bezier(.2,.75,.25,1);
+}
+
+.media-tile:hover .media-tile__open :deep(.media-tile__image img),
+.media-tile:focus-within .media-tile__open :deep(.media-tile__image img) {
+	filter: contrast(1.04) saturate(1.08);
+	transform: scale(1.035);
 }
 
 .media-tile:hover .media-tile__open img,

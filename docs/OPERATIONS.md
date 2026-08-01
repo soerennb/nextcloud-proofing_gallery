@@ -73,6 +73,14 @@ least 24 hours old, and not referenced by a collection gallery are deleted.
 Referenced, recent, non-empty, or irregularly named folders are never removed.
 Never place user files in these directories.
 
+Recursive folder galleries maintain a bounded media index in the app database.
+The index stores file identity, relative path, MIME type, size, modification
+time, and sort keys, not image bytes. Rebuilds run in bounded background batches
+and stop at the administrator-defined maximum. Public links can further reduce
+the visible result by start path and minimum owner rating. Monitor background
+jobs and the administration health summary after enabling recursive delivery on
+large existing folders.
+
 Administrators can inspect the same bounded scan without changing files. The
 endpoint defaults to dry-run; pass `dryRun=false` only after reviewing the
 candidate count:

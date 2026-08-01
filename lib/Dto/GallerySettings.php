@@ -25,10 +25,10 @@ final readonly class GallerySettings implements JsonSerializable {
 	public array $appearance;
 
 	/**
-	 * @param array{visibility: string, likes: bool, colors: bool, comments: bool, annotations: bool, selections: bool, colorLabels: list<string>, colorEnabled: list<bool>, selectionWarningThreshold: int} $review
-	 * @param array{accentColor: string, welcomeMessage: string, logoFileId: ?int, instanceLogoAssetId: ?string, heroFileId: ?int, openerStyle: string, heroFocusX: int, heroFocusY: int, fontPreset: string, watermarkText: string, watermarkOpacity: int, theme: string, layout: string, tileSize: string, tileGap: string, tileRadius: string, titleAlignment: string, showFilenames: bool} $presentation
+	 * @param array{visibility: string, likes: bool, colors: bool, comments: bool, annotations: bool, selections: bool, ratings: bool, pick: bool, colorLabels: list<string>, colorEnabled: list<bool>, selectionWarningThreshold: int} $review
+	 * @param array{accentColor: string, welcomeMessage: string, logoFileId: ?int, instanceLogoAssetId: ?string, heroFileId: ?int, openerStyle: string, heroFocusX: int, heroFocusY: int, fontPreset: string, watermarkText: string, watermarkOpacity: int, theme: string, layout: string, tileSize: string, tileGap: string, tileRadius: string, titleAlignment: string, showFilenames: bool, slideshowInterval: int} $presentation
 	 * @param array{downloadScope: string, contactSheet: bool, guestUploads: bool} $delivery
-	 * @param array{folders: bool, sortBy: string, sortDirection: string, groupBy: string} $navigation
+	 * @param array{folders: bool, recursive: bool, groupDepth: int, sortBy: string, sortDirection: string, groupBy: string} $navigation
 	 * @param array{allowModeSwitch: bool, hideRejectedInPresentation: bool} $security
 	 * @param array{publicFields: list<string>} $metadata
 	 * @param array{enabled: bool, trigger: string, revokeAt: string, revokeAfterDays: int, archiveAfterDays: int, reminderDays: list<int>} $lifecycle
@@ -207,7 +207,7 @@ final readonly class GallerySettings implements JsonSerializable {
 		} catch (\ValueError $exception) {
 			throw new InvalidArgumentException('Invalid feedback visibility', previous: $exception);
 		}
-		foreach (['likes', 'colors', 'comments', 'annotations', 'selections'] as $key) {
+		foreach (['likes', 'colors', 'comments', 'annotations', 'selections', 'ratings', 'pick'] as $key) {
 			self::assertBoolean($this->review[$key], 'review.' . $key);
 		}
 		if (!is_array($this->review['colorLabels']) || !array_is_list($this->review['colorLabels']) || count($this->review['colorLabels']) !== 4) {
@@ -241,7 +241,7 @@ final readonly class GallerySettings implements JsonSerializable {
 			&& (!is_string($p['instanceLogoAssetId']) || preg_match('/^[A-Za-z0-9]{32}\.(png|jpg|webp|svg)$/', $p['instanceLogoAssetId']) !== 1)) {
 			throw new InvalidArgumentException('presentation.instanceLogoAssetId must be a branding asset ID or null');
 		}
-		foreach (['heroFocusX', 'heroFocusY', 'watermarkOpacity'] as $key) {
+		foreach (['heroFocusX', 'heroFocusY', 'watermarkOpacity', 'slideshowInterval'] as $key) {
 			if (!is_int($p[$key])) {
 				throw new InvalidArgumentException('presentation.' . $key . ' must be an integer');
 			}
@@ -253,6 +253,7 @@ final readonly class GallerySettings implements JsonSerializable {
 			|| $p['heroFocusX'] < 0 || $p['heroFocusX'] > 100
 			|| $p['heroFocusY'] < 0 || $p['heroFocusY'] > 100
 			|| $p['watermarkOpacity'] < 5 || $p['watermarkOpacity'] > 80
+			|| $p['slideshowInterval'] < 3 || $p['slideshowInterval'] > 15
 			|| !in_array($p['openerStyle'], ['compact', 'cinematic'], true)
 			|| !in_array($p['fontPreset'], ['system', 'editorial', 'modern'], true)
 			|| !in_array($p['theme'], ['auto', 'light', 'dark'], true)
@@ -269,9 +270,13 @@ final readonly class GallerySettings implements JsonSerializable {
 			throw new InvalidArgumentException('Invalid download scope');
 		}
 		self::assertBoolean($this->navigation['folders'], 'navigation.folders');
+		self::assertBoolean($this->navigation['recursive'], 'navigation.recursive');
 		if (!in_array($this->navigation['sortBy'], ['name', 'modified', 'size'], true)
 			|| !in_array($this->navigation['sortDirection'], ['asc', 'desc'], true)
-			|| !in_array($this->navigation['groupBy'], ['none', 'type'], true)) {
+			|| !in_array($this->navigation['groupBy'], ['none', 'type', 'folder'], true)
+			|| !is_int($this->navigation['groupDepth'])
+			|| $this->navigation['groupDepth'] < 0
+			|| $this->navigation['groupDepth'] > 8) {
 			throw new InvalidArgumentException('Invalid navigation settings');
 		}
 		foreach (['allowModeSwitch', 'hideRejectedInPresentation'] as $key) self::assertBoolean($this->security[$key], 'security.' . $key);
@@ -305,7 +310,7 @@ final readonly class GallerySettings implements JsonSerializable {
 		return [
 			'review' => [
 				'visibility' => 'collaborative', 'likes' => true, 'colors' => true, 'comments' => true,
-				'annotations' => true, 'selections' => true,
+				'annotations' => true, 'selections' => true, 'ratings' => false, 'pick' => false,
 				'colorLabels' => ['Favorit', 'Auswahl', 'Überarbeiten', 'Ablehnen'],
 				'colorEnabled' => [true, true, true, true], 'selectionWarningThreshold' => 0,
 			],
@@ -314,10 +319,10 @@ final readonly class GallerySettings implements JsonSerializable {
 				'openerStyle' => 'compact', 'heroFocusX' => 50, 'heroFocusY' => 50, 'fontPreset' => 'system',
 				'watermarkText' => '', 'watermarkOpacity' => 24, 'theme' => 'dark', 'layout' => 'grid',
 				'tileSize' => 'medium', 'tileGap' => 'normal', 'tileRadius' => 'soft', 'titleAlignment' => 'left',
-				'showFilenames' => true,
+				'showFilenames' => true, 'slideshowInterval' => 5,
 			],
 			'delivery' => ['downloadScope' => 'none', 'contactSheet' => true, 'guestUploads' => false],
-			'navigation' => ['folders' => true, 'sortBy' => 'name', 'sortDirection' => 'asc', 'groupBy' => 'none'],
+			'navigation' => ['folders' => true, 'recursive' => false, 'groupDepth' => 1, 'sortBy' => 'name', 'sortDirection' => 'asc', 'groupBy' => 'none'],
 			'security' => ['allowModeSwitch' => false, 'hideRejectedInPresentation' => false],
 			'metadata' => ['publicFields' => []],
 			'lifecycle' => [

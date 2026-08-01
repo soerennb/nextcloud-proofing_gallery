@@ -8,6 +8,8 @@ use InvalidArgumentException;
 use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\GalleryMapper;
+use OCA\ProofingGallery\Db\PublicLink;
+use OCA\ProofingGallery\Db\PublicLinkMapper;
 use OCA\ProofingGallery\Db\Guest;
 use OCA\ProofingGallery\Service\GuestService;
 use OCA\ProofingGallery\Service\UploadService;
@@ -28,12 +30,15 @@ use OCP\Share\IShare;
 final class UploadController extends PublicShareController {
 	private ?IShare $share = null;
 	private ?Gallery $gallery = null;
+	private ?PublicLink $publicLink = null;
 
 	public function __construct(
 		IRequest $request,
 		ISession $session,
 		private IManager $shareManager,
 		private GalleryMapper $galleries,
+		private PublicLinkMapper $publicLinks,
+		private \OCA\ProofingGallery\Service\PublicLinkPolicyService $linkPolicies,
 		private GuestService $guests,
 		private UploadService $uploads,
 	) {
@@ -101,8 +106,11 @@ final class UploadController extends PublicShareController {
 	public function isValidToken(): bool {
 		try {
 			$this->share = $this->shareManager->getShareByToken($this->getToken());
-			$this->gallery = $this->galleries->findByShareToken($this->getToken());
-			return $this->share->getNodeId() === $this->gallery->getFolderId();
+			$this->publicLink = $this->publicLinks->findByToken($this->getToken());
+			if ($this->publicLink->getStatus() !== 'active') return false;
+			$policy = $this->linkPolicies->validate(json_decode($this->publicLink->getPolicy(), true, flags: JSON_THROW_ON_ERROR));
+			$this->gallery = $this->galleries->find($this->publicLink->getGalleryId());
+			return $policy['upload'] && $this->share->getNode() instanceof \OCP\Files\Folder;
 		} catch (ShareNotFound|DoesNotExistException) {
 			return false;
 		}

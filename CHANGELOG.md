@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.0-alpha.1 — 2026-08-01
+
+- Added an indexed, cursor-paged media foundation with recursive folder views,
+  folder/type grouping, bounded virtual grids, and resilient progressive images.
+- Added a keyboard-first owner culling desk with ratings, picks/rejects, color
+  labels, undo, saved cross-device views, and conflict-aware Adobe XMP sync.
+- Replaced single-link delivery with independently scoped public links and
+  per-link locale, view, download, metadata, upload, feedback, expiry, password,
+  owner-rating threshold, audit, and native Nextcloud share controls.
+- Added private client star ratings and pick/reject signals with owner-only
+  aggregation and an explicit, idempotent preview-before-promotion workflow.
+- Added configurable slideshows that pause in hidden tabs, accessible shortcut
+  help, and privacy-bounded RFC 4180 UTF-8 CSV composers for owners and guests.
+- Hardened collection policy serialization, collection media membership,
+  scoped comment mutation, and cross-link selection export authorization.
+- Refined the bold responsive culling and public interfaces with 44-pixel touch
+  targets, sticky mobile action decks, visible keyboard focus, and reduced-motion
+  alternatives.
+
 ## 0.4.0-alpha.3 — 2026-08-01
 
 - Added grouped, localized Nextcloud notification-center alerts for comments,

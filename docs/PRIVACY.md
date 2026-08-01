@@ -8,7 +8,8 @@ tracking pixels, or external media services.
 - gallery configuration and the Nextcloud file IDs it references, including
   ordered collection membership and source-gallery IDs
 - optional guest display name and encrypted email address
-- likes, color states, comments, normalized point annotations, and selections
+- likes, color states, comments, normalized point annotations, selections, and
+  private per-client star ratings and pick/reject decisions
 - pending upload metadata and temporary chunks
 - locally extracted EXIF/IPTC technical and descriptive metadata, plus optional
   XMP sidecars stored beside originals
@@ -45,6 +46,13 @@ be an explicit collection member and still resolve inside an owned, readable
 folder gallery. Hidden paths are excluded. Public writes additionally require
 the guest cookie and mutation nonce. Authenticated owner endpoints retain
 Nextcloud's session, permission, and CSRF/OCS protections.
+
+Each public link is authorized independently. Link-scoped collaboration state,
+comment edits, selection exports, previews, downloads, and ratings are checked
+against that link's folder boundary or explicit collection membership. Guest
+CSV exports expose only filenames and that authenticated guest's own private
+rating values; owner-only culling, aggregates, paths, and comments are removed
+server-side even if requested manually.
 
 Report vulnerabilities privately to the repository maintainer; do not include
 real share tokens, guest data, or images in a public issue.

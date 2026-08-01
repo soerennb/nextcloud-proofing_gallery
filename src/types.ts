@@ -82,9 +82,86 @@ export interface MediaItem {
 	modifiedAt: number
 	etag: string
 	folder: boolean
+	group?: string
+	relativePath?: string
 	sourceGalleryId?: number
 	sourceGalleryTitle?: string
 	metadata?: MediaMetadata
+}
+
+export interface IndexedMediaItem extends MediaItem {
+	parentId: number
+	relativePath: string
+	depth: number
+}
+
+export type CullColor = 'none' | 'red' | 'yellow' | 'green' | 'blue' | 'purple'
+export type CullPick = 'none' | 'pick' | 'reject'
+
+export interface MediaCull {
+	fileId: number
+	rating: number
+	color: CullColor
+	pick: CullPick
+	source: 'app' | 'xmp'
+	revision: number
+	sourceEtag: string | null
+	sidecarEtag: string | null
+	updatedAt: number
+}
+
+export interface GuestRatingValue {
+	fileId: number
+	rating: number
+	pick: CullPick
+	updatedAt: number
+}
+
+export interface GuestRatingAggregate {
+	fileId: number
+	count: number
+	average: number
+	distribution: [number, number, number, number, number, number]
+	picks: Record<CullPick, number>
+	updatedAt: number
+	individuals: Array<GuestRatingValue & { guestId: number; name: string }>
+}
+
+export interface GuestRatingPromotion {
+	fileId: number
+	guestUpdatedAt: number
+	guestCount: number
+	average: number
+	target: Pick<MediaCull, 'rating' | 'pick' | 'color'>
+	owner: Pick<MediaCull, 'fileId' | 'rating' | 'pick' | 'color' | 'revision'>
+}
+
+export interface IndexedMediaPage {
+	items: IndexedMediaItem[]
+	nextCursor: string | null
+	total: number
+}
+
+export interface CullingXmpItem {
+	fileId: number
+	name?: string
+	app?: Pick<MediaCull, 'fileId' | 'rating' | 'color' | 'pick' | 'revision'>
+	xmp?: { exists: boolean; etag: string | null; rating: number; color: CullColor; pick: CullPick }
+	result?: Pick<MediaCull, 'fileId' | 'rating' | 'color' | 'pick' | 'revision'>
+	differences?: Array<'rating' | 'color' | 'pick'>
+	conflict?: boolean
+	action?: 'report' | 'app' | 'xmp' | 'merge'
+	wouldWrite?: boolean
+	error?: string
+}
+
+export interface CullingXmpReport {
+	items: CullingXmpItem[]
+	total: number
+	offset: number
+	limit: number
+	nextOffset: number | null
+	dryRun: boolean
 }
 
 export interface CollectionItem {
@@ -139,6 +216,50 @@ export interface GalleryManager {
 	createdAt: number
 }
 
+export interface PublicLinkPolicy {
+	view: boolean
+	likes: boolean
+	colors: boolean
+	comments: boolean
+	annotations: boolean
+	selections: boolean
+	ratings: boolean
+	pick: boolean
+	upload: boolean
+	export: boolean
+	metadata: boolean
+	downloadScope: 'none' | 'individual' | 'selection' | 'all'
+}
+
+export interface GalleryPublicLink {
+	id: number
+	galleryId: number
+	name: string
+	status: 'active' | 'revoked'
+	primary: boolean
+	policy: PublicLinkPolicy
+	startPath: string
+	viewMode: 'folder' | 'recursive'
+	groupDepth: number
+	minOwnerRating: number
+	publicLocale: 'en' | 'de' | null
+	createdAt: number
+	updatedAt: number
+	revokedAt: number | null
+	url: string
+}
+
+export interface ShareAuditItem {
+	publicLinkId: number
+	guestId: number | null
+	actorUid: string | null
+	fileId: number | null
+	event: 'login' | 'view' | 'download' | 'export' | 'upload' | 'feedback' | 'revoke'
+	outcome: 'success' | 'denied' | 'failed'
+	reasonCode: string | null
+	createdAt: number
+}
+
 export interface GalleryPage {
 	items: Gallery[]
 	total: number
@@ -176,6 +297,13 @@ export interface UserPreferences {
 		email: { enabled: boolean; events: NotificationEventType[]; frequency: 'immediate' | 'daily' }
 	}
 	lifecycle: { enabled: boolean; trigger: 'fixed_date' | 'after_completion'; revokeAfterDays: number; archiveAfterDays: number }
+	savedViews: Array<{
+		id: string
+		name: string
+		galleryId: number
+		filters: { sortBy: 'name' | 'modified' | 'size'; sortDirection: 'asc' | 'desc'; rating: number; pick: 'all' | CullPick; color: 'all' | CullColor }
+		updatedAt: number
+	}>
 }
 
 export interface NotificationSubscription {

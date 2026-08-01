@@ -15,6 +15,8 @@ use OCP\Constants;
 use OCP\Share\IManager;
 use OCP\Share\IShare;
 use Throwable;
+use OCA\ProofingGallery\BackgroundJob\RebuildMediaIndexJob;
+use OCP\BackgroundJob\IJobList;
 
 final class PublicShareService {
 	public function __construct(
@@ -25,6 +27,8 @@ final class PublicShareService {
 		private CollectionService $collections,
 		private ITimeFactory $clock,
 		private CapabilityPolicyService $capabilities,
+		private PublicLinkService $publicLinks,
+		private IJobList $jobs,
 	) {
 	}
 
@@ -74,12 +78,19 @@ final class PublicShareService {
 		$gallery->setUpdatedAt($this->clock->getTime());
 		$gallery->setRevision($gallery->getRevision() + 1);
 
-		return $this->galleries->update($gallery);
+		$updated = $this->galleries->update($gallery);
+		$this->publicLinks->ensurePrimary($updated, (int)$share->getId());
+		return $updated;
 	}
 
 	public function revoke(Gallery $gallery): Gallery {
-		if ($gallery->getShareToken() !== null) {
-			$this->shareManager->deleteShare($this->shareManager->getShareByToken($gallery->getShareToken()));
+		foreach ($this->publicLinks->list($gallery) as $link) {
+			if ($link->getStatus() !== 'active') continue;
+			try {
+				$this->shareManager->deleteShare($this->shareManager->getShareByToken($link->getToken()));
+			} catch (\Throwable) {
+			}
+			$this->publicLinks->markRevoked($link);
 		}
 		$gallery->setShareToken(null);
 		$gallery->setStatus(GalleryStatus::Draft->value);
@@ -88,6 +99,10 @@ final class PublicShareService {
 		$gallery->setRevision($gallery->getRevision() + 1);
 
 		return $this->galleries->update($gallery);
+	}
+
+	public function synchronizePrimaryNavigation(Gallery $gallery): void {
+		$this->publicLinks->synchronizePrimaryNavigation($gallery);
 	}
 
 	/**
@@ -120,6 +135,7 @@ final class PublicShareService {
 			$gallery->setRevision($gallery->getRevision() + 1);
 			$updated = $this->galleries->update($gallery);
 			$this->summaries->invalidate($gallery->getId());
+			$this->jobs->add(RebuildMediaIndexJob::class, ['galleryId' => $gallery->getId()]);
 			return $updated;
 		} catch (Throwable $exception) {
 			$gallery->setFolderId($oldFolderId);

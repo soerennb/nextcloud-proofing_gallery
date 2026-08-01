@@ -122,6 +122,17 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 		return $this->findEntities($qb);
 	}
 
+	/** @return list<Gallery> */
+	public function findIndexCandidates(int $limit = 1000): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')->from($this->tableName)
+			->where($qb->expr()->eq('source_type', $qb->createNamedParameter('folder')))
+			->andWhere($qb->expr()->neq('status', $qb->createNamedParameter('archived')))
+			->orderBy('updated_at', 'DESC')
+			->setMaxResults(max(1, min(5000, $limit)));
+		return $this->findEntities($qb);
+	}
+
 	/** @param list<int> $ids
 	 * @return list<Gallery>
 	 */

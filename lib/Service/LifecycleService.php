@@ -36,6 +36,11 @@ final class LifecycleService {
 			'created_at',
 			$now - $this->policies->get('eventRetentionDays') * 86400,
 		);
+		$shareAudit = $this->deleteOldRows(
+			'proofing_share_audit',
+			'created_at',
+			$now - $this->policies->get('shareAuditRetentionDays') * 86400,
+		);
 		$uploads = $this->cleanupUploads($now);
 		$previews = $this->cleanupPreviewCache(
 			$now - $this->policies->get('previewRetentionDays') * 86400,
@@ -44,7 +49,7 @@ final class LifecycleService {
 		$collectionAnchors = $this->collectionAnchors->reconcile(false)['deleted'];
 		$versions = $this->versions->cleanupExpired(self::BATCH_SIZE);
 		['revoked' => $revoked, 'archived' => $archived] = $this->automateGalleries($now);
-		return compact('events', 'uploads', 'previews', 'versions', 'orphans', 'collectionAnchors', 'revoked', 'archived');
+		return compact('events', 'shareAudit', 'uploads', 'previews', 'versions', 'orphans', 'collectionAnchors', 'revoked', 'archived');
 	}
 
 	/** @return array{revoked: int, archived: int} */
@@ -160,7 +165,7 @@ final class LifecycleService {
 
 	private function cleanupOrphanMetadata(): int {
 		$deleted = 0;
-		foreach (['proofing_events', 'proofing_uploads', 'proofing_collections', 'proofing_notify_subs', 'proofing_native_notify'] as $table) {
+		foreach (['proofing_events', 'proofing_uploads', 'proofing_collections', 'proofing_notify_subs', 'proofing_native_notify', 'proofing_media_index', 'proofing_public_links', 'proofing_guest_ratings', 'proofing_share_audit'] as $table) {
 			$qb = $this->db->getQueryBuilder();
 			$qb->selectDistinct('gallery_id')->from($table)->setMaxResults(100);
 			foreach ($qb->executeQuery()->fetchFirstColumn() as $galleryId) {

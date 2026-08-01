@@ -44,7 +44,7 @@ $groups = static fn (array $values): string => htmlspecialchars(implode(', ', $v
 				<label class="proofing-switch"><span><strong><?= $l->t('Downloads') ?></strong><small><?= $l->t('Immediately blocks all public file and selection downloads.') ?></small></span><input name="feature.downloads" type="checkbox"<?= $checked($features['downloads']) ?>><i aria-hidden="true"></i></label>
 				<label class="proofing-switch"><span><strong><?= $l->t('Email invitations') ?></strong><small><?= $l->t('Allow photographers to send gallery links by email.') ?></small></span><input name="feature.emailInvitations" type="checkbox"<?= $checked($features['emailInvitations']) ?>><i aria-hidden="true"></i></label>
 				<label class="proofing-switch"><span><strong><?= $l->t('Nextcloud notifications') ?></strong><small><?= $l->t('Show important gallery updates in the Nextcloud notification center.') ?></small></span><input name="feature.nextcloudNotifications" type="checkbox"<?= $checked($features['nextcloudNotifications']) ?>><i aria-hidden="true"></i></label>
-				<?php foreach (['likes' => $l->t('Likes'), 'colors' => $l->t('Color workflow'), 'comments' => $l->t('Comments'), 'annotations' => $l->t('Image annotations'), 'selections' => $l->t('Client selections'), 'lifecycleAutomation' => $l->t('Lifecycle automation')] as $key => $label): ?>
+				<?php foreach (['likes' => $l->t('Likes'), 'colors' => $l->t('Color workflow'), 'comments' => $l->t('Comments'), 'annotations' => $l->t('Image annotations'), 'selections' => $l->t('Client selections'), 'lifecycleAutomation' => $l->t('Lifecycle automation'), 'ownerCulling' => $l->t('Photographer culling'), 'guestRatings' => $l->t('Client ratings'), 'recursiveGalleries' => $l->t('Recursive galleries'), 'multiplePublicLinks' => $l->t('Multiple public links')] as $key => $label): ?>
 					<label class="proofing-switch proofing-switch--compact"><span><strong><?= $label ?></strong></span><input name="feature.<?= $key ?>" type="checkbox"<?= $checked($features[$key]) ?>><i aria-hidden="true"></i></label>
 				<?php endforeach; ?>
 			</div>
@@ -96,6 +96,9 @@ $groups = static fn (array $values): string => htmlspecialchars(implode(', ', $v
 					'versionRetentionDays' => [$l->t('Archived versions (days)'), $policies['versionRetentionDays'], 1, 3650],
 					'metadataMaxMiB' => [$l->t('Metadata file size (MiB)'), (int)($policies['metadataMaxBytes'] / 1048576), 1, 512],
 					'metadataBatchSize' => [$l->t('Files per metadata run'), $policies['metadataBatchSize'], 1, 200],
+					'maxIndexedMedia' => [$l->t('Maximum indexed media per gallery'), $policies['maxIndexedMedia'], 100, 100000],
+					'maxPublicLinks' => [$l->t('Maximum public links per gallery'), $policies['maxPublicLinks'], 1, 100],
+					'shareAuditRetentionDays' => [$l->t('Public link audit history (days)'), $policies['shareAuditRetentionDays'], 7, 3650],
 				] as $name => [$label, $value, $min, $max]): ?><label><span><?= $label ?></span><input name="<?= $name ?>" type="number" min="<?= $min ?>" max="<?= $max ?>" value="<?= (int)$value ?>"></label><?php endforeach; ?>
 				<label><span><?= $l->t('XMP sidecar writing') ?></span><select name="xmpWritingEnabled"><option value="1"<?= $policies['xmpWritingEnabled'] === 1 ? ' selected' : '' ?>><?= $l->t('Enabled') ?></option><option value="0"<?= $policies['xmpWritingEnabled'] === 0 ? ' selected' : '' ?>><?= $l->t('Disabled') ?></option></select></label>
 			</div>

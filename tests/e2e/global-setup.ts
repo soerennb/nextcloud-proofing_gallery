@@ -14,7 +14,10 @@ export default async function globalSetup(config: FullConfig) {
 		body: JSON.stringify({ preferences: {
 			defaultPurpose: null,
 			publicLocale: 'en',
-			notifications: { email: false, events: ['upload.received', 'comment.created', 'selection.created'] },
+			notifications: {
+				nextcloud: { enabled: true, events: ['upload.received', 'comment.created', 'selection.created'] },
+				email: { enabled: false, events: ['upload.received', 'comment.created', 'selection.created'], frequency: 'immediate' },
+			},
 		} }),
 	})
 	if (!preferences.ok) throw new Error(`E2E preferences could not be reset (${preferences.status})`)

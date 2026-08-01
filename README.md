@@ -6,7 +6,7 @@ folder or assembles an ordered virtual collection from several owned galleries.
 Originals remain in Files while the app adds a customizable public presentation,
 guest feedback, selections, secure downloads, and an upload inbox.
 
-## Included in 0.2
+## Included
 
 - presentation and collaborative proofing modes
 - standard Nextcloud public-link protection, password, and expiry
@@ -24,9 +24,6 @@ guest feedback, selections, secure downloads, and an upload inbox.
   public-gallery and mail delivery
 - ordered, copy-free collections spanning the owner's folder galleries, with
   unavailable-source diagnostics and conflict-safe editing
-
-## New in 0.3 alpha
-
 - bounded EXIF/IPTC indexing through Nextcloud FilesMetadata, with owner-side
   capture date, camera, lens, keyword, and rating filters
 - per-gallery public metadata disclosure that starts with no shared fields and
@@ -35,6 +32,16 @@ guest feedback, selections, secure downloads, and an upload inbox.
   creators, copyright, keywords, ratings, and labels while originals stay intact
 - client-selection round trips into standard XMP/Lightroom fields and a
   versioned Proofing Gallery namespace for workflow fidelity
+- recursive, cursor-paged galleries with folder/type grouping and bounded
+  virtual grids for large photographic deliveries
+- a keyboard-first owner culling desk with ratings, picks/rejects, color labels,
+  conflict-aware XMP synchronization, batch undo, and cross-device saved views
+- multiple independently scoped public links per gallery, each with its own
+  start folder, presentation mode, language, download and feedback policy
+- private per-client star ratings and decisions, owner-side aggregates, and an
+  explicit preview-before-promotion workflow that never writes XMP implicitly
+- a field-selectable, privacy-bounded UTF-8 CSV export composer with preview and
+  clipboard support, plus configurable resource-aware slideshows
 
 ## Local development
 

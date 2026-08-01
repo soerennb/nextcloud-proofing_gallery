@@ -1,0 +1,178 @@
+<script setup lang="ts">
+import { useVirtualizer, useWindowVirtualizer } from '@tanstack/vue-virtual'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import type { MediaItem } from '../types.ts'
+
+const props = withDefaults(defineProps<{
+	items: MediaItem[]
+	minItemWidth?: number
+	maxItemWidth?: number
+	maxColumns?: number
+	gap?: number
+	itemAspectRatio?: number
+	mobileItemAspectRatio?: number
+	itemExtraHeight?: number
+	list?: boolean
+	contained?: boolean
+	hasMore?: boolean
+	loadingMore?: boolean
+	ariaLabel?: string
+}>(), {
+	minItemWidth: 210,
+	maxItemWidth: undefined,
+	maxColumns: undefined,
+	gap: 12,
+	itemAspectRatio: 4 / 3,
+	mobileItemAspectRatio: undefined,
+	itemExtraHeight: 0,
+	list: false,
+	contained: false,
+	hasMore: false,
+	loadingMore: false,
+	ariaLabel: undefined,
+})
+
+const emit = defineEmits<{ 'load-more': [] }>()
+const root = ref<HTMLDivElement | null>(null)
+const width = ref(1000)
+const viewportWidth = ref(1000)
+const scrollMargin = ref(0)
+let observer: ResizeObserver | undefined
+
+const columns = computed(() => {
+	if (props.list) return 1
+	const fitting = Math.max(1, Math.floor((width.value + props.gap) / (props.minItemWidth + props.gap)))
+	return props.maxColumns === undefined ? fitting : Math.min(fitting, Math.max(1, props.maxColumns))
+})
+const rows = computed(() => Math.ceil(props.items.length / columns.value))
+const itemWidth = computed(() => {
+	const available = (width.value - props.gap * (columns.value - 1)) / columns.value
+	return props.maxItemWidth === undefined ? available : Math.min(available, props.maxItemWidth)
+})
+const rowHeight = computed(() => props.list
+	? 94
+	: Math.max(120, itemWidth.value / (
+		props.mobileItemAspectRatio !== undefined && viewportWidth.value <= 600
+			? props.mobileItemAspectRatio
+			: props.itemAspectRatio
+	) + props.itemExtraHeight))
+
+const windowVirtualizer = useWindowVirtualizer<HTMLDivElement>(computed(() => ({
+	count: props.contained ? 0 : rows.value,
+	estimateSize: () => rowHeight.value + props.gap,
+	overscan: 5,
+	scrollMargin: scrollMargin.value,
+	getItemKey: index => `${columns.value}:${Math.round(rowHeight.value)}:${index}`,
+})))
+const elementVirtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>(computed(() => ({
+	count: props.contained ? rows.value : 0,
+	getScrollElement: () => root.value,
+	estimateSize: () => rowHeight.value + props.gap,
+	overscan: 5,
+	getItemKey: index => `${columns.value}:${Math.round(rowHeight.value)}:${index}`,
+})))
+const virtualizer = computed(() => props.contained ? elementVirtualizer.value : windowVirtualizer.value)
+
+const virtualRows = computed(() => virtualizer.value.getVirtualItems())
+const totalHeight = computed(() => Math.max(0, rows.value * (rowHeight.value + props.gap) - props.gap))
+const viewportHeight = computed(() => props.contained
+	? Math.min(totalHeight.value, Math.max(360, Math.min(760, Math.round((typeof window === 'undefined' ? 900 : window.innerHeight) * 0.66))))
+	: totalHeight.value)
+
+function itemsForRow(row: number): Array<{ item: MediaItem; index: number }> {
+	const start = row * columns.value
+	return props.items.slice(start, start + columns.value).map((item, offset) => ({ item, index: start + offset }))
+}
+
+function measure() {
+	if (!root.value) return
+	width.value = root.value.clientWidth
+	viewportWidth.value = window.innerWidth
+	scrollMargin.value = root.value.getBoundingClientRect().top + window.scrollY
+	virtualizer.value.measure()
+}
+
+watch(virtualRows, rowsInView => {
+	const last = rowsInView.at(-1)?.index ?? -1
+	if (props.hasMore && !props.loadingMore && last >= rows.value - 3) emit('load-more')
+})
+watch([columns, rowHeight, () => props.items.length], () => nextTick(measure))
+
+onMounted(() => {
+	measure()
+	observer = new ResizeObserver(measure)
+	if (root.value) observer.observe(root.value)
+	window.addEventListener('resize', measure, { passive: true })
+})
+onBeforeUnmount(() => {
+	observer?.disconnect()
+	window.removeEventListener('resize', measure)
+})
+</script>
+
+<template>
+	<div
+		ref="root"
+		class="virtual-media"
+		:class="{ 'virtual-media--contained': contained }"
+		role="list"
+		:aria-label="ariaLabel"
+		:style="{ height: `${viewportHeight}px` }">
+		<div class="virtual-media__canvas" :style="{ height: `${totalHeight}px` }">
+			<div
+				v-for="virtualRow in virtualRows"
+				:key="String(virtualRow.key)"
+				class="virtual-media__row"
+				:style="{
+					gap: `${gap}px`,
+					gridTemplateColumns: `repeat(${columns}, minmax(0, ${maxItemWidth === undefined ? '1fr' : `${maxItemWidth}px`}))`,
+					height: `${rowHeight}px`,
+					transform: `translateY(${virtualRow.index * (rowHeight + gap)}px)`,
+				}">
+				<div
+					v-for="entry in itemsForRow(virtualRow.index)"
+					:key="entry.item.id"
+					class="virtual-media__cell"
+					role="listitem">
+					<slot :item="entry.item" :index="entry.index" />
+				</div>
+			</div>
+		</div>
+	</div>
+</template>
+
+<style scoped>
+.virtual-media {
+	position: relative;
+	box-sizing: border-box;
+	contain: layout style;
+	overflow: clip;
+	max-width: 100%;
+	min-width: 0;
+	width: 100%;
+}
+
+.virtual-media--contained {
+	overflow: auto;
+	overscroll-behavior: contain;
+}
+
+.virtual-media__canvas {
+	position: relative;
+	width: 100%;
+}
+
+.virtual-media__row {
+	position: absolute;
+	inset: 0 0 auto;
+	display: grid;
+	box-sizing: border-box;
+	max-width: 100%;
+	width: 100%;
+}
+
+.virtual-media__cell {
+	min-width: 0;
+	height: 100%;
+}
+</style>

@@ -66,6 +66,37 @@ final class MediaMetadataServiceTest extends TestCase {
 		self::assertStringContainsString('>Portrait<', $xml);
 	}
 
+	public function testCanonicalCullingRoundTripsWithoutDroppingAdobeOrUnknownNamespaces(): void {
+		$service = $this->service();
+		$fixture = file_get_contents(__DIR__ . '/../../Fixtures/xmp/adobe-existing.xmp');
+		self::assertIsString($fixture);
+		$document = $this->invoke($service, 'loadXmp', $fixture);
+		$this->invoke($service, 'applyCullingFields', $document, ['rating' => 4, 'color' => 'purple', 'pick' => 'pick']);
+		$xml = $document->saveXML();
+		self::assertIsString($xml);
+
+		self::assertSame(
+			['rating' => 4, 'color' => 'purple', 'pick' => 'pick'],
+			$this->invoke($service, 'readCullingDocument', $this->invoke($service, 'loadXmp', $xml)),
+		);
+		self::assertStringContainsString('xmp:Rating="4"', $xml);
+		self::assertStringContainsString('xmp:Label="Purple"', $xml);
+		self::assertStringContainsString('pg:PickState="pick"', $xml);
+		self::assertStringContainsString('archive:AssetId="asset-42"', $xml);
+	}
+
+	public function testLightroomRejectRatingImportsAsCanonicalReject(): void {
+		$service = $this->service();
+		$document = $this->invoke($service, 'newXmpDocument');
+		$description = $this->invoke($service, 'description', $document);
+		$description->setAttributeNS('http://ns.adobe.com/xap/1.0/', 'xmp:Rating', '-1');
+
+		self::assertSame(
+			['rating' => 0, 'color' => 'none', 'pick' => 'reject'],
+			$this->invoke($service, 'readCullingDocument', $document),
+		);
+	}
+
 	public function testXmpParserRejectsDoctypeDeclarations(): void {
 		$this->expectException(InvalidArgumentException::class);
 		$this->invoke($this->service(), 'loadXmp', '<!DOCTYPE x [<!ENTITY leak SYSTEM "file:///etc/passwd">]><x>&leak;</x>');

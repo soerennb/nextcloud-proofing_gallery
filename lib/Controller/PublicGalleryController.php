@@ -7,6 +7,8 @@ namespace OCA\ProofingGallery\Controller;
 use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\GalleryMapper;
+use OCA\ProofingGallery\Db\PublicLink;
+use OCA\ProofingGallery\Db\PublicLinkMapper;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCA\ProofingGallery\Http\TemporaryFileResponse;
 use OCA\ProofingGallery\Service\PolicyService;
@@ -36,12 +38,14 @@ use OCP\Share\IShare;
 final class PublicGalleryController extends PublicShareController {
 	private ?IShare $share = null;
 	private ?Gallery $gallery = null;
+	private ?PublicLink $publicLink = null;
 
 	public function __construct(
 		IRequest $request,
 		ISession $session,
 		private IManager $shareManager,
 		private GalleryMapper $galleries,
+		private PublicLinkMapper $publicLinks,
 		private IRootFolder $rootFolder,
 		private IPreview $preview,
 		private WatermarkPreviewService $watermarks,
@@ -50,6 +54,9 @@ final class PublicGalleryController extends PublicShareController {
 		private PolicyService $policies,
 		private \OCA\ProofingGallery\Service\CapabilityPolicyService $capabilities,
 		private \OCA\ProofingGallery\Service\BrandingAssetService $branding,
+		private \OCA\ProofingGallery\Service\PublicLinkScopeService $linkScopes,
+		private \OCA\ProofingGallery\Service\PublicLinkPolicyService $linkPolicies,
+		private \OCA\ProofingGallery\Service\ShareAuditService $shareAudit,
 	) {
 		parent::__construct(Application::APP_ID, $request, $session);
 	}
@@ -65,9 +72,10 @@ final class PublicGalleryController extends PublicShareController {
 		string $sortBy = '',
 		string $sortDirection = '',
 		string $groupBy = '',
+		?string $cursor = null,
 	): JSONResponse {
 		try {
-			return new JSONResponse($this->galleryData->page(
+			$result = $this->galleryData->page(
 				$this->resolvedGallery(),
 				$this->folder(),
 				$limit,
@@ -77,7 +85,12 @@ final class PublicGalleryController extends PublicShareController {
 				$sortBy,
 				$sortDirection,
 				$groupBy,
-			));
+				$cursor,
+				$this->resolvedPublicLink(),
+				true,
+			);
+			$this->shareAudit->record($this->resolvedPublicLink(), 'view');
+			return new JSONResponse($result);
 		} catch (\InvalidArgumentException $exception) {
 			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
@@ -147,9 +160,11 @@ final class PublicGalleryController extends PublicShareController {
 	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/media/{fileId}/download')]
 	public function download(int $fileId): Response {
 		if (!$this->downloadAllowed('individual')) {
+			$this->shareAudit->record($this->resolvedPublicLink(), 'download', fileId: $fileId, outcome: 'denied', reasonCode: 'policy');
 			return new DataDisplayResponse('', Http::STATUS_FORBIDDEN);
 		}
 		$file = $this->fileInShare($fileId);
+		$this->shareAudit->record($this->resolvedPublicLink(), 'download', fileId: $fileId);
 		return new DataDownloadResponse(
 			$file->getContent(),
 			$file->getName(),
@@ -184,6 +199,7 @@ final class PublicGalleryController extends PublicShareController {
 				: $file->getName();
 			$archive->addFromString($name, $file->getContent());
 		}
+		$this->shareAudit->record($this->resolvedPublicLink(), 'export');
 		$archive->close();
 		$filename = preg_replace('/[^a-z0-9._-]+/i', '-', $this->resolvedGallery()->getTitle()) ?: 'gallery';
 		return new TemporaryFileResponse($temporaryPath, trim($filename, '-') . '-selection.zip', 'application/zip');
@@ -264,8 +280,11 @@ final class PublicGalleryController extends PublicShareController {
 	public function isValidToken(): bool {
 		try {
 			$this->share = $this->shareManager->getShareByToken($this->getToken());
-			$this->gallery = $this->galleries->findByShareToken($this->getToken());
-			return $this->share->getNodeId() === $this->gallery->getFolderId()
+			$this->publicLink = $this->publicLinks->findByToken($this->getToken());
+			if ($this->publicLink->getStatus() !== 'active' || $this->publicLink->getRevokedAt() !== null) return false;
+			$this->gallery = $this->galleries->find($this->publicLink->getGalleryId());
+			$policy = $this->linkPolicies->validate(json_decode($this->publicLink->getPolicy(), true, flags: JSON_THROW_ON_ERROR));
+			return $policy['view'] && $this->share->getNodeId() === $this->expectedShareFolder()->getId()
 				&& $this->share->getNode() instanceof Folder;
 		} catch (ShareNotFound|DoesNotExistException) {
 			return false;
@@ -287,12 +306,28 @@ final class PublicGalleryController extends PublicShareController {
 		return $this->gallery;
 	}
 
+	private function resolvedPublicLink(): PublicLink {
+		if ($this->publicLink === null) throw new \RuntimeException('Public gallery link was not resolved');
+		return $this->publicLink;
+	}
+
 	private function folder(): Folder {
 		$node = $this->share?->getNode();
 		if (!$node instanceof Folder) {
 			throw new \RuntimeException('Public gallery folder was not resolved');
 		}
 		return $node;
+	}
+
+	private function expectedShareFolder(): Folder {
+		$nodes = $this->rootFolder->getUserFolder($this->resolvedGallery()->getOwnerUid())->getById($this->resolvedGallery()->getFolderId());
+		$root = current($nodes);
+		if (!$root instanceof Folder) throw new \RuntimeException('Gallery root was not resolved');
+		$startPath = $this->linkScopes->normalize($this->resolvedPublicLink()->getStartPath());
+		if ($startPath === '') return $root;
+		$folder = $root->get($startPath);
+		if (!$folder instanceof Folder || !$root->isSubNode($folder)) throw new \RuntimeException('Public link scope was not resolved');
+		return $folder;
 	}
 
 	private function fileInShare(int $fileId): File {
@@ -304,11 +339,17 @@ final class PublicGalleryController extends PublicShareController {
 			}
 		}
 		foreach ($this->folder()->getById($fileId) as $node) {
-			if ($node instanceof File && $this->folder()->isSubNode($node) && $this->isSupported($node)) {
+			if ($node instanceof File && $this->folder()->isSubNode($node) && $this->isSupported($node) && $this->fileWithinLinkScope($node)) {
 				return $node;
 			}
 		}
 		throw new \OCP\Files\NotFoundException('Media file not found');
+	}
+
+	private function fileWithinLinkScope(File $file): bool {
+		$relativePath = trim($this->folder()->getRelativePath($file->getPath()), '/');
+		$settings = GallerySettings::fromArray(json_decode($this->resolvedGallery()->getSettings(), true, flags: JSON_THROW_ON_ERROR));
+		return $this->linkScopes->contains($this->resolvedPublicLink(), $settings, $relativePath);
 	}
 
 	private function previewResponse(
@@ -374,10 +415,12 @@ final class PublicGalleryController extends PublicShareController {
 			flags: JSON_THROW_ON_ERROR,
 		));
 		$scope = $settings->delivery['downloadScope'];
+		$linkScope = $this->linkPolicies->validate(json_decode($this->resolvedPublicLink()->getPolicy(), true, flags: JSON_THROW_ON_ERROR))['downloadScope'];
+		if ($linkScope === 'none') return false;
 		return match ($kind) {
-			'individual' => $this->share?->getHideDownload() !== true && in_array($scope, ['individual', 'all'], true),
-			'selection' => in_array($scope, ['selection', 'all'], true),
-			'contactSheet' => $settings->delivery['contactSheet'] && in_array($scope, ['selection', 'all'], true),
+			'individual' => $this->share?->getHideDownload() !== true && in_array($scope, ['individual', 'all'], true) && in_array($linkScope, ['individual', 'all'], true),
+			'selection' => in_array($scope, ['selection', 'all'], true) && in_array($linkScope, ['selection', 'all'], true),
+			'contactSheet' => $settings->delivery['contactSheet'] && in_array($scope, ['selection', 'all'], true) && in_array($linkScope, ['selection', 'all'], true),
 			default => false,
 		};
 	}

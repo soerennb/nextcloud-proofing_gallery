@@ -38,7 +38,7 @@ form?.addEventListener('submit', async event => {
 		await axios.put(generateOcsUrl('/apps/proofing_gallery/api/v1/admin/settings'), {
 			instanceSettings: {
 				access: { creatorGroups: groups(data, 'creatorGroups'), publisherGroups: groups(data, 'publisherGroups') },
-				features: Object.fromEntries(['galleryCreation', 'publicPublishing', 'guestUploads', 'downloads', 'emailInvitations', 'nextcloudNotifications', 'likes', 'colors', 'comments', 'annotations', 'selections', 'lifecycleAutomation'].map(key => [key, bool(data, `feature.${key}`)])),
+				features: Object.fromEntries(['galleryCreation', 'publicPublishing', 'guestUploads', 'downloads', 'emailInvitations', 'nextcloudNotifications', 'likes', 'colors', 'comments', 'annotations', 'selections', 'lifecycleAutomation', 'ownerCulling', 'guestRatings', 'recursiveGalleries', 'multiplePublicLinks'].map(key => [key, bool(data, `feature.${key}`)])),
 				workflow: { defaultPurpose: String(data.get('defaultPurpose')) },
 				branding: { studioName: String(data.get('studioName')), accentColor: String(data.get('accentColor')) },
 			},
@@ -60,6 +60,9 @@ form?.addEventListener('submit', async event => {
 				metadataMaxBytes: number(data, 'metadataMaxMiB') * 1048576,
 				metadataBatchSize: number(data, 'metadataBatchSize'),
 				xmpWritingEnabled: number(data, 'xmpWritingEnabled'),
+				maxIndexedMedia: number(data, 'maxIndexedMedia'),
+				maxPublicLinks: number(data, 'maxPublicLinks'),
+				shareAuditRetentionDays: number(data, 'shareAuditRetentionDays'),
 			},
 		})
 		if (status) status.textContent = t('proofing_gallery', 'Settings saved.')

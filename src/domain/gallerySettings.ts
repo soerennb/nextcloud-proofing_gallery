@@ -23,6 +23,7 @@ export interface GalleryPresentation extends GalleryAppearance {
 	tileRadius: 'square' | 'soft'
 	titleAlignment: 'left' | 'center'
 	showFilenames: boolean
+	slideshowInterval: number
 }
 
 export interface GallerySettings {
@@ -41,6 +42,8 @@ export interface GallerySettings {
 		comments: boolean
 		annotations: boolean
 		selections: boolean
+		ratings: boolean
+		pick: boolean
 		colorLabels: [string, string, string, string]
 		colorEnabled: [boolean, boolean, boolean, boolean]
 		selectionWarningThreshold: number
@@ -52,9 +55,11 @@ export interface GallerySettings {
 	}
 	navigation: {
 		folders: boolean
+		recursive: boolean
+		groupDepth: number
 		sortBy: 'name' | 'modified' | 'size'
 		sortDirection: 'asc' | 'desc'
-		groupBy: 'none' | 'type'
+		groupBy: 'none' | 'type' | 'folder'
 	}
 	security: {
 		allowModeSwitch: boolean
@@ -121,6 +126,7 @@ export function createDefaultGallerySettings(): GallerySettings {
 		tileRadius: 'soft',
 		titleAlignment: 'left',
 		showFilenames: true,
+		slideshowInterval: 5,
 	}
 	return {
 		schemaVersion: 5,
@@ -138,12 +144,14 @@ export function createDefaultGallerySettings(): GallerySettings {
 			comments: true,
 			annotations: true,
 			selections: true,
+			ratings: false,
+			pick: false,
 			colorLabels: [...DEFAULT_COLOR_LABELS],
 			colorEnabled: [true, true, true, true],
 			selectionWarningThreshold: 0,
 		},
 		delivery: { downloadScope: 'none', contactSheet: true, guestUploads: false },
-		navigation: { folders: true, sortBy: 'name', sortDirection: 'asc', groupBy: 'none' },
+		navigation: { folders: true, recursive: false, groupDepth: 1, sortBy: 'name', sortDirection: 'asc', groupBy: 'none' },
 		security: { allowModeSwitch: false, hideRejectedInPresentation: false },
 		metadata: { publicFields: [] },
 		lifecycle: { enabled: false, trigger: 'after_completion', revokeAt: '', revokeAfterDays: 30, archiveAfterDays: 30, reminderDays: [7, 1] },

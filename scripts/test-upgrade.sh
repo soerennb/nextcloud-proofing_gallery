@@ -6,8 +6,9 @@ repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 compose_file="${repo_dir}/tests/compat/compose.yaml"
 archive="${repo_dir}/build/artifacts/appstore/proofing_gallery.tar.gz"
 upgrade_root="$(mktemp -d -t proofing-gallery-upgrade.XXXXXXXX)"
-project_name="pg-upgrade-alpha1-$$"
+project_name="pg-upgrade-05-$$"
 app_source="${upgrade_root}/proofing_gallery"
+expected_version="$(php -r '$xml=simplexml_load_file($argv[1]); echo (string)$xml->version;' "${repo_dir}/appinfo/info.xml")"
 
 cleanup() {
 	COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION=34 \
@@ -46,7 +47,7 @@ compose exec -T --user www-data sqlite php -r '
 		"slug" => $q->createNamedParameter("upgrade-sentinel"),
 		"status" => $q->createNamedParameter("draft"),
 		"settings" => $q->createNamedParameter("{}"),
-		"share_token" => $q->createNamedParameter(null),
+		"share_token" => $q->createNamedParameter("upgrade-sentinel-token"),
 		"created_at" => $q->createNamedParameter($now, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
 		"updated_at" => $q->createNamedParameter($now, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
 		"archived_at" => $q->createNamedParameter(null),
@@ -58,7 +59,7 @@ compose exec -T --user www-data sqlite php occ upgrade
 compose exec -T --user www-data sqlite php -r '
 	require "/var/www/html/lib/base.php";
 	$db = \OC::$server->get(\OCP\IDBConnection::class);
-	foreach (["proofing_presets", "proofing_inv_templates", "proofing_notify_subs", "proofing_notify_queue"] as $table) {
+	foreach (["proofing_presets", "proofing_inv_templates", "proofing_notify_subs", "proofing_notify_queue", "proofing_media_index", "proofing_media_cull", "proofing_public_links", "proofing_guest_ratings", "proofing_share_audit"] as $table) {
 		$q = $db->getQueryBuilder();
 		$q->select($q->func()->count())->from($table)->executeQuery()->fetchOne();
 	}
@@ -69,12 +70,19 @@ compose exec -T --user www-data sqlite php -r '
 	if ((int)$count !== 1) {
 		exit(3);
 	}
+	$q = $db->getQueryBuilder();
+	$linkCount = $q->select($q->func()->count())->from("proofing_public_links")
+		->where($q->expr()->eq("token", $q->createNamedParameter("upgrade-sentinel-token")))
+		->executeQuery()->fetchOne();
+	if ((int)$linkCount !== 1) {
+		exit(5);
+	}
 '
 version="$(compose exec -T --user www-data sqlite php occ app:list --enabled --output=json \
 	| php -r '$apps=json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR); echo $apps["enabled"]["proofing_gallery"];')"
-if [[ "${version}" != "0.4.0-alpha.1" ]]; then
+if [[ "${version}" != "${expected_version}" ]]; then
 	echo "Unexpected upgraded version: ${version}" >&2
 	exit 4
 fi
 
-echo "Previous release -> 0.4 Alpha.1 schema and data upgrade passed (${version})."
+echo "Previous release -> ${expected_version} schema and data upgrade passed."

@@ -136,6 +136,9 @@ final class AdminController extends Controller {
 		int $metadataMaxMiB = 64,
 		int $metadataBatchSize = 100,
 		int $xmpWritingEnabled = 1,
+		int $maxIndexedMedia = 25000,
+		int $maxPublicLinks = 10,
+		int $shareAuditRetentionDays = 90,
 		string $defaultPublicLocale = 'auto',
 		string $defaultTheme = 'dark',
 		string $defaultLayout = 'grid',
@@ -155,6 +158,9 @@ final class AdminController extends Controller {
 				'metadataMaxBytes' => $metadataMaxMiB * 1024 * 1024,
 				'metadataBatchSize' => $metadataBatchSize,
 				'xmpWritingEnabled' => $xmpWritingEnabled,
+				'maxIndexedMedia' => $maxIndexedMedia,
+				'maxPublicLinks' => $maxPublicLinks,
+				'shareAuditRetentionDays' => $shareAuditRetentionDays,
 			]);
 			$this->policies->saveGalleryDefaults([
 				'publicLocale' => $defaultPublicLocale,

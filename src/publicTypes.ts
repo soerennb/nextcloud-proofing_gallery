@@ -8,6 +8,8 @@ export interface MediaItem {
 	modifiedAt: number
 	etag: string
 	folder: boolean
+	group?: string
+	relativePath?: string
 	metadata?: {
 		state: 'ready' | 'pending' | 'unavailable'
 		capturedAt?: number
@@ -35,7 +37,11 @@ export interface PublicGallery {
 		total: number
 		limit: number
 		offset: number
+		nextCursor?: string | null
 		path: string
+		groups?: Record<string, number>
+		indexState?: { indexed: number; limit: number; limitReached: boolean; complete: boolean; state?: 'unindexed' | 'limit_reached' | 'ready'; lastIndexedAt?: number | null }
+		scope?: { startPath: string; viewMode: 'folder' | 'recursive'; groupDepth: number }
 	}
 }
 
@@ -74,5 +80,6 @@ export interface CollaborationState {
 		annotations: Array<{ x: number; y: number; width: number; height: number }>
 	}>
 	selections: Array<{ id: string; name: string; message: string; fileIds: number[]; author: string; mine: boolean }>
+	ratings: Array<{ fileId: number; rating: number; pick: 'none' | 'pick' | 'reject'; updatedAt: number }>
 	cursor: number
 }

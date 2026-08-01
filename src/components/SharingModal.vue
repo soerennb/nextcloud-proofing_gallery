@@ -21,6 +21,7 @@ import {
 	updateInvitationTemplate,
 } from '../services/galleryApi.ts'
 import type { Gallery, InvitationTemplate } from '../types.ts'
+import PublicLinkManager from './PublicLinkManager.vue'
 
 const props = defineProps<{ show: boolean; gallery: Gallery }>()
 const emit = defineEmits<{
@@ -301,6 +302,8 @@ function updateOpen(open: boolean) {
 					{{ t('proofing_gallery', 'Revoke link') }}
 				</NcButton>
 			</section>
+
+			<PublicLinkManager v-if="published" :gallery="gallery" @gallery-updated="emit('updated', $event)" />
 
 			<section v-if="published">
 				<h3>{{ t('proofing_gallery', 'Email invitation') }}</h3>

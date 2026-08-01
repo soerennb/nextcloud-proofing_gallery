@@ -12,6 +12,8 @@ use OCA\ProofingGallery\Domain\GalleryStatus;
 use OCA\ProofingGallery\Domain\GalleryPurpose;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\BackgroundJob\IJobList;
+use OCA\ProofingGallery\BackgroundJob\RebuildMediaIndexJob;
 
 final class GalleryService {
 	public function __construct(
@@ -27,6 +29,7 @@ final class GalleryService {
 		private UserPreferenceService $preferences,
 		private PresetMapper $presets,
 		private NotificationService $notifications,
+		private IJobList $jobs,
 	) {
 	}
 
@@ -98,6 +101,7 @@ final class GalleryService {
 
 		try {
 			$gallery = $this->mapper->insert($gallery);
+			if ($sourceType === 'folder') $this->jobs->add(RebuildMediaIndexJob::class, ['galleryId' => $gallery->getId()]);
 			if ($sourceType === 'collection') {
 				$this->collections->initialize($gallery);
 			}
@@ -306,7 +310,9 @@ final class GalleryService {
 		}
 		$gallery->setUpdatedAt($this->clock->getTime());
 
-		return $this->mapper->updateDocument($gallery, $revision);
+		$updated = $this->mapper->updateDocument($gallery, $revision);
+		$this->shares->synchronizePrimaryNavigation($updated);
+		return $updated;
 	}
 
 	public function archive(string $ownerUid, int $id): Gallery {

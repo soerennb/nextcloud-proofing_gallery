@@ -9,6 +9,20 @@ use OCA\ProofingGallery\Dto\GallerySettings;
 use PHPUnit\Framework\TestCase;
 
 final class GallerySettingsTest extends TestCase {
+	public function testRecursiveNavigationDefaultsAreBounded(): void {
+		$settings = GallerySettings::merge(GallerySettings::defaults(), [
+			'navigation' => ['recursive' => true, 'groupBy' => 'folder', 'groupDepth' => 3],
+		]);
+		self::assertTrue($settings->navigation['recursive']);
+		self::assertSame('folder', $settings->navigation['groupBy']);
+		self::assertSame(3, $settings->navigation['groupDepth']);
+	}
+
+	public function testRecursiveNavigationRejectsUnboundedDepth(): void {
+		$this->expectException(\InvalidArgumentException::class);
+		GallerySettings::fromArray(['navigation' => ['groupDepth' => 9]]);
+	}
+
 	public function testDefaultsAreSafe(): void {
 		$settings = GallerySettings::defaults()->jsonSerialize();
 

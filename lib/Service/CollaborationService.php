@@ -22,6 +22,8 @@ final class CollaborationService {
 		private CollectionService $collections,
 		private NotificationService $notifications,
 		private CapabilityPolicyService $capabilities,
+		private CullingService $culling,
+		private GuestRatingService $guestRatings,
 	) {
 	}
 
@@ -201,6 +203,18 @@ final class CollaborationService {
 		$this->event($gallery, $guest, 'comment.deleted', ['commentId' => $commentId]);
 	}
 
+	public function ownedCommentFileId(Gallery $gallery, Guest $guest, int $commentId): int {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('file_id')->from('proofing_comments')
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($commentId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('guest_id', $qb->createNamedParameter($guest->getId(), IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->isNull('deleted_at'));
+		$fileId = $qb->executeQuery()->fetchOne();
+		if ($fileId === false) throw new InvalidArgumentException('Comment not found');
+		return (int)$fileId;
+	}
+
 	public function updateComment(Gallery $gallery, Guest $guest, int $commentId, string $body): void {
 		$this->capabilities->assertFeature('comments');
 		$body = trim($body);
@@ -287,7 +301,7 @@ final class CollaborationService {
 	}
 
 	/** @return array{content: string, filename: string, mimeType: string} */
-	public function exportSelection(Gallery $gallery, ?Guest $guest, string $publicId, string $format): array {
+	public function exportSelection(Gallery $gallery, ?Guest $guest, string $publicId, string $format, array $requestedFields = []): array {
 		$this->capabilities->assertFeature('selections');
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')->from('proofing_selections')
@@ -302,24 +316,31 @@ final class CollaborationService {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('file_id')->from('proofing_selection_items')
 			->where($qb->expr()->eq('selection_id', $qb->createNamedParameter((int)$row['id'], IQueryBuilder::PARAM_INT)));
-		$names = [];
+		$fileIds = [];
 		foreach ($qb->executeQuery()->fetchFirstColumn() as $fileId) {
 			try {
-				$names[] = $this->resolveMedia($gallery, (int)$fileId)->getName();
+				$this->resolveMedia($gallery, (int)$fileId);
+				$fileIds[] = (int)$fileId;
 			} catch (\Throwable) {
 				// Files removed after selection creation are intentionally omitted.
 			}
 		}
+		$names = array_map(fn (int $fileId): string => $this->resolveMedia($gallery, $fileId)->getName(), $fileIds);
 		$base = preg_replace('/[^a-z0-9._-]+/i', '-', (string)$row['name']) ?: 'selection';
+		if ($format === 'csv' || $format === 'preview') {
+			$allowed = $guest === null
+				? ['filename', 'path', 'mimeType', 'size', 'modifiedAt', 'ownerRating', 'ownerPick', 'ownerColor', 'guestAverage', 'guestCount', 'selection', 'comments']
+				: ['filename', 'rating', 'pick'];
+			$fields = array_values(array_unique(array_intersect($allowed, array_map('strval', $requestedFields))));
+			if ($fields === []) $fields = ['filename'];
+			$rows = $this->composeExportRows($gallery, $guest, $fileIds, $fields, (string)$row['name']);
+			$content = "\xEF\xBB\xBF" . $this->csv([$fields, ...array_map(
+				static fn (array $values): array => array_map(static fn (string $field): string => (string)($values[$field] ?? ''), $fields),
+				$rows,
+			)]);
+			return ['content' => $content, 'filename' => $base . ($format === 'preview' ? '-preview.csv' : '.csv'), 'mimeType' => 'text/csv; charset=utf-8'];
+		}
 		return match ($format) {
-			'csv' => [
-				'content' => "filename\r\n" . implode('', array_map(
-					static fn (string $name): string => '"' . str_replace('"', '""', $name) . "\"\r\n",
-					$names,
-				)),
-				'filename' => $base . '.csv',
-				'mimeType' => 'text/csv',
-			],
 			'search' => [
 				'content' => implode(' OR ', array_map(
 					static fn (string $name): string => 'name:"' . str_replace('"', '\\"', $name) . '"',
@@ -337,14 +358,81 @@ final class CollaborationService {
 		};
 	}
 
+	/** @return list<int> */
+	public function guestSelectionFileIds(Gallery $gallery, Guest $guest, string $publicId): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('id', 'guest_id')->from('proofing_selections')
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('public_id', $qb->createNamedParameter($publicId)));
+		$row = $qb->executeQuery()->fetchAssociative();
+		if ($row === false || ($this->settings($gallery)->feedbackVisibility === FeedbackVisibility::Private && (int)$row['guest_id'] !== $guest->getId())) {
+			throw new InvalidArgumentException('Selection not found');
+		}
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('file_id')->from('proofing_selection_items')
+			->where($qb->expr()->eq('selection_id', $qb->createNamedParameter((int)$row['id'], IQueryBuilder::PARAM_INT)));
+		return array_map('intval', $qb->executeQuery()->fetchFirstColumn());
+	}
+
+	/** @param list<int> $fileIds @param list<string> $fields @return list<array<string, int|float|string>> */
+	private function composeExportRows(Gallery $gallery, ?Guest $guest, array $fileIds, array $fields, string $selectionName): array {
+		if ($fileIds === []) return [];
+		$culls = $guest === null ? $this->culling->forFiles($gallery->getOwnerUid(), $fileIds) : [];
+		$aggregates = $guest === null ? array_column($this->guestRatings->aggregate($gallery)['items'], null, 'fileId') : [];
+		$guestValues = $guest === null ? [] : array_column(array_map(static fn (\OCA\ProofingGallery\Db\GuestRating $value): array => $value->jsonSerialize(), $this->guestRatings->forGuest($guest)), null, 'fileId');
+		$comments = [];
+		if ($guest === null && in_array('comments', $fields, true)) {
+			foreach (array_chunk($fileIds, 500) as $chunk) {
+				$qb = $this->db->getQueryBuilder();
+				$qb->select('file_id', 'body')->from('proofing_comments')
+					->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
+					->andWhere($qb->expr()->in('file_id', $qb->createNamedParameter($chunk, IQueryBuilder::PARAM_INT_ARRAY)))
+					->andWhere($qb->expr()->isNull('deleted_at'))->orderBy('created_at', 'ASC');
+				foreach ($qb->executeQuery()->fetchAllAssociative() as $comment) $comments[(int)$comment['file_id']][] = trim((string)$comment['body']);
+			}
+		}
+		$root = $gallery->getSourceType() === 'folder' ? $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId()) : null;
+		$result = [];
+		foreach ($fileIds as $fileId) {
+			$file = $this->resolveMedia($gallery, $fileId);
+			$cull = $culls[$fileId] ?? null;
+			$aggregate = $aggregates[$fileId] ?? null;
+			$rating = $guestValues[$fileId] ?? null;
+			$result[] = [
+				'filename' => $file->getName(),
+				'path' => $root === null ? $file->getName() : $root->getRelativePath($file->getPath()),
+				'mimeType' => $file->getMimeType(),
+				'size' => (int)$file->getSize(),
+				'modifiedAt' => gmdate(DATE_ATOM, $file->getMTime()),
+				'ownerRating' => $cull?->getRating() ?? 0,
+				'ownerPick' => $cull?->getPickState() ?? 'none',
+				'ownerColor' => $cull?->getColor() ?? 'none',
+				'guestAverage' => $aggregate['average'] ?? '',
+				'guestCount' => $aggregate['count'] ?? 0,
+				'selection' => $selectionName,
+				'comments' => implode(' | ', $comments[$fileId] ?? []),
+				'rating' => $rating['rating'] ?? 0,
+				'pick' => $rating['pick'] ?? 'none',
+			];
+		}
+		return $result;
+	}
+
+	/** @param list<list<string>> $rows */
+	private function csv(array $rows): string {
+		return implode('', array_map(static function (array $row): string {
+			return implode(',', array_map(static fn (string $value): string => '"' . str_replace('"', '""', $value) . '"', $row)) . "\r\n";
+		}, $rows));
+	}
+
 	/** @return list<array<string, mixed>> */
 	public function ownerSelections(Gallery $gallery): array {
 		return array_reverse($this->presentSelections($this->selectionRows($gallery->getId(), null), null));
 	}
 
 	/** @return array{content: string, filename: string, mimeType: string} */
-	public function exportOwnerSelection(Gallery $gallery, string $publicId, string $format): array {
-		return $this->exportSelection($gallery, null, $publicId, $format);
+	public function exportOwnerSelection(Gallery $gallery, string $publicId, string $format, array $fields = []): array {
+		return $this->exportSelection($gallery, null, $publicId, $format, $fields);
 	}
 
 	public function updateOwnerSelection(Gallery $gallery, string $publicId, string $name, string $status): void {
@@ -400,6 +488,10 @@ final class CollaborationService {
 		} catch (\Throwable) {
 			throw new InvalidArgumentException('Media file is unavailable');
 		}
+	}
+
+	public function assertMediaAvailable(Gallery $gallery, int $fileId): void {
+		$this->resolveMedia($gallery, $fileId);
 	}
 
 	private function assertCollaborationMode(Gallery $gallery): GallerySettings {

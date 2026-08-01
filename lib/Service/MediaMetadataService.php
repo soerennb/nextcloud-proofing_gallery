@@ -20,6 +20,14 @@ final class MediaMetadataService {
 	private const NS_DC = 'http://purl.org/dc/elements/1.1/';
 	private const NS_LR = 'http://ns.adobe.com/lightroom/1.0/';
 	private const NS_PG = 'urn:nextcloud:proofing-gallery:1.0';
+	private const CULL_COLORS = [
+		'none' => null,
+		'red' => 'Red',
+		'yellow' => 'Yellow',
+		'green' => 'Green',
+		'blue' => 'Blue',
+		'purple' => 'Purple',
+	];
 
 	public function __construct(
 		private IFilesMetadataManager $metadataManager,
@@ -185,6 +193,85 @@ final class MediaMetadataService {
 			$sidecar->putContent($xml);
 		}
 		return $this->index($file);
+	}
+
+	/**
+	 * Read canonical culling values from an Adobe-compatible sidecar.
+	 * Lightroom's -1 rating is interpreted as reject while explicit app pick
+	 * state is retained in the proofing namespace.
+	 *
+	 * @return array{exists: bool, etag: ?string, rating: int, color: string, pick: string}
+	 */
+	public function readCullingSidecar(File $file): array {
+		$parent = $file->getParent();
+		if (!$parent instanceof Folder) return ['exists' => false, 'etag' => null, 'rating' => 0, 'color' => 'none', 'pick' => 'none'];
+		$name = pathinfo($file->getName(), PATHINFO_FILENAME) . '.xmp';
+		if (!$parent->nodeExists($name)) return ['exists' => false, 'etag' => null, 'rating' => 0, 'color' => 'none', 'pick' => 'none'];
+		$node = $parent->get($name);
+		if (!$node instanceof File || $node->getSize() > self::MAX_SIDECAR_BYTES) throw new InvalidArgumentException('The XMP sidecar is unavailable or too large');
+		$values = $this->readCullingDocument($this->loadXmp($node->getContent()));
+		return [
+			'exists' => true,
+			'etag' => $node->getEtag(),
+			...$values,
+		];
+	}
+
+	/**
+	 * @param array{rating: int, color: string, pick: string} $state
+	 * @return array{changed: bool, etag: ?string, xml: string}
+	 */
+	public function writeCullingSidecar(File $file, array $state, ?string $expectedSidecarEtag, bool $dryRun = false): array {
+		if (!$dryRun && $this->policies->get('xmpWritingEnabled') !== 1) throw new InvalidArgumentException('XMP sidecar writing is disabled by the administrator');
+		$rating = (int)($state['rating'] ?? -1);
+		$color = (string)($state['color'] ?? '');
+		$pick = (string)($state['pick'] ?? '');
+		if ($rating < 0 || $rating > 5 || !array_key_exists($color, self::CULL_COLORS) || !in_array($pick, ['none', 'pick', 'reject'], true)) {
+			throw new InvalidArgumentException('Invalid culling value');
+		}
+		$parent = $file->getParent();
+		if (!$parent instanceof Folder || (!$dryRun && !$parent->isUpdateable())) throw new InvalidArgumentException('The source folder is not writable');
+		$this->assertUnambiguousBaseName($parent, $file);
+		$name = pathinfo($file->getName(), PATHINFO_FILENAME) . '.xmp';
+		$sidecar = null;
+		if ($parent->nodeExists($name)) {
+			$node = $parent->get($name);
+			if (!$node instanceof File || $node->getSize() > self::MAX_SIDECAR_BYTES) throw new InvalidArgumentException('The XMP sidecar is unavailable or too large');
+			$sidecar = $node;
+			if ($expectedSidecarEtag === null || !hash_equals($sidecar->getEtag(), $expectedSidecarEtag)) throw new MetadataConflictException('The XMP sidecar changed');
+		} elseif ($expectedSidecarEtag !== null) {
+			throw new MetadataConflictException('The XMP sidecar was removed');
+		}
+		$document = $sidecar === null ? $this->newXmpDocument() : $this->loadXmp($sidecar->getContent());
+		$this->applyCullingFields($document, ['rating' => $rating, 'color' => $color, 'pick' => $pick]);
+		$xml = $document->saveXML();
+		if (!is_string($xml) || strlen($xml) > self::MAX_SIDECAR_BYTES) throw new InvalidArgumentException('The generated XMP sidecar is too large');
+		$changed = $sidecar === null || $sidecar->getContent() !== $xml;
+		if ($dryRun || !$changed) return ['changed' => $changed, 'etag' => $sidecar?->getEtag(), 'xml' => $xml];
+		if ($sidecar === null) $sidecar = $parent->newFile($name, $xml);
+		else $sidecar->putContent($xml);
+		return ['changed' => true, 'etag' => $sidecar->getEtag(), 'xml' => $xml];
+	}
+
+	/** @return array{rating: int, color: string, pick: string} */
+	private function readCullingDocument(\DOMDocument $document): array {
+		$description = $this->description($document);
+		$rawRating = $description->hasAttributeNS(self::NS_XMP, 'Rating') ? (int)$description->getAttributeNS(self::NS_XMP, 'Rating') : 0;
+		$label = mb_strtolower(trim($description->getAttributeNS(self::NS_XMP, 'Label')));
+		$color = array_search($label === '' ? null : ucfirst($label), self::CULL_COLORS, true);
+		$pick = $description->getAttributeNS(self::NS_PG, 'PickState');
+		if (!in_array($pick, ['none', 'pick', 'reject'], true)) $pick = $rawRating < 0 ? 'reject' : 'none';
+		return ['rating' => max(0, min(5, $rawRating)), 'color' => is_string($color) ? $color : 'none', 'pick' => $pick];
+	}
+
+	/** @param array{rating: int, color: string, pick: string} $state */
+	private function applyCullingFields(\DOMDocument $document, array $state): void {
+		$description = $this->description($document);
+		$description->setAttributeNS(self::NS_XMP, 'xmp:Rating', (string)$state['rating']);
+		$label = self::CULL_COLORS[$state['color']];
+		if ($label === null) $description->removeAttributeNS(self::NS_XMP, 'Label');
+		else $description->setAttributeNS(self::NS_XMP, 'xmp:Label', $label);
+		$description->setAttributeNS(self::NS_PG, 'pg:PickState', $state['pick']);
 	}
 
 	/** @param array<string, mixed> $known @return array<string, mixed> */

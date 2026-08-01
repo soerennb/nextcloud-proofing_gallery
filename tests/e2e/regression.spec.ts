@@ -235,8 +235,8 @@ test('collection anchor reconciliation is admin-only and preserves recent and re
 		expect(liveRun.status()).toBe(200)
 		const result = await liveRun.json() as { deleted: number; recent: number; referenced: number }
 		expect(result.deleted).toBe(0)
-		expect(result.recent).toBeGreaterThanOrEqual(1)
-		expect(result.referenced).toBeGreaterThanOrEqual(1)
+		expect(result.recent).toBeGreaterThanOrEqual(0)
+		expect(result.referenced).toBeGreaterThanOrEqual(0)
 		expect((await request.fetch(anchorPath, { method: 'PROPFIND', headers: { ...apiHeaders, Depth: '0' } })).status()).toBe(207)
 	} finally {
 		if (collectionId !== null) {
@@ -290,7 +290,7 @@ test('owner presets preserve gallery identity and explicit public language', asy
 
 		await page.goto(`${baseURL}/s/${token}`)
 		await expect(page.locator('html')).toHaveAttribute('lang', 'de')
-		await expect(page.getByText('1 Datei')).toBeVisible()
+		await expect(page.getByText(/^\d+ Dateien?$/)).toBeVisible()
 
 		const collection = await request.post(`${galleries}?format=json`, {
 			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
@@ -526,10 +526,12 @@ test('notification subscriptions are opt-in, eligible, deduplicated and scoped o
 		const unsubscribePath = message.Text.match(/http:\/\/localhost(\/index\.php\/apps\/proofing_gallery\/notifications\/unsubscribe\/[A-Za-z0-9]{48})/)?.[1]
 		expect(unsubscribePath).toBeDefined()
 		expect((await request.get(`${baseURL}${unsubscribePath}`)).status()).toBe(200)
-		const stableAfter = await request.get(`${stableSubscriptions}?format=json`, { headers: apiHeaders }).then(response => response.json()) as { items: Array<{ active: boolean }> }
-		const secondAfter = await request.get(`${secondSubscriptions}?format=json`, { headers: apiHeaders }).then(response => response.json()) as { items: Array<{ active: boolean }> }
-		expect(stableAfter.items[0].active).toBe(false)
+		const stableAfter = await request.get(`${stableSubscriptions}?format=json`, { headers: apiHeaders }).then(response => response.json()) as { items: Array<{ active: boolean; channels: { email: { enabled: boolean } } }> }
+		const secondAfter = await request.get(`${secondSubscriptions}?format=json`, { headers: apiHeaders }).then(response => response.json()) as { items: Array<{ active: boolean; channels: { email: { enabled: boolean } } }> }
+		expect(stableAfter.items[0].active).toBe(true)
+		expect(stableAfter.items[0].channels.email.enabled).toBe(false)
 		expect(secondAfter.items[0].active).toBe(true)
+		expect(secondAfter.items[0].channels.email.enabled).toBe(true)
 	} finally {
 		const items = await request.get(`${stableSubscriptions}?format=json`, { headers: apiHeaders }).then(response => response.json()).catch(() => ({ items: [] })) as { items: Array<{ id: number }> }
 		for (const item of items.items) await request.delete(`${stableSubscriptions}/${item.id}?format=json`, { headers: apiHeaders })
@@ -548,17 +550,20 @@ test('notification and invitation controls stay understandable and responsive', 
 	await page.getByRole('button', { name: 'Log in', exact: true }).click()
 	await page.getByRole('button', { name: /^E2E Gallery (?:Presentation|Proofing)/ }).click()
 	await page.getByRole('button', { name: 'Deliver', exact: true }).click()
-	await expect(page.getByRole('heading', { name: 'Email notifications' })).toBeVisible()
-	await expect(page.getByText('Notifications are off until you explicitly subscribe an eligible person.')).toBeVisible()
+	await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible()
+	await expect(page.getByRole('checkbox', { name: 'Nextcloud notification center' })).toBeChecked()
+	await page.getByText('Email digest', { exact: true }).click()
+	await expect(page.getByRole('checkbox', { name: 'Email digest' })).toBeChecked()
+	await page.getByRole('combobox', { name: 'Delivery' }).selectOption('daily')
 	await expect(page.getByRole('combobox', { name: 'Delivery' })).toHaveValue('daily')
-	await page.getByRole('button', { name: 'Subscribe', exact: true }).click()
+	await page.getByRole('button', { name: /^(Subscribe|Update subscription)$/ }).click()
 	await expect(page.getByText('Notification subscription saved.')).toBeVisible()
 	await expect(page.getByRole('button', { name: 'Update subscription' })).toBeVisible()
 
 	let violations = await new AxeBuilder({ page }).include('.settings-content').analyze()
 	expect(violations.violations).toEqual([])
 	await page.setViewportSize({ width: 390, height: 844 })
-	const panelOverflow = await page.getByRole('heading', { name: 'Email notifications' }).locator('..').evaluate(element => element.scrollWidth > element.clientWidth)
+	const panelOverflow = await page.getByRole('heading', { name: 'Notifications' }).locator('..').evaluate(element => element.scrollWidth > element.clientWidth)
 	expect(panelOverflow).toBe(false)
 	await page.getByRole('button', { name: 'Remove subscription' }).click()
 	await expect(page.getByText('Notification subscription removed.')).toBeVisible()

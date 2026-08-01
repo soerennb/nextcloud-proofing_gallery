@@ -6,6 +6,7 @@ namespace OCA\ProofingGallery\Share;
 
 use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Db\GalleryMapper;
+use OCA\ProofingGallery\Db\PublicLinkMapper;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCA\ProofingGallery\Service\PublicGalleryDataService;
 use OCP\AppFramework\Db\DoesNotExistException;
@@ -21,28 +22,36 @@ use OCP\Util;
 final class PublicShareTemplateProvider implements IPublicShareTemplateProvider {
 	public function __construct(
 		private GalleryMapper $galleries,
+		private PublicLinkMapper $publicLinks,
 		private IInitialState $initialState,
 		private PublicGalleryDataService $galleryData,
 		private IURLGenerator $urlGenerator,
+		private \OCA\ProofingGallery\Service\PublicLinkPolicyService $linkPolicies,
+		private \OCA\ProofingGallery\Service\FolderService $folders,
 	) {
 	}
 
 	public function shouldRespond(IShare $share): bool {
 		try {
-			$gallery = $this->galleries->findByShareToken($share->getToken());
-			return $gallery->getFolderId() === $share->getNodeId();
+			$link = $this->publicLinks->findByToken($share->getToken());
+			$gallery = $this->galleries->find($link->getGalleryId());
+			$policy = $this->linkPolicies->validate(json_decode($link->getPolicy(), true, flags: JSON_THROW_ON_ERROR));
+			$root = $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId());
+			$expected = $link->getStartPath() === '' ? $root : $root->get($link->getStartPath());
+			return $expected instanceof Folder && $policy['view'] && $link->getStatus() === 'active' && $link->getRevokedAt() === null && $expected->getId() === $share->getNodeId();
 		} catch (DoesNotExistException) {
 			return false;
 		}
 	}
 
 	public function renderPage(IShare $share, string $token, string $path): TemplateResponse {
-		$gallery = $this->galleries->findByShareToken($token);
+		$link = $this->publicLinks->findByToken($token);
+		$gallery = $this->galleries->find($link->getGalleryId());
 		$node = $share->getNode();
 		if (!$node instanceof Folder) {
 			throw new \RuntimeException('Public gallery folder was not resolved');
 		}
-		$initialPage = $this->galleryData->page($gallery, $node, 60, 0, $path);
+		$initialPage = $this->galleryData->page($gallery, $node, 60, 0, $path, link: $link, nativeRootIsScope: true);
 		$this->initialState->provideInitialState('public-gallery', [
 			'id' => $gallery->getId(),
 			'title' => $gallery->getTitle(),
@@ -57,6 +66,12 @@ final class PublicShareTemplateProvider implements IPublicShareTemplateProvider 
 
 		$response = new PublicTemplateResponse(Application::APP_ID, 'public');
 		$response->setHeaderTitle($gallery->getTitle());
+		$heroImage = ($initialPage['gallery']['settings']['appearance']['heroFileId'] ?? null) !== null
+			? $this->urlGenerator->linkToRouteAbsolute(
+				'proofing_gallery.PublicGallery.asset',
+				['token' => $token, 'kind' => 'hero'],
+			)
+			: null;
 		$firstImage = null;
 		foreach ($initialPage['items'] as $item) {
 			if (!$item['folder'] && str_starts_with($item['mimeType'], 'image/')) {
@@ -66,12 +81,12 @@ final class PublicShareTemplateProvider implements IPublicShareTemplateProvider 
 		}
 		$response->setParams([
 			'pageTitle' => $gallery->getTitle(),
-			'preloadImage' => $firstImage === null
+			'preloadImage' => $heroImage ?? ($firstImage === null
 				? null
 				: $this->urlGenerator->linkToRouteAbsolute(
 					'proofing_gallery.PublicGallery.preview',
-					['token' => $token, 'fileId' => $firstImage['id'], 'x' => 900, 'y' => 900],
-				),
+					['token' => $token, 'fileId' => $firstImage['id'], 'x' => 900, 'y' => 900, 'mode' => 'fit'],
+				)),
 		]);
 		return $response;
 	}

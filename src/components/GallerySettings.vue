@@ -13,13 +13,14 @@ import { applyPreset, completeGallery, createPreset, deletePreset, fetchCollecti
 import type { Gallery, GalleryPreset, MediaItem } from '../types.ts'
 import GalleryActivity from './GalleryActivity.vue'
 import CollectionContent from './CollectionContent.vue'
+import CullingWorkspace from './CullingWorkspace.vue'
 import FolderContent from './FolderContent.vue'
 import ManagerPanel from './ManagerPanel.vue'
 import NotificationPanel from './NotificationPanel.vue'
 import SharingModal from './SharingModal.vue'
 import SelectionManager from './SelectionManager.vue'
 
-type SettingsTab = 'overview' | 'content' | 'design' | 'access' | 'feedback' | 'activity'
+type SettingsTab = 'overview' | 'content' | 'culling' | 'design' | 'access' | 'feedback' | 'activity'
 type SaveState = 'saved' | 'pending' | 'saving' | 'offline' | 'error' | 'conflict' | 'invalid'
 
 const props = defineProps<{ gallery: Gallery }>()
@@ -32,6 +33,7 @@ const reduceMotion = useReducedMotion()
 const allTabs: Array<{ id: SettingsTab; label: string }> = [
 	{ id: 'overview', label: t('proofing_gallery', 'Plan') },
 	{ id: 'content', label: t('proofing_gallery', 'Photos') },
+	{ id: 'culling', label: t('proofing_gallery', 'Cull') },
 	{ id: 'design', label: t('proofing_gallery', 'Style') },
 	{ id: 'access', label: t('proofing_gallery', 'Deliver') },
 	{ id: 'feedback', label: t('proofing_gallery', 'Results') },
@@ -61,6 +63,7 @@ const availableTabs = computed(() => allTabs.filter(tab => {
 	if (tab.id === 'feedback' && !interactivePurpose && !advancedOpen.value) return false
 	if (tab.id === 'activity' && !advancedOpen.value && props.gallery.permissions.canEdit) return false
 	if (tab.id === 'content') return props.gallery.permissions.role === 'owner'
+	if (tab.id === 'culling') return props.gallery.permissions.role === 'owner' && props.gallery.sourceType === 'folder'
 	if (props.gallery.permissions.canManageAccess) return true
 	if (props.gallery.permissions.canEdit) return tab.id !== 'access'
 	return tab.id === 'overview' || tab.id === 'activity'
@@ -685,6 +688,9 @@ onBeforeUnmount(() => {
 					v-else-if="activeTab === 'content' && gallery.sourceType === 'folder'"
 					:gallery="gallery"
 					@changed="collectionChanged" />
+				<CullingWorkspace
+					v-else-if="activeTab === 'culling'"
+					:gallery="gallery" />
 
 				<section v-else-if="activeTab === 'design'" class="design-layout">
 					<div class="settings-section design-fields">
@@ -757,6 +763,12 @@ onBeforeUnmount(() => {
 								<select v-model="draft.settings.presentation.titleAlignment" name="titleAlignment">
 									<option value="left">{{ t('proofing_gallery', 'Left') }}</option>
 									<option value="center">{{ t('proofing_gallery', 'Centered') }}</option>
+								</select>
+							</label>
+							<label class="select-field">
+								<span>{{ t('proofing_gallery', 'Slideshow timing') }}</span>
+								<select v-model.number="draft.settings.presentation.slideshowInterval" name="slideshowInterval">
+									<option v-for="seconds in [3, 5, 8, 12, 15]" :key="seconds" :value="seconds">{{ t('proofing_gallery', '{seconds} seconds', { seconds }) }}</option>
 								</select>
 							</label>
 						</div>
@@ -916,6 +928,13 @@ onBeforeUnmount(() => {
 								<select v-model="draft.settings.navigation.groupBy" name="groupBy">
 									<option value="none">{{ t('proofing_gallery', 'No grouping') }}</option>
 									<option value="type">{{ t('proofing_gallery', 'By file type') }}</option>
+									<option value="folder">{{ t('proofing_gallery', 'By folder') }}</option>
+								</select>
+							</label>
+							<label v-if="gallery.sourceType === 'folder' && draft.settings.navigation.groupBy === 'folder'" class="select-field">
+								<span>{{ t('proofing_gallery', 'Folder grouping depth') }}</span>
+								<select v-model.number="draft.settings.navigation.groupDepth" name="groupDepth">
+									<option v-for="depth in 8" :key="depth" :value="depth">{{ depth }}</option>
 								</select>
 							</label>
 						</div>
@@ -924,6 +943,9 @@ onBeforeUnmount(() => {
 						</NcCheckboxRadioSwitch>
 						<NcCheckboxRadioSwitch v-if="gallery.sourceType === 'folder'" v-model="draft.settings.navigation.folders" type="switch">
 							{{ t('proofing_gallery', 'Let clients browse subfolders') }}
+						</NcCheckboxRadioSwitch>
+						<NcCheckboxRadioSwitch v-if="gallery.sourceType === 'folder'" v-model="draft.settings.navigation.recursive" type="switch">
+							{{ t('proofing_gallery', 'Show media from every subfolder in one continuous gallery') }}
 						</NcCheckboxRadioSwitch>
 					</div>
 					<fieldset class="automation-settings">
@@ -1004,6 +1026,12 @@ onBeforeUnmount(() => {
 						</NcCheckboxRadioSwitch>
 						<NcCheckboxRadioSwitch v-model="draft.settings.review.selections" type="switch">
 							{{ t('proofing_gallery', 'Saved selections') }}
+						</NcCheckboxRadioSwitch>
+						<NcCheckboxRadioSwitch v-model="draft.settings.review.ratings" type="switch">
+							{{ t('proofing_gallery', 'Private guest star ratings') }}
+						</NcCheckboxRadioSwitch>
+						<NcCheckboxRadioSwitch v-model="draft.settings.review.pick" type="switch">
+							{{ t('proofing_gallery', 'Private guest pick or reject') }}
 						</NcCheckboxRadioSwitch>
 					</div>
 					<div v-if="draft.settings.mode === 'collaboration'" class="color-labels">
