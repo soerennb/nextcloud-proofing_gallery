@@ -24,6 +24,7 @@ final class LifecycleService {
 		private GalleryMapper $galleries,
 		private PublicShareService $shares,
 		private CapabilityPolicyService $capabilities,
+		private NativeNotificationService $notifications,
 	) {
 	}
 
@@ -58,6 +59,7 @@ final class LifecycleService {
 
 			if ($gallery->getShareToken() !== null && $this->revokeDue($gallery->getCompletedAt(), $rule, $now)) {
 				$this->shares->revoke($gallery);
+				$this->notifications->signalCategory((int)$gallery->getId(), $gallery->getOwnerUid(), 'revoked');
 				$revoked++;
 			}
 			if ($gallery->getShareToken() === null && $gallery->getRevokedAt() !== null
@@ -158,7 +160,7 @@ final class LifecycleService {
 
 	private function cleanupOrphanMetadata(): int {
 		$deleted = 0;
-		foreach (['proofing_events', 'proofing_uploads', 'proofing_collections'] as $table) {
+		foreach (['proofing_events', 'proofing_uploads', 'proofing_collections', 'proofing_notify_subs', 'proofing_native_notify'] as $table) {
 			$qb = $this->db->getQueryBuilder();
 			$qb->selectDistinct('gallery_id')->from($table)->setMaxResults(100);
 			foreach ($qb->executeQuery()->fetchFirstColumn() as $galleryId) {

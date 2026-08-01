@@ -16,6 +16,7 @@ final class PolicyService {
 		'guestUploads' => true,
 		'downloads' => true,
 		'emailInvitations' => true,
+		'nextcloudNotifications' => true,
 		'likes' => true,
 		'colors' => true,
 		'comments' => true,

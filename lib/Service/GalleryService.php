@@ -101,15 +101,21 @@ final class GalleryService {
 			if ($sourceType === 'collection') {
 				$this->collections->initialize($gallery);
 			}
-			if ($preferences['notifications']['email'] && $preferences['notifications']['events'] !== []) {
+			$emailNotifications = $preferences['notifications']['email'];
+			$nativeNotifications = $preferences['notifications']['nextcloud'];
+			if (($emailNotifications['enabled'] && $emailNotifications['events'] !== [])
+				|| ($nativeNotifications['enabled'] && $nativeNotifications['events'] !== [])) {
 				try {
 					$this->notifications->save(
 						$ownerUid,
 						(int)$gallery->getId(),
 						$ownerUid,
-						$preferences['notifications']['events'],
-						'immediate',
+						$emailNotifications['events'],
+						$emailNotifications['frequency'],
 						$preferences['publicLocale'],
+						$emailNotifications['enabled'],
+						$nativeNotifications['enabled'],
+						$nativeNotifications['events'],
 					);
 				} catch (\Throwable) {
 					// Missing email addresses must not make gallery creation fail.

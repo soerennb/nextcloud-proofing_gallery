@@ -786,6 +786,34 @@ const de = {
 	'Choose folder': 'Ordner auswählen',
 	'Clear': 'Leeren',
 	'Notifications': 'Benachrichtigungen',
+	'The notification subscription could not be saved.': 'Das Benachrichtigungsabonnement konnte nicht gespeichert werden.',
+	'Choose how owners and individual gallery managers receive important updates.': 'Legen Sie fest, wie Eigentümer und einzelne Galerie-Manager wichtige Neuigkeiten erhalten.',
+	'Nextcloud notification center': 'Nextcloud-Benachrichtigungszentrale',
+	'Important updates appear in the Nextcloud bell and supported clients. Repeated events are grouped.': 'Wichtige Neuigkeiten erscheinen in der Nextcloud-Glocke und unterstützten Clients. Wiederholte Ereignisse werden gebündelt.',
+	'Important events': 'Wichtige Ereignisse',
+	'Email digest': 'E-Mail-Zusammenfassung',
+	'Nextcloud notifications': 'Nextcloud-Benachrichtigungen',
+	'Show important gallery updates in the Nextcloud notification center.': 'Wichtige Galerie-Neuigkeiten in der Nextcloud-Benachrichtigungszentrale anzeigen.',
+	'Notification center': 'Benachrichtigungszentrale',
+	'Available': 'Verfügbar',
+	'Unavailable': 'Nicht verfügbar',
+	'Pending notifications': 'Ausstehende Benachrichtigungen',
+	'Failed notifications': 'Fehlgeschlagene Benachrichtigungen',
+	'You can now manage {gallery}': 'Sie können {gallery} jetzt verwalten',
+	'Public access to {gallery} was revoked': 'Der öffentliche Zugriff auf {gallery} wurde widerrufen',
+	'These defaults are applied to newly created galleries.': 'Diese Vorgaben werden auf neu erstellte Galerien angewendet.',
+	'Show important updates in Nextcloud': 'Wichtige Neuigkeiten in Nextcloud anzeigen',
+	'Also send gallery updates by email': 'Galerie-Neuigkeiten zusätzlich per E-Mail senden',
+	'Email delivery': 'E-Mail-Zustellung',
+	'A client added a comment in {gallery}': 'Ein Kunde hat einen Kommentar in {gallery} hinzugefügt',
+	'A client edited a comment in {gallery}': 'Ein Kunde hat einen Kommentar in {gallery} bearbeitet',
+	'A client submitted a selection in {gallery}': 'Ein Kunde hat eine Auswahl in {gallery} eingereicht',
+	'A client changed a like in {gallery}': 'Ein Kunde hat ein Like in {gallery} geändert',
+	'A client changed a color status in {gallery}': 'Ein Kunde hat einen Farbstatus in {gallery} geändert',
+	'A client uploaded a file to {gallery}': 'Ein Kunde hat eine Datei in {gallery} hochgeladen',
+	'An upload was accepted in {gallery}': 'Ein Upload wurde in {gallery} angenommen',
+	'An upload was rejected in {gallery}': 'Ein Upload wurde in {gallery} abgelehnt',
+	'New activity in {gallery}': 'Neue Aktivität in {gallery}',
 	'Automatically subscribe me to activity in new galleries': 'Aktivitäten neuer Galerien automatisch per E-Mail abonnieren',
 	'New client uploads': 'Neue Kunden-Uploads',
 	'Completed selections': 'Abgeschlossene Auswahlen',
@@ -803,6 +831,9 @@ const pluralDe = {
 	'_%n like_::_%n likes_': ['%n Like', '%n Likes'],
 	'_%n item selected_::_%n items selected_': ['%n Element ausgewählt', '%n Elemente ausgewählt'],
 	'_%n gallery_::_%n galleries_': ['%n Galerie', '%n Galerien'],
+	'_%n new comment in {gallery}_::_%n new comments in {gallery}_': ['%n neuer Kommentar in {gallery}', '%n neue Kommentare in {gallery}'],
+	'_%n new client selection in {gallery}_::_%n new client selections in {gallery}_': ['%n neue Kundenauswahl in {gallery}', '%n neue Kundenauswahlen in {gallery}'],
+	'_%n new upload in {gallery}_::_%n new uploads in {gallery}_': ['%n neuer Upload in {gallery}', '%n neue Uploads in {gallery}'],
 }
 
 const sources = await Promise.all(sourceFiles.map(file => readFile(path.join(root, file), 'utf8')))
@@ -819,6 +850,9 @@ for (const source of sources) {
 		singular.add(match[1])
 	}
 	for (const match of source.matchAll(/\bn\(\s*'proofing_gallery'\s*,\s*'([^']+)'\s*,\s*'([^']+)'/g)) {
+		plurals.set(`_${match[1]}_::_${match[2]}_`, [match[1], match[2]])
+	}
+	for (const match of source.matchAll(/\$l->n\(\s*'([^']+)'\s*,\s*'([^']+)'/g)) {
 		plurals.set(`_${match[1]}_::_${match[2]}_`, [match[1], match[2]])
 	}
 }

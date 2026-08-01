@@ -9,7 +9,7 @@ Publish existing Nextcloud folders as customizable client galleries.
 Collect likes, workflow states, comments, annotations, and named selections
 without copying or changing original files.
 	]]></description>
-	<version>0.4.0-alpha.2</version>
+	<version>0.4.0-alpha.3</version>
 	<licence>AGPL-3.0-or-later</licence>
 	<author mail="soerennb@users.noreply.github.com">soeren</author>
 	<namespace>ProofingGallery</namespace>
@@ -34,6 +34,9 @@ without copying or changing original files.
 		</navigation>
 	</navigations>
 	<activity>
+		<settings>
+			<setting>OCA\ProofingGallery\Activity\Setting</setting>
+		</settings>
 		<providers>
 			<provider>OCA\ProofingGallery\Activity\Provider</provider>
 		</providers>

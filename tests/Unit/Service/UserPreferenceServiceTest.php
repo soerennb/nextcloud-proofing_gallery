@@ -12,7 +12,8 @@ final class UserPreferenceServiceTest extends TestCase {
 	public function testEmailSubscriptionsAreOptInByDefault(): void {
 		$preferences = (new UserPreferenceService($this->createMock(IConfig::class)))->get('user');
 
-		self::assertFalse($preferences['notifications']['email']);
+		self::assertFalse($preferences['notifications']['email']['enabled']);
+		self::assertTrue($preferences['notifications']['nextcloud']['enabled']);
 	}
 
 	public function testPreferencesPersistAcrossDevicesAndFilterUnknownEvents(): void {
@@ -31,11 +32,15 @@ final class UserPreferenceServiceTest extends TestCase {
 		$saved = $service->save('photographer', [
 			'defaultPurpose' => 'selection',
 			'parentFolder' => ['id' => 42, 'name' => 'Clients'],
-			'notifications' => ['email' => false, 'events' => ['selection.created', 'unknown']],
+			'notifications' => [
+				'nextcloud' => ['enabled' => true, 'events' => ['selection.created', 'unknown']],
+				'email' => ['enabled' => false, 'events' => ['selection.created', 'unknown'], 'frequency' => 'daily'],
+			],
 		]);
 
 		self::assertSame('selection', $saved['defaultPurpose']);
-		self::assertSame(['selection.created'], $saved['notifications']['events']);
+		self::assertSame(['selection.created'], $saved['notifications']['nextcloud']['events']);
+		self::assertSame(['selection.created'], $saved['notifications']['email']['events']);
 		self::assertSame($saved, $service->get('photographer'));
 	}
 
@@ -47,5 +52,12 @@ final class UserPreferenceServiceTest extends TestCase {
 	public function testUnknownPreferenceIsRejected(): void {
 		$this->expectException(\InvalidArgumentException::class);
 		(new UserPreferenceService($this->createMock(IConfig::class)))->save('user', ['trackingPixel' => true]);
+	}
+
+	public function testUnknownNotificationChannelPreferenceIsRejected(): void {
+		$this->expectException(\InvalidArgumentException::class);
+		(new UserPreferenceService($this->createMock(IConfig::class)))->save('user', [
+			'notifications' => ['nextcloud' => ['enabled' => true, 'sound' => true]],
+		]);
 	}
 }

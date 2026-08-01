@@ -9,6 +9,7 @@ use OCA\ProofingGallery\BackgroundJob\PurgeGuestsJob;
 use OCA\ProofingGallery\BackgroundJob\CleanupGalleryDataJob;
 use OCA\ProofingGallery\BackgroundJob\SendNotificationDigestsJob;
 use OCA\ProofingGallery\Db\GalleryMapper;
+use OCA\ProofingGallery\Notification\Notifier;
 use OCA\ProofingGallery\Service\CollectionAnchorReferences;
 use OCP\BackgroundJob\IJobList;
 use OCP\AppFramework\App;
@@ -25,6 +26,7 @@ final class Application extends App implements IBootstrap {
 
 	public function register(IRegistrationContext $context): void {
 		$context->registerPublicShareTemplateProvider(PublicShareTemplateProvider::class);
+		$context->registerNotifierService(Notifier::class);
 		$context->registerServiceAlias(CollectionAnchorReferences::class, GalleryMapper::class);
 	}
 

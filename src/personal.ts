@@ -53,8 +53,15 @@ form?.addEventListener('submit', async event => {
 				designPresetId: data.get('designPresetId') ? Number(data.get('designPresetId')) : null,
 				parentFolder: parentId > 0 ? { id: parentId, name: String(data.get('parentFolderName')) } : null,
 				notifications: {
-					email: data.has('email'),
-					events: ['upload.received', 'comment.created', 'selection.created'].filter(name => data.has(`event.${name}`)),
+					nextcloud: {
+						enabled: data.has('nextcloudEnabled'),
+						events: ['upload.received', 'comment.created', 'selection.created'].filter(name => data.has(`nativeEvent.${name}`)),
+					},
+					email: {
+						enabled: data.has('emailEnabled'),
+						events: ['upload.received', 'comment.created', 'selection.created'].filter(name => data.has(`emailEvent.${name}`)),
+						frequency: String(data.get('emailFrequency')),
+					},
 				},
 				lifecycle: {
 					enabled: data.has('lifecycleEnabled'),

@@ -45,7 +45,7 @@ final class CapabilityPolicyService {
 	/** @return array<string, array{allowed: bool, reason: ?string}> */
 	public function effective(?GallerySettings $settings = null, ?string $userId = null): array {
 		$map = [];
-		foreach (['galleryCreation', 'publicPublishing', 'guestUploads', 'downloads', 'emailInvitations', 'likes', 'colors', 'comments', 'annotations', 'selections', 'lifecycleAutomation'] as $feature) {
+		foreach (['galleryCreation', 'publicPublishing', 'guestUploads', 'downloads', 'emailInvitations', 'nextcloudNotifications', 'likes', 'colors', 'comments', 'annotations', 'selections', 'lifecycleAutomation'] as $feature) {
 			$allowed = $this->feature($feature);
 			if ($userId !== null && $feature === 'galleryCreation') $allowed = $this->allowedForUser($userId, $feature, 'creatorGroups');
 			if ($userId !== null && $feature === 'publicPublishing') $allowed = $this->allowedForUser($userId, $feature, 'publisherGroups') && $this->feature($feature);

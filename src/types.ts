@@ -166,12 +166,15 @@ export type NotificationEventType = 'comment.created' | 'comment.updated' | 'sel
 	| 'like.changed' | 'color.changed' | 'upload.received' | 'upload.accepted' | 'upload.rejected'
 
 export interface UserPreferences {
-	schemaVersion: 1
+	schemaVersion: 2
 	defaultPurpose: GalleryPurpose | null
 	parentFolder: { id: number; name: string } | null
 	designPresetId: number | null
 	publicLocale: 'auto' | 'en' | 'de'
-	notifications: { email: boolean; events: NotificationEventType[] }
+	notifications: {
+		nextcloud: { enabled: boolean; events: NotificationEventType[] }
+		email: { enabled: boolean; events: NotificationEventType[]; frequency: 'immediate' | 'daily' }
+	}
 	lifecycle: { enabled: boolean; trigger: 'fixed_date' | 'after_completion'; revokeAfterDays: number; archiveAfterDays: number }
 }
 
@@ -184,4 +187,8 @@ export interface NotificationSubscription {
 	frequency: 'immediate' | 'daily'
 	locale: 'auto' | 'en' | 'de'
 	active: boolean
+	channels: {
+		nextcloud: { enabled: boolean; available: boolean; eventTypes: NotificationEventType[] }
+		email: { enabled: boolean; available: boolean; eventTypes: NotificationEventType[]; frequency: 'immediate' | 'daily'; locale: 'auto' | 'en' | 'de' }
+	}
 }

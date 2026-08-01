@@ -43,9 +43,21 @@ final class NotificationController extends Controller {
 	/** @param list<string> $eventTypes */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'PUT', url: '/api/v1/galleries/{galleryId}/notification-subscriptions')]
-	public function save(int $galleryId, string $recipientUid, array $eventTypes, string $frequency = 'daily', string $locale = 'auto'): DataResponse {
+	public function save(
+		int $galleryId,
+		string $recipientUid,
+		array $eventTypes = [],
+		string $frequency = 'daily',
+		string $locale = 'auto',
+		bool $emailEnabled = true,
+		bool $nativeEnabled = false,
+		array $nativeEventTypes = [],
+	): DataResponse {
 		try {
-			return new DataResponse($this->notifications->save($this->userId(), $galleryId, $recipientUid, $eventTypes, $frequency, $locale));
+			return new DataResponse($this->notifications->save(
+				$this->userId(), $galleryId, $recipientUid, $eventTypes, $frequency, $locale,
+				$emailEnabled, $nativeEnabled, $nativeEventTypes,
+			));
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
 		} catch (InvalidArgumentException $exception) {

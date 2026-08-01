@@ -6,7 +6,8 @@ $preferences = $_['preferences'];
 $capabilities = $_['capabilities'];
 $instance = $_['instanceSettings'];
 $presets = $_['presets'] ?? [];
-$events = $preferences['notifications']['events'] ?? [];
+$nativeEvents = $preferences['notifications']['nextcloud']['events'] ?? [];
+$emailEvents = $preferences['notifications']['email']['events'] ?? [];
 $checked = static fn (bool $value): string => $value ? ' checked' : '';
 ?>
 <section id="proofing-gallery-personal" class="settings-section">
@@ -22,8 +23,12 @@ $checked = static fn (bool $value): string => $value ? ' checked' : '';
 		</div>
 		<div class="proofing-personal__section">
 			<h3><?= $l->t('Notifications') ?></h3>
-			<label class="proofing-personal__check"><input name="email" type="checkbox"<?= $checked((bool)$preferences['notifications']['email']) ?>><span><?= $l->t('Automatically subscribe me to activity in new galleries') ?></span></label>
-			<?php foreach (['upload.received' => $l->t('New client uploads'), 'comment.created' => $l->t('New comments'), 'selection.created' => $l->t('Completed selections')] as $event => $label): ?><label class="proofing-personal__check"><input name="event.<?= $event ?>" type="checkbox"<?= $checked(in_array($event, $events, true)) ?>><span><?= $label ?></span></label><?php endforeach; ?>
+			<p class="settings-hint"><?= $l->t('These defaults are applied to newly created galleries.') ?></p>
+			<label class="proofing-personal__check"><input name="nextcloudEnabled" type="checkbox"<?= $checked((bool)$preferences['notifications']['nextcloud']['enabled']) ?>><span><?= $l->t('Show important updates in Nextcloud') ?></span></label>
+			<?php foreach (['upload.received' => $l->t('New client uploads'), 'comment.created' => $l->t('New comments'), 'selection.created' => $l->t('Completed selections')] as $event => $label): ?><label class="proofing-personal__check"><input name="nativeEvent.<?= $event ?>" type="checkbox"<?= $checked(in_array($event, $nativeEvents, true)) ?>><span><?= $label ?></span></label><?php endforeach; ?>
+			<label class="proofing-personal__check"><input name="emailEnabled" type="checkbox"<?= $checked((bool)$preferences['notifications']['email']['enabled']) ?>><span><?= $l->t('Also send gallery updates by email') ?></span></label>
+			<label><span><?= $l->t('Email delivery') ?></span><select name="emailFrequency"><option value="immediate"<?= $preferences['notifications']['email']['frequency'] === 'immediate' ? ' selected' : '' ?>><?= $l->t('As soon as possible') ?></option><option value="daily"<?= $preferences['notifications']['email']['frequency'] === 'daily' ? ' selected' : '' ?>><?= $l->t('Daily digest') ?></option></select></label>
+			<?php foreach (['upload.received' => $l->t('New client uploads'), 'comment.created' => $l->t('New comments'), 'selection.created' => $l->t('Completed selections')] as $event => $label): ?><label class="proofing-personal__check"><input name="emailEvent.<?= $event ?>" type="checkbox"<?= $checked(in_array($event, $emailEvents, true)) ?>><span><?= $label ?></span></label><?php endforeach; ?>
 		</div>
 		<div class="proofing-personal__section"<?= !$capabilities['lifecycleAutomation']['allowed'] ? ' aria-disabled="true"' : '' ?>>
 			<h3><?= $l->t('Lifecycle suggestion') ?></h3>

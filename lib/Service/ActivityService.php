@@ -4,10 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Service;
 
-use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\Guest;
-use OCP\Activity\IManager;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
@@ -16,7 +14,6 @@ final class ActivityService {
 	public function __construct(
 		private IDBConnection $db,
 		private ITimeFactory $clock,
-		private IManager $activity,
 		private NotificationService $notifications,
 	) {
 	}
@@ -35,17 +32,6 @@ final class ActivityService {
 		])->executeStatement();
 		$eventId = (int)$this->db->lastInsertId('proofing_events');
 		$this->notifications->queue($gallery, $eventId, $type, $now);
-
-		$message = $this->message($gallery, $guest, $type, $payload);
-		$event = $this->activity->generateEvent()
-			->setApp(Application::APP_ID)
-			->setType('proofing_gallery')
-			->setAffectedUser($gallery->getOwnerUid())
-			->setAuthor($gallery->getOwnerUid())
-			->setTimestamp($now)
-			->setSubject('gallery_event', ['message' => $message])
-			->setObject('proofing_gallery', $gallery->getId(), $gallery->getTitle());
-		$this->activity->publish($event);
 
 	}
 
@@ -69,17 +55,6 @@ final class ActivityService {
 			'payload' => json_decode($row['payload'], true, flags: JSON_THROW_ON_ERROR),
 			'createdAt' => (int)$row['created_at'],
 		], $qb->executeQuery()->fetchAllAssociative());
-	}
-
-	/** @param array<string, mixed> $payload */
-	private function message(Gallery $gallery, ?Guest $guest, string $type, array $payload): string {
-		$actor = $guest?->getDisplayName() ?? 'A gallery manager';
-		return match ($type) {
-			'upload.received' => sprintf('%s uploaded %s to “%s”', $actor, $payload['filename'] ?? 'a file', $gallery->getTitle()),
-			'upload.accepted' => sprintf('An upload was accepted into “%s”', $gallery->getTitle()),
-			'upload.rejected' => sprintf('An upload was rejected from “%s”', $gallery->getTitle()),
-			default => sprintf('New activity in “%s”', $gallery->getTitle()),
-		};
 	}
 
 }

@@ -294,6 +294,9 @@ export async function saveNotificationSubscription(galleryId: number, payload: {
 	eventTypes: NotificationEventType[]
 	frequency: 'immediate' | 'daily'
 	locale: 'auto' | 'en' | 'de'
+	emailEnabled: boolean
+	nativeEnabled: boolean
+	nativeEventTypes: NotificationEventType[]
 }): Promise<NotificationSubscription> {
 	const { data } = await axios.put<NotificationSubscription>(`${galleriesUrl}/${galleryId}/notification-subscriptions`, payload)
 	return data

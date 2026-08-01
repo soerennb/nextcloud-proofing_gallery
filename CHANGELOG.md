@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0-alpha.3 — 2026-08-01
+
+- Added grouped, localized Nextcloud notification-center alerts for comments,
+  completed selections, client uploads, manager assignments, and automatic
+  public-link revocations with deep links and bounded retries.
+- Added separate per-gallery and personal defaults for native notifications and
+  email digests while preserving existing email subscriptions during upgrades.
+- Completed the native Activity integration and exposed notification delivery
+  availability, pending work, and failures in the administrator system status.
+
 ## 0.4.0-alpha.2 — 2026-07-31
 
 - Added a dedicated global administration area with server-enforced feature,

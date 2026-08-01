@@ -38,7 +38,7 @@ form?.addEventListener('submit', async event => {
 		await axios.put(generateOcsUrl('/apps/proofing_gallery/api/v1/admin/settings'), {
 			instanceSettings: {
 				access: { creatorGroups: groups(data, 'creatorGroups'), publisherGroups: groups(data, 'publisherGroups') },
-				features: Object.fromEntries(['galleryCreation', 'publicPublishing', 'guestUploads', 'downloads', 'emailInvitations', 'likes', 'colors', 'comments', 'annotations', 'selections', 'lifecycleAutomation'].map(key => [key, bool(data, `feature.${key}`)])),
+				features: Object.fromEntries(['galleryCreation', 'publicPublishing', 'guestUploads', 'downloads', 'emailInvitations', 'nextcloudNotifications', 'likes', 'colors', 'comments', 'annotations', 'selections', 'lifecycleAutomation'].map(key => [key, bool(data, `feature.${key}`)])),
 				workflow: { defaultPurpose: String(data.get('defaultPurpose')) },
 				branding: { studioName: String(data.get('studioName')), accentColor: String(data.get('accentColor')) },
 			},

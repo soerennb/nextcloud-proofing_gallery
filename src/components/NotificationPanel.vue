@@ -22,7 +22,10 @@ const saving = ref(false)
 const recipientUid = ref(props.gallery.ownerUid)
 const frequency = ref<'immediate' | 'daily'>('daily')
 const locale = ref<'auto' | 'en' | 'de'>('auto')
+const emailEnabled = ref(false)
+const nativeEnabled = ref(true)
 const eventTypes = ref<NotificationEventType[]>(['comment.created', 'selection.created', 'upload.received'])
+const nativeEventTypes = ref<NotificationEventType[]>(['comment.created', 'selection.created', 'upload.received'])
 const eventOptions: Array<{ value: NotificationEventType; label: string }> = [
 	{ value: 'comment.created', label: t('proofing_gallery', 'New comments') },
 	{ value: 'comment.updated', label: t('proofing_gallery', 'Edited comments') },
@@ -60,16 +63,24 @@ function selectRecipient() {
 	if (!existing) {
 		frequency.value = 'daily'
 		locale.value = 'auto'
+		emailEnabled.value = false
+		nativeEnabled.value = true
 		eventTypes.value = ['comment.created', 'selection.created', 'upload.received']
+		nativeEventTypes.value = ['comment.created', 'selection.created', 'upload.received']
 		return
 	}
-	frequency.value = existing.frequency
-	locale.value = existing.locale
-	eventTypes.value = [...existing.eventTypes]
+	frequency.value = existing.channels.email.frequency
+	locale.value = existing.channels.email.locale
+	emailEnabled.value = existing.channels.email.enabled
+	nativeEnabled.value = existing.channels.nextcloud.enabled
+	eventTypes.value = [...existing.channels.email.eventTypes]
+	nativeEventTypes.value = [...existing.channels.nextcloud.eventTypes]
 }
 
 async function save() {
-	if (eventTypes.value.length === 0) return
+	if ((!emailEnabled.value && !nativeEnabled.value)
+		|| (emailEnabled.value && eventTypes.value.length === 0)
+		|| (nativeEnabled.value && nativeEventTypes.value.length === 0)) return
 	saving.value = true
 	try {
 		const subscription = await saveNotificationSubscription(props.gallery.id, {
@@ -77,13 +88,16 @@ async function save() {
 			eventTypes: eventTypes.value,
 			frequency: frequency.value,
 			locale: locale.value,
+			emailEnabled: emailEnabled.value,
+			nativeEnabled: nativeEnabled.value,
+			nativeEventTypes: nativeEventTypes.value,
 		})
 		const index = subscriptions.value.findIndex(item => item.id === subscription.id)
 		if (index === -1) subscriptions.value.push(subscription)
 		else subscriptions.value[index] = subscription
 		showSuccess(t('proofing_gallery', 'Notification subscription saved.'))
 	} catch {
-		showError(t('proofing_gallery', 'The notification subscription could not be saved. The recipient needs an email address.'))
+		showError(t('proofing_gallery', 'The notification subscription could not be saved.'))
 	} finally {
 		saving.value = false
 	}
@@ -109,53 +123,77 @@ defineExpose({ load })
 	<section class="notification-panel" aria-labelledby="notification-title">
 		<header>
 			<h2 id="notification-title">
-				{{ t('proofing_gallery', 'Email notifications') }}
+				{{ t('proofing_gallery', 'Notifications') }}
 			</h2>
-			<p>{{ t('proofing_gallery', 'Notifications are off until you explicitly subscribe an eligible person.') }}</p>
+			<p>{{ t('proofing_gallery', 'Choose how owners and individual gallery managers receive important updates.') }}</p>
 		</header>
 		<div v-if="loading" class="notification-loading">
 			<NcLoadingIcon :size="24" />
 		</div>
 		<template v-else>
-			<div class="notification-fields">
+			<div class="notification-fields notification-fields--recipient">
 				<label>
 					<span>{{ t('proofing_gallery', 'Recipient') }}</span>
 					<select v-model="recipientUid" name="notificationRecipient" @change="selectRecipient">
 						<option v-for="recipient in recipients" :key="recipient.uid" :value="recipient.uid">{{ recipient.label }}</option>
 					</select>
 				</label>
-				<label>
-					<span>{{ t('proofing_gallery', 'Delivery') }}</span>
-					<select v-model="frequency" name="notificationFrequency">
-						<option value="daily">{{ t('proofing_gallery', 'Daily digest') }}</option>
-						<option value="immediate">{{ t('proofing_gallery', 'As soon as possible') }}</option>
-					</select>
-				</label>
-				<label>
-					<span>{{ t('proofing_gallery', 'Email language') }}</span>
-					<select v-model="locale" name="notificationLocale">
-						<option value="auto">{{ t('proofing_gallery', 'Gallery language') }}</option>
-						<option value="en">English</option>
-						<option value="de">Deutsch</option>
-					</select>
-				</label>
 			</div>
-			<fieldset class="notification-events">
-				<legend>{{ t('proofing_gallery', 'Events') }}</legend>
-				<NcCheckboxRadioSwitch
-					v-for="option in eventOptions"
-					:key="option.value"
-					v-model="eventTypes"
-					type="checkbox"
-					:value="option.value">
-					{{ option.label }}
+			<section class="notification-channel">
+				<NcCheckboxRadioSwitch v-model="nativeEnabled" type="switch">
+					{{ t('proofing_gallery', 'Nextcloud notification center') }}
 				</NcCheckboxRadioSwitch>
-			</fieldset>
-			<p v-if="eventTypes.length === 0" class="notification-warning">
+				<p>{{ t('proofing_gallery', 'Important updates appear in the Nextcloud bell and supported clients. Repeated events are grouped.') }}</p>
+				<fieldset v-if="nativeEnabled" class="notification-events">
+					<legend>{{ t('proofing_gallery', 'Important events') }}</legend>
+					<NcCheckboxRadioSwitch
+						v-for="option in eventOptions.filter(item => ['comment.created', 'selection.created', 'upload.received'].includes(item.value))"
+						:key="`native-${option.value}`"
+						v-model="nativeEventTypes"
+						type="checkbox"
+						:value="option.value">
+						{{ option.label }}
+					</NcCheckboxRadioSwitch>
+				</fieldset>
+			</section>
+			<section class="notification-channel">
+				<NcCheckboxRadioSwitch v-model="emailEnabled" type="switch">
+					{{ t('proofing_gallery', 'Email digest') }}
+				</NcCheckboxRadioSwitch>
+				<div v-if="emailEnabled" class="notification-fields">
+					<label>
+						<span>{{ t('proofing_gallery', 'Delivery') }}</span>
+						<select v-model="frequency" name="notificationFrequency">
+							<option value="daily">{{ t('proofing_gallery', 'Daily digest') }}</option>
+							<option value="immediate">{{ t('proofing_gallery', 'As soon as possible') }}</option>
+						</select>
+					</label>
+					<label>
+						<span>{{ t('proofing_gallery', 'Email language') }}</span>
+						<select v-model="locale" name="notificationLocale">
+							<option value="auto">{{ t('proofing_gallery', 'Gallery language') }}</option>
+							<option value="en">English</option>
+							<option value="de">Deutsch</option>
+						</select>
+					</label>
+				</div>
+				<fieldset v-if="emailEnabled" class="notification-events">
+					<legend>{{ t('proofing_gallery', 'Events') }}</legend>
+					<NcCheckboxRadioSwitch
+						v-for="option in eventOptions"
+						:key="option.value"
+						v-model="eventTypes"
+						type="checkbox"
+						:value="option.value">
+						{{ option.label }}
+					</NcCheckboxRadioSwitch>
+				</fieldset>
+			</section>
+			<p v-if="(!emailEnabled && !nativeEnabled) || (emailEnabled && eventTypes.length === 0) || (nativeEnabled && nativeEventTypes.length === 0)" class="notification-warning">
 				{{ t('proofing_gallery', 'Choose at least one event.') }}
 			</p>
 			<div class="notification-actions">
-				<NcButton variant="primary" :disabled="saving || eventTypes.length === 0" @click="save">
+				<NcButton variant="primary" :disabled="saving || (!emailEnabled && !nativeEnabled) || (emailEnabled && eventTypes.length === 0) || (nativeEnabled && nativeEventTypes.length === 0)" @click="save">
 					{{ saving ? t('proofing_gallery', 'Saving…') : selectedExisting ? t('proofing_gallery', 'Update subscription') : t('proofing_gallery', 'Subscribe') }}
 				</NcButton>
 				<NcButton v-if="selectedExisting" variant="tertiary" @click="remove">
@@ -194,6 +232,19 @@ defineExpose({ load })
 	grid-template-columns: repeat(3, minmax(0, 1fr));
 	gap: 8px;
 }
+
+.notification-fields--recipient { grid-template-columns: minmax(0, 1fr); }
+
+.notification-channel {
+	display: grid;
+	gap: 10px;
+	padding: 14px;
+	border: 1px solid var(--color-border);
+	border-radius: 10px;
+	background: var(--color-background-hover);
+}
+
+.notification-channel > p { color: var(--color-text-maxcontrast); font-size: 13px; }
 
 .notification-fields label {
 	display: grid;

@@ -16,12 +16,15 @@ final class UserPreferenceService {
 	/** @return array<string, mixed> */
 	public function get(string $userId): array {
 		$defaults = [
-			'schemaVersion' => 1,
+			'schemaVersion' => 2,
 			'defaultPurpose' => null,
 			'parentFolder' => null,
 			'designPresetId' => null,
 			'publicLocale' => 'auto',
-			'notifications' => ['email' => false, 'events' => ['upload.received', 'comment.created', 'selection.created']],
+			'notifications' => [
+				'nextcloud' => ['enabled' => true, 'events' => ['upload.received', 'comment.created', 'selection.created']],
+				'email' => ['enabled' => false, 'events' => ['upload.received', 'comment.created', 'selection.created'], 'frequency' => 'immediate'],
+			],
 			'lifecycle' => ['enabled' => false, 'trigger' => 'after_completion', 'revokeAfterDays' => 30, 'archiveAfterDays' => 30],
 		];
 		$raw = $this->config->getUserValue($userId, Application::APP_ID, self::KEY, '');
@@ -30,9 +33,20 @@ final class UserPreferenceService {
 			$stored = json_decode($raw, true, flags: JSON_THROW_ON_ERROR);
 			if (!is_array($stored)) return $defaults;
 			$merged = array_replace($defaults, $stored);
-			foreach (['notifications', 'lifecycle'] as $section) {
-				$merged[$section] = array_replace($defaults[$section], is_array($stored[$section] ?? null) ? $stored[$section] : []);
+			$storedNotifications = is_array($stored['notifications'] ?? null) ? $stored['notifications'] : [];
+			if (isset($storedNotifications['events']) || is_bool($storedNotifications['email'] ?? null)) {
+				$legacyEvents = is_array($storedNotifications['events'] ?? null) ? $storedNotifications['events'] : $defaults['notifications']['email']['events'];
+				$storedNotifications = [
+					'nextcloud' => $defaults['notifications']['nextcloud'],
+					'email' => ['enabled' => (bool)($storedNotifications['email'] ?? false), 'events' => $legacyEvents, 'frequency' => 'immediate'],
+				];
 			}
+			$merged['notifications'] = [
+				'nextcloud' => array_replace($defaults['notifications']['nextcloud'], is_array($storedNotifications['nextcloud'] ?? null) ? $storedNotifications['nextcloud'] : []),
+				'email' => array_replace($defaults['notifications']['email'], is_array($storedNotifications['email'] ?? null) ? $storedNotifications['email'] : []),
+			];
+			$merged['lifecycle'] = array_replace($defaults['lifecycle'], is_array($stored['lifecycle'] ?? null) ? $stored['lifecycle'] : []);
+			$merged['schemaVersion'] = 2;
 			return $merged;
 		} catch (\Throwable) {
 			return $defaults;
@@ -51,11 +65,26 @@ final class UserPreferenceService {
 			if ($unknownKeys !== []) throw new \InvalidArgumentException('Unknown ' . $section . ' preference: ' . reset($unknownKeys));
 		}
 		$current = array_replace($defaults, $patch);
-		foreach (['notifications', 'lifecycle'] as $section) {
-			if (is_array($patch[$section] ?? null)) {
-				$current[$section] = array_replace($defaults[$section], $patch[$section]);
+		if (is_array($patch['notifications'] ?? null)) {
+			$current['notifications'] = $defaults['notifications'];
+			foreach (['nextcloud', 'email'] as $channel) {
+				if (isset($patch['notifications'][$channel]) && !is_array($patch['notifications'][$channel])) {
+					throw new \InvalidArgumentException($channel . ' notifications must be an object');
+				}
+				$unknownChannelKeys = array_diff(
+					array_keys(is_array($patch['notifications'][$channel] ?? null) ? $patch['notifications'][$channel] : []),
+					array_keys($defaults['notifications'][$channel]),
+				);
+				if ($unknownChannelKeys !== []) {
+					throw new \InvalidArgumentException('Unknown ' . $channel . ' notification preference: ' . reset($unknownChannelKeys));
+				}
+				$current['notifications'][$channel] = array_replace(
+					$defaults['notifications'][$channel],
+					is_array($patch['notifications'][$channel] ?? null) ? $patch['notifications'][$channel] : [],
+				);
 			}
 		}
+		if (is_array($patch['lifecycle'] ?? null)) $current['lifecycle'] = array_replace($defaults['lifecycle'], $patch['lifecycle']);
 		if ($current['defaultPurpose'] !== null && !in_array($current['defaultPurpose'], ['showcase', 'delivery', 'selection', 'proofing', 'uploads', 'custom'], true)) {
 			throw new \InvalidArgumentException('Invalid default gallery purpose');
 		}
@@ -65,16 +94,23 @@ final class UserPreferenceService {
 			$current['parentFolder'] = ['id' => (int)$current['parentFolder']['id'], 'name' => mb_substr(trim((string)($current['parentFolder']['name'] ?? '')), 0, 255)];
 		}
 		$current['designPresetId'] = $current['designPresetId'] === null ? null : max(1, (int)$current['designPresetId']);
-		if (!is_bool($current['notifications']['email']) || !is_array($current['notifications']['events'])) throw new \InvalidArgumentException('Invalid notification preferences');
+		foreach (['nextcloud', 'email'] as $channel) {
+			if (!is_bool($current['notifications'][$channel]['enabled']) || !is_array($current['notifications'][$channel]['events'])) {
+				throw new \InvalidArgumentException('Invalid notification preferences');
+			}
+		}
 		$allowedEvents = ['upload.received', 'comment.created', 'selection.created'];
-		$current['notifications']['events'] = array_values(array_intersect($allowedEvents, array_map('strval', $current['notifications']['events'])));
+		foreach (['nextcloud', 'email'] as $channel) {
+			$current['notifications'][$channel]['events'] = array_values(array_intersect($allowedEvents, array_map('strval', $current['notifications'][$channel]['events'])));
+		}
+		if (!in_array($current['notifications']['email']['frequency'], ['immediate', 'daily'], true)) throw new \InvalidArgumentException('Invalid email notification frequency');
 		foreach (['enabled'] as $key) if (!is_bool($current['lifecycle'][$key])) throw new \InvalidArgumentException('Invalid lifecycle preference');
 		foreach (['revokeAfterDays', 'archiveAfterDays'] as $key) {
 			$current['lifecycle'][$key] = (int)$current['lifecycle'][$key];
 			if ($current['lifecycle'][$key] < 1 || $current['lifecycle'][$key] > 3650) throw new \InvalidArgumentException('Invalid lifecycle duration');
 		}
 		if (!in_array($current['lifecycle']['trigger'], ['fixed_date', 'after_completion'], true)) throw new \InvalidArgumentException('Invalid lifecycle trigger');
-		$current['schemaVersion'] = 1;
+		$current['schemaVersion'] = 2;
 		$this->config->setUserValue($userId, Application::APP_ID, self::KEY, json_encode($current, JSON_THROW_ON_ERROR));
 		return $current;
 	}

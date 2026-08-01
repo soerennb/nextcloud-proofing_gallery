@@ -19,6 +19,7 @@ final class ManagerService {
 		private IUserManager $users,
 		private IGroupManager $groups,
 		private ITimeFactory $clock,
+		private NativeNotificationService $notifications,
 	) {
 	}
 
@@ -52,7 +53,11 @@ final class ManagerService {
 			$manager->setUserUid($principalId);
 			$manager->setRole($role);
 			$manager->setCreatedAt($this->clock->getTime());
-			return $this->managers->insert($manager);
+			$manager = $this->managers->insert($manager);
+			if ($type === 'user') {
+				$this->notifications->signalCategory($galleryId, $principalId, 'manager');
+			}
+			return $manager;
 		}
 	}
 
@@ -61,6 +66,9 @@ final class ManagerService {
 		foreach ($this->managers->findByGallery($galleryId) as $manager) {
 			if ($manager->getId() === $managerId) {
 				$this->managers->delete($manager);
+				if ($manager->getPrincipalType() === 'user') {
+					$this->notifications->processGalleryUser($galleryId, $manager->getUserUid());
+				}
 				return;
 			}
 		}
