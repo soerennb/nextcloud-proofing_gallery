@@ -19,6 +19,18 @@ OC.L10N.register("proofing_gallery", {
     "%n Like",
     "%n Likes"
   ],
+  "_%n new client selection in {gallery}_::_%n new client selections in {gallery}_": [
+    "%n neue Kundenauswahl in {gallery}",
+    "%n neue Kundenauswahlen in {gallery}"
+  ],
+  "_%n new comment in {gallery}_::_%n new comments in {gallery}_": [
+    "%n neuer Kommentar in {gallery}",
+    "%n neue Kommentare in {gallery}"
+  ],
+  "_%n new upload in {gallery}_::_%n new uploads in {gallery}_": [
+    "%n neuer Upload in {gallery}",
+    "%n neue Uploads in {gallery}"
+  ],
   "_%n star_::_%n stars_": [
     "%n Stern",
     "%n Sterne"
@@ -38,6 +50,12 @@ OC.L10N.register("proofing_gallery", {
   "{visible} visible · {loaded} of {total} loaded": "{visible} sichtbar · {loaded} von {total} geladen",
   "%s prepared a private gallery for you.": "%s hat eine private Galerie für Sie vorbereitet.",
   "%s shared “%s” with you": "%s hat „%s“ mit Ihnen geteilt",
+  "A client added a comment in {gallery}": "Ein Kunde hat einen Kommentar in {gallery} hinzugefügt",
+  "A client changed a color status in {gallery}": "Ein Kunde hat einen Farbstatus in {gallery} geändert",
+  "A client changed a like in {gallery}": "Ein Kunde hat ein Like in {gallery} geändert",
+  "A client edited a comment in {gallery}": "Ein Kunde hat einen Kommentar in {gallery} bearbeitet",
+  "A client submitted a selection in {gallery}": "Ein Kunde hat eine Auswahl in {gallery} eingereicht",
+  "A client uploaded a file to {gallery}": "Ein Kunde hat eine Datei in {gallery} hochgeladen",
   "A file chunk could not be uploaded.": "Ein Dateiteil konnte nicht hochgeladen werden.",
   "A polished gallery with individual and complete downloads.": "Eine hochwertige Galerie mit Einzel- und Gesamtdownloads.",
   "A preview is required before owner culling changes.": "Vor Änderungen an der Inhaberauswahl ist eine Vorschau erforderlich.",
@@ -73,6 +91,8 @@ OC.L10N.register("proofing_gallery", {
   "Also send gallery updates by email": "Galerie-Neuigkeiten zusätzlich per E-Mail senden",
   "An image-first presentation without downloads or review tools.": "Eine bildstarke Präsentation ohne Downloads oder Abstimmungswerkzeuge.",
   "An instance logo is active. Upload a file to replace it.": "Ein Instanzlogo ist aktiv. Laden Sie eine Datei hoch, um es zu ersetzen.",
+  "An upload was accepted in {gallery}": "Ein Upload wurde in {gallery} angenommen",
+  "An upload was rejected in {gallery}": "Ein Upload wurde in {gallery} abgelehnt",
   "Appearance": "Erscheinungsbild",
   "Apply": "Anwenden",
   "Apply field-wise merge": "Feldweisen Abgleich anwenden",
@@ -461,6 +481,7 @@ OC.L10N.register("proofing_gallery", {
   "Name this saved view": "Gespeicherte Ansicht benennen",
   "Navigate": "Navigieren",
   "Needs attention": "Aktion erforderlich",
+  "New activity in {gallery}": "Neue Aktivität in {gallery}",
   "New client link": "Neuer Kundenlink",
   "New client uploads": "Neue Kunden-Uploads",
   "New comments": "Neue Kommentare",
@@ -583,6 +604,7 @@ OC.L10N.register("proofing_gallery", {
   "Proofing Gallery settings": "Proofing-Gallery-Einstellungen",
   "Protection and delivery": "Schutz und Übergabe",
   "Public access": "Öffentlicher Zugriff",
+  "Public access to {gallery} was revoked": "Der öffentliche Zugriff auf {gallery} wurde widerrufen",
   "Public gallery language": "Sprache der öffentlichen Galerie",
   "Public gallery link": "Öffentlicher Galerielink",
   "Public gallery link updated.": "Öffentlicher Galerielink wurde aktualisiert.",
@@ -878,6 +900,7 @@ OC.L10N.register("proofing_gallery", {
   "XMP synchronization completed.": "XMP-Synchronisierung abgeschlossen.",
   "XMP synchronization could not be completed.": "Die XMP-Synchronisierung konnte nicht abgeschlossen werden.",
   "Yellow": "Gelb",
+  "You can now manage {gallery}": "Sie können {gallery} jetzt verwalten",
   "You subscribed to these gallery updates. Unsubscribe: %s": "Sie haben diese Galerieaktualisierungen abonniert. Abmelden: %s",
   "Your changes remain in this browser.": "Ihre Änderungen bleiben in diesem Browser erhalten.",
   "Your feedback is private": "Ihr Feedback ist privat",

@@ -1,0 +1,1207 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Method OCA\\ProofingGallery\\BackgroundJob\\CleanupGalleryDataJob\:\:run\(\) has parameter \$argument with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: lib/BackgroundJob/CleanupGalleryDataJob.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\BackgroundJob\\PurgeGuestsJob\:\:run\(\) has parameter \$argument with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: lib/BackgroundJob/PurgeGuestsJob.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\BackgroundJob\\RebuildMediaIndexJob\:\:run\(\) has parameter \$argument with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: lib/BackgroundJob/RebuildMediaIndexJob.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\BackgroundJob\\SendNotificationDigestsJob\:\:run\(\) has parameter \$argument with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: lib/BackgroundJob/SendNotificationDigestsJob.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\ActivityController\:\:index\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/ActivityController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\AdminController\:\:apply\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/AdminController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\AdminController\:\:deleteBrandLogo\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/AdminController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\AdminController\:\:impact\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/AdminController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\AdminController\:\:reconcileCollectionAnchors\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/AdminController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\AdminController\:\:revokePublications\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/AdminController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\AdminController\:\:save\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/AdminController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\AdminController\:\:settings\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/AdminController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\AdminController\:\:updateSettings\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/AdminController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\AdminController\:\:uploadBrandLogo\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/AdminController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\CollaborationController\:\:addComment\(\) return type with generic class OCP\\AppFramework\\Http\\JSONResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/CollaborationController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\CollaborationController\:\:deleteComment\(\) return type with generic class OCP\\AppFramework\\Http\\JSONResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/CollaborationController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\CollaborationController\:\:exportSelection\(\) return type with generic class OCP\\AppFramework\\Http\\Response does not specify its types\: S, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/CollaborationController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\CollaborationController\:\:mutation\(\) return type with generic class OCP\\AppFramework\\Http\\JSONResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/CollaborationController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\CollaborationController\:\:saveSelection\(\) return type with generic class OCP\\AppFramework\\Http\\JSONResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/CollaborationController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\CollaborationController\:\:setColor\(\) return type with generic class OCP\\AppFramework\\Http\\JSONResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/CollaborationController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\CollaborationController\:\:setRating\(\) return type with generic class OCP\\AppFramework\\Http\\JSONResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/CollaborationController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\CollaborationController\:\:state\(\) return type with generic class OCP\\AppFramework\\Http\\JSONResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/CollaborationController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\CollaborationController\:\:toggleLike\(\) return type with generic class OCP\\AppFramework\\Http\\JSONResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/CollaborationController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\CollaborationController\:\:updateComment\(\) return type with generic class OCP\\AppFramework\\Http\\JSONResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/CollaborationController.php
+
+		-
+			message: '#^Parameter \#2 \$statusCode of class OCP\\AppFramework\\Http\\JSONResponse constructor expects S of 100\|101\|102\|200\|201\|202\|203\|204\|205\|206\|207\|208\|226\|300\|301\|302\|303\|304\|305\|306\|307\|400\|401\|402\|403\|404\|405\|406\|407\|408\|409\|410\|411\|412\|413\|414\|415\|416\|417\|418\|422\|423\|424\|426\|428\|429\|431\|500\|501\|502\|503\|504\|505\|506\|507\|508\|509\|510\|511, int given\.$#'
+			identifier: argument.type
+			count: 1
+			path: lib/Controller/CollaborationController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:archive\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:bulkMedia\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:collection\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:complete\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:create\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:createFolder\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:createProject\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:createPublicLink\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:culling\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:deleteMedia\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:deleteSelection\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:downloadMedia\(\) return type with generic class OCP\\AppFramework\\Http\\Response does not specify its types\: S, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:exportSelection\(\) return type with generic class OCP\\AppFramework\\Http\\Response does not specify its types\: S, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:exportSelectionXmp\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:guestRatingPromotionPreview\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:guestRatings\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:index\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:indexMetadata\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:indexedMedia\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:makePublicLinkPrimary\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:media\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:mediaMetadata\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:preview\(\) return type with generic class OCP\\AppFramework\\Http\\DataDisplayResponse does not specify its types\: S, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:promoteGuestRatings\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:publicLinks\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:rebuildMediaIndex\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:renameMedia\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:replaceMedia\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:restore\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:restoreMediaVersion\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:revokePublicLink\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:selections\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:shareAudit\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:show\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:source\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:synchronizeCullingXmp\(\) has parameter \$fieldChoices with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:synchronizeCullingXmp\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:update\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:updateCollection\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:updateCulling\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:updateMediaMetadata\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:updatePublicLink\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:updateSelection\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:uploadMedia\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GalleryController\:\:versions\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GuestController\:\:create\(\) return type with generic class OCP\\AppFramework\\Http\\JSONResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GuestController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GuestController\:\:current\(\) return type with generic class OCP\\AppFramework\\Http\\JSONResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GuestController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\GuestController\:\:destroy\(\) return type with generic class OCP\\AppFramework\\Http\\JSONResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/GuestController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\InboxController\:\:accept\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/InboxController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\InboxController\:\:index\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/InboxController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\InboxController\:\:moderate\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/InboxController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\InboxController\:\:reject\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/InboxController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\InvitationTemplateController\:\:create\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/InvitationTemplateController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\InvitationTemplateController\:\:delete\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/InvitationTemplateController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\InvitationTemplateController\:\:index\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/InvitationTemplateController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\InvitationTemplateController\:\:render\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/InvitationTemplateController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\InvitationTemplateController\:\:update\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/InvitationTemplateController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\ManagerController\:\:index\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/ManagerController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\ManagerController\:\:remove\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/ManagerController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\ManagerController\:\:save\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/ManagerController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\NotificationController\:\:delete\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/NotificationController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\NotificationController\:\:index\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/NotificationController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\NotificationController\:\:save\(\) has parameter \$nativeEventTypes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Controller/NotificationController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\NotificationController\:\:save\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/NotificationController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\NotificationController\:\:unsubscribe\(\) return type with generic class OCP\\AppFramework\\Http\\DataDisplayResponse does not specify its types\: S, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/NotificationController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\PageController\:\:index\(\) return type with generic class OCP\\AppFramework\\Http\\TemplateResponse does not specify its types\: S, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/PageController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\PreferenceController\:\:show\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/PreferenceController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\PreferenceController\:\:update\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/PreferenceController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\PresetController\:\:apply\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/PresetController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\PresetController\:\:create\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/PresetController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\PresetController\:\:delete\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/PresetController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\PresetController\:\:index\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/PresetController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\PresetController\:\:update\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/PresetController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\PublicGalleryController\:\:asset\(\) return type with generic class OCP\\AppFramework\\Http\\DataDisplayResponse does not specify its types\: S, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/PublicGalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\PublicGalleryController\:\:contactSheet\(\) return type with generic class OCP\\AppFramework\\Http\\DataDisplayResponse does not specify its types\: S, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/PublicGalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\PublicGalleryController\:\:download\(\) return type with generic class OCP\\AppFramework\\Http\\Response does not specify its types\: S, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/PublicGalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\PublicGalleryController\:\:downloadSelection\(\) return type with generic class OCP\\AppFramework\\Http\\Response does not specify its types\: S, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/PublicGalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\PublicGalleryController\:\:gallery\(\) return type with generic class OCP\\AppFramework\\Http\\JSONResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/PublicGalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\PublicGalleryController\:\:mediaStream\(\) return type with generic class OCP\\AppFramework\\Http\\DataDisplayResponse does not specify its types\: S, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/PublicGalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\PublicGalleryController\:\:preview\(\) return type with generic class OCP\\AppFramework\\Http\\DataDisplayResponse does not specify its types\: S, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/PublicGalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\PublicGalleryController\:\:previewResponse\(\) return type with generic class OCP\\AppFramework\\Http\\DataDisplayResponse does not specify its types\: S, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/PublicGalleryController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\ShareController\:\:invite\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/ShareController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\ShareController\:\:publish\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/ShareController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\ShareController\:\:revoke\(\) return type with generic class OCP\\AppFramework\\Http\\DataResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/ShareController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\UploadController\:\:finalize\(\) return type with generic class OCP\\AppFramework\\Http\\JSONResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/UploadController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\UploadController\:\:initiate\(\) return type with generic class OCP\\AppFramework\\Http\\JSONResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/UploadController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\UploadController\:\:mutation\(\) return type with generic class OCP\\AppFramework\\Http\\JSONResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/UploadController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\UploadController\:\:putChunk\(\) return type with generic class OCP\\AppFramework\\Http\\JSONResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/UploadController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Controller\\UploadController\:\:status\(\) return type with generic class OCP\\AppFramework\\Http\\JSONResponse does not specify its types\: S, T, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Controller/UploadController.php
+
+		-
+			message: '#^Parameter \#2 \$statusCode of class OCP\\AppFramework\\Http\\JSONResponse constructor expects S of 100\|101\|102\|200\|201\|202\|203\|204\|205\|206\|207\|208\|226\|300\|301\|302\|303\|304\|305\|306\|307\|400\|401\|402\|403\|404\|405\|406\|407\|408\|409\|410\|411\|412\|413\|414\|415\|416\|417\|418\|422\|423\|424\|426\|428\|429\|431\|500\|501\|502\|503\|504\|505\|506\|507\|508\|509\|510\|511, int given\.$#'
+			identifier: argument.type
+			count: 1
+			path: lib/Controller/UploadController.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Db\\GuestRatingMapper\:\:findForGalleryFiles\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Db/GuestRatingMapper.php
+
+		-
+			message: '#^Call to function is_string\(\) with string will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 1
+			path: lib/Dto/GallerySettings.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Dto\\GallerySettings\:\:mergeSection\(\) has parameter \$input with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Dto/GallerySettings.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Dto\\GallerySettings\:\:mergeSection\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Dto/GallerySettings.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Dto\\GallerySettings\:\:object\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Dto/GallerySettings.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Dto\\MediaItem\:\:__construct\(\) has parameter \$metadata with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Dto/MediaItem.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Dto\\MediaItem\:\:jsonSerialize\(\) should return array\<string, bool\|int\|string\> but returns array\<string, array\|bool\|int\|string\>\.$#'
+			identifier: return.type
+			count: 1
+			path: lib/Dto/MediaItem.php
+
+		-
+			message: '#^Class OCA\\ProofingGallery\\Http\\TemporaryFileResponse extends generic class OCP\\AppFramework\\Http\\StreamResponse but does not specify its types\: S, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Http/TemporaryFileResponse.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000100Date20260730\:\:changeSchema\(\) has parameter \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Migration/Version000100Date20260730.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000100Date20260730\:\:changeSchema\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: lib/Migration/Version000100Date20260730.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000101Date20260730\:\:changeSchema\(\) has parameter \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Migration/Version000101Date20260730.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000101Date20260730\:\:changeSchema\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: lib/Migration/Version000101Date20260730.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000102Date20260730\:\:changeSchema\(\) has parameter \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Migration/Version000102Date20260730.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000102Date20260730\:\:changeSchema\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: lib/Migration/Version000102Date20260730.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000103Date20260731\:\:changeSchema\(\) has parameter \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Migration/Version000103Date20260731.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000103Date20260731\:\:changeSchema\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: lib/Migration/Version000103Date20260731.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000104Date20260731\:\:changeSchema\(\) has parameter \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Migration/Version000104Date20260731.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000104Date20260731\:\:changeSchema\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: lib/Migration/Version000104Date20260731.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000105Date20260731\:\:changeSchema\(\) has parameter \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Migration/Version000105Date20260731.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000105Date20260731\:\:changeSchema\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: lib/Migration/Version000105Date20260731.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000106Date20260731\:\:changeSchema\(\) has parameter \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Migration/Version000106Date20260731.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000106Date20260731\:\:changeSchema\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: lib/Migration/Version000106Date20260731.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000107Date20260731\:\:changeSchema\(\) has parameter \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Migration/Version000107Date20260731.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000107Date20260731\:\:changeSchema\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: lib/Migration/Version000107Date20260731.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000108Date20260731\:\:changeSchema\(\) has parameter \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Migration/Version000108Date20260731.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000108Date20260731\:\:changeSchema\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: lib/Migration/Version000108Date20260731.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000109Date20260731\:\:changeSchema\(\) has parameter \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Migration/Version000109Date20260731.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000109Date20260731\:\:changeSchema\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: lib/Migration/Version000109Date20260731.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000110Date20260801\:\:changeSchema\(\) has parameter \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Migration/Version000110Date20260801.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000110Date20260801\:\:changeSchema\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: lib/Migration/Version000110Date20260801.php
+
+		-
+			message: '#^Call to an undefined method OCP\\DB\\IResult\:\:fetchAssociative\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: lib/Migration/Version000111Date20260801.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000111Date20260801\:\:changeSchema\(\) has parameter \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Migration/Version000111Date20260801.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000111Date20260801\:\:changeSchema\(\) never returns null so it can be removed from the return type\.$#'
+			identifier: return.unusedType
+			count: 1
+			path: lib/Migration/Version000111Date20260801.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Migration\\Version000111Date20260801\:\:postSchemaChange\(\) has parameter \$options with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Migration/Version000111Date20260801.php
+
+		-
+			message: '#^Call to an undefined method OCP\\DB\\IResult\:\:fetchAllAssociative\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: lib/Service/ActivityService.php
+
+		-
+			message: '#^Call to an undefined method OCP\\DB\\IResult\:\:fetchAllAssociative\(\)\.$#'
+			identifier: method.notFound
+			count: 4
+			path: lib/Service/CollaborationService.php
+
+		-
+			message: '#^Call to an undefined method OCP\\DB\\IResult\:\:fetchAssociative\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: lib/Service/CollaborationService.php
+
+		-
+			message: '#^Call to an undefined method OCP\\DB\\IResult\:\:fetchFirstColumn\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: lib/Service/CollaborationService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\CollaborationService\:\:composeExportRows\(\) has parameter \$fields with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/CollaborationService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\CollaborationService\:\:composeExportRows\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/CollaborationService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\CollaborationService\:\:exportOwnerSelection\(\) has parameter \$fields with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/CollaborationService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\CollaborationService\:\:exportSelection\(\) has parameter \$requestedFields with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/CollaborationService.php
+
+		-
+			message: '#^Call to an undefined method OCP\\DB\\IResult\:\:fetchAllAssociative\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: lib/Service/CollectionService.php
+
+		-
+			message: '#^Property OCA\\ProofingGallery\\Service\\CullingXmpService\:\:\$culls is never read, only written\.$#'
+			identifier: property.onlyWritten
+			count: 1
+			path: lib/Service/CullingXmpService.php
+
+		-
+			message: '#^Call to an undefined method OCP\\DB\\IResult\:\:fetchAllAssociative\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: lib/Service/GuestRatingService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\GuestRatingService\:\:aggregate\(\) has parameter \$fileIds with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/GuestRatingService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\GuestRatingService\:\:promote\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/GuestRatingService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\GuestRatingService\:\:promotionPlan\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/GuestRatingService.php
+
+		-
+			message: '#^Call to an undefined method OCP\\DB\\IResult\:\:fetchAllAssociative\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: lib/Service/HealthService.php
+
+		-
+			message: '#^Call to an undefined method OCP\\DB\\IResult\:\:fetchAllAssociative\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: lib/Service/LifecycleService.php
+
+		-
+			message: '#^Call to an undefined method OCP\\DB\\IResult\:\:fetchFirstColumn\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: lib/Service/LifecycleService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\MediaIndexService\:\:normalizePath\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: lib/Service/MediaIndexService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\MediaMetadataService\:\:extract\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/MediaMetadataService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\MediaMetadataService\:\:first\(\) has parameter \$keys with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/MediaMetadataService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\MediaMetadataService\:\:flatten\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/MediaMetadataService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\MediaMetadataService\:\:gps\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/MediaMetadataService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\MediaMetadataService\:\:iptcFirst\(\) has parameter \$iptc with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/MediaMetadataService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\MediaMetadataService\:\:iptcList\(\) has parameter \$iptc with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/MediaMetadataService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\MediaMetadataService\:\:publicSummary\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/MediaMetadataService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\MediaMetadataService\:\:validatedChanges\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/MediaMetadataService.php
+
+		-
+			message: '#^Call to an undefined method OCP\\DB\\IResult\:\:fetchAssociative\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: lib/Service/MediaSummaryService.php
+
+		-
+			message: '#^Call to an undefined method OCP\\DB\\IResult\:\:fetchAssociative\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: lib/Service/NativeNotificationService.php
+
+		-
+			message: '#^Call to an undefined method OCP\\DB\\IResult\:\:fetchFirstColumn\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: lib/Service/NativeNotificationService.php
+
+		-
+			message: '#^Call to an undefined method OCP\\DB\\IResult\:\:fetchAllAssociative\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: lib/Service/NotificationService.php
+
+		-
+			message: '#^Call to an undefined method OCP\\DB\\IResult\:\:fetchAssociative\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: lib/Service/NotificationService.php
+
+		-
+			message: '#^Call to an undefined method OCP\\DB\\IResult\:\:fetchFirstColumn\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: lib/Service/NotificationService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\NotificationService\:\:save\(\) has parameter \$nativeEventTypes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/NotificationService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\PolicyService\:\:saveInstanceSettings\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/PolicyService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\PublicGalleryDataService\:\:response\(\) has parameter \$groups with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/PublicGalleryDataService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\PublicGalleryDataService\:\:response\(\) has parameter \$indexState with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/PublicGalleryDataService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\PublicGalleryDataService\:\:response\(\) has parameter \$scope with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/PublicGalleryDataService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\PublicLinkManagerService\:\:create\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/PublicLinkManagerService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\PublicLinkManagerService\:\:makePrimary\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/PublicLinkManagerService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\PublicLinkManagerService\:\:revoke\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/PublicLinkManagerService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\PublicLinkManagerService\:\:update\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/PublicLinkManagerService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\PublicLinkManagerService\:\:validate\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/PublicLinkManagerService.php
+
+		-
+			message: '#^Call to an undefined method OCP\\DB\\IResult\:\:fetchAllAssociative\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: lib/Service/ShareAuditService.php
+
+		-
+			message: '#^Call to an undefined method OCP\\DB\\IResult\:\:fetchAllAssociative\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: lib/Service/UploadService.php
+
+		-
+			message: '#^Call to an undefined method OCP\\DB\\IResult\:\:fetchAssociative\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: lib/Service/UploadService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Service\\UserPreferenceService\:\:save\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: lib/Service/UserPreferenceService.php
+
+		-
+			message: '#^Call to an undefined method OCP\\DB\\IResult\:\:fetchAllAssociative\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: lib/Service/VersionService.php
+
+		-
+			message: '#^Call to an undefined method OCP\\DB\\IResult\:\:fetchAssociative\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: lib/Service/VersionService.php
+
+		-
+			message: '#^Call to an undefined method OCP\\Files\\File\:\:read\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: lib/Service/VersionService.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Settings\\Admin\:\:getForm\(\) return type with generic class OCP\\AppFramework\\Http\\TemplateResponse does not specify its types\: S, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Settings/Admin.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Settings\\Personal\:\:getForm\(\) return type with generic class OCP\\AppFramework\\Http\\TemplateResponse does not specify its types\: S, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Settings/Personal.php
+
+		-
+			message: '#^Method OCA\\ProofingGallery\\Share\\PublicShareTemplateProvider\:\:renderPage\(\) return type with generic class OCP\\AppFramework\\Http\\TemplateResponse does not specify its types\: S, H$#'
+			identifier: missingType.generics
+			count: 1
+			path: lib/Share/PublicShareTemplateProvider.php

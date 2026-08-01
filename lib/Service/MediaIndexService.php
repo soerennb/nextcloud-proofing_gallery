@@ -8,6 +8,7 @@ use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\MediaIndex;
 use OCA\ProofingGallery\Db\MediaIndexMapper;
+use OCA\ProofingGallery\Dto\MediaIndexQuery;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\Files\File;
@@ -24,7 +25,7 @@ final class MediaIndexService {
 		private FolderService $folders,
 		private PolicyService $policies,
 		private ITimeFactory $clock,
-		private CullingService $culling,
+		private MediaCursorCodec $cursors,
 	) {
 	}
 
@@ -82,32 +83,15 @@ final class MediaIndexService {
 		string $sortDirection = 'asc',
 		int $minOwnerRating = 0,
 	): array {
-		$limit = max(1, min(200, $limit));
-		$pathPrefix = $this->normalizePath($pathPrefix);
-		$search = mb_substr(mb_strtolower(trim($search)), 0, 120);
-		if (!in_array($sortBy, ['name', 'modified', 'size'], true) || !in_array($sortDirection, ['asc', 'desc'], true)) {
-			throw new \InvalidArgumentException('Invalid media index arrangement');
-		}
-		[$afterValue, $afterFileId] = $this->decodeCursor($cursor, $sortBy, $sortDirection, $pathPrefix, $search);
-		$entries = $this->index->page(
-			$gallery->getId(),
-			$limit + 1,
-			$afterValue,
-			$afterFileId,
-			$pathPrefix,
-			$search,
-			$sortBy,
-			$sortDirection,
-		);
-		$hasMore = count($entries) > $limit;
+		$query = MediaIndexQuery::fromInput($gallery->getId(), $gallery->getOwnerUid(), $limit, $pathPrefix, $search, $sortBy, $sortDirection, $minOwnerRating);
+		$pageQuery = $query->withLimit($query->limit + 1);
+		[$afterValue, $afterFileId] = $this->cursors->decode($cursor, $query);
+		$entries = $this->index->page($pageQuery, $afterValue, $afterFileId);
+		$hasMore = count($entries) > $query->limit;
 		if ($hasMore) array_pop($entries);
 
 		$items = [];
-		$culls = $minOwnerRating > 0
-			? $this->culling->forFiles($gallery->getOwnerUid(), array_map(static fn (MediaIndex $entry): int => $entry->getFileId(), $entries))
-			: [];
 		foreach ($entries as $entry) {
-			if ($minOwnerRating > 0 && (($culls[$entry->getFileId()] ?? null)?->getRating() ?? 0) < $minOwnerRating) continue;
 			try {
 				$file = $this->folders->resolveMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $entry->getFileId());
 				if (!hash_equals($entry->getEtag(), $file->getEtag())) continue;
@@ -119,19 +103,18 @@ final class MediaIndexService {
 		$last = $hasMore && $entries !== [] ? $entries[array_key_last($entries)] : null;
 		return [
 			'items' => $items,
-			'nextCursor' => $last === null ? null : $this->encodeCursor($last, $sortBy, $sortDirection, $pathPrefix, $search),
-			'total' => $this->index->countFiltered($gallery->getId(), $pathPrefix, $search),
+			'nextCursor' => $last === null ? null : $this->cursors->encode($last, $query),
+			'total' => $this->index->countFiltered($query),
 		];
 	}
 
 	/** @return array{groups: array<string, int>, indexed: int, limit: int, limitReached: bool, complete: bool, state: string, lastIndexedAt: ?int} */
 	public function summary(Gallery $gallery, string $pathPrefix, string $search, string $groupBy, int $groupDepth, int $minOwnerRating = 0): array {
-		$pathPrefix = $this->normalizePath($pathPrefix);
+		$query = MediaIndexQuery::fromInput($gallery->getId(), $gallery->getOwnerUid(), 1, $pathPrefix, $search, 'name', 'asc', $minOwnerRating);
+		$pathPrefix = $query->pathPrefix;
 		$groups = [];
-		$rows = $this->index->groupingRows($gallery->getId(), $pathPrefix, mb_strtolower(trim($search)));
-		$culls = $minOwnerRating > 0 ? $this->culling->forFiles($gallery->getOwnerUid(), array_column($rows, 'file_id')) : [];
+		$rows = $this->index->groupingRows($query);
 		foreach ($rows as $row) {
-			if ($minOwnerRating > 0 && (($culls[$row['file_id']] ?? null)?->getRating() ?? 0) < $minOwnerRating) continue;
 			$key = match ($groupBy) {
 				'type' => str_starts_with($row['mime_type'], 'video/') ? 'video' : 'image',
 				'folder' => $this->folderGroup($row['relative_path'], $pathPrefix, $groupDepth),
@@ -195,38 +178,6 @@ final class MediaIndexService {
 		} catch (UniqueConstraintViolationException) {
 			$this->upsert($galleryId, $file, $parentId, $relativePath, $depth, $generation, $now);
 		}
-	}
-
-	/** @return array{0: ?string, 1: ?int} */
-	private function decodeCursor(?string $cursor, string $sortBy, string $sortDirection, string $path, string $search): array {
-		if ($cursor === null || $cursor === '') return [null, null];
-		$decoded = base64_decode(strtr($cursor, '-_', '+/'), true);
-		$data = $decoded === false ? null : json_decode($decoded, true);
-		$value = $data['value'] ?? null;
-		if (!is_array($data)
-			|| (!is_string($value) && !is_int($value))
-			|| !is_int($data['fileId'] ?? null)
-			|| ($data['sortBy'] ?? null) !== $sortBy
-			|| ($data['sortDirection'] ?? null) !== $sortDirection
-			|| ($data['scope'] ?? null) !== hash('sha256', $path . "\0" . $search)) {
-			throw new \InvalidArgumentException('Invalid media cursor');
-		}
-		return [$value, $data['fileId']];
-	}
-
-	private function encodeCursor(MediaIndex $entry, string $sortBy, string $sortDirection, string $path, string $search): string {
-		$value = match ($sortBy) {
-			'modified' => $entry->getMtime(),
-			'size' => $entry->getSize(),
-			default => $entry->getSortKey(),
-		};
-		return rtrim(strtr(base64_encode(json_encode([
-			'value' => $value,
-			'fileId' => $entry->getFileId(),
-			'sortBy' => $sortBy,
-			'sortDirection' => $sortDirection,
-			'scope' => hash('sha256', $path . "\0" . $search),
-		], JSON_THROW_ON_ERROR)), '+/', '-_'), '=');
 	}
 
 	private function folderGroup(string $relativePath, string $pathPrefix, int $groupDepth): string {

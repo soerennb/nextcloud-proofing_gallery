@@ -51,9 +51,10 @@ final class MediaIndex extends Entity implements \JsonSerializable {
 	protected int $seenAt = 0;
 
 	public function __construct() {
-		foreach (['galleryId', 'fileId', 'parentFileId', 'size', 'mtime', 'depth', 'seenAt'] as $field) {
+		foreach (['galleryId', 'fileId', 'parentFileId', 'size', 'mtime', 'seenAt'] as $field) {
 			$this->addType($field, Types::BIGINT);
 		}
+		$this->addType('depth', Types::INTEGER);
 	}
 
 	/** @return array<string, int|string> */

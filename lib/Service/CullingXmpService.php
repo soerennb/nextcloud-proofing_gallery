@@ -10,14 +10,13 @@ use OCA\ProofingGallery\Db\MediaCullMapper;
 use OCA\ProofingGallery\Db\MediaIndexMapper;
 
 final class CullingXmpService {
-	private const MODES = ['report', 'app', 'xmp', 'merge'];
-
 	public function __construct(
 		private MediaIndexMapper $index,
 		private MediaCullMapper $culls,
 		private FolderService $folders,
 		private MediaMetadataService $metadata,
 		private CullingService $culling,
+		private CullingXmpResolver $resolver,
 	) {
 	}
 
@@ -37,11 +36,7 @@ final class CullingXmpService {
 		array $fieldChoices = [],
 	): array {
 		if ($gallery->getOwnerUid() !== $userId || $gallery->getSourceType() !== 'folder') throw new \InvalidArgumentException('Only folder gallery owners can synchronize XMP');
-		if (!in_array($mode, self::MODES, true)) throw new \InvalidArgumentException('Invalid XMP resolution mode');
-		foreach (['rating', 'color', 'pick'] as $field) {
-			$choice = $fieldChoices[$field] ?? 'app';
-			if (!in_array($choice, ['app', 'xmp'], true)) throw new \InvalidArgumentException('Invalid merge field source');
-		}
+		$this->resolver->validate($mode, $fieldChoices);
 		$max = $dryRun ? 2000 : 200;
 		$limit = max(1, min($max, $limit));
 		$offset = max(0, $offset);
@@ -57,7 +52,7 @@ final class CullingXmpService {
 				$appEntity = $known[$fileId] ?? null;
 				$app = $this->appState($fileId, $appEntity);
 				$xmp = $this->metadata->readCullingSidecar($file);
-				$resolved = $this->resolveState($mode, $app, $xmp, $fieldChoices);
+				$resolved = $this->resolver->resolve($mode, $app, $xmp, $fieldChoices);
 				$differences = array_values(array_filter(['rating', 'color', 'pick'], static fn (string $field): bool => $app[$field] !== $xmp[$field]));
 				$etagDiverged = $appEntity !== null && $appEntity->getSidecarEtag() !== null && $appEntity->getSidecarEtag() !== $xmp['etag'];
 				$action = $mode === 'report' ? 'report' : $mode;
@@ -94,7 +89,7 @@ final class CullingXmpService {
 					'action' => $action,
 					'wouldWrite' => $wouldWrite,
 				];
-			} catch (\Throwable $exception) {
+			} catch (\OCA\ProofingGallery\Exception\FolderAccessException|\OCA\ProofingGallery\Exception\MetadataConflictException|\OCP\Files\NotFoundException|\InvalidArgumentException|\RuntimeException $exception) {
 				$items[] = ['fileId' => $fileId, 'error' => $exception->getMessage()];
 			}
 		}
@@ -120,19 +115,4 @@ final class CullingXmpService {
 		];
 	}
 
-	/**
-	 * @param array{fileId: int, rating: int, color: string, pick: string, revision: int} $app
-	 * @param array{exists: bool, rating: int, color: string, pick: string} $xmp
-	 * @param array{rating?: string, color?: string, pick?: string} $fieldChoices
-	 * @return array{fileId: int, rating: int, color: string, pick: string, revision: int}
-	 */
-	private function resolveState(string $mode, array $app, array $xmp, array $fieldChoices): array {
-		if ($mode === 'xmp' && $xmp['exists']) return [...$app, 'rating' => $xmp['rating'], 'color' => $xmp['color'], 'pick' => $xmp['pick']];
-		if ($mode !== 'merge') return $app;
-		$result = $app;
-		foreach (['rating', 'color', 'pick'] as $field) {
-			if (($fieldChoices[$field] ?? 'app') === 'xmp' && $xmp['exists']) $result[$field] = $xmp[$field];
-		}
-		return $result;
-	}
 }

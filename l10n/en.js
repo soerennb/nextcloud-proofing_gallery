@@ -19,6 +19,18 @@ OC.L10N.register("proofing_gallery", {
     "%n like",
     "%n likes"
   ],
+  "_%n new client selection in {gallery}_::_%n new client selections in {gallery}_": [
+    "%n new client selection in {gallery}",
+    "%n new client selections in {gallery}"
+  ],
+  "_%n new comment in {gallery}_::_%n new comments in {gallery}_": [
+    "%n new comment in {gallery}",
+    "%n new comments in {gallery}"
+  ],
+  "_%n new upload in {gallery}_::_%n new uploads in {gallery}_": [
+    "%n new upload in {gallery}",
+    "%n new uploads in {gallery}"
+  ],
   "_%n star_::_%n stars_": [
     "%n star",
     "%n stars"
@@ -38,6 +50,12 @@ OC.L10N.register("proofing_gallery", {
   "{visible} visible · {loaded} of {total} loaded": "{visible} visible · {loaded} of {total} loaded",
   "%s prepared a private gallery for you.": "%s prepared a private gallery for you.",
   "%s shared “%s” with you": "%s shared “%s” with you",
+  "A client added a comment in {gallery}": "A client added a comment in {gallery}",
+  "A client changed a color status in {gallery}": "A client changed a color status in {gallery}",
+  "A client changed a like in {gallery}": "A client changed a like in {gallery}",
+  "A client edited a comment in {gallery}": "A client edited a comment in {gallery}",
+  "A client submitted a selection in {gallery}": "A client submitted a selection in {gallery}",
+  "A client uploaded a file to {gallery}": "A client uploaded a file to {gallery}",
   "A file chunk could not be uploaded.": "A file chunk could not be uploaded.",
   "A polished gallery with individual and complete downloads.": "A polished gallery with individual and complete downloads.",
   "A preview is required before owner culling changes.": "A preview is required before owner culling changes.",
@@ -73,6 +91,8 @@ OC.L10N.register("proofing_gallery", {
   "Also send gallery updates by email": "Also send gallery updates by email",
   "An image-first presentation without downloads or review tools.": "An image-first presentation without downloads or review tools.",
   "An instance logo is active. Upload a file to replace it.": "An instance logo is active. Upload a file to replace it.",
+  "An upload was accepted in {gallery}": "An upload was accepted in {gallery}",
+  "An upload was rejected in {gallery}": "An upload was rejected in {gallery}",
   "Appearance": "Appearance",
   "Apply": "Apply",
   "Apply field-wise merge": "Apply field-wise merge",
@@ -461,6 +481,7 @@ OC.L10N.register("proofing_gallery", {
   "Name this saved view": "Name this saved view",
   "Navigate": "Navigate",
   "Needs attention": "Needs attention",
+  "New activity in {gallery}": "New activity in {gallery}",
   "New client link": "New client link",
   "New client uploads": "New client uploads",
   "New comments": "New comments",
@@ -583,6 +604,7 @@ OC.L10N.register("proofing_gallery", {
   "Proofing Gallery settings": "Proofing Gallery settings",
   "Protection and delivery": "Protection and delivery",
   "Public access": "Public access",
+  "Public access to {gallery} was revoked": "Public access to {gallery} was revoked",
   "Public gallery language": "Public gallery language",
   "Public gallery link": "Public gallery link",
   "Public gallery link updated.": "Public gallery link updated.",
@@ -878,6 +900,7 @@ OC.L10N.register("proofing_gallery", {
   "XMP synchronization completed.": "XMP synchronization completed.",
   "XMP synchronization could not be completed.": "XMP synchronization could not be completed.",
   "Yellow": "Yellow",
+  "You can now manage {gallery}": "You can now manage {gallery}",
   "You subscribed to these gallery updates. Unsubscribe: %s": "You subscribed to these gallery updates. Unsubscribe: %s",
   "Your changes remain in this browser.": "Your changes remain in this browser.",
   "Your feedback is private": "Your feedback is private",

@@ -47,9 +47,7 @@ final class PublicLink extends Entity implements \JsonSerializable {
 	protected string $status = 'active';
 	protected bool $isPrimary = false;
 	protected string $policy = '{}';
-	// A sentinel ensures Entity marks an explicitly configured root path (the
-	// empty string) dirty for inserts on schemas upgraded before its DB default.
-	protected string $startPath = "\0";
+	protected string $startPath = '';
 	protected string $viewMode = 'folder';
 	protected int $groupDepth = 0;
 	protected int $minOwnerRating = 0;
@@ -59,8 +57,18 @@ final class PublicLink extends Entity implements \JsonSerializable {
 	protected ?int $revokedAt = null;
 
 	public function __construct() {
-		foreach (['galleryId', 'coreShareId', 'groupDepth', 'minOwnerRating', 'createdAt', 'updatedAt', 'revokedAt'] as $field) $this->addType($field, Types::BIGINT);
+		foreach (['galleryId', 'coreShareId', 'createdAt', 'updatedAt', 'revokedAt'] as $field) $this->addType($field, Types::BIGINT);
+		foreach (['groupDepth', 'minOwnerRating'] as $field) $this->addType($field, Types::INTEGER);
 		$this->addType('isPrimary', Types::BOOLEAN);
+	}
+
+	/**
+	 * The database cannot reliably provide a default for TEXT columns. Unlike
+	 * Entity's magic setter, this method also marks an empty root path dirty.
+	 */
+	public function setStartPath(string $startPath): void {
+		$this->markFieldUpdated('startPath');
+		$this->startPath = $startPath;
 	}
 
 	/** @return array<string, mixed> */

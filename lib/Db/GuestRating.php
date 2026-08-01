@@ -33,7 +33,8 @@ final class GuestRating extends Entity implements \JsonSerializable {
 	protected int $updatedAt = 0;
 
 	public function __construct() {
-		foreach (['galleryId', 'publicLinkId', 'guestId', 'fileId', 'rating', 'updatedAt'] as $field) $this->addType($field, Types::BIGINT);
+		foreach (['galleryId', 'publicLinkId', 'guestId', 'fileId', 'updatedAt'] as $field) $this->addType($field, Types::BIGINT);
+		$this->addType('rating', Types::INTEGER);
 	}
 
 	/** @return array{fileId: int, rating: int, pick: string, updatedAt: int} */

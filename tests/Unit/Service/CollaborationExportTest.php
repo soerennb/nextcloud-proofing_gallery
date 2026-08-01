@@ -4,14 +4,12 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Tests\Unit\Service;
 
-use OCA\ProofingGallery\Service\CollaborationService;
+use OCA\ProofingGallery\Service\CsvEncoder;
 use PHPUnit\Framework\TestCase;
 
 final class CollaborationExportTest extends TestCase {
 	public function testCsvUsesRfc4180QuotingAndCrlfForEdgeCases(): void {
-		$service = (new \ReflectionClass(CollaborationService::class))->newInstanceWithoutConstructor();
-		$method = new \ReflectionMethod($service, 'csv');
-		$content = $method->invoke($service, [
+		$content = (new CsvEncoder())->encode([
 			['filename', 'comment'],
 			['portrait, final.jpg', "Client said \"yes\"\nSecond line"],
 		]);

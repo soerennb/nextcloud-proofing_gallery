@@ -1,0 +1,19 @@
+includes:
+	- phpstan-baseline.neon
+
+parameters:
+	level: 6
+	paths:
+		- lib
+	bootstrapFiles:
+		- tests/bootstrap.php
+	tmpDir: .cache/phpstan
+	treatPhpDocTypesAsCertain: false
+	reportUnmatchedIgnoredErrors: false
+	ignoreErrors:
+		# OCP response status generics model literal status unions that controller methods intentionally vary.
+		- identifier: missingType.generics
+		  path: lib/Controller/*
+		# Nextcloud Entity exposes typed magic accessors declared in class PHPDoc.
+		- identifier: method.notFound
+		  path: lib/Db/*

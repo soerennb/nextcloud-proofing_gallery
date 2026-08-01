@@ -6,13 +6,13 @@ namespace OCA\ProofingGallery\Dto;
 
 use JsonSerializable;
 
-final readonly class MediaPage implements JsonSerializable {
+final class MediaPage implements JsonSerializable {
 	/** @param list<MediaItem> $items */
 	public function __construct(
-		public array $items,
-		public int $total,
-		public int $limit,
-		public int $offset,
+		public readonly array $items,
+		public readonly int $total,
+		public readonly int $limit,
+		public readonly int $offset,
 	) {
 	}
 

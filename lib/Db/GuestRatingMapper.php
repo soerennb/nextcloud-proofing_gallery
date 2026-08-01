@@ -44,4 +44,20 @@ final class GuestRatingMapper extends QBMapper {
 			->orderBy('file_id', 'ASC')->addOrderBy('guest_id', 'ASC');
 		return $this->findEntities($qb);
 	}
+
+	/** @param list<int> $fileIds @return list<GuestRating> */
+	public function findForGalleryFiles(int $galleryId, array $fileIds): array {
+		$fileIds = array_values(array_unique(array_filter(array_map('intval', $fileIds), static fn (int $id): bool => $id > 0)));
+		if ($fileIds === []) return [];
+		$result = [];
+		foreach (array_chunk($fileIds, 500) as $chunk) {
+			$qb = $this->db->getQueryBuilder();
+			$qb->select('*')->from($this->tableName)
+				->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+				->andWhere($qb->expr()->in('file_id', $qb->createNamedParameter($chunk, IQueryBuilder::PARAM_INT_ARRAY)))
+				->orderBy('file_id', 'ASC')->addOrderBy('guest_id', 'ASC');
+			array_push($result, ...$this->findEntities($qb));
+		}
+		return $result;
+	}
 }

@@ -2,6 +2,7 @@
 import { useVirtualizer, useWindowVirtualizer } from '@tanstack/vue-virtual'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { MediaItem } from '../types.ts'
+import { calculateMediaGridLayout } from '../domain/mediaGridLayout.ts'
 
 const props = withDefaults(defineProps<{
 	items: MediaItem[]
@@ -39,23 +40,20 @@ const viewportWidth = ref(1000)
 const scrollMargin = ref(0)
 let observer: ResizeObserver | undefined
 
-const columns = computed(() => {
-	if (props.list) return 1
-	const fitting = Math.max(1, Math.floor((width.value + props.gap) / (props.minItemWidth + props.gap)))
-	return props.maxColumns === undefined ? fitting : Math.min(fitting, Math.max(1, props.maxColumns))
-})
-const rows = computed(() => Math.ceil(props.items.length / columns.value))
-const itemWidth = computed(() => {
-	const available = (width.value - props.gap * (columns.value - 1)) / columns.value
-	return props.maxItemWidth === undefined ? available : Math.min(available, props.maxItemWidth)
-})
-const rowHeight = computed(() => props.list
-	? 94
-	: Math.max(120, itemWidth.value / (
-		props.mobileItemAspectRatio !== undefined && viewportWidth.value <= 600
-			? props.mobileItemAspectRatio
-			: props.itemAspectRatio
-	) + props.itemExtraHeight))
+const layout = computed(() => calculateMediaGridLayout({
+	containerWidth: width.value,
+	itemCount: props.items.length,
+	minItemWidth: props.minItemWidth,
+	maxItemWidth: props.maxItemWidth,
+	maxColumns: props.maxColumns,
+	gap: props.gap,
+	itemAspectRatio: props.mobileItemAspectRatio !== undefined && viewportWidth.value <= 600 ? props.mobileItemAspectRatio : props.itemAspectRatio,
+	itemExtraHeight: props.itemExtraHeight,
+	list: props.list,
+}))
+const columns = computed(() => layout.value.columns)
+const rows = computed(() => layout.value.rows)
+const rowHeight = computed(() => layout.value.rowHeight)
 
 const windowVirtualizer = useWindowVirtualizer<HTMLDivElement>(computed(() => ({
 	count: props.contained ? 0 : rows.value,
@@ -74,7 +72,7 @@ const elementVirtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>(comput
 const virtualizer = computed(() => props.contained ? elementVirtualizer.value : windowVirtualizer.value)
 
 const virtualRows = computed(() => virtualizer.value.getVirtualItems())
-const totalHeight = computed(() => Math.max(0, rows.value * (rowHeight.value + props.gap) - props.gap))
+const totalHeight = computed(() => layout.value.totalHeight)
 const viewportHeight = computed(() => props.contained
 	? Math.min(totalHeight.value, Math.max(360, Math.min(760, Math.round((typeof window === 'undefined' ? 900 : window.innerHeight) * 0.66))))
 	: totalHeight.value)

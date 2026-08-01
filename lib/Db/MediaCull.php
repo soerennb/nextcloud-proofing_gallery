@@ -42,7 +42,8 @@ final class MediaCull extends Entity implements \JsonSerializable {
 	protected int $updatedAt = 0;
 
 	public function __construct() {
-		foreach (['fileId', 'rating', 'revision', 'updatedAt'] as $field) $this->addType($field, Types::BIGINT);
+		foreach (['fileId', 'updatedAt'] as $field) $this->addType($field, Types::BIGINT);
+		foreach (['rating', 'revision'] as $field) $this->addType($field, Types::INTEGER);
 	}
 
 	/** @return array<string, int|string|null> */

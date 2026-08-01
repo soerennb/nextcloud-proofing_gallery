@@ -19,6 +19,7 @@
 /test-results-e2e-state.json
 /.phpunit.cache/
 /tests/.phpunit.cache/
+/.cache/
 /.eslintcache
 
 # Local development state

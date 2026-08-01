@@ -9,20 +9,20 @@ use JsonSerializable;
 use OCA\ProofingGallery\Domain\FeedbackVisibility;
 use OCA\ProofingGallery\Domain\GalleryMode;
 
-final readonly class GallerySettings implements JsonSerializable {
+final class GallerySettings implements JsonSerializable {
 	public const SCHEMA_VERSION = 5;
 	public const PUBLIC_METADATA_FIELDS = [
 		'capturedAt', 'camera', 'lens', 'exposure', 'title', 'description', 'creator', 'copyright',
 	];
 
 	/** @var list<string> */
-	public array $colorLabels;
-	public FeedbackVisibility $feedbackVisibility;
-	public bool $allowDownloads;
-	public bool $allowGuestUploads;
-	public bool $showFilenames;
+	public readonly array $colorLabels;
+	public readonly FeedbackVisibility $feedbackVisibility;
+	public readonly bool $allowDownloads;
+	public readonly bool $allowGuestUploads;
+	public readonly bool $showFilenames;
 	/** @var array<string, mixed> */
-	public array $appearance;
+	public readonly array $appearance;
 
 	/**
 	 * @param array{visibility: string, likes: bool, colors: bool, comments: bool, annotations: bool, selections: bool, ratings: bool, pick: bool, colorLabels: list<string>, colorEnabled: list<bool>, selectionWarningThreshold: int} $review
@@ -34,16 +34,16 @@ final readonly class GallerySettings implements JsonSerializable {
 	 * @param array{enabled: bool, trigger: string, revokeAt: string, revokeAfterDays: int, archiveAfterDays: int, reminderDays: list<int>} $lifecycle
 	 */
 	public function __construct(
-		public int $schemaVersion,
-		public GalleryMode $mode,
-		public string $publicLocale,
-		public array $review,
-		public array $presentation,
-		public array $delivery,
-		public array $navigation,
-		public array $security,
-		public array $metadata,
-		public array $lifecycle,
+		public readonly int $schemaVersion,
+		public readonly GalleryMode $mode,
+		public readonly string $publicLocale,
+		public readonly array $review,
+		public readonly array $presentation,
+		public readonly array $delivery,
+		public readonly array $navigation,
+		public readonly array $security,
+		public readonly array $metadata,
+		public readonly array $lifecycle,
 	) {
 		$this->validate();
 		$this->feedbackVisibility = FeedbackVisibility::from($review['visibility']);

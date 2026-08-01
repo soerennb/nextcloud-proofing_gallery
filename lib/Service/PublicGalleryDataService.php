@@ -7,6 +7,7 @@ namespace OCA\ProofingGallery\Service;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\PublicLink;
 use OCA\ProofingGallery\Dto\GallerySettings;
+use OCA\ProofingGallery\Domain\DownloadScope;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\Node;
@@ -242,14 +243,9 @@ final class PublicGalleryDataService {
 			$serialized['review']['pick'] = $serialized['review']['pick'] && $policy['pick'] && $this->capabilities->feature('guestRatings');
 			$serialized['delivery']['guestUploads'] = $serialized['delivery']['guestUploads'] && $policy['upload'];
 			$serialized['allowGuestUploads'] = $serialized['delivery']['guestUploads'];
-			$allowedDownloads = ['none' => [], 'individual' => ['individual'], 'selection' => ['selection'], 'all' => ['individual', 'selection']];
-			$intersection = array_values(array_intersect($allowedDownloads[$serialized['delivery']['downloadScope']], $allowedDownloads[$policy['downloadScope']]));
-			$serialized['delivery']['downloadScope'] = match ($intersection) {
-				['individual'] => 'individual',
-				['selection'] => 'selection',
-				['individual', 'selection'] => 'all',
-				default => 'none',
-			};
+			$serialized['delivery']['downloadScope'] = DownloadScope::from($serialized['delivery']['downloadScope'])
+				->restrict(DownloadScope::from((string)$policy['downloadScope']))
+				->value;
 			$serialized['allowDownloads'] = $serialized['delivery']['downloadScope'] !== 'none';
 			if (!$policy['metadata']) $serialized['metadata']['publicFields'] = [];
 			if ($link->getPublicLocale() !== null) $serialized['publicLocale'] = $link->getPublicLocale();

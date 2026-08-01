@@ -9,6 +9,14 @@ upgrade_root="$(mktemp -d -t proofing-gallery-upgrade.XXXXXXXX)"
 project_name="pg-upgrade-05-$$"
 app_source="${upgrade_root}/proofing_gallery"
 expected_version="$(php -r '$xml=simplexml_load_file($argv[1]); echo (string)$xml->version;' "${repo_dir}/appinfo/info.xml")"
+upgrade_from_ref="${UPGRADE_FROM_REF:-HEAD^}"
+previous_version="$(git -C "${repo_dir}" show "${upgrade_from_ref}:appinfo/info.xml" \
+	| php -r '$xml=simplexml_load_string(stream_get_contents(STDIN)); echo (string)$xml->version;')"
+
+if [[ "${previous_version}" == "${expected_version}" ]]; then
+	echo "Upgrade source ${upgrade_from_ref} already has version ${expected_version}; choose an older UPGRADE_FROM_REF." >&2
+	exit 2
+fi
 
 cleanup() {
 	COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION=34 \
@@ -24,7 +32,7 @@ if [[ ! -f "${archive}" ]]; then
 fi
 
 install -d "${app_source}"
-git -C "${repo_dir}" archive HEAD | tar -x -C "${app_source}"
+git -C "${repo_dir}" archive "${upgrade_from_ref}" | tar -x -C "${app_source}"
 
 compose() {
 	COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION=34 \
@@ -85,4 +93,4 @@ if [[ "${version}" != "${expected_version}" ]]; then
 	exit 4
 fi
 
-echo "Previous release -> ${expected_version} schema and data upgrade passed."
+echo "${previous_version} (${upgrade_from_ref}) -> ${expected_version} schema and data upgrade passed."

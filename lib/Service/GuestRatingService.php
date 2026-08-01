@@ -17,6 +17,7 @@ final class GuestRatingService {
 		private ITimeFactory $clock,
 		private CullingService $culling,
 		private \OCP\IDBConnection $db,
+		private GuestRatingAggregator $aggregator,
 	) {
 	}
 
@@ -53,10 +54,11 @@ final class GuestRatingService {
 	}
 
 	/** @return array{items: list<array<string, mixed>>, guests: array<int, string>} */
-	public function aggregate(\OCA\ProofingGallery\Db\Gallery $gallery): array {
+	public function aggregate(\OCA\ProofingGallery\Db\Gallery $gallery, array $fileIds = []): array {
 		$grouped = [];
 		$guests = [];
-		foreach ($this->ratings->findForGallery($gallery->getId()) as $value) {
+		$values = $fileIds === [] ? $this->ratings->findForGallery($gallery->getId()) : $this->ratings->findForGalleryFiles($gallery->getId(), $fileIds);
+		foreach ($values as $value) {
 			$grouped[$value->getFileId()][] = $value;
 			$guests[$value->getGuestId()] = '';
 		}
@@ -70,42 +72,16 @@ final class GuestRatingService {
 		}
 		$items = [];
 		foreach ($grouped as $fileId => $values) {
-			$items[] = $this->summarizeFile((int)$fileId, $values, $guests);
+			$items[] = $this->aggregator->summarize((int)$fileId, $values, $guests);
 		}
 		return ['items' => $items, 'guests' => $guests];
-	}
-
-	/** @param list<GuestRating> $values @param array<int, string> $guests @return array<string, mixed> */
-	private function summarizeFile(int $fileId, array $values, array $guests): array {
-		if ($values === []) throw new \InvalidArgumentException('Cannot summarize an empty guest rating set');
-		$distribution = array_fill(0, 6, 0);
-		$picks = ['none' => 0, 'pick' => 0, 'reject' => 0];
-		$sum = 0;
-		$updatedAt = 0;
-		$individuals = [];
-		foreach ($values as $value) {
-			$distribution[$value->getRating()]++;
-			$picks[$value->getPickState()]++;
-			$sum += $value->getRating();
-			$updatedAt = max($updatedAt, $value->getUpdatedAt());
-			$individuals[] = ['guestId' => $value->getGuestId(), 'name' => ($guests[$value->getGuestId()] ?? '') ?: 'Guest', ...$value->jsonSerialize()];
-		}
-		return [
-			'fileId' => $fileId,
-			'count' => count($values),
-			'average' => round($sum / count($values), 2),
-			'distribution' => $distribution,
-			'picks' => $picks,
-			'updatedAt' => $updatedAt,
-			'individuals' => $individuals,
-		];
 	}
 
 	/** @param list<int> $fileIds @return list<array<string, mixed>> */
 	public function promotionPlan(\OCA\ProofingGallery\Db\Gallery $gallery, array $fileIds): array {
 		$fileIds = array_values(array_unique(array_filter(array_map('intval', $fileIds), static fn (int $id): bool => $id > 0)));
 		if (count($fileIds) > 200) throw new \InvalidArgumentException('Select no more than 200 media items');
-		$aggregates = array_column($this->aggregate($gallery)['items'], null, 'fileId');
+		$aggregates = array_column($this->aggregate($gallery, $fileIds)['items'], null, 'fileId');
 		$current = $this->culling->forFiles($gallery->getOwnerUid(), $fileIds);
 		$result = [];
 		foreach (array_values(array_unique($fileIds)) as $fileId) {
@@ -129,25 +105,32 @@ final class GuestRatingService {
 	/** @param list<array<string, mixed>> $items @return list<array<string, mixed>> */
 	public function promote(string $ownerUid, \OCA\ProofingGallery\Db\Gallery $gallery, array $items): array {
 		$plan = array_column($this->promotionPlan($gallery, array_map(static fn (array $item): int => (int)($item['fileId'] ?? 0), $items)), null, 'fileId');
-		$result = [];
+		$current = $this->culling->forFiles($ownerUid, array_keys($plan));
+		$updates = [];
+		$unchanged = [];
 		foreach ($items as $item) {
 			$fileId = (int)($item['fileId'] ?? 0);
 			$currentPlan = $plan[$fileId] ?? throw new \InvalidArgumentException('Guest rating promotion is stale');
 			if ((int)($item['guestUpdatedAt'] ?? 0) !== $currentPlan['guestUpdatedAt']) throw new \InvalidArgumentException('Guest rating promotion is stale');
 			$target = $currentPlan['target'];
-			$owner = $this->culling->forFiles($ownerUid, [$fileId])[$fileId] ?? null;
+			$owner = $current[$fileId] ?? null;
 			if ($owner !== null && $owner->getRating() === (int)$target['rating'] && $owner->getPickState() === (string)$target['pick']) {
-				$result[] = $owner->jsonSerialize();
+				$unchanged[$fileId] = $owner->jsonSerialize();
 				continue;
 			}
-			$updated = $this->culling->updateBatch($ownerUid, $gallery, [[
+			$updates[] = [
 				'fileId' => $fileId,
 				'rating' => (int)$target['rating'],
 				'pick' => (string)$target['pick'],
 				'color' => (string)($target['color'] ?? $owner?->getColor() ?? 'none'),
 				'expectedRevision' => (int)($item['expectedOwnerRevision'] ?? $owner?->getRevision() ?? 0),
-			]])[0];
-			$result[] = $updated->jsonSerialize();
+			];
+		}
+		$changed = $updates === [] ? [] : array_column(array_map(static fn ($value): array => $value->jsonSerialize(), $this->culling->updateBatch($ownerUid, $gallery, $updates)), null, 'fileId');
+		$result = [];
+		foreach ($items as $item) {
+			$fileId = (int)$item['fileId'];
+			$result[] = $changed[$fileId] ?? $unchanged[$fileId];
 		}
 		return $result;
 	}

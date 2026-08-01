@@ -5,14 +5,12 @@ declare(strict_types=1);
 namespace OCA\ProofingGallery\Controller;
 
 use InvalidArgumentException;
-use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Db\Gallery;
-use OCA\ProofingGallery\Db\GalleryMapper;
 use OCA\ProofingGallery\Db\PublicLink;
-use OCA\ProofingGallery\Db\PublicLinkMapper;
 use OCA\ProofingGallery\Db\Guest;
 use OCA\ProofingGallery\Service\CollaborationService;
 use OCA\ProofingGallery\Service\GuestService;
+use OCA\ProofingGallery\Service\PublicShareContextResolver;
 use OCA\ProofingGallery\Exception\PolicyViolationException;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
@@ -22,26 +20,14 @@ use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\DataDownloadResponse;
 use OCP\AppFramework\Http\Response;
-use OCP\AppFramework\PublicShareController;
 use OCP\IRequest;
 use OCP\ISession;
-use OCP\Share\Exceptions\ShareNotFound;
-use OCP\Share\IManager;
-use OCP\Share\IShare;
 
-final class CollaborationController extends PublicShareController {
-	private ?IShare $share = null;
-	private ?Gallery $gallery = null;
-	private ?PublicLink $publicLink = null;
-
+final class CollaborationController extends ResolvedPublicShareController {
 	public function __construct(
 		IRequest $request,
 		ISession $session,
-		private IManager $shareManager,
-		private GalleryMapper $galleries,
-		private PublicLinkMapper $publicLinks,
-		private \OCA\ProofingGallery\Service\PublicLinkPolicyService $linkPolicies,
-		private \OCA\ProofingGallery\Service\PublicLinkScopeService $linkScopes,
+		PublicShareContextResolver $contextResolver,
 		private \OCA\ProofingGallery\Service\FolderService $folders,
 		private GuestService $guests,
 		private CollaborationService $collaboration,
@@ -49,7 +35,7 @@ final class CollaborationController extends PublicShareController {
 		private \OCA\ProofingGallery\Service\CapabilityPolicyService $capabilities,
 		private \OCA\ProofingGallery\Service\ShareAuditService $shareAudit,
 	) {
-		parent::__construct(Application::APP_ID, $request, $session);
+		parent::__construct($request, $session, $contextResolver);
 	}
 
 	#[PublicPage]
@@ -211,31 +197,8 @@ final class CollaborationController extends PublicShareController {
 		}
 	}
 
-	public function isValidToken(): bool {
-		try {
-			$this->share = $this->shareManager->getShareByToken($this->getToken());
-			$this->publicLink = $this->publicLinks->findByToken($this->getToken());
-			if ($this->publicLink->getStatus() !== 'active') return false;
-			$this->gallery = $this->galleries->find($this->publicLink->getGalleryId());
-			return $this->policy()['view'] && $this->share->getNode() instanceof \OCP\Files\Folder;
-		} catch (ShareNotFound|DoesNotExistException) {
-			return false;
-		}
-	}
-
-	protected function isPasswordProtected(): bool {
-		return $this->share?->getPassword() !== null;
-	}
-
-	protected function getPasswordHash(): ?string {
-		return $this->share?->getPassword();
-	}
-
 	private function resolvedGallery(): Gallery {
-		if ($this->gallery === null) {
-			throw new \RuntimeException('Public gallery was not resolved');
-		}
-		return $this->gallery;
+		return $this->publicContext()->gallery;
 	}
 
 	private function optionalGuest(): ?Guest {
@@ -271,8 +234,7 @@ final class CollaborationController extends PublicShareController {
 
 	/** @return array<string, bool|string> */
 	private function policy(): array {
-		if ($this->publicLink === null) throw new \RuntimeException('Public gallery link was not resolved');
-		return $this->linkPolicies->validate(json_decode($this->publicLink->getPolicy(), true, flags: JSON_THROW_ON_ERROR));
+		return $this->publicContext()->policy->jsonSerialize();
 	}
 
 	private function ratingEnabled(): bool {
@@ -300,14 +262,11 @@ final class CollaborationController extends PublicShareController {
 		}
 		try {
 			$file = $this->folders->resolveMedia($this->resolvedGallery()->getOwnerUid(), $this->resolvedGallery()->getFolderId(), $fileId);
-			$root = $this->folders->resolveFolder($this->resolvedGallery()->getOwnerUid(), $this->resolvedGallery()->getFolderId());
-			$settings = \OCA\ProofingGallery\Dto\GallerySettings::fromArray(json_decode($this->resolvedGallery()->getSettings(), true, flags: JSON_THROW_ON_ERROR));
-			return $this->linkScopes->contains($this->resolvedPublicLink(), $settings, $root->getRelativePath($file->getPath()));
+			return $this->publicContext()->root->isSubNode($file);
 		} catch (\Throwable) { return false; }
 	}
 
 	private function resolvedPublicLink(): PublicLink {
-		if ($this->publicLink === null) throw new \RuntimeException('Public gallery link was not resolved');
-		return $this->publicLink;
+		return $this->publicContext()->link;
 	}
 }

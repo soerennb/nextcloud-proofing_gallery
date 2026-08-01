@@ -6,16 +6,16 @@ namespace OCA\ProofingGallery\Dto;
 
 use JsonSerializable;
 
-final readonly class MediaItem implements JsonSerializable {
+final class MediaItem implements JsonSerializable {
 	public function __construct(
-		public int $id,
-		public string $name,
-		public string $mimeType,
-		public int $size,
-		public int $modifiedAt,
-		public string $etag,
-		public bool $folder,
-		public array $metadata = ['state' => 'unavailable'],
+		public readonly int $id,
+		public readonly string $name,
+		public readonly string $mimeType,
+		public readonly int $size,
+		public readonly int $modifiedAt,
+		public readonly string $etag,
+		public readonly bool $folder,
+		public readonly array $metadata = ['state' => 'unavailable'],
 	) {
 	}
 

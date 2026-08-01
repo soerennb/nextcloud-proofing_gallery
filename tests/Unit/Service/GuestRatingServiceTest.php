@@ -5,14 +5,12 @@ declare(strict_types=1);
 namespace OCA\ProofingGallery\Tests\Unit\Service;
 
 use OCA\ProofingGallery\Db\GuestRating;
-use OCA\ProofingGallery\Service\GuestRatingService;
+use OCA\ProofingGallery\Service\GuestRatingAggregator;
 use PHPUnit\Framework\TestCase;
 
 final class GuestRatingServiceTest extends TestCase {
 	public function testSummaryIncludesCorrectDistributionAverageAndPrivateIdentities(): void {
-		$service = (new \ReflectionClass(GuestRatingService::class))->newInstanceWithoutConstructor();
-		$method = new \ReflectionMethod($service, 'summarizeFile');
-		$summary = $method->invoke($service, 91, [
+		$summary = (new GuestRatingAggregator())->summarize(91, [
 			$this->rating(10, 91, 5, 'pick', 100),
 			$this->rating(11, 91, 3, 'reject', 120),
 			$this->rating(12, 91, 4, 'pick', 110),

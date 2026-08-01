@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Tests\Unit\Service;
 
-use OCA\ProofingGallery\Service\CullingXmpService;
+use OCA\ProofingGallery\Service\CullingXmpResolver;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -20,9 +20,7 @@ final class CullingXmpServiceTest extends TestCase {
 	/** @param array<string, string> $choices @param array<string, int|string> $expected */
 	#[DataProvider('resolutionModes')]
 	public function testEveryResolutionMode(string $mode, array $choices, array $expected): void {
-		$service = (new \ReflectionClass(CullingXmpService::class))->newInstanceWithoutConstructor();
-		$method = new \ReflectionMethod($service, 'resolveState');
-		$result = $method->invoke($service, $mode,
+		$result = (new CullingXmpResolver())->resolve($mode,
 			['fileId' => 7, 'rating' => 5, 'color' => 'red', 'pick' => 'pick', 'revision' => 3],
 			['exists' => true, 'rating' => 2, 'color' => 'blue', 'pick' => 'reject'],
 			$choices,

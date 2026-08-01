@@ -10,7 +10,7 @@ use OCA\ProofingGallery\Db\PublicLinkMapper;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Utility\ITimeFactory;
 
-final class PublicLinkService {
+final class PrimaryPublicLinkSynchronizer {
 	public function __construct(
 		private PublicLinkMapper $links,
 		private PublicLinkPolicyService $policies,

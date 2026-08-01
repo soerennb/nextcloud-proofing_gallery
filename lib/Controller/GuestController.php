@@ -5,37 +5,26 @@ declare(strict_types=1);
 namespace OCA\ProofingGallery\Controller;
 
 use InvalidArgumentException;
-use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Db\Gallery;
-use OCA\ProofingGallery\Db\GalleryMapper;
-use OCA\ProofingGallery\Db\PublicLinkMapper;
 use OCA\ProofingGallery\Service\GuestService;
+use OCA\ProofingGallery\Service\PublicShareContextResolver;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\JSONResponse;
-use OCP\AppFramework\PublicShareController;
 use OCP\IRequest;
 use OCP\ISession;
-use OCP\Share\Exceptions\ShareNotFound;
-use OCP\Share\IManager;
-use OCP\Share\IShare;
 
-final class GuestController extends PublicShareController {
-	private ?IShare $share = null;
-	private ?Gallery $gallery = null;
-
+final class GuestController extends ResolvedPublicShareController {
 	public function __construct(
 		IRequest $request,
 		ISession $session,
-		private IManager $shareManager,
-		private GalleryMapper $galleries,
-		private PublicLinkMapper $publicLinks,
+		PublicShareContextResolver $contextResolver,
 		private GuestService $guests,
 	) {
-		parent::__construct(Application::APP_ID, $request, $session);
+		parent::__construct($request, $session, $contextResolver);
 	}
 
 	#[PublicPage]
@@ -91,31 +80,8 @@ final class GuestController extends PublicShareController {
 		}
 	}
 
-	public function isValidToken(): bool {
-		try {
-			$this->share = $this->shareManager->getShareByToken($this->getToken());
-			$link = $this->publicLinks->findByToken($this->getToken());
-			if ($link->getStatus() !== 'active') return false;
-			$this->gallery = $this->galleries->find($link->getGalleryId());
-			return $this->share->getNode() instanceof \OCP\Files\Folder;
-		} catch (ShareNotFound|DoesNotExistException) {
-			return false;
-		}
-	}
-
-	protected function isPasswordProtected(): bool {
-		return $this->share?->getPassword() !== null;
-	}
-
-	protected function getPasswordHash(): ?string {
-		return $this->share?->getPassword();
-	}
-
 	private function gallery(): Gallery {
-		if ($this->gallery === null) {
-			throw new \RuntimeException('Public gallery was not resolved');
-		}
-		return $this->gallery;
+		return $this->publicContext()->gallery;
 	}
 
 }

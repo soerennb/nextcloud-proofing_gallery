@@ -24,6 +24,7 @@ final class CollaborationService {
 		private CapabilityPolicyService $capabilities,
 		private CullingService $culling,
 		private GuestRatingService $guestRatings,
+		private CsvEncoder $csv,
 	) {
 	}
 
@@ -334,7 +335,7 @@ final class CollaborationService {
 			$fields = array_values(array_unique(array_intersect($allowed, array_map('strval', $requestedFields))));
 			if ($fields === []) $fields = ['filename'];
 			$rows = $this->composeExportRows($gallery, $guest, $fileIds, $fields, (string)$row['name']);
-			$content = "\xEF\xBB\xBF" . $this->csv([$fields, ...array_map(
+			$content = "\xEF\xBB\xBF" . $this->csv->encode([$fields, ...array_map(
 				static fn (array $values): array => array_map(static fn (string $field): string => (string)($values[$field] ?? ''), $fields),
 				$rows,
 			)]);
@@ -378,7 +379,7 @@ final class CollaborationService {
 	private function composeExportRows(Gallery $gallery, ?Guest $guest, array $fileIds, array $fields, string $selectionName): array {
 		if ($fileIds === []) return [];
 		$culls = $guest === null ? $this->culling->forFiles($gallery->getOwnerUid(), $fileIds) : [];
-		$aggregates = $guest === null ? array_column($this->guestRatings->aggregate($gallery)['items'], null, 'fileId') : [];
+		$aggregates = $guest === null ? array_column($this->guestRatings->aggregate($gallery, $fileIds)['items'], null, 'fileId') : [];
 		$guestValues = $guest === null ? [] : array_column(array_map(static fn (\OCA\ProofingGallery\Db\GuestRating $value): array => $value->jsonSerialize(), $this->guestRatings->forGuest($guest)), null, 'fileId');
 		$comments = [];
 		if ($guest === null && in_array('comments', $fields, true)) {
@@ -416,13 +417,6 @@ final class CollaborationService {
 			];
 		}
 		return $result;
-	}
-
-	/** @param list<list<string>> $rows */
-	private function csv(array $rows): string {
-		return implode('', array_map(static function (array $row): string {
-			return implode(',', array_map(static fn (string $value): string => '"' . str_replace('"', '""', $value) . '"', $row)) . "\r\n";
-		}, $rows));
 	}
 
 	/** @return list<array<string, mixed>> */

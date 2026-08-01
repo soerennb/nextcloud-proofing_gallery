@@ -5,30 +5,39 @@ declare(strict_types=1);
 namespace OCA\ProofingGallery\Service;
 
 use DateTime;
+use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\GalleryMapper;
 use OCA\ProofingGallery\Db\PublicLink;
 use OCA\ProofingGallery\Db\PublicLinkMapper;
+use OCA\ProofingGallery\Domain\DownloadScope;
 use OCP\AppFramework\Db\DoesNotExistException;
+use OCP\AppFramework\Db\TTransactional;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Constants;
 use OCP\Files\Folder;
 use OCP\IURLGenerator;
+use OCP\IDBConnection;
 use OCP\Share\IManager;
 use OCP\Share\IShare;
+use Psr\Log\LoggerInterface;
 
 final class PublicLinkManagerService {
+	use TTransactional;
+
 	public function __construct(
 		private PublicLinkMapper $links,
 		private GalleryMapper $galleries,
 		private PublicLinkPolicyService $policies,
 		private PublicLinkScopeService $scopes,
-		private PublicLinkService $primaryLinks,
+		private PrimaryPublicLinkSynchronizer $primaryLinks,
 		private FolderService $folders,
 		private IManager $shareManager,
 		private ITimeFactory $clock,
 		private IURLGenerator $urls,
 		private ShareAuditService $audit,
+		private IDBConnection $db,
+		private LoggerInterface $logger,
 	) {
 	}
 
@@ -77,7 +86,11 @@ final class PublicLinkManagerService {
 		try {
 			return $this->present($this->links->insert($link));
 		} catch (\Throwable $exception) {
-			try { $this->shareManager->deleteShare($share); } catch (\Throwable) {}
+			try {
+				$this->shareManager->deleteShare($share);
+			} catch (\Throwable $compensation) {
+				$this->logCompensationFailure('delete a newly created public share', $compensation, $exception);
+			}
 			throw $exception;
 		}
 	}
@@ -100,6 +113,7 @@ final class PublicLinkManagerService {
 		if ($link->getStatus() !== 'active') throw new \InvalidArgumentException('Revoked links cannot be edited');
 		$config = $this->validate($gallery, $name, $policy, $startPath, $viewMode, $groupDepth, $minOwnerRating, $publicLocale);
 		$share = $this->shareManager->getShareByToken($link->getToken());
+		$snapshot = $this->shareSnapshot($share);
 		$this->applyShare($share, $gallery, $config['name'], $config['policy'], $config['startPath'], $password, $expiresAt, false);
 		$this->shareManager->updateShare($share);
 		$link->setName($config['name']);
@@ -110,20 +124,28 @@ final class PublicLinkManagerService {
 		$link->setMinOwnerRating($config['minOwnerRating']);
 		$link->setPublicLocale($config['publicLocale']);
 		$link->setUpdatedAt($this->clock->getTime());
-		return $this->present($this->links->update($link));
+		try {
+			return $this->present($this->links->update($link));
+		} catch (\Throwable $exception) {
+			$this->compensateShare($share, $snapshot, $exception);
+			throw $exception;
+		}
 	}
 
 	public function makePrimary(Gallery $gallery, int $linkId): array {
 		$link = $this->owned($gallery, $linkId);
 		if ($link->getStatus() !== 'active') throw new \InvalidArgumentException('Only active links can be primary');
-		$this->links->clearPrimary($gallery->getId());
-		$link->setIsPrimary(true);
-		$link->setUpdatedAt($this->clock->getTime());
-		$link = $this->links->update($link);
-		$gallery->setShareToken($link->getToken());
-		$gallery->setUpdatedAt($this->clock->getTime());
-		$gallery->setRevision($gallery->getRevision() + 1);
-		$this->galleries->update($gallery);
+		$link = $this->atomic(function () use ($gallery, $link): PublicLink {
+			$this->links->clearPrimary($gallery->getId());
+			$link->setIsPrimary(true);
+			$link->setUpdatedAt($this->clock->getTime());
+			$link = $this->links->update($link);
+			$gallery->setShareToken($link->getToken());
+			$gallery->setUpdatedAt($this->clock->getTime());
+			$gallery->setRevision($gallery->getRevision() + 1);
+			$this->galleries->update($gallery);
+			return $link;
+		}, $this->db);
 		return $this->present($link);
 	}
 
@@ -187,7 +209,7 @@ final class PublicLinkManagerService {
 		$share->setNode($startPath === '' ? $root : $root->get($startPath));
 		$share->setLabel($gallery->getTitle() . ' · ' . $name);
 		$share->setPermissions(Constants::PERMISSION_READ);
-		$share->setHideDownload(!in_array($policy['downloadScope'], ['individual', 'all'], true));
+		$share->setHideDownload(!DownloadScope::from((string)$policy['downloadScope'])->allowsIndividual());
 		if ($creating || $password !== null) $share->setPassword($password === '' ? null : $password);
 		$share->setExpirationDate($this->expirationDate($expiresAt));
 	}
@@ -197,5 +219,40 @@ final class PublicLinkManagerService {
 		$date = DateTime::createFromFormat('!Y-m-d', $value);
 		if ($date === false || $date->format('Y-m-d') !== $value) throw new \InvalidArgumentException('Expiration date must use YYYY-MM-DD');
 		return $date;
+	}
+
+	/** @return array{node: \OCP\Files\Node, label: string, permissions: int, hideDownload: bool, password: ?string, expiration: ?DateTime} */
+	private function shareSnapshot(IShare $share): array {
+		return [
+			'node' => $share->getNode(),
+			'label' => (string)$share->getLabel(),
+			'permissions' => (int)$share->getPermissions(),
+			'hideDownload' => $share->getHideDownload(),
+			'password' => $share->getPassword(),
+			'expiration' => $share->getExpirationDate(),
+		];
+	}
+
+	/** @param array{node: \OCP\Files\Node, label: string, permissions: int, hideDownload: bool, password: ?string, expiration: ?DateTime} $snapshot */
+	private function compensateShare(IShare $share, array $snapshot, \Throwable $original): void {
+		try {
+			$share->setNode($snapshot['node']);
+			$share->setLabel($snapshot['label']);
+			$share->setPermissions($snapshot['permissions']);
+			$share->setHideDownload($snapshot['hideDownload']);
+			$share->setPassword($snapshot['password']);
+			$share->setExpirationDate($snapshot['expiration']);
+			$this->shareManager->updateShare($share);
+		} catch (\Throwable $compensation) {
+			$this->logCompensationFailure('restore a public share', $compensation, $original);
+		}
+	}
+
+	private function logCompensationFailure(string $action, \Throwable $compensation, \Throwable $original): void {
+		$this->logger->error('Failed to ' . $action . ' after app persistence failed', [
+			'app' => Application::APP_ID,
+			'exception' => $compensation,
+			'originalException' => $original,
+		]);
 	}
 }

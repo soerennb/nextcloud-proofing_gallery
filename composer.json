@@ -21,6 +21,7 @@
 	},
 	"scripts": {
 		"lint": "find appinfo lib templates tests -name '*.php' -print0 | xargs -0 -n1 php -l",
+		"analyse": "phpstan analyse --configuration=phpstan.neon --no-progress",
 		"test": "phpunit -c tests/phpunit.xml --colors=always",
 		"test:unit": "@test"
 	},
@@ -30,6 +31,7 @@
 	"require-dev": {
 		"doctrine/dbal": "^3.8",
 		"nextcloud/ocp": "dev-stable31",
+		"phpstan/phpstan": "^2.1",
 		"phpunit/phpunit": "^10.5",
 		"roave/security-advisories": "dev-latest"
 	},

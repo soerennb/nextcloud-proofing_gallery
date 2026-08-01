@@ -27,7 +27,7 @@ final class PublicShareService {
 		private CollectionService $collections,
 		private ITimeFactory $clock,
 		private CapabilityPolicyService $capabilities,
-		private PublicLinkService $publicLinks,
+		private PrimaryPublicLinkSynchronizer $publicLinks,
 		private IJobList $jobs,
 	) {
 	}

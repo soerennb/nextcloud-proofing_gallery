@@ -1,29 +1,18 @@
 import type { GallerySettings } from './domain/gallerySettings.ts'
+import type { MediaItem } from './types.ts'
+export type { MediaItem } from './types.ts'
 
-export interface MediaItem {
-	id: number
-	name: string
-	mimeType: string
-	size: number
-	modifiedAt: number
-	etag: string
-	folder: boolean
-	group?: string
-	relativePath?: string
-	metadata?: {
-		state: 'ready' | 'pending' | 'unavailable'
-		capturedAt?: number
-		camera?: string
-		lens?: string
-		focalLength?: number
-		aperture?: number
-		exposureTime?: string
-		iso?: number
-		title?: string
-		description?: string
-		creator?: string
-		copyright?: string
-	}
+export interface PublicGalleryPage {
+	gallery: { id: number; title: string; settings: GallerySettings }
+	items: MediaItem[]
+	total: number
+	limit: number
+	offset: number
+	nextCursor: string | null
+	path: string
+	groups: Record<string, number>
+	indexState: { indexed: number; limit: number; limitReached: boolean; complete: boolean; state?: 'unindexed' | 'limit_reached' | 'ready'; lastIndexedAt?: number | null }
+	scope: { startPath: string; viewMode: 'folder' | 'recursive'; groupDepth: number }
 }
 
 export interface PublicGallery {
@@ -31,18 +20,7 @@ export interface PublicGallery {
 	title: string
 	token: string
 	settings: GallerySettings
-	initialPage?: {
-		gallery: { id: number; title: string; settings: GallerySettings }
-		items: MediaItem[]
-		total: number
-		limit: number
-		offset: number
-		nextCursor?: string | null
-		path: string
-		groups?: Record<string, number>
-		indexState?: { indexed: number; limit: number; limitReached: boolean; complete: boolean; state?: 'unindexed' | 'limit_reached' | 'ready'; lastIndexedAt?: number | null }
-		scope?: { startPath: string; viewMode: 'folder' | 'recursive'; groupDepth: number }
-	}
+	initialPage?: PublicGalleryPage
 }
 
 export interface GuestIdentity {
