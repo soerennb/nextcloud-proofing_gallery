@@ -134,6 +134,7 @@ jobs:
             release-assets/proofing_gallery.tar.gz \
             release-assets/proofing_gallery.spdx.json \
             release-assets/SHA256SUMS \
+            --repo "${GITHUB_REPOSITORY}" \
             --verify-tag \
             --title "Proofing Gallery ${GITHUB_REF_NAME#v}" \
             --notes-file release-assets/RELEASE_NOTES.md
