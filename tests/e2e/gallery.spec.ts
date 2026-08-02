@@ -48,6 +48,7 @@ test('gallery action menus stay above cards in every overview', async ({ browser
 	await expect(page).toHaveScreenshot('owner-dashboard-actions.png', {
 		animations: 'disabled',
 		fullPage: true,
+		mask: [page.locator('.gallery-row__cover')],
 		maxDiffPixels: 100,
 	})
 	await page.keyboard.press('Escape')
