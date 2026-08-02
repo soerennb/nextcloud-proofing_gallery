@@ -146,7 +146,10 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 		// The workspace reloads the authoritative state before exposing this retry.
 		cullingResponse = await saveRating()
 	}
-	expect(cullingResponse.status(), await cullingResponse.text()).toBe(200)
+	const cullingResponseBody = await cullingResponse.text()
+	if (cullingResponse.status() !== 200) {
+		throw new Error(`Culling save failed with HTTP ${cullingResponse.status()}: ${cullingResponseBody}`)
+	}
 	await expect(cullingSave).toHaveText('Saved')
 	await page.getByRole('button', { name: 'Pick', exact: true }).click()
 	await page.getByRole('button', { name: 'Undo', exact: true }).click()
