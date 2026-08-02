@@ -242,7 +242,7 @@ export async function updateMediaCulling(id: number, items: Array<MediaCull & { 
 	const { data } = await axios.put<{ items: MediaCull[] }>(
 		`${galleriesUrl}/${id}/media/cull`,
 		{ items: payload },
-		{ headers: { 'Content-Type': 'application/json' } },
+		{ headers: { 'Content-Type': 'application/json', 'OCS-APIRequest': 'true' } },
 	)
 	return data.items
 }
