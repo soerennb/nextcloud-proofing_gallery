@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1 — 2026-08-02
+
+- fix SPDX SBOM generation for release archives
+- make release publication independent of a checked-out Git worktree
+- migrate existing public links in cursor-free batches for reliable SQLite upgrades
+
 ## 0.5.0 — 2026-08-02
 
 - publish the first stable GitHub release with verified Nextcloud 31–34 support

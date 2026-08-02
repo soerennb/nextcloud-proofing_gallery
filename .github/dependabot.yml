@@ -10,8 +10,10 @@ updates:
     groups:
       npm-development:
         dependency-type: development
+        update-types: [minor, patch]
       nextcloud-frontend:
         patterns: ["@nextcloud/*"]
+        update-types: [minor, patch]
     open-pull-requests-limit: 5
   - package-ecosystem: composer
     directory: /
@@ -23,6 +25,7 @@ updates:
     groups:
       composer-development:
         dependency-type: development
+        update-types: [minor, patch]
     open-pull-requests-limit: 5
   - package-ecosystem: github-actions
     directory: /

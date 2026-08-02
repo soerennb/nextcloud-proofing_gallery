@@ -25,6 +25,8 @@ use OCP\IRequest;
 use OCP\IUserSession;
 
 final class CullingController extends Controller {
+	private IRequest $rawRequest;
+
 	public function __construct(
 		IRequest $request,
 		private GalleryService $galleries,
@@ -35,6 +37,7 @@ final class CullingController extends Controller {
 		private CapabilityPolicyService $capabilities,
 	) {
 		parent::__construct(Application::APP_ID, $request);
+		$this->rawRequest = $request;
 	}
 
 	#[NoAdminRequired]
@@ -72,8 +75,12 @@ final class CullingController extends Controller {
 	/** @param list<array<string, mixed>> $items */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'PUT', url: '/api/v1/galleries/{id}/media/cull')]
-	public function updateCulling(int $id, array $items): DataResponse {
+	public function updateCulling(int $id, array $items = []): DataResponse {
 		try {
+			if ($items === []) {
+				$params = $this->rawRequest->getParams();
+				if (is_array($params['items'] ?? null)) $items = $params['items'];
+			}
 			$this->capabilities->assertFeature('ownerCulling');
 			$userId = $this->userId();
 			$gallery = $this->galleries->get($userId, $id);
@@ -87,6 +94,13 @@ final class CullingController extends Controller {
 		} catch (InvalidArgumentException $exception) {
 			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
+	}
+
+	/** @param list<array<string, mixed>> $items */
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'POST', url: '/api/v1/galleries/{id}/media/cull/batch')]
+	public function updateCullingPost(int $id, array $items = []): DataResponse {
+		return $this->updateCulling($id, $items);
 	}
 
 	/** @param list<int> $fileIds */

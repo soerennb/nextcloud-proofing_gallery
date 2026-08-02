@@ -8,6 +8,12 @@ const auth = `Basic ${Buffer.from('admin:admin').toString('base64')}`
 export default async function globalSetup(config: FullConfig) {
 	const baseURL = String(config.projects[0].use.baseURL)
 	const headers = { Authorization: auth, 'OCS-APIRequest': 'true' }
+	const adminProfile = await fetch(`${baseURL}/ocs/v2.php/cloud/users/admin?format=json`, {
+		method: 'PUT',
+		headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
+		body: new URLSearchParams({ key: 'email', value: 'admin@example.test' }),
+	})
+	if (!adminProfile.ok) throw new Error(`E2E admin profile could not be initialized (${adminProfile.status})`)
 	const preferences = await fetch(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/user/preferences?format=json`, {
 		method: 'PUT',
 		headers: { ...headers, 'Content-Type': 'application/json' },
