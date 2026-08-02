@@ -342,8 +342,12 @@ test('administrator policies reject out-of-range API values and health remains a
 	await expect(page.locator('select[name="semanticProvider"]')).toHaveValue('disabled')
 	await expect(page.getByRole('heading', { level: 3, name: 'HTTPS Live Push' })).toBeVisible()
 	await expect(page.getByRole('heading', { level: 3, name: 'Custom gallery domains' })).toBeVisible()
-	await expect(page.getByText('Video derivatives')).toBeVisible()
+	await expect(page.getByText('Video derivatives', { exact: true })).toBeVisible()
 	await expect(page.getByText(/Not run yet|Healthy|Overdue|Failed/).first()).toBeVisible()
+	await expect(page.getByRole('heading', { level: 3, name: 'Administrator documentation' })).toBeVisible()
+	await expect(page.getByRole('heading', { name: 'Requirements and installation' })).toBeVisible()
+	await page.getByRole('button', { name: 'Deutsch' }).last().click()
+	await expect(page.getByRole('heading', { name: 'Voraussetzungen und Installation' })).toBeVisible()
 	const adminStyles = page.locator('link[rel="stylesheet"][href*="proofing_gallery-admin"]')
 	await expect(adminStyles).toHaveCount(1)
 	const healthRow = page.locator('.proofing-settings__health dl > div').first()
@@ -498,7 +502,7 @@ test('owner presets preserve gallery identity and explicit public language', asy
 
 		await page.goto(`${baseURL}/s/${token}`)
 		await expect(page.locator('html')).toHaveAttribute('lang', 'de')
-		await expect(page.getByText(/^\d+ Dateien?$/)).toBeVisible()
+		await expect(page.getByText(/^\d+ Datei(?:en)?$/)).toBeVisible()
 
 		const collection = await request.post(`${galleries}?format=json`, {
 			headers: { ...apiHeaders, 'Content-Type': 'application/json' },

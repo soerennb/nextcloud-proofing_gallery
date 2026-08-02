@@ -1,5 +1,9 @@
 # Proofing Gallery
 
+[![Quality](https://github.com/soerennb/nextcloud-proofing_gallery/actions/workflows/quality.yml/badge.svg)](https://github.com/soerennb/nextcloud-proofing_gallery/actions/workflows/quality.yml)
+[![Security](https://github.com/soerennb/nextcloud-proofing_gallery/actions/workflows/security.yml/badge.svg)](https://github.com/soerennb/nextcloud-proofing_gallery/actions/workflows/security.yml)
+[![Documentation](https://github.com/soerennb/nextcloud-proofing_gallery/actions/workflows/docs.yml/badge.svg)](https://soerennb.github.io/nextcloud-proofing_gallery/)
+
 Proofing Gallery is a native Nextcloud app for branded client delivery and
 collaborative photo proofing. A gallery either references an existing Nextcloud
 folder or assembles an ordered virtual collection from several owned galleries.
@@ -70,6 +74,7 @@ Nextcloud is available at <http://localhost:8080> and Mailpit at
 
 ```bash
 make build
+make docs
 make lint
 make test
 npm run test:e2e
@@ -94,13 +99,47 @@ The reproducible unsigned artifact is written to
 Nextcloud code-signing and App Store upload process; signing credentials are
 deliberately not stored in this repository.
 
+### Install a GitHub release
+
+Download `proofing_gallery.tar.gz` and `SHA256SUMS` from the matching
+[GitHub release](https://github.com/soerennb/nextcloud-proofing_gallery/releases).
+Verify the checksum and, when the GitHub CLI is available, the artifact
+attestation before extracting the archive:
+
+```bash
+sha256sum --check SHA256SUMS
+gh attestation verify proofing_gallery.tar.gz --repo soerennb/nextcloud-proofing_gallery
+tar -xzf proofing_gallery.tar.gz -C /path/to/nextcloud/custom_apps
+sudo -u www-data php /path/to/nextcloud/occ app:enable proofing_gallery
+```
+
+The GitHub artifact is reproducible but is not yet a Nextcloud App Store signed
+package. App Store publication and its Nextcloud certificate are a later step.
+
 ## Documentation
 
-- [User guide](docs/USER-GUIDE.md)
+- [Documentation website](https://soerennb.github.io/nextcloud-proofing_gallery/)
+- [English user guide](docs/en/user-guide.md)
+- [German user guide](docs/de/benutzerhandbuch.md)
+- [English administrator guide](docs/en/admin-guide.md)
+- [German administrator guide](docs/de/administrationshandbuch.md)
 - [Development guide](docs/DEVELOPMENT.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Operations](docs/OPERATIONS.md)
 - [Privacy and security](docs/PRIVACY.md)
+- [GitHub repository setup](docs/GITHUB-SETUP.md)
+
+The user guide is available through **Help** in the app. The administrator guide
+is embedded in the Proofing Gallery administration settings. Both are built
+from the same Markdown files as GitHub Pages and work without internet access.
+
+## Contributing and support
+
+Use [GitHub Discussions](https://github.com/soerennb/nextcloud-proofing_gallery/discussions)
+for questions and the structured [issue forms](https://github.com/soerennb/nextcloud-proofing_gallery/issues/new/choose)
+for bugs and features. Read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting
+changes. Suspected vulnerabilities must be reported privately as described in
+[SECURITY.md](SECURITY.md), never in a public issue.
 
 ## Compatibility
 

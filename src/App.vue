@@ -16,11 +16,13 @@ import type { Gallery } from './types.ts'
 
 const CreateGalleryModal = defineAsyncComponent(() => import('./components/CreateGalleryModal.vue'))
 const GallerySettings = defineAsyncComponent(() => import('./components/GallerySettings.vue'))
+const HelpView = defineAsyncComponent(() => import('./components/HelpView.vue'))
 const SharingModal = defineAsyncComponent(() => import('./components/SharingModal.vue'))
 
 const galleries = ref<Gallery[]>([])
 const loading = ref(true)
 const archived = ref(false)
+const helpOpen = ref(window.location.hash === '#help')
 const search = ref('')
 const modeFilter = ref<'all' | 'presentation' | 'collaboration'>('all')
 const sourceFilter = ref<'all' | 'folder' | 'collection'>('all')
@@ -59,7 +61,10 @@ function resetFilters() {
 }
 
 function showArchive(value: boolean) {
+	helpOpen.value = false
+	selectedGallery.value = null
 	archived.value = value
+	history.replaceState(null, '', window.location.pathname)
 	if (mobileViewport.value) {
 		emit('toggle-navigation', { open: false })
 	}
@@ -94,8 +99,16 @@ function created(gallery: Gallery) {
 }
 
 function selectGallery(gallery: Gallery) {
+	helpOpen.value = false
 	selectedGallery.value = gallery
 	window.location.hash = `gallery/${gallery.id}`
+}
+
+function showHelp() {
+	helpOpen.value = true
+	selectedGallery.value = null
+	window.location.hash = 'help'
+	if (mobileViewport.value) emit('toggle-navigation', { open: false })
 }
 
 function updateSelected(gallery: Gallery) {
@@ -161,7 +174,7 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 				<li class="gallery-nav__entry">
 					<button
 						class="gallery-nav__item"
-						:class="{ 'gallery-nav__item--active': !archived }"
+						:class="{ 'gallery-nav__item--active': !archived && !helpOpen }"
 						type="button"
 						@click="showArchive(false)">
 						<span>{{ t('proofing_gallery', 'Galleries') }}</span>
@@ -170,18 +183,28 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 				<li class="gallery-nav__entry">
 					<button
 						class="gallery-nav__item"
-						:class="{ 'gallery-nav__item--active': archived }"
+						:class="{ 'gallery-nav__item--active': archived && !helpOpen }"
 						type="button"
 						@click="showArchive(true)">
 						<span>{{ t('proofing_gallery', 'Archive') }}</span>
+					</button>
+				</li>
+				<li class="gallery-nav__entry gallery-nav__entry--help">
+					<button
+						class="gallery-nav__item"
+						:class="{ 'gallery-nav__item--active': helpOpen }"
+						type="button"
+						@click="showHelp">
+						<span>{{ t('proofing_gallery', 'Help') }}</span>
 					</button>
 				</li>
 			</template>
 		</NcAppNavigation>
 
 		<NcAppContent>
+			<HelpView v-if="helpOpen" />
 			<GallerySettings
-				v-if="selectedGallery"
+				v-else-if="selectedGallery"
 				:gallery="selectedGallery"
 				@back="closeSettings"
 				@updated="updateSelected" />
@@ -332,6 +355,12 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 
 .gallery-nav__entry:last-child {
 	padding-bottom: 8px;
+}
+
+.gallery-nav__entry--help {
+	margin-top: 10px;
+	padding-top: 10px;
+	border-top: 1px solid var(--color-border);
 }
 
 .gallery-nav__item {

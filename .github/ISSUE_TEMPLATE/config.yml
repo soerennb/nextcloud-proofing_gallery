@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and support
+    url: https://github.com/soerennb/nextcloud-proofing_gallery/discussions
+    about: Ask usage, setup, and design questions in GitHub Discussions.
+  - name: Private security report
+    url: https://github.com/soerennb/nextcloud-proofing_gallery/security/advisories/new
+    about: Report suspected vulnerabilities without disclosing them publicly.

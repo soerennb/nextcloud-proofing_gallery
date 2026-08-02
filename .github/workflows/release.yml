@@ -1,0 +1,139 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: "8.4"
+          coverage: none
+      - name: Validate stable tag and versions
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          [[ "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          app_version="$(php -r '$xml=simplexml_load_file("appinfo/info.xml"); echo (string)$xml->version;')"
+          package_version="$(node -p "require('./package.json').version")"
+          test "${version}" = "${app_version}"
+          test "${version}" = "${package_version}"
+          node scripts/release-notes.mjs "${version}" >/dev/null
+      - run: npm ci
+      - run: composer install --no-interaction --prefer-dist
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - run: npm run build:docs
+      - run: composer lint
+      - run: composer test
+      - run: composer analyse
+      - run: npm audit --audit-level=high
+      - run: composer audit --no-interaction
+
+  compatibility:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        nextcloud: ["31", "32", "33", "34"]
+        database: [sqlite, mariadb, postgres]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Enable and migrate the app
+        env:
+          NEXTCLOUD_VERSIONS: ${{ matrix.nextcloud }}
+          DATABASES: ${{ matrix.database }}
+        run: ./scripts/compatibility-matrix.sh
+
+  package:
+    needs: [validate-and-test, compatibility]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: "8.4"
+          coverage: none
+      - run: npm ci
+      - run: composer install --no-interaction --prefer-dist
+      - name: Build the release twice and verify reproducibility
+        run: |
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          make appstore
+          cp build/artifacts/appstore/proofing_gallery.tar.gz /tmp/proofing_gallery-first.tar.gz
+          make appstore
+          cmp /tmp/proofing_gallery-first.tar.gz build/artifacts/appstore/proofing_gallery.tar.gz
+      - run: make verify-package
+      - name: Prepare checksums and release notes
+        run: |
+          cd build/artifacts/appstore
+          sha256sum proofing_gallery.tar.gz > SHA256SUMS
+          node ../../../scripts/release-notes.mjs "${GITHUB_REF_NAME#v}" > RELEASE_NOTES.md
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          path: build/artifacts/appstore/proofing_gallery.tar.gz
+          format: spdx-json
+          output-file: build/artifacts/appstore/proofing_gallery.spdx.json
+          upload-artifact: false
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-assets
+          path: |
+            build/artifacts/appstore/proofing_gallery.tar.gz
+            build/artifacts/appstore/proofing_gallery.spdx.json
+            build/artifacts/appstore/SHA256SUMS
+            build/artifacts/appstore/RELEASE_NOTES.md
+          if-no-files-found: error
+
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-assets
+          path: release-assets
+      - name: Attest release package
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4
+        with:
+          subject-path: release-assets/proofing_gallery.tar.gz
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            release-assets/proofing_gallery.tar.gz \
+            release-assets/proofing_gallery.spdx.json \
+            release-assets/SHA256SUMS \
+            --verify-tag \
+            --title "Proofing Gallery ${GITHUB_REF_NAME#v}" \
+            --notes-file release-assets/RELEASE_NOTES.md

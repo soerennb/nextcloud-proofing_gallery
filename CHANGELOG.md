@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0 — 2026-08-02
+
+- publish the first stable GitHub release with verified Nextcloud 31–34 support
+- add bilingual user and administrator guides both offline in the app and on GitHub Pages
+- add reproducible release, documentation, dependency, and security automation
+- document contribution, support, disclosure, privacy, and release verification workflows
+- remove private maintainer contact data and prepare a sanitized public Git history
+
 ## 0.5.0-alpha.3 — 2026-08-02
 
 - make archive and restore fail closed while preserving public-link credentials

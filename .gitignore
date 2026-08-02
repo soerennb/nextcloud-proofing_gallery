@@ -5,6 +5,14 @@
 .beads-credential-key
 .beads/proxieddb/
 
+# Local agent and issue-tracker state must never enter the public repository.
+/.agents/
+/.beads/
+/.claude/
+/.codex/
+/AGENTS.md
+/CLAUDE.md
+
 # Application dependencies and build output
 /node_modules/
 /vendor/

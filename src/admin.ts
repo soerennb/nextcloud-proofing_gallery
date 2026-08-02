@@ -1,6 +1,7 @@
 import axios from '@nextcloud/axios'
-import { t } from '@nextcloud/l10n'
+import { getLanguage, t } from '@nextcloud/l10n'
 import { generateOcsUrl } from '@nextcloud/router'
+import { documentation } from 'virtual:proofing-documentation'
 import './admin.css'
 
 const root = document.querySelector<HTMLElement>('#proofing-gallery-admin')
@@ -10,6 +11,28 @@ const dirty = root?.querySelector<HTMLElement>('.proofing-gallery-admin__dirty')
 const removeLogo = root?.querySelector<HTMLButtonElement>('[data-action="remove-logo"]')
 const logoStatus = root?.querySelector<HTMLElement>('[data-brand-logo-status]')
 const deleteSemanticIndex = root?.querySelector<HTMLButtonElement>('[data-action="delete-semantic-index"]')
+const documentationContent = root?.querySelector<HTMLElement>('[data-admin-documentation]')
+const documentationButtons = root?.querySelectorAll<HTMLButtonElement>('[data-documentation-language]')
+
+type DocumentationLanguage = 'de' | 'en'
+const storedDocumentationLanguage = localStorage.getItem('proofing-gallery-documentation-language')
+let documentationLanguage: DocumentationLanguage = storedDocumentationLanguage === 'de' || storedDocumentationLanguage === 'en'
+	? storedDocumentationLanguage
+	: getLanguage().toLowerCase().startsWith('de') ? 'de' : 'en'
+
+function renderDocumentation(language: DocumentationLanguage) {
+	documentationLanguage = language
+	localStorage.setItem('proofing-gallery-documentation-language', language)
+	// This HTML is compiled from repository-owned Markdown with raw HTML disabled.
+	if (documentationContent) documentationContent.innerHTML = documentation[language].admin
+	documentationButtons?.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.documentationLanguage === language)))
+}
+
+documentationButtons?.forEach(button => button.addEventListener('click', () => {
+	const language = button.dataset.documentationLanguage
+	if (language === 'de' || language === 'en') renderDocumentation(language)
+}))
+renderDocumentation(documentationLanguage)
 
 const bool = (data: FormData, key: string) => data.has(key)
 const groups = (data: FormData, key: string) => String(data.get(key) ?? '').split(',').map(value => value.trim()).filter(Boolean)

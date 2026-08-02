@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Proofing Gallery</title>
+  <rect width="64" height="64" rx="15" fill="#1f6f5c"/>
+  <path d="M15 18h34v28H15z" fill="none" stroke="#fff" stroke-width="4"/>
+  <circle cx="25" cy="27" r="4" fill="#fff"/>
+  <path d="m18 42 10-10 7 7 5-5 7 8" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/>
+</svg>

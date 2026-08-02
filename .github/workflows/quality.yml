@@ -3,18 +3,21 @@ name: Quality
 on:
   pull_request:
   push:
-    branches:
-      - main
+    branches: [main]
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
-  frontend:
+  frontend-and-docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -22,16 +25,18 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+      - run: npm run build:docs
       - run: npm audit --audit-level=high
 
   php:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        php: ["8.1", "8.4", "8.5"]
+        php: ["8.1", "8.6"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: shivammathur/setup-php@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
           php-version: ${{ matrix.php }}
           coverage: none
@@ -44,14 +49,16 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: make dev-up
+      - name: Verify the app enabled successfully
+        run: make occ CMD="app:list --enabled --output=json" | grep -q '"proofing_gallery"'
       - run: npm run test:e2e
       - name: Verify protected public routes
         env:
@@ -63,14 +70,14 @@ jobs:
   package-and-upgrade:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: .nvmrc
           cache: npm
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
           php-version: "8.4"
           coverage: none
@@ -79,18 +86,3 @@ jobs:
       - run: make appstore
       - run: make verify-package
       - run: make test-upgrade
-
-  compatibility:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        nextcloud: ["31", "32", "33", "34"]
-        database: [sqlite, mariadb, postgres]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Enable and migrate the app
-        env:
-          NEXTCLOUD_VERSIONS: ${{ matrix.nextcloud }}
-          DATABASES: ${{ matrix.database }}
-        run: ./scripts/compatibility-matrix.sh

@@ -1,12 +1,11 @@
 {
-	"name": "soeren/proofing-gallery",
+	"name": "soerennb/proofing-gallery",
 	"description": "Branded client galleries and collaborative photo proofing for Nextcloud",
 	"type": "project",
 	"license": "AGPL-3.0-or-later",
 	"authors": [
 		{
-			"name": "soeren",
-			"email": "soerennb@users.noreply.github.com"
+			"name": "soerennb"
 		}
 	],
 	"autoload": {

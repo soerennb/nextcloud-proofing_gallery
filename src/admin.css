@@ -126,6 +126,28 @@
 
 .proofing-settings__health { border-bottom: 0; }
 
+.proofing-settings__documentation { border-bottom: 0; }
+
+.proofing-documentation__languages { display: flex; align-self: start; justify-self: end; gap: 3px; padding: 3px; border: 1px solid var(--color-border-maxcontrast); border-radius: 9px; }
+
+.proofing-documentation__languages button { min-height: 36px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: var(--color-main-text); cursor: pointer; }
+
+.proofing-documentation__languages button[aria-pressed='true'] { background: var(--color-primary-element); color: var(--color-primary-element-text); }
+
+.proofing-documentation__content { min-width: 0; max-width: 78ch; overflow-wrap: anywhere; }
+
+.proofing-documentation__content h1 { display: none; }
+
+.proofing-documentation__content h2 { margin: 34px 0 10px; font-size: 22px; }
+
+.proofing-documentation__content p, .proofing-documentation__content li { line-height: 1.65; }
+
+.proofing-documentation__content code { overflow-wrap: anywhere; }
+
+.proofing-documentation__content pre { max-width: 100%; overflow: auto; padding: 14px; border-radius: 8px; background: var(--color-background-dark); white-space: pre-wrap; }
+
+.proofing-documentation__content a.header-anchor { color: inherit; text-decoration: none; }
+
 @media (prefers-reduced-motion: reduce) { .proofing-switch i, .proofing-switch i::after { transition: none; } }
 
 @media (max-width: 760px) {
@@ -142,4 +164,5 @@
 	.proofing-gallery-admin__status { grid-column: 1 / -1; }
 	.proofing-domains article { grid-template-columns: 1fr; }
 	.proofing-domains__actions { justify-content: flex-end; }
+	.proofing-documentation__languages { justify-self: start; }
 }

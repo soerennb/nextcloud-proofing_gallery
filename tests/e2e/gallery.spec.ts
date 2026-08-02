@@ -74,6 +74,30 @@ test('gallery action menus stay above cards in every overview', async ({ browser
 	await context.close()
 })
 
+test('bundled user documentation works offline in English and German', async ({ browser, baseURL }) => {
+	const context = await browser.newContext({ viewport: { width: 1100, height: 850 } })
+	const page = await context.newPage()
+	const externalDocumentationRequests: string[] = []
+	page.on('request', request => {
+		if (/github\.com|github\.io/.test(request.url())) externalDocumentationRequests.push(request.url())
+	})
+	await login(page, baseURL)
+	await page.getByRole('button', { name: 'Help', exact: true }).click()
+	await expect(page).toHaveURL(/#help$/)
+	await expect(page.getByRole('heading', { name: 'Proofing Gallery help' })).toBeVisible()
+	await expect(page.getByRole('heading', { name: 'Create a gallery' })).toBeVisible()
+	await page.getByRole('button', { name: 'Deutsch' }).click()
+	await expect(page.getByRole('heading', { name: 'Galerie erstellen' })).toBeVisible()
+	await page.reload()
+	await expect(page.getByRole('heading', { name: 'Galerie erstellen' })).toBeVisible()
+	expect(externalDocumentationRequests).toEqual([])
+	const accessibility = await new AxeBuilder({ page }).include('.proofing-help').analyze()
+	expect(accessibility.violations).toEqual([])
+	await page.setViewportSize({ width: 390, height: 844 })
+	expect(await page.locator('.proofing-help').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+	await context.close()
+})
+
 test('owner can move through the focused gallery workspace', async ({ browser, baseURL }) => {
 	const context = await browser.newContext({
 		viewport: { width: 1440, height: 1000 },

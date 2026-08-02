@@ -28,10 +28,10 @@ export default async function globalSetup(config: FullConfig) {
 		headers: { ...headers, Depth: '1', 'Content-Type': 'application/xml' },
 		body: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>',
 	}).then(response => response.text())
+	const fixtureRoot = new URL(dav, baseURL).pathname.replace(/\/?$/, '/')
 	for (const [, href] of fixtureContents.matchAll(/<(?:d:)?href>([^<]+)<\/(?:d:)?href>/g)) {
 		const pathname = new URL(href, baseURL).pathname
-		const filename = decodeURIComponent(pathname.split('/').at(-1) ?? '')
-		if (filename.startsWith('resumable-') && filename.endsWith('.png')) {
+		if (pathname.replace(/\/?$/, '/') !== fixtureRoot) {
 			await fetch(new URL(pathname, baseURL), { method: 'DELETE', headers })
 		}
 	}

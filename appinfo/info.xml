@@ -9,13 +9,23 @@ Publish existing Nextcloud folders as customizable client galleries.
 Collect likes, workflow states, comments, annotations, and named selections
 without copying or changing original files.
 	]]></description>
-	<version>0.5.0-alpha.3</version>
+	<version>0.5.0</version>
 	<licence>AGPL-3.0-or-later</licence>
-	<author mail="soerennb@users.noreply.github.com">soeren</author>
+	<author>soerennb</author>
 	<namespace>ProofingGallery</namespace>
 	<category>files</category>
 	<category>multimedia</category>
-	<bugs>https://github.com/soeren/proofing-gallery/issues</bugs>
+	<website>https://soerennb.github.io/nextcloud-proofing_gallery/</website>
+	<bugs>https://github.com/soerennb/nextcloud-proofing_gallery/issues</bugs>
+	<repository>https://github.com/soerennb/nextcloud-proofing_gallery</repository>
+	<discussion>https://github.com/soerennb/nextcloud-proofing_gallery/discussions</discussion>
+	<documentation>
+		<user>https://soerennb.github.io/nextcloud-proofing_gallery/en/user-guide/</user>
+		<admin>https://soerennb.github.io/nextcloud-proofing_gallery/en/admin-guide/</admin>
+		<developer>https://soerennb.github.io/nextcloud-proofing_gallery/en/development/</developer>
+	</documentation>
+	<screenshot>https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/owner-dashboard.png</screenshot>
+	<screenshot>https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/public-gallery.png</screenshot>
 	<dependencies>
 		<php min-version="8.1" max-version="8.6"/>
 		<database>sqlite</database>

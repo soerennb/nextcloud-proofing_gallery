@@ -37,6 +37,7 @@ $groups = static fn (array $values): string => htmlspecialchars(implode(', ', $v
 		<a href="#proofing-domains"><?= $l->t('Domains') ?></a>
 		<a href="#proofing-limits"><?= $l->t('Limits') ?></a>
 		<a href="#proofing-health"><?= $l->t('System status') ?></a>
+		<a href="#proofing-documentation"><?= $l->t('Documentation') ?></a>
 	</nav>
 
 	<form class="proofing-gallery-admin__form">
@@ -171,5 +172,16 @@ $groups = static fn (array $values): string => htmlspecialchars(implode(', ', $v
 	<section id="proofing-health" class="proofing-settings__section proofing-settings__health">
 		<div class="proofing-settings__section-title"><h3><?= $l->t('System status') ?></h3><p><?= $l->t('Operational signals from background cleanup and client uploads.') ?></p></div>
 		<dl><div><dt><?= $l->t('Cleanup status') ?></dt><dd><?= $cleanupState ?></dd></div><div><dt><?= $l->t('FFmpeg') ?></dt><dd><?= $health['video']['available'] ? $l->t('Available') : $l->t('Unavailable') ?></dd></div><div><dt><?= $l->t('Videos waiting') ?></dt><dd><?= (int)$health['video']['pending'] ?></dd></div><div><dt><?= $l->t('Failed video jobs') ?></dt><dd><?= (int)$health['video']['failed'] ?></dd></div><div><dt><?= $l->t('Video derivatives') ?></dt><dd><?= \OCP\Util::humanFileSize((int)$health['video']['bytes']) ?></dd></div><div><dt><?= $l->t('Semantic media') ?></dt><dd><?= (int)$health['semantic']['items'] ?></dd></div><div><dt><?= $l->t('Semantic galleries') ?></dt><dd><?= (int)$health['semantic']['galleries'] ?></dd></div><div><dt><?= $l->t('Active Live Push credentials') ?></dt><dd><?= (int)$health['livePush']['active'] ?></dd></div><div><dt><?= $l->t('Live Push uploads') ?></dt><dd><?= (int)$health['livePush']['uploads'] ?></dd></div><div><dt><?= $l->t('Notification center') ?></dt><dd><?= $health['notifications']['available'] ? $l->t('Available') : $l->t('Unavailable') ?></dd></div><div><dt><?= $l->t('Pending notifications') ?></dt><dd><?= (int)$health['notifications']['pending'] ?></dd></div><div><dt><?= $l->t('Failed notifications') ?></dt><dd><?= (int)$health['notifications']['failed'] ?></dd></div><div><dt><?= $l->t('Incomplete uploads') ?></dt><dd><?= (int)$health['pendingUploads'] ?></dd></div><div><dt><?= $l->t('Uploads awaiting review') ?></dt><dd><?= (int)$health['awaitingReview'] ?></dd></div><div><dt><?= $l->t('Preview cache') ?></dt><dd><?= \OCP\Util::humanFileSize((int)$health['previewCacheBytes']) ?></dd></div></dl>
+	</section>
+
+	<section id="proofing-documentation" class="proofing-settings__section proofing-settings__documentation">
+		<div class="proofing-settings__section-title">
+			<div><h3><?= $l->t('Administrator documentation') ?></h3><p><?= $l->t('This guide is included with the app and remains available without internet access.') ?></p></div>
+			<div class="proofing-documentation__languages" aria-label="<?= $l->t('Documentation language') ?>">
+				<button type="button" data-documentation-language="en" aria-pressed="false">English</button>
+				<button type="button" data-documentation-language="de" aria-pressed="false">Deutsch</button>
+			</div>
+		</div>
+		<article class="proofing-documentation__content" data-admin-documentation></article>
 	</section>
 </section>
