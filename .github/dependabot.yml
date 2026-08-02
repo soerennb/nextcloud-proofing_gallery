@@ -14,9 +14,18 @@ updates:
       nextcloud-frontend:
         patterns: ["@nextcloud/*"]
         update-types: [minor, patch]
+      vitest-major:
+        patterns: ["vitest", "@vitest/*"]
+        update-types: [major]
     ignore:
       - dependency-name: "@playwright/test"
         versions: ["1.62.1"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: jsdom
+        update-types: ["version-update:semver-major"]
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
     open-pull-requests-limit: 5
   - package-ecosystem: composer
     directory: /
