@@ -132,6 +132,22 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await expect(page.getByRole('heading', { name: 'Cull and rate' })).toBeVisible()
 	await expect(page.getByLabel('Describe a scene')).toHaveCount(0)
 	await expect(page.getByRole('button', { name: 'Focus proof.png' })).toBeVisible()
+	const filmstripPlacement = page.locator('select[name="filmstripPlacement"]')
+	const setFilmstripPlacement = async (placement: 'auto' | 'bottom') => {
+		const response = page.waitForResponse(candidate => candidate.request().method() === 'PUT' && candidate.url().includes('/user/preferences'))
+		await filmstripPlacement.selectOption(placement)
+		expect((await response).status()).toBe(200)
+	}
+	await setFilmstripPlacement('auto')
+	await expect(page.locator('.culling-stage--side')).toBeVisible()
+	await expect(page.getByRole('navigation', { name: 'Photo filmstrip' })).toBeVisible()
+	await setFilmstripPlacement('bottom')
+	await expect(page.locator('.culling-stage--bottom')).toBeVisible()
+	await setFilmstripPlacement('auto')
+	await page.setViewportSize({ width: 800, height: 900 })
+	await expect(page.locator('.culling-stage--bottom')).toBeVisible()
+	await page.setViewportSize({ width: 1440, height: 1000 })
+	await expect(page.locator('.culling-stage--side')).toBeVisible()
 	const cullingSave = page.locator('.culling-save')
 	const saveRating = async () => {
 		const responsePromise = page.waitForResponse(response => response.request().method() === 'POST' && response.url().includes('/media/cull'))

@@ -286,7 +286,7 @@ function trapFocus(event: KeyboardEvent) {
 
 async function toggleLike() {
 	const item = activeItem.value
-	if (!item || !props.collaboration) return
+	if (!item) return
 	await props.mutate(`media/${item.id}/like`, 'POST')
 }
 
@@ -297,7 +297,7 @@ async function openFeedbackAndLike() {
 
 async function setColor(value: string) {
 	const item = activeItem.value
-	if (!item || !props.collaboration) return
+	if (!item) return
 	await props.mutate(`media/${item.id}/color`, 'PUT', { value: value || null })
 }
 

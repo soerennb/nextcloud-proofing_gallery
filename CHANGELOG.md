@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.1 — 2026-08-02
+
+- keep virtualized public-gallery rows below immersive headers on desktop and
+  mobile so every image remains visible and interactive
+- preserve guest feedback actions while collaboration updates are delayed or
+  temporarily rate-limited, including fast interactions during initialization
+- let compact culling controls scroll out of the way while keeping the photo
+  and bottom filmstrip together inside the viewport
+- cover automatic side and bottom filmstrip placement in the real Nextcloud
+  browser flow and reset the Docker gateway during local E2E preparation
+
 ## 0.6.0 — 2026-08-02
 
 - redesign public galleries as immersive, mobile-first presentations with

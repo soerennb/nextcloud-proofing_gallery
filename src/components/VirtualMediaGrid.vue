@@ -75,14 +75,13 @@ const virtualizer = computed(() => props.contained ? elementVirtualizer.value : 
 
 const virtualRows = computed(() => virtualizer.value.getVirtualItems())
 const renderedRows = computed(() => {
-	const visible = virtualRows.value.map(row => ({ index: row.index, key: row.key, start: row.start }))
+	const visible = virtualRows.value.map(row => ({ index: row.index, key: row.key }))
 	if (visible.length > 0 || rows.value === 0) return visible
 	// Resize/scroll observers can be delayed in a newly revealed iframe. Keep the
 	// first viewport useful until the virtualizer publishes its initial range.
 	return Array.from({ length: Math.min(rows.value, 6) }, (_, index) => ({
 		index,
 		key: `initial:${columns.value}:${Math.round(rowHeight.value)}:${index}`,
-		start: (props.contained ? 0 : scrollMargin.value) + index * (rowHeight.value + props.gap),
 	}))
 })
 const totalHeight = computed(() => layout.value.totalHeight)
@@ -103,8 +102,8 @@ function measure() {
 	virtualizer.value.measure()
 }
 
-function rowOffset(start: number): number {
-	return start - (props.contained ? 0 : scrollMargin.value)
+function rowOffset(index: number): number {
+	return index * (rowHeight.value + props.gap)
 }
 
 function scrollToIndex(index: number, behavior: ScrollBehavior = 'auto') {
@@ -164,7 +163,7 @@ onBeforeUnmount(() => {
 					gap: `${gap}px`,
 					gridTemplateColumns: `repeat(${columns}, minmax(0, ${maxItemWidth === undefined ? '1fr' : `${maxItemWidth}px`}))`,
 					height: `${rowHeight}px`,
-					transform: `translateY(${rowOffset(virtualRow.start)}px)`,
+					transform: `translateY(${rowOffset(virtualRow.index)}px)`,
 				}">
 				<div
 					v-for="entry in itemsForRow(virtualRow.index)"

@@ -228,7 +228,7 @@ kbd { padding: 2px 6px; border: 1px solid var(--color-border-maxcontrast); borde
 @media (max-width: 800px) {
 	.culling-header { align-items: start; flex-direction: column; padding: 22px; }
 	.culling-progress { width: 100%; }
-	.culling-toolbar { top: 4px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 10px; }
+	.culling-toolbar { position: static; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 10px; }
 	.culling-toolbar label, .culling-toolbar .saved-view { min-width: 0; }
 	.semantic-search { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; }
 	.semantic-search label { grid-column: 1 / -1; }

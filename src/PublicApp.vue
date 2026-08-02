@@ -257,8 +257,8 @@ async function initializeCollaboration() {
 		// A visitor may not have a guest identity yet.
 	}
 	await loadCollaboration()
-	guestDialogOpen.value = false
-	if (pendingMutation.value) {
+	if (guest.value && nonce.value) guestDialogOpen.value = false
+	if (guest.value && nonce.value && pendingMutation.value) {
 		const pending = pendingMutation.value
 		pendingMutation.value = null
 		await performMutation(pending.path, pending.method, pending.body)
