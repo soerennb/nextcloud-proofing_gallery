@@ -45,7 +45,12 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+      - name: Scan full Git history for secrets
+        run: >-
+          docker run --rm
+          -v "${{ github.workspace }}:/repo:ro"
+          ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+          git --redact --no-banner /repo
 
   dependency-audit:
     runs-on: ubuntu-latest
@@ -61,4 +66,4 @@ jobs:
           coverage: none
       - run: npm ci
       - run: npm audit --audit-level=high
-      - run: composer audit --no-interaction
+      - run: composer audit --locked --no-interaction
