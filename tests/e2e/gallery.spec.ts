@@ -132,17 +132,22 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await expect(page.getByRole('heading', { name: 'Cull and rate' })).toBeVisible()
 	await expect(page.getByLabel('Describe a scene')).toHaveCount(0)
 	await expect(page.getByRole('button', { name: 'Focus proof.png' })).toBeVisible()
-	await page.getByRole('button', { name: '4 stars' }).click()
 	const cullingSave = page.locator('.culling-save')
-	await expect(cullingSave).toHaveText('Saving…')
+	const saveRating = async () => {
+		const responsePromise = page.waitForResponse(response => response.request().method() === 'PUT' && response.url().includes('/media/cull'))
+		await page.getByRole('button', { name: '4 stars' }).click()
+		await expect(cullingSave).toHaveText('Saving…')
+		return responsePromise
+	}
+	let cullingResponse = await saveRating()
 	await expect(cullingSave).toHaveText(/^(Saved|Needs attention)$/)
 	if (await cullingSave.textContent() === 'Needs attention') {
 		// A concurrent index refresh can invalidate the optimistic revision once.
 		// The workspace reloads the authoritative state before exposing this retry.
-		await page.getByRole('button', { name: '4 stars' }).click()
-		await expect(cullingSave).toHaveText('Saving…')
-		await expect(cullingSave).toHaveText('Saved')
+		cullingResponse = await saveRating()
 	}
+	expect(cullingResponse.status(), await cullingResponse.text()).toBe(200)
+	await expect(cullingSave).toHaveText('Saved')
 	await page.getByRole('button', { name: 'Pick', exact: true }).click()
 	await page.getByRole('button', { name: 'Undo', exact: true }).click()
 	await expect(page.getByText('Last culling change undone.')).toBeVisible()
