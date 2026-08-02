@@ -62,7 +62,7 @@
     "@vue/test-utils": "^2.4.6",
     "@vue/tsconfig": "^0.9.1",
     "eslint": "^10.0.0",
-    "jsdom": "^26.0.0",
+    "jsdom": "^30.0.1",
     "magic-string": "^1.1.0",
     "markdown-it": "^14.1.0",
     "markdown-it-anchor": "^9.2.0",
