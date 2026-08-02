@@ -1,7 +1,7 @@
 import axios from '@nextcloud/axios'
 import { generateOcsUrl, generateUrl } from '@nextcloud/router'
 
-import type { CollectionDocument, CullingXmpReport, Gallery, GalleryPage, GalleryPublicLink, GalleryReadiness, GuestRatingAggregate, GuestRatingPromotion, IndexedMediaPage, InvitationTemplate, MediaCull, MediaItem, MediaMetadata, MediaPage, MediaVersion, OwnerSelection, PublicLinkPolicy, ShareAuditItem } from '../types'
+import type { CollectionDocument, CullingXmpReport, Gallery, GalleryPage, GalleryPublicLink, GalleryReadiness, GuestRatingAggregate, GuestRatingPromotion, IndexedMediaPage, InvitationTemplate, LivePushCredential, LivePushOverview, MediaCull, MediaItem, MediaMetadata, MediaPage, MediaVersion, OwnerSelection, PublicLinkPolicy, ShareAuditItem } from '../types'
 import type { CanonicalGallerySettings, GallerySettings } from '../domain/gallerySettings'
 
 export { uploadGalleryMedia } from './ownerUploadApi.ts'
@@ -105,6 +105,14 @@ export async function revokePublicLink(id: number, linkId: number): Promise<Gall
 	return data
 }
 
+export async function requestCustomDomain(id: number, publicLinkId: number, domain: string): Promise<void> {
+	await axios.post(`${galleriesUrl}/${id}/domains`, { publicLinkId, domain })
+}
+
+export async function revokeCustomDomain(id: number, domainId: number): Promise<void> {
+	await axios.delete(`${galleriesUrl}/${id}/domains/${domainId}`)
+}
+
 export async function fetchShareAudit(id: number): Promise<ShareAuditItem[]> {
 	const { data } = await axios.get<{ items: ShareAuditItem[] }>(`${galleriesUrl}/${id}/share-audit`)
 	return data.items
@@ -171,6 +179,40 @@ export async function indexGalleryMetadata(id: number, path = ''): Promise<{ ind
 export async function rebuildGalleryMediaIndex(id: number): Promise<{ indexed: number; removed: number; truncated: boolean; generation: string }> {
 	const { data } = await axios.post(`${galleriesUrl}/${id}/media/index`)
 	return data
+}
+
+export async function rebuildSemanticIndex(id: number): Promise<{ state: string; provider: string; model: string }> {
+	const { data } = await axios.post<{ state: string; provider: string; model: string }>(`${galleriesUrl}/${id}/semantic-index`)
+	return data
+}
+
+export async function fetchSemanticStatus(id: number): Promise<{ enabled: boolean; provider: 'disabled' | 'local' | 'https'; model: string; scope: string; state: 'disabled' | 'unindexed' | 'indexing' | 'ready' | 'failed'; error: string | null }> {
+	const { data } = await axios.get<{ enabled: boolean; provider: 'disabled' | 'local' | 'https'; model: string; scope: string; state: 'disabled' | 'unindexed' | 'indexing' | 'ready' | 'failed'; error: string | null }>(`${galleriesUrl}/${id}/semantic`)
+	return data
+}
+
+export async function searchSemanticMedia(id: number, query: string, limit = 100): Promise<Array<{ fileId: number; score: number; concepts: string[] }>> {
+	const { data } = await axios.get<{ items: Array<{ fileId: number; score: number; concepts: string[] }> }>(`${galleriesUrl}/${id}/semantic-search`, { params: { query, limit } })
+	return data.items
+}
+
+export async function fetchLivePush(id: number): Promise<LivePushOverview> {
+	const { data } = await axios.get<LivePushOverview>(`${galleriesUrl}/${id}/live-push`)
+	return data
+}
+
+export async function createLivePushCredential(id: number, label: string, path: string): Promise<LivePushCredential> {
+	const { data } = await axios.post<LivePushCredential>(`${galleriesUrl}/${id}/live-push`, { label, path })
+	return data
+}
+
+export async function rotateLivePushCredential(id: number, credentialId: number): Promise<LivePushCredential> {
+	const { data } = await axios.post<LivePushCredential>(`${galleriesUrl}/${id}/live-push/${credentialId}/rotate`)
+	return data
+}
+
+export async function revokeLivePushCredential(id: number, credentialId: number): Promise<void> {
+	await axios.delete(`${galleriesUrl}/${id}/live-push/${credentialId}`)
 }
 
 export async function fetchIndexedMedia(id: number, limit = 200, cursor?: string | null, path = '', signal?: AbortSignal, sortBy: 'name' | 'modified' | 'size' = 'name', sortDirection: 'asc' | 'desc' = 'asc'): Promise<IndexedMediaPage> {

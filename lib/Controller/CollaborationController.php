@@ -17,6 +17,7 @@ use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
+use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\DataDownloadResponse;
 use OCP\AppFramework\Http\Response;
@@ -66,6 +67,7 @@ final class CollaborationController extends ResolvedPublicShareController {
 
 	#[PublicPage]
 	#[NoCSRFRequired]
+	#[AnonRateLimit(limit: 600, period: 3600)]
 	#[FrontpageRoute(verb: 'PUT', url: '/public/{token}/collaboration/media/{fileId}/rating')]
 	public function setRating(int $fileId, int $rating = 0, string $pick = 'none'): JSONResponse {
 		if (!$this->ratingEnabled()) return new JSONResponse(['message' => 'Guest ratings are disabled for this link'], Http::STATUS_FORBIDDEN);
@@ -89,6 +91,7 @@ final class CollaborationController extends ResolvedPublicShareController {
 
 	#[PublicPage]
 	#[NoCSRFRequired]
+	#[AnonRateLimit(limit: 600, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/public/{token}/collaboration/media/{fileId}/like')]
 	public function toggleLike(int $fileId): JSONResponse {
 		if (!$this->allowsFile($fileId)) return new JSONResponse(['message' => 'Media not found'], Http::STATUS_NOT_FOUND);
@@ -99,6 +102,7 @@ final class CollaborationController extends ResolvedPublicShareController {
 
 	#[PublicPage]
 	#[NoCSRFRequired]
+	#[AnonRateLimit(limit: 600, period: 3600)]
 	#[FrontpageRoute(verb: 'PUT', url: '/public/{token}/collaboration/media/{fileId}/color')]
 	public function setColor(int $fileId, ?string $value = null): JSONResponse {
 		if (!$this->allowsFile($fileId)) return new JSONResponse(['message' => 'Media not found'], Http::STATUS_NOT_FOUND);
@@ -111,6 +115,7 @@ final class CollaborationController extends ResolvedPublicShareController {
 	/** @param array<string, int>|null $annotation */
 	#[PublicPage]
 	#[NoCSRFRequired]
+	#[AnonRateLimit(limit: 240, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/public/{token}/collaboration/media/{fileId}/comments')]
 	public function addComment(int $fileId, string $body, ?array $annotation = null): JSONResponse {
 		if (!$this->allowsFile($fileId)) return new JSONResponse(['message' => 'Media not found'], Http::STATUS_NOT_FOUND);
@@ -121,6 +126,7 @@ final class CollaborationController extends ResolvedPublicShareController {
 
 	#[PublicPage]
 	#[NoCSRFRequired]
+	#[AnonRateLimit(limit: 240, period: 3600)]
 	#[FrontpageRoute(verb: 'DELETE', url: '/public/{token}/collaboration/comments/{commentId}')]
 	public function deleteComment(int $commentId): JSONResponse {
 		return $this->mutation('comments', function (Guest $guest) use ($commentId): array {
@@ -134,6 +140,7 @@ final class CollaborationController extends ResolvedPublicShareController {
 
 	#[PublicPage]
 	#[NoCSRFRequired]
+	#[AnonRateLimit(limit: 240, period: 3600)]
 	#[FrontpageRoute(verb: 'PUT', url: '/public/{token}/collaboration/comments/{commentId}')]
 	public function updateComment(int $commentId, string $body): JSONResponse {
 		return $this->mutation('comments', function (Guest $guest) use ($commentId, $body): array {
@@ -148,6 +155,7 @@ final class CollaborationController extends ResolvedPublicShareController {
 	/** @param list<int> $fileIds */
 	#[PublicPage]
 	#[NoCSRFRequired]
+	#[AnonRateLimit(limit: 120, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/public/{token}/collaboration/selections')]
 	public function saveSelection(string $name, string $message = '', array $fileIds = []): JSONResponse {
 		foreach ($fileIds as $fileId) if (!$this->allowsFile((int)$fileId)) return new JSONResponse(['message' => 'Media not found'], Http::STATUS_NOT_FOUND);

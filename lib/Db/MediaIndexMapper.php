@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Db;
 
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use OCA\ProofingGallery\Dto\MediaIndexQuery;
 use OCP\AppFramework\Db\QBMapper;
 use OCP\DB\QueryBuilder\IQueryBuilder;
@@ -120,5 +121,56 @@ final class MediaIndexMapper extends QBMapper {
 		$qb->delete($this->tableName)
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
 		return $qb->executeStatement();
+	}
+
+	/** @param array{name: string, mimeType: string, size: int, mtime: int, etag: string} $file */
+	public function upsert(
+		int $galleryId,
+		int $fileId,
+		int $parentId,
+		string $relativePath,
+		int $depth,
+		string $generation,
+		int $now,
+		array $file,
+	): void {
+		$sortKey = mb_strtolower(mb_substr($relativePath, 0, 512));
+		$qb = $this->db->getQueryBuilder();
+		$updated = $qb->update($this->tableName)
+			->set('parent_file_id', $qb->createNamedParameter($parentId, IQueryBuilder::PARAM_INT))
+			->set('relative_path', $qb->createNamedParameter($relativePath))
+			->set('sort_key', $qb->createNamedParameter($sortKey))
+			->set('name', $qb->createNamedParameter($file['name']))
+			->set('mime_type', $qb->createNamedParameter($file['mimeType']))
+			->set('size', $qb->createNamedParameter($file['size'], IQueryBuilder::PARAM_INT))
+			->set('mtime', $qb->createNamedParameter($file['mtime'], IQueryBuilder::PARAM_INT))
+			->set('etag', $qb->createNamedParameter($file['etag']))
+			->set('depth', $qb->createNamedParameter($depth, IQueryBuilder::PARAM_INT))
+			->set('scan_generation', $qb->createNamedParameter($generation))
+			->set('seen_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT))
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
+			->executeStatement();
+		if ($updated === 1) return;
+		$qb = $this->db->getQueryBuilder();
+		try {
+			$qb->insert($this->tableName)->values([
+				'gallery_id' => $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT),
+				'file_id' => $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT),
+				'parent_file_id' => $qb->createNamedParameter($parentId, IQueryBuilder::PARAM_INT),
+				'relative_path' => $qb->createNamedParameter($relativePath),
+				'sort_key' => $qb->createNamedParameter($sortKey),
+				'name' => $qb->createNamedParameter($file['name']),
+				'mime_type' => $qb->createNamedParameter($file['mimeType']),
+				'size' => $qb->createNamedParameter($file['size'], IQueryBuilder::PARAM_INT),
+				'mtime' => $qb->createNamedParameter($file['mtime'], IQueryBuilder::PARAM_INT),
+				'etag' => $qb->createNamedParameter($file['etag']),
+				'depth' => $qb->createNamedParameter($depth, IQueryBuilder::PARAM_INT),
+				'scan_generation' => $qb->createNamedParameter($generation),
+				'seen_at' => $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT),
+			])->executeStatement();
+		} catch (UniqueConstraintViolationException) {
+			$this->upsert($galleryId, $fileId, $parentId, $relativePath, $depth, $generation, $now, $file);
+		}
 	}
 }

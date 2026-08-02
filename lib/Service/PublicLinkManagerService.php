@@ -8,6 +8,7 @@ use DateTime;
 use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\GalleryMapper;
+use OCA\ProofingGallery\Db\CustomDomainRepository;
 use OCA\ProofingGallery\Db\PublicLink;
 use OCA\ProofingGallery\Db\PublicLinkMapper;
 use OCA\ProofingGallery\Dto\PublicLinkConfiguration;
@@ -39,6 +40,9 @@ final class PublicLinkManagerService {
 		private ShareAuditService $audit,
 		private IDBConnection $db,
 		private LoggerInterface $logger,
+		private CustomDomainRepository $customDomains,
+		private CapabilityPolicyService $capabilities,
+		private GalleryReadinessService $readiness,
 	) {
 	}
 
@@ -52,6 +56,7 @@ final class PublicLinkManagerService {
 
 	/** @return array<string, mixed> */
 	public function create(Gallery $gallery, PublicLinkConfiguration $config): array {
+		$this->assertLinkManagementAllowed($gallery, $config, true);
 		$this->primaryLinks->assertBelowLimit($gallery);
 		$config = $this->validateScope($gallery, $config);
 		$share = $this->newShare($gallery);
@@ -88,6 +93,8 @@ final class PublicLinkManagerService {
 	/** @return array<string, mixed> */
 	public function update(Gallery $gallery, int $linkId, PublicLinkConfiguration $config): array {
 		$link = $this->owned($gallery, $linkId);
+		$this->assertLinkManagementAllowed($gallery, $config, false);
+		if (!$link->getIsPrimary()) $this->capabilities->assertFeature('multiplePublicLinks');
 		if ($link->getStatus() !== 'active') throw new \InvalidArgumentException('Revoked links cannot be edited');
 		$config = $this->validateScope($gallery, $config);
 		$share = $this->shareManager->getShareByToken($link->getToken());
@@ -112,6 +119,8 @@ final class PublicLinkManagerService {
 
 	/** @return array<string, mixed> */
 	public function makePrimary(Gallery $gallery, int $linkId): array {
+		$this->capabilities->assertCanPublish($gallery->getOwnerUid());
+		$this->capabilities->assertFeature('multiplePublicLinks');
 		$link = $this->owned($gallery, $linkId);
 		if ($link->getStatus() !== 'active') throw new \InvalidArgumentException('Only active links can be primary');
 		$link = $this->atomic(function () use ($gallery, $link): PublicLink {
@@ -149,9 +158,16 @@ final class PublicLinkManagerService {
 
 	/** @return array<string, mixed> */
 	private function present(PublicLink $link): array {
+		$domain = $this->customDomains->activeLink((int)$link->getId());
 		return [
 			...$link->jsonSerialize(),
-			'url' => $this->urls->linkToRouteAbsolute('files_sharing.sharecontroller.showShare', ['token' => $link->getToken()]),
+			'url' => $domain !== null && $domain['status'] === 'verified'
+				? 'https://' . $domain['domain'] . '/'
+				: $this->urls->linkToRouteAbsolute('files_sharing.sharecontroller.showShare', ['token' => $link->getToken()]),
+			'customDomain' => $domain === null ? null : [
+				'id' => (int)$domain['id'], 'domain' => (string)$domain['domain'], 'status' => (string)$domain['status'],
+				'verificationName' => '_proofing-gallery.' . $domain['domain'], 'verificationValue' => (string)$domain['verification_token'],
+			],
 		];
 	}
 
@@ -169,6 +185,17 @@ final class PublicLinkManagerService {
 			if (!$node instanceof Folder || !$root->isSubNode($node)) throw new \InvalidArgumentException('Public link start folder not found');
 		}
 		return $config->withStartPath($startPath);
+	}
+
+	private function assertLinkManagementAllowed(Gallery $gallery, PublicLinkConfiguration $config, bool $creating): void {
+		$this->capabilities->assertCanPublish($gallery->getOwnerUid());
+		if ($creating) $this->capabilities->assertFeature('multiplePublicLinks');
+		if ($config->viewMode === 'recursive') $this->capabilities->assertFeature('recursiveGalleries');
+		if ($gallery->getStatus() !== \OCA\ProofingGallery\Domain\GalleryStatus::Published->value
+			|| $gallery->getArchivedAt() !== null) {
+			throw new \InvalidArgumentException('Only published galleries can manage active public links');
+		}
+		$this->readiness->assertPublishable($gallery);
 	}
 
 	private function newShare(Gallery $gallery): IShare {

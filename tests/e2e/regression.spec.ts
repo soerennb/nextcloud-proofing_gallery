@@ -14,6 +14,49 @@ async function state(): Promise<{ galleryId: number, token: string, folderId: nu
 	return JSON.parse(await readFile(path.join(process.cwd(), 'test-results-e2e-state.json'), 'utf8'))
 }
 
+test('archiving suspends native and app access and restore keeps the token', async ({ request, baseURL }) => {
+	const stable = await state()
+	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
+	const created = await request.post(`${galleries}?format=json`, {
+		headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+		data: { folderId: stable.folderId, title: `E2E Archive ${Date.now()}` },
+	})
+	expect(created.status()).toBe(201)
+	const galleryId = (await created.json() as { id: number }).id
+	const published = await request.post(`${galleries}/${galleryId}/publish?format=json`, {
+		headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+		data: { allowDownloads: true },
+	})
+	expect(published.status()).toBe(200)
+	const token = (await published.json() as { gallery: { shareToken: string } }).gallery.shareToken
+	expect((await request.get(`${baseURL}/s/${token}`)).status()).toBe(200)
+	const publicDavHeaders = { Depth: '0', Authorization: `Basic ${Buffer.from(`${token}:`).toString('base64')}` }
+	expect((await request.fetch(`${baseURL}/public.php/dav/files/${token}/`, {
+		method: 'PROPFIND',
+		headers: publicDavHeaders,
+	})).status()).toBe(207)
+
+	const archived = await request.delete(`${galleries}/${galleryId}?format=json`, { headers: apiHeaders })
+	expect(archived.status()).toBe(200)
+	expect((await archived.json() as { status: string }).status).toBe('archived')
+	const archivedPage = await request.get(`${baseURL}/s/${token}`)
+	expect(archivedPage.status()).toBe(404)
+	expect(await archivedPage.text()).toContain('Gallery unavailable')
+	expect([401, 403, 404, 405]).toContain((await request.fetch(`${baseURL}/public.php/dav/files/${token}/`, {
+		method: 'PROPFIND',
+		headers: publicDavHeaders,
+	})).status())
+
+	const restored = await request.post(`${galleries}/${galleryId}/restore?format=json`, { headers: apiHeaders })
+	expect(restored.status()).toBe(200)
+	const restoredGallery = await restored.json() as { status: string, shareToken: string }
+	expect(restoredGallery).toEqual(expect.objectContaining({ status: 'published', shareToken: token }))
+	expect((await request.get(`${baseURL}/s/${token}`)).status()).toBe(200)
+
+	await request.delete(`${galleries}/${galleryId}/publish?format=json`, { headers: apiHeaders })
+	await request.delete(`${galleries}/${galleryId}?format=json`, { headers: apiHeaders })
+})
+
 test('source cache refreshes and a missing published source recovers without changing its token', async ({ request, baseURL }) => {
 	const stable = await state()
 	const folderName = `ProofingGalleryRecovery-${Date.now()}`
@@ -136,6 +179,97 @@ test('owner chunk uploads expose resumable state and finalize into the gallery',
 	}
 })
 
+test('Live Push credentials are upload-only, independently rotated and revoked', async ({ request, baseURL }) => {
+	const stable = await state()
+	const adminSettings = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/admin/settings?format=json`
+	const livePush = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries/${stable.galleryId}/live-push?format=json`
+	const original = await request.get(adminSettings, { headers: apiHeaders }).then(response => response.json()) as {
+		instanceSettings: { livePush: { enabled: boolean } }
+	}
+	let uploadedFileId: number | null = null
+	try {
+		const enabled = await request.put(adminSettings, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+			data: { instanceSettings: { livePush: { enabled: true } } },
+		})
+		expect(enabled.status()).toBe(200)
+		const created = await request.post(livePush, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+			data: { label: 'E2E camera', path: '' },
+		})
+		expect(created.status()).toBe(201)
+		const credential = await created.json() as { id: number; username: string; password: string }
+		expect(credential.password).toHaveLength(48)
+
+		const ingress = `${baseURL}/apps/proofing_gallery/live-push/upload?filename=live-push.png`
+		expect((await request.put(ingress, { headers: { Authorization: 'Basic invalid' }, data: Buffer.from('invalid') })).status()).toBe(401)
+		const uploaded = await request.put(ingress, {
+			headers: { Authorization: `Basic ${Buffer.from(`${credential.username}:${credential.password}`).toString('base64')}`, 'Content-Type': 'image/png' },
+			data: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+3vTnWQAAAABJRU5ErkJggg==', 'base64'),
+		})
+		expect(uploaded.status()).toBe(201)
+		uploadedFileId = (await uploaded.json() as { item: { id: number } }).item.id
+
+		const rotated = await request.post(livePush.replace('?format=json', `/${credential.id}/rotate?format=json`), { headers: apiHeaders })
+		expect(rotated.status()).toBe(200)
+		const replacement = await rotated.json() as { password: string }
+		expect(replacement.password).not.toBe(credential.password)
+		expect((await request.put(ingress, { headers: { Authorization: `Basic ${Buffer.from(`${credential.username}:${credential.password}`).toString('base64')}` }, data: Buffer.from('old') })).status()).toBe(401)
+		expect((await request.delete(livePush.replace('?format=json', `/${credential.id}?format=json`), { headers: apiHeaders })).status()).toBe(204)
+		expect((await request.put(ingress, { headers: { Authorization: `Basic ${Buffer.from(`${credential.username}:${replacement.password}`).toString('base64')}` }, data: Buffer.from('revoked') })).status()).toBe(401)
+	} finally {
+		if (uploadedFileId !== null) await request.delete(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries/${stable.galleryId}/media/${uploadedFileId}?format=json`, { headers: apiHeaders })
+		await request.put(adminSettings, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+			data: { instanceSettings: { livePush: original.instanceSettings.livePush } },
+		})
+	}
+})
+
+test('custom domains require administrator DNS and HTTPS verification and revoke safely', async ({ request, baseURL }) => {
+	const stable = await state()
+	const adminSettings = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/admin/settings?format=json`
+	const domains = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries/${stable.galleryId}/domains?format=json`
+	const links = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries/${stable.galleryId}/public-links?format=json`
+	const original = await request.get(adminSettings, { headers: apiHeaders }).then(response => response.json()) as {
+		instanceSettings: { customDomains: { enabled: boolean } }
+	}
+	let domainId: number | null = null
+	try {
+		expect((await request.put(adminSettings, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+			data: { instanceSettings: { customDomains: { enabled: true } } },
+		})).status()).toBe(200)
+		const publicLinks = await request.get(links, { headers: apiHeaders }).then(response => response.json()) as { items: Array<{ id: number; status: string }> }
+		const link = publicLinks.items.find(item => item.status === 'active')
+		expect(link).toBeDefined()
+		expect((await request.post(domains, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' }, data: { publicLinkId: link!.id, domain: 'gallery.invalid' },
+		})).status()).toBe(422)
+		const requested = await request.post(domains, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' }, data: { publicLinkId: link!.id, domain: `gallery-${Date.now()}.example.com` },
+		})
+		expect(requested.status()).toBe(201)
+		const mapping = await requested.json() as { id: number; status: string; verificationName: string; verificationValue: string }
+		domainId = mapping.id
+		expect(mapping).toEqual(expect.objectContaining({ status: 'pending', verificationName: expect.stringMatching(/^_proofing-gallery\./), verificationValue: expect.stringMatching(/^proofing-gallery-verification=/) }))
+		expect((await request.post(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/admin/domains/${domainId}/verify?format=json`, { headers: apiHeaders })).status()).toBe(422)
+		const anonymousRequest = await requestFactory.newContext()
+		expect((await anonymousRequest.post(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/admin/domains/${domainId}/verify?format=json`, {
+			headers: { 'OCS-APIRequest': 'true' },
+		})).status()).toBe(401)
+		await anonymousRequest.dispose()
+		expect((await request.delete(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/admin/domains/${domainId}?format=json`, { headers: apiHeaders })).status()).toBe(204)
+		domainId = null
+		expect((await request.get(`${baseURL}/apps/proofing_gallery/domain`)).status()).toBe(404)
+	} finally {
+		if (domainId !== null) await request.delete(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/admin/domains/${domainId}?format=json`, { headers: apiHeaders })
+		await request.put(adminSettings, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' }, data: { instanceSettings: { customDomains: original.instanceSettings.customDomains } },
+		})
+	}
+})
+
 test('administrator policies reject out-of-range API values and health remains accessible', async ({ browser, request, baseURL }) => {
 	const unauthorized = await request.put(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/admin/policies?format=json`, {
 		headers: { 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' },
@@ -168,9 +302,17 @@ test('administrator policies reject out-of-range API values and health remains a
 		headers: apiHeaders,
 	})
 	expect(settings.status()).toBe(200)
-	const settingsDocument = await settings.json() as { instanceSettings: { schemaVersion: number }, coreSharing: { publicLinksAllowed: boolean } }
+	const settingsDocument = await settings.json() as {
+		instanceSettings: { schemaVersion: number; media: { videoTranscoding: boolean; transcodeConcurrency: number }; semantic: { provider: string; externalTransfer: boolean } }
+		coreSharing: { publicLinksAllowed: boolean }
+		health: { video: { available: boolean; pending: number; failed: number } }
+	}
 	expect(settingsDocument.instanceSettings.schemaVersion).toBe(2)
+	expect(settingsDocument.instanceSettings.media.videoTranscoding).toBe(true)
+	expect(settingsDocument.instanceSettings.media.transcodeConcurrency).toBeGreaterThanOrEqual(1)
+	expect(settingsDocument.instanceSettings.semantic).toEqual(expect.objectContaining({ provider: 'disabled', externalTransfer: false }))
 	expect(typeof settingsDocument.coreSharing.publicLinksAllowed).toBe('boolean')
+	expect(typeof settingsDocument.health.video.available).toBe('boolean')
 	const logoEndpoint = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/admin/branding/logo?format=json`
 	const uploadedLogo = await request.post(logoEndpoint, {
 		headers: apiHeaders,
@@ -194,6 +336,13 @@ test('administrator policies reject out-of-range API values and health remains a
 	await page.getByRole('button', { name: 'Log in', exact: true }).click()
 	await expect(page.getByRole('heading', { level: 2, name: 'Proofing Gallery' })).toBeVisible()
 	await expect(page.getByText('Cleanup status')).toBeVisible()
+	await expect(page.getByRole('heading', { level: 3, name: 'Video delivery' })).toBeVisible()
+	await expect(page.getByLabel('FFmpeg executable')).toHaveValue('ffmpeg')
+	await expect(page.getByRole('heading', { level: 3, name: 'Media search' })).toBeVisible()
+	await expect(page.locator('select[name="semanticProvider"]')).toHaveValue('disabled')
+	await expect(page.getByRole('heading', { level: 3, name: 'HTTPS Live Push' })).toBeVisible()
+	await expect(page.getByRole('heading', { level: 3, name: 'Custom gallery domains' })).toBeVisible()
+	await expect(page.getByText('Video derivatives')).toBeVisible()
 	await expect(page.getByText(/Not run yet|Healthy|Overdue|Failed/).first()).toBeVisible()
 	const adminStyles = page.locator('link[rel="stylesheet"][href*="proofing_gallery-admin"]')
 	await expect(adminStyles).toHaveCount(1)

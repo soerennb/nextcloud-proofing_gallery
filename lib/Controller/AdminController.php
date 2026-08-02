@@ -12,6 +12,7 @@ use OCA\ProofingGallery\Service\CollectionAnchorReconciler;
 use OCA\ProofingGallery\Service\CoreSharingPolicyService;
 use OCA\ProofingGallery\Service\SettingsRolloutService;
 use OCA\ProofingGallery\Service\BrandingAssetService;
+use OCA\ProofingGallery\Db\SemanticIndexRepository;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\ApiRoute;
@@ -27,6 +28,7 @@ final class AdminController extends Controller {
 		private CoreSharingPolicyService $coreSharing,
 		private SettingsRolloutService $rollout,
 		private BrandingAssetService $branding,
+		private SemanticIndexRepository $semanticIndex,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -180,5 +182,10 @@ final class AdminController extends Controller {
 	#[ApiRoute(verb: 'POST', url: '/api/v1/admin/collection-anchors/reconcile')]
 	public function reconcileCollectionAnchors(bool $dryRun = true): DataResponse {
 		return new DataResponse($this->collectionAnchors->reconcile($dryRun));
+	}
+
+	#[ApiRoute(verb: 'DELETE', url: '/api/v1/admin/semantic-index')]
+	public function deleteSemanticIndex(): DataResponse {
+		return new DataResponse(['deleted' => $this->semanticIndex->deleteAll()]);
 	}
 }

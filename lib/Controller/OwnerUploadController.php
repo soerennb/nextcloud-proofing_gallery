@@ -51,7 +51,7 @@ final class OwnerUploadController extends Controller {
 	#[ApiRoute(verb: 'PUT', url: '/api/v1/galleries/{id}/owner-uploads/{uploadId}/chunks/{index}')]
 	public function putChunk(int $id, string $uploadId, int $index): DataResponse {
 		return $this->respond(function () use ($id, $uploadId, $index): array {
-			$content = file_get_contents('php://input');
+			$content = file_get_contents('php://input', false, null, 0, OwnerUploadService::CHUNK_SIZE + 1);
 			if ($content === false) throw new InvalidArgumentException('Upload chunk could not be read');
 			$this->uploads->putChunk($this->galleries->get($this->userId(), $id), $this->userId(), $uploadId, $index, $content);
 			return [];

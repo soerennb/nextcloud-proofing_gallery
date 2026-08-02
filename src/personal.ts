@@ -16,6 +16,42 @@ function folderFields() {
 	}
 }
 
+function preferencePayload(data: FormData, parentId: number) {
+	const selectedEvents = (prefix: string) => ['upload.received', 'comment.created', 'selection.created']
+		.filter(name => data.has(`${prefix}.${name}`))
+	return {
+		preferences: {
+			defaultPurpose: String(data.get('defaultPurpose') || '') || null,
+			publicLocale: String(data.get('publicLocale')),
+			designPresetId: data.get('designPresetId') ? Number(data.get('designPresetId')) : null,
+			parentFolder: parentId > 0 ? { id: parentId, name: String(data.get('parentFolderName')) } : null,
+			notifications: {
+				nextcloud: {
+					enabled: data.has('nextcloudEnabled'),
+					events: selectedEvents('nativeEvent'),
+				},
+				email: {
+					enabled: data.has('emailEnabled'),
+					events: selectedEvents('emailEvent'),
+					frequency: String(data.get('emailFrequency')),
+				},
+			},
+			lifecycle: {
+				enabled: data.has('lifecycleEnabled'),
+				trigger: 'after_completion',
+				revokeAfterDays: Number(data.get('revokeAfterDays')),
+				archiveAfterDays: Number(data.get('archiveAfterDays')),
+			},
+		},
+	}
+}
+
+function responseMessage(error: unknown): string | null {
+	return typeof error === 'object' && error !== null && 'response' in error
+		? (error as { response?: { data?: { message?: string } } }).response?.data?.message ?? null
+		: null
+}
+
 root?.querySelector('[data-action="folder"]')?.addEventListener('click', async () => {
 	try {
 		const nodes = await getFilePickerBuilder(t('proofing_gallery', 'Choose the default project folder'))
@@ -46,37 +82,11 @@ form?.addEventListener('submit', async event => {
 	if (submit) submit.disabled = true
 	if (status) status.textContent = t('proofing_gallery', 'Saving…')
 	try {
-		await axios.put(endpoint, {
-			preferences: {
-				defaultPurpose: String(data.get('defaultPurpose') || '') || null,
-				publicLocale: String(data.get('publicLocale')),
-				designPresetId: data.get('designPresetId') ? Number(data.get('designPresetId')) : null,
-				parentFolder: parentId > 0 ? { id: parentId, name: String(data.get('parentFolderName')) } : null,
-				notifications: {
-					nextcloud: {
-						enabled: data.has('nextcloudEnabled'),
-						events: ['upload.received', 'comment.created', 'selection.created'].filter(name => data.has(`nativeEvent.${name}`)),
-					},
-					email: {
-						enabled: data.has('emailEnabled'),
-						events: ['upload.received', 'comment.created', 'selection.created'].filter(name => data.has(`emailEvent.${name}`)),
-						frequency: String(data.get('emailFrequency')),
-					},
-				},
-				lifecycle: {
-					enabled: data.has('lifecycleEnabled'),
-					trigger: 'after_completion',
-					revokeAfterDays: Number(data.get('revokeAfterDays')),
-					archiveAfterDays: Number(data.get('archiveAfterDays')),
-				},
-			},
-		})
+		await axios.put(endpoint, preferencePayload(data, parentId))
 		localStorage.removeItem('proofing-gallery:last-parent')
 		if (status) status.textContent = t('proofing_gallery', 'Settings saved.')
 	} catch (error) {
-		const message = typeof error === 'object' && error !== null && 'response' in error
-			? (error as { response?: { data?: { message?: string } } }).response?.data?.message
-			: null
+		const message = responseMessage(error)
 		if (status) status.textContent = message || t('proofing_gallery', 'Settings could not be saved.')
 	} finally {
 		if (submit) submit.disabled = false

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Tests\Unit\Service;
 
+use OCA\ProofingGallery\Db\MediaSummaryRepository;
 use OCA\ProofingGallery\Service\MediaSummaryService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Files\File;
@@ -32,7 +33,7 @@ final class MediaSummaryServiceTest extends TestCase {
 		]);
 
 		$summary = (new MediaSummaryService(
-			$db,
+			new MediaSummaryRepository($db),
 			$this->createMock(ITimeFactory::class),
 			$logger,
 		))->forFolder(4, 5, $folder);

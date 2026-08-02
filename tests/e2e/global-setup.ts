@@ -57,7 +57,7 @@ export default async function globalSetup(config: FullConfig) {
 	const galleries = await fetch(galleriesUrl, { headers }).then(response => response.json()) as {
 		items: Array<{ id: number, title: string, shareToken: string | null }>
 	}
-	for (const stale of galleries.items.filter(item => item.title.startsWith('E2E Gallery'))) {
+	for (const stale of galleries.items.filter(item => item.title.startsWith('E2E '))) {
 		await fetch(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries/${stale.id}?format=json`, {
 			method: 'DELETE',
 			headers,
@@ -81,6 +81,19 @@ export default async function globalSetup(config: FullConfig) {
 			body: JSON.stringify({ allowDownloads: true }),
 		},
 	).then(response => response.json()) as { gallery: { id: number, shareToken: string } }
+
+	for (let index = 1; index <= 4; index++) {
+		const dashboardGallery = await fetch(galleriesUrl, {
+			method: 'POST',
+			headers: { ...headers, 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				folderId,
+				title: `E2E Dashboard ${index}`,
+				settings: { mode: index % 2 === 0 ? 'collaboration' : 'presentation' },
+			}),
+		})
+		if (!dashboardGallery.ok) throw new Error(`E2E dashboard gallery ${index} could not be created (${dashboardGallery.status})`)
+	}
 
 	await writeFile(
 		path.join(process.cwd(), 'test-results-e2e-state.json'),

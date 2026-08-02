@@ -1,8 +1,10 @@
 import { showError, showSuccess } from '@nextcloud/dialogs'
 import { t } from '@nextcloud/l10n'
-import { ref, type Ref } from 'vue'
+import { ref } from 'vue'
+import type {Ref} from 'vue'
 
-import { canonicalGallerySettings, type GallerySettings } from '../domain/gallerySettings.ts'
+import { canonicalGallerySettings } from '../domain/gallerySettings.ts'
+import type {GallerySettings} from '../domain/gallerySettings.ts'
 import { applyPreset, createPreset, deletePreset, fetchPresets, updatePreset } from '../services/galleryApi.ts'
 import type { Gallery, GalleryPreset } from '../types.ts'
 

@@ -11,15 +11,20 @@ use OCA\ProofingGallery\Db\GalleryMapper;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCA\ProofingGallery\Domain\GalleryStatus;
 use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\AppFramework\Db\TTransactional;
 use OCP\Constants;
 use OCP\Share\IManager;
 use OCP\Share\IShare;
+use OCP\Share\Exceptions\ShareNotFound;
+use OCP\IDBConnection;
 use Throwable;
 use OCA\ProofingGallery\BackgroundJob\RebuildMediaIndexJob;
 use OCP\BackgroundJob\IJobList;
 use OCA\ProofingGallery\BackgroundJob\WarmGalleryPreviewJob;
 
 final class PublicShareService {
+	use TTransactional;
+
 	public function __construct(
 		private IManager $shareManager,
 		private GalleryMapper $galleries,
@@ -32,6 +37,7 @@ final class PublicShareService {
 		private IJobList $jobs,
 		private GalleryReadinessService $readiness,
 		private PreviewWarmService $previewWarm,
+		private IDBConnection $db,
 	) {
 	}
 
@@ -51,7 +57,8 @@ final class PublicShareService {
 			throw new InvalidArgumentException('A collection needs at least one available file before publishing');
 		}
 
-		$share = $gallery->getShareToken() === null
+		$isNewShare = $gallery->getShareToken() === null;
+		$share = $isNewShare
 			? $this->createShare($gallery)
 			: $this->shareManager->getShareByToken($gallery->getShareToken());
 
@@ -66,7 +73,7 @@ final class PublicShareService {
 		}
 		$share->setExpirationDate($this->expirationDate($expiresAt));
 
-		$share = $gallery->getShareToken() === null
+		$share = $isNewShare
 			? $this->shareManager->createShare($share)
 			: $this->shareManager->updateShare($share);
 
@@ -82,8 +89,16 @@ final class PublicShareService {
 		$gallery->setUpdatedAt($this->clock->getTime());
 		$gallery->setRevision($gallery->getRevision() + 1);
 
-		$updated = $this->galleries->update($gallery);
-		$this->publicLinks->ensurePrimary($updated, (int)$share->getId());
+		try {
+			$updated = $this->atomic(function () use ($gallery, $share): Gallery {
+				$updated = $this->galleries->update($gallery);
+				$this->publicLinks->ensurePrimary($updated, (int)$share->getId());
+				return $updated;
+			}, $this->db);
+		} catch (Throwable $exception) {
+			$this->failClosedPublishShare($gallery, $share, $isNewShare);
+			throw $exception;
+		}
 		try {
 			$this->previewWarm->warm($updated);
 		} catch (\Throwable) {
@@ -91,6 +106,30 @@ final class PublicShareService {
 		}
 		$this->jobs->add(WarmGalleryPreviewJob::class, ['galleryId' => $updated->getId()]);
 		return $updated;
+	}
+
+	private function failClosedPublishShare(Gallery $gallery, IShare $share, bool $isNewShare): void {
+		if ($isNewShare) {
+			try {
+				$this->shareManager->deleteShare($share);
+				return;
+			} catch (Throwable) {
+				// Fall through to permission removal and app-side registration so the
+				// core share page cannot expose an orphaned token.
+			}
+		}
+		try {
+			$share->setPermissions(0);
+			$this->shareManager->updateShare($share);
+		} catch (Throwable) {
+		}
+		try {
+			$link = $this->publicLinks->ensurePrimary($gallery, (int)$share->getId());
+			$this->publicLinks->suspend($link);
+		} catch (Throwable) {
+			// Nothing more can be changed safely here. The original exception is
+			// retained and health reconciliation can surface the orphaned share.
+		}
 	}
 
 	public function revoke(Gallery $gallery): Gallery {
@@ -106,6 +145,124 @@ final class PublicShareService {
 		$gallery->setRevision($gallery->getRevision() + 1);
 
 		return $this->galleries->update($gallery);
+	}
+
+	/**
+	 * Suspend app-managed link shares without changing their tokens or passwords.
+	 * Native permissions are removed before the archived state is committed so
+	 * WebDAV and the default Files Sharing page fail closed as well.
+	 */
+	public function archive(Gallery $gallery): Gallery {
+		if ($gallery->getStatus() === GalleryStatus::Archived->value) return $gallery;
+		$links = $this->publicLinks->list($gallery);
+		/** @var list<array{share: IShare, permissions: int}> $changed */
+		$changed = [];
+		try {
+			foreach ($links as $link) {
+				if ($link->getStatus() !== 'active') continue;
+				try {
+					$share = $this->shareManager->getShareByToken($link->getToken());
+				} catch (ShareNotFound) {
+					// A missing native share is already inaccessible. Reconciliation can
+					// surface it before a later restore attempt.
+					continue;
+				}
+				$permissions = (int)$share->getPermissions();
+				if ($permissions === 0) continue;
+				$share->setPermissions(0);
+				$this->shareManager->updateShare($share);
+				$changed[] = ['share' => $share, 'permissions' => $permissions];
+			}
+
+			return $this->atomic(function () use ($gallery, $links): Gallery {
+				foreach ($links as $link) $this->publicLinks->suspend($link);
+				$now = $this->clock->getTime();
+				$gallery->setStatus(GalleryStatus::Archived->value);
+				$gallery->setArchivedAt($now);
+				$gallery->setUpdatedAt($now);
+				$gallery->setRevision($gallery->getRevision() + 1);
+				return $this->galleries->update($gallery);
+			}, $this->db);
+		} catch (Throwable $exception) {
+			$this->restorePermissions($changed);
+			throw $exception;
+		}
+	}
+
+	public function reconcileArchived(Gallery $gallery): int {
+		if ($gallery->getStatus() !== GalleryStatus::Archived->value) return 0;
+		$links = array_values(array_filter(
+			$this->publicLinks->list($gallery),
+			static fn ($link): bool => $link->getStatus() === 'active',
+		));
+		foreach ($links as $link) {
+			try {
+				$share = $this->shareManager->getShareByToken($link->getToken());
+				if ((int)$share->getPermissions() !== 0) {
+					$share->setPermissions(0);
+					$this->shareManager->updateShare($share);
+				}
+			} catch (ShareNotFound) {
+				// Missing native shares are already inaccessible and can be suspended.
+			}
+		}
+		return $this->atomic(function () use ($links): int {
+			foreach ($links as $link) $this->publicLinks->suspend($link);
+			return count($links);
+		}, $this->db);
+	}
+
+	/** Restore all suspended native shares before making app routes public. */
+	public function restore(Gallery $gallery): Gallery {
+		if ($gallery->getStatus() !== GalleryStatus::Archived->value) {
+			throw new InvalidArgumentException('Only archived galleries can be restored');
+		}
+		$links = array_values(array_filter(
+			$this->publicLinks->list($gallery),
+			static fn ($link): bool => $link->getStatus() === 'suspended',
+		));
+		/** @var list<array{share: IShare, permissions: int}> $changed */
+		$changed = [];
+		try {
+			foreach ($links as $link) {
+				try {
+					$share = $this->shareManager->getShareByToken($link->getToken());
+				} catch (ShareNotFound $exception) {
+					throw new InvalidArgumentException('A suspended native share is missing and must be repaired before restore', previous: $exception);
+				}
+				$permissions = (int)$share->getPermissions();
+				if ($permissions !== Constants::PERMISSION_READ) {
+					$share->setPermissions(Constants::PERMISSION_READ);
+					$this->shareManager->updateShare($share);
+					$changed[] = ['share' => $share, 'permissions' => $permissions];
+				}
+			}
+
+			return $this->atomic(function () use ($gallery, $links): Gallery {
+				foreach ($links as $link) $this->publicLinks->activate($link);
+				$gallery->setStatus($links === [] ? GalleryStatus::Draft->value : GalleryStatus::Published->value);
+				$gallery->setArchivedAt(null);
+				$gallery->setUpdatedAt($this->clock->getTime());
+				$gallery->setRevision($gallery->getRevision() + 1);
+				return $this->galleries->update($gallery);
+			}, $this->db);
+		} catch (Throwable $exception) {
+			$this->restorePermissions($changed);
+			throw $exception;
+		}
+	}
+
+	/** @param list<array{share: IShare, permissions: int}> $changed */
+	private function restorePermissions(array $changed): void {
+		foreach (array_reverse($changed) as $snapshot) {
+			try {
+				$snapshot['share']->setPermissions($snapshot['permissions']);
+				$this->shareManager->updateShare($snapshot['share']);
+			} catch (Throwable) {
+				// The original error remains authoritative. Health/reconciliation
+				// reports any cross-store drift for an administrator to repair.
+			}
+		}
 	}
 
 	public function synchronizePrimaryNavigation(Gallery $gallery): void {

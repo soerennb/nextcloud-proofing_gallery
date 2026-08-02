@@ -13,6 +13,7 @@ use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
+use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 use OCP\ISession;
@@ -29,6 +30,7 @@ final class GuestController extends ResolvedPublicShareController {
 
 	#[PublicPage]
 	#[NoCSRFRequired]
+	#[AnonRateLimit(limit: 60, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/public/{token}/session')]
 	public function create(string $displayName = '', ?string $email = null): JSONResponse {
 		try {
@@ -61,6 +63,7 @@ final class GuestController extends ResolvedPublicShareController {
 
 	#[PublicPage]
 	#[NoCSRFRequired]
+	#[AnonRateLimit(limit: 120, period: 3600)]
 	#[FrontpageRoute(verb: 'DELETE', url: '/public/{token}/session')]
 	public function destroy(): JSONResponse {
 		try {

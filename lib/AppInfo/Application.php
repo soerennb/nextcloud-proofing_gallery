@@ -8,6 +8,7 @@ use OCA\ProofingGallery\Share\PublicShareTemplateProvider;
 use OCA\ProofingGallery\BackgroundJob\PurgeGuestsJob;
 use OCA\ProofingGallery\BackgroundJob\CleanupGalleryDataJob;
 use OCA\ProofingGallery\BackgroundJob\SendNotificationDigestsJob;
+use OCA\ProofingGallery\BackgroundJob\RevalidateCustomDomainsJob;
 use OCA\ProofingGallery\Db\GalleryMapper;
 use OCA\ProofingGallery\Notification\Notifier;
 use OCA\ProofingGallery\Listener\MediaIndexCacheListener;
@@ -41,5 +42,6 @@ final class Application extends App implements IBootstrap {
 		$context->getServerContainer()->get(IJobList::class)->add(PurgeGuestsJob::class);
 		$context->getServerContainer()->get(IJobList::class)->add(CleanupGalleryDataJob::class);
 		$context->getServerContainer()->get(IJobList::class)->add(SendNotificationDigestsJob::class);
+		$context->getServerContainer()->get(IJobList::class)->add(RevalidateCustomDomainsJob::class);
 	}
 }

@@ -4,21 +4,18 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Service;
 
-use OCA\ProofingGallery\Db\QueryResult;
-
 use InvalidArgumentException;
 use OCA\ProofingGallery\Db\Gallery;
+use OCA\ProofingGallery\Db\VersionRepository;
 use OCP\AppFramework\Utility\ITimeFactory;
-use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\Files\File;
 use OCP\Files\IAppData;
 use OCP\Files\SimpleFS\ISimpleFolder;
-use OCP\IDBConnection;
 use OCP\Security\ISecureRandom;
 
 final class VersionService {
 	public function __construct(
-		private IDBConnection $db,
+		private VersionRepository $repository,
 		private IAppData $appData,
 		private ISecureRandom $random,
 		private ITimeFactory $clock,
@@ -30,12 +27,6 @@ final class VersionService {
 	/** @return list<array<string, mixed>> */
 	public function list(Gallery $gallery, int $fileId): array {
 		$this->folders->resolveMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $fileId);
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('version_id', 'filename', 'mime_type', 'size', 'created_by', 'created_at')
-			->from('proofing_versions')
-			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
-			->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
-			->orderBy('created_at', 'DESC');
 		return array_map(static fn (array $row): array => [
 			'id' => $row['version_id'],
 			'filename' => $row['filename'],
@@ -43,7 +34,7 @@ final class VersionService {
 			'size' => (int)$row['size'],
 			'createdBy' => $row['created_by'],
 			'createdAt' => (int)$row['created_at'],
-		], QueryResult::rows($qb->executeQuery()));
+		], $this->repository->list($gallery->getId(), $fileId));
 	}
 
 	public function replace(Gallery $gallery, int $fileId, string $temporaryPath, string $userId): void {
@@ -91,17 +82,7 @@ final class VersionService {
 			fclose($stream);
 		}
 		try {
-			$qb = $this->db->getQueryBuilder();
-			$qb->insert('proofing_versions')->values([
-				'gallery_id' => $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT),
-				'file_id' => $qb->createNamedParameter($file->getId(), IQueryBuilder::PARAM_INT),
-				'version_id' => $qb->createNamedParameter($versionId),
-				'filename' => $qb->createNamedParameter($file->getName()),
-				'mime_type' => $qb->createNamedParameter($file->getMimeType()),
-				'size' => $qb->createNamedParameter((int)$file->getSize(), IQueryBuilder::PARAM_INT),
-				'created_by' => $qb->createNamedParameter($userId),
-				'created_at' => $qb->createNamedParameter($this->clock->getTime(), IQueryBuilder::PARAM_INT),
-			])->executeStatement();
+			$this->repository->insert($gallery->getId(), $file->getId(), $versionId, $file->getName(), $file->getMimeType(), (int)$file->getSize(), $userId, $this->clock->getTime());
 		} catch (\Throwable $exception) {
 			$archive->delete();
 			throw $exception;
@@ -111,21 +92,11 @@ final class VersionService {
 
 	public function cleanupExpired(int $limit = 1000): int {
 		$before = $this->clock->getTime() - $this->policies->get('versionRetentionDays') * 86400;
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('id', 'gallery_id', 'file_id', 'version_id')->from('proofing_versions')
-			->where($qb->expr()->lt('created_at', $qb->createNamedParameter($before, IQueryBuilder::PARAM_INT)))
-			->orderBy('id', 'ASC')->setMaxResults(max(1, min(1000, $limit)));
-		return $this->deleteRows(QueryResult::rows($qb->executeQuery()));
+		return $this->deleteRows($this->repository->expired($before, $limit));
 	}
 
 	private function pruneFile(int $galleryId, int $fileId): void {
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('id', 'gallery_id', 'file_id', 'version_id')->from('proofing_versions')
-			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
-			->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
-			->orderBy('created_at', 'DESC')
-			->setFirstResult($this->policies->get('maxVersionsPerFile'));
-		$this->deleteRows(QueryResult::rows($qb->executeQuery()));
+		$this->deleteRows($this->repository->excess($galleryId, $fileId, $this->policies->get('maxVersionsPerFile')));
 	}
 
 	/** @param list<array<string, mixed>> $rows */
@@ -138,29 +109,18 @@ final class VersionService {
 		}
 		$ids = array_map(static fn (array $row): int => (int)$row['id'], $rows);
 		if ($ids === []) return 0;
-		$qb = $this->db->getQueryBuilder();
-		$qb->delete('proofing_versions')
-			->where($qb->expr()->in('id', $qb->createNamedParameter($ids, IQueryBuilder::PARAM_INT_ARRAY)));
-		return $qb->executeStatement();
+		return $this->repository->delete($ids);
 	}
 
-	/** @return array<string, mixed> */
-	private function find(Gallery $gallery, int $fileId, string $versionId): array {
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')->from('proofing_versions')
-			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
-			->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
-			->andWhere($qb->expr()->eq('version_id', $qb->createNamedParameter($versionId)));
-		$row = QueryResult::row($qb->executeQuery());
-		if ($row === false) {
+	private function find(Gallery $gallery, int $fileId, string $versionId): void {
+		if (!$this->repository->exists($gallery->getId(), $fileId, $versionId)) {
 			throw new InvalidArgumentException('Archived version not found');
 		}
-		return $row;
 	}
 
 	private function supportedUploadMime(string $path): string {
 		$mime = (new \finfo(FILEINFO_MIME_TYPE))->file($path);
-		if (!is_string($mime) || (!str_starts_with($mime, 'image/') && !in_array($mime, ['video/mp4', 'video/webm'], true))) {
+		if (!is_string($mime) || (!str_starts_with($mime, 'image/') && !str_starts_with($mime, 'video/'))) {
 			throw new InvalidArgumentException('Only images, MP4 and WebM files are accepted');
 		}
 		return $mime;

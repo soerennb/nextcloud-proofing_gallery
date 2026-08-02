@@ -8,7 +8,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { normalizeAnnotationPoint } from '../domain/collaboration.ts'
 import type { GallerySettings } from '../domain/gallerySettings.ts'
-import type { CollaborationState, GuestIdentity, MediaItem } from '../publicTypes.ts'
+import type { CollaborationState, MediaItem } from '../publicTypes.ts'
 
 type MediaDimensions = Record<number, { width: number; height: number }>
 
@@ -17,7 +17,6 @@ const props = defineProps<{
 	initialIndex: number
 	settings: GallerySettings
 	collaboration: CollaborationState | null
-	guest: GuestIdentity | null
 	dimensions: MediaDimensions
 	mutate(path: string, method: 'POST' | 'PUT' | 'DELETE', body?: unknown): Promise<boolean>
 	previewUrl(item: MediaItem, width?: number, height?: number, mode?: 'cover' | 'fit'): string
@@ -149,6 +148,16 @@ watch(marking, value => annotationHost.value?.classList.toggle('proofing-annotat
 
 function toSlideData(item: MediaItem): SlideData {
 	if (!item.mimeType.startsWith('image/')) {
+		if (item.playback && !item.playback.playable) {
+			const message = ['pending', 'processing'].includes(item.playback.state)
+				? t('proofing_gallery', 'This video is being prepared. Reload the gallery in a moment.')
+				: t('proofing_gallery', 'This video cannot be played in this browser.')
+			return {
+				html: `<div class="proofing-video-state" role="status"><span aria-hidden="true">▶</span><p>${escapeHtml(message)}</p></div>`,
+				width: 1280,
+				height: 720,
+			}
+		}
 		return {
 			html: `<video class="proofing-pswp-video" src="${props.streamUrl(item)}" controls playsinline preload="metadata"></video>`,
 			width: 1920,
@@ -172,6 +181,10 @@ function toSlideData(item: MediaItem): SlideData {
 		msrc: props.previewUrl(item, 320, 320, 'fit'),
 		thumbCropped: true,
 	}
+}
+
+function escapeHtml(value: string): string {
+	return value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!)
 }
 
 function syncAnnotationHost() {

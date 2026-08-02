@@ -6,8 +6,8 @@ import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { cullingShortcut } from '../domain/cullingShortcuts.ts'
-import { fetchGuestRatings, fetchIndexedMedia, fetchMediaCulling, fetchUserPreferences, ownerPreviewUrl, previewGuestRatingPromotion, promoteGuestRatings, rebuildGalleryMediaIndex, synchronizeCullingXmp, updateMediaCulling, updateUserPreferences } from '../services/galleryApi.ts'
-import type { CullColor, CullPick, CullingXmpReport, Gallery, GuestRatingAggregate, GuestRatingPromotion, IndexedMediaItem, MediaCull, UserPreferences } from '../types.ts'
+import { fetchGuestRatings, fetchIndexedMedia, fetchMediaCulling, fetchSemanticStatus, fetchUserPreferences, ownerPreviewUrl, previewGuestRatingPromotion, promoteGuestRatings, rebuildGalleryMediaIndex, rebuildSemanticIndex, searchSemanticMedia, synchronizeCullingXmp, updateMediaCulling, updateUserPreferences } from '../services/galleryApi.ts'
+import type { CullColor, CullingXmpReport, CullPick, Gallery, GuestRatingAggregate, GuestRatingPromotion, IndexedMediaItem, MediaCull, UserPreferences } from '../types.ts'
 import ProgressiveImage from './ProgressiveImage.vue'
 import VirtualMediaGrid from './VirtualMediaGrid.vue'
 
@@ -51,25 +51,33 @@ const guestWorking = ref(false)
 const guestRatings = ref<GuestRatingAggregate[]>([])
 const guestPlan = ref<GuestRatingPromotion[]>([])
 const undoStack = ref<Array<Record<number, MediaCull>>>([])
+const semanticQuery = ref('')
+const semanticMatches = ref<number[] | null>(null)
+const semanticWorking = ref(false)
+const semanticEnabled = ref(false)
+const semanticProvider = ref<'disabled' | 'local' | 'https'>('disabled')
 let controller: AbortController | undefined
 
-const defaultState = (fileId: number): MediaCull => ({
-	fileId,
-	rating: 0,
-	color: 'none',
-	pick: 'none',
-	source: 'app',
-	revision: 0,
-	sourceEtag: null,
-	sidecarEtag: null,
-	updatedAt: 0,
-})
+function defaultState(fileId: number): MediaCull {
+	return {
+		fileId,
+		rating: 0,
+		color: 'none',
+		pick: 'none',
+		source: 'app',
+		revision: 0,
+		sourceEtag: null,
+		sidecarEtag: null,
+		updatedAt: 0,
+	}
+}
 const stateFor = (fileId: number) => states.value[fileId] ?? defaultState(fileId)
 const filteredItems = computed(() => items.value.filter(item => {
 	const state = stateFor(item.id)
 	return (ratingFilter.value < 0 || state.rating === ratingFilter.value)
 		&& (pickFilter.value === 'all' || state.pick === pickFilter.value)
 		&& (colorFilter.value === 'all' || state.color === colorFilter.value)
+		&& (semanticMatches.value === null || semanticMatches.value.includes(item.id))
 }))
 const activeIndex = computed(() => filteredItems.value.findIndex(item => item.id === activeId.value))
 const activeItem = computed(() => activeIndex.value < 0 ? null : filteredItems.value[activeIndex.value])
@@ -131,6 +139,37 @@ async function loadSavedViews() {
 	try {
 		savedViews.value = (await fetchUserPreferences()).preferences.savedViews.filter(view => view.galleryId === props.gallery.id)
 	} catch { /* Culling remains fully usable without presets. */ }
+}
+
+async function loadSemanticStatus() {
+	try {
+		const status = await fetchSemanticStatus(props.gallery.id)
+		semanticEnabled.value = status.enabled
+		semanticProvider.value = status.provider
+	} catch {
+		semanticEnabled.value = false
+		semanticProvider.value = 'disabled'
+	}
+}
+
+async function runSemanticSearch() {
+	if (semanticQuery.value.trim().length < 2 || semanticWorking.value) return
+	semanticWorking.value = true
+	try {
+		semanticMatches.value = (await searchSemanticMedia(props.gallery.id, semanticQuery.value)).map(item => item.fileId)
+		showSuccess(t('proofing_gallery', '{count} search matches found.', { count: semanticMatches.value.length }))
+	} catch {
+		showError(t('proofing_gallery', 'Media search is unavailable. Ask an administrator to enable and index it.'))
+	} finally { semanticWorking.value = false }
+}
+
+async function queueSemanticIndex() {
+	if (semanticWorking.value) return
+	semanticWorking.value = true
+	try {
+		await rebuildSemanticIndex(props.gallery.id)
+		showSuccess(t('proofing_gallery', 'Media search indexing was queued.'))
+	} catch { showError(t('proofing_gallery', 'Media search indexing could not be queued.')) } finally { semanticWorking.value = false }
 }
 
 async function applySavedView() {
@@ -334,18 +373,19 @@ function onKeydown(event: KeyboardEvent) {
 
 function applyShortcut(action: NonNullable<ReturnType<typeof cullingShortcut>>) {
 	switch (action.type) {
-	case 'move': moveActive(action.delta); break
-	case 'rating': mutate({ rating: action.rating }); break
-	case 'toggle-pick': mutate({ pick: stateFor(activeId.value ?? 0).pick === 'pick' ? 'none' : 'pick' }); break
-	case 'toggle-reject': mutate({ pick: stateFor(activeId.value ?? 0).pick === 'reject' ? 'none' : 'reject' }); break
-	case 'undo': undo(); break
-	case 'toggle-selection': if (activeId.value !== null) toggleSelected(activeId.value); break
+		case 'move': moveActive(action.delta); break
+		case 'rating': mutate({ rating: action.rating }); break
+		case 'toggle-pick': mutate({ pick: stateFor(activeId.value ?? 0).pick === 'pick' ? 'none' : 'pick' }); break
+		case 'toggle-reject': mutate({ pick: stateFor(activeId.value ?? 0).pick === 'reject' ? 'none' : 'reject' }); break
+		case 'undo': undo(); break
+		case 'toggle-selection': if (activeId.value !== null) toggleSelected(activeId.value); break
 	}
 }
 
 onMounted(() => {
 	window.addEventListener('keydown', onKeydown)
 	loadSavedViews()
+	loadSemanticStatus()
 	loadPage(true)
 })
 onBeforeUnmount(() => {
@@ -373,6 +413,27 @@ onBeforeUnmount(() => {
 		</header>
 
 		<div class="culling-toolbar" aria-label="Culling tools">
+			<form v-if="semanticEnabled"
+				class="semantic-search"
+				role="search"
+				@submit.prevent="runSemanticSearch">
+				<label><span>{{ semanticProvider === 'https' ? t('proofing_gallery', 'Describe a scene') : t('proofing_gallery', 'Search filenames and metadata') }}</span><input v-model="semanticQuery" type="search" :placeholder="semanticProvider === 'https' ? t('proofing_gallery', 'e.g. family at sunset') : t('proofing_gallery', 'e.g. ceremony or IMG_2048')"></label>
+				<NcButton type="submit" variant="tertiary" :disabled="semanticQuery.trim().length < 2 || semanticWorking">
+					{{ t('proofing_gallery', 'Find') }}
+				</NcButton>
+				<NcButton v-if="semanticMatches !== null"
+					type="button"
+					variant="tertiary"
+					@click="semanticMatches = null; semanticQuery = ''">
+					{{ t('proofing_gallery', 'Clear') }}
+				</NcButton>
+				<NcButton type="button"
+					variant="tertiary"
+					:disabled="semanticWorking"
+					@click="queueSemanticIndex">
+					{{ t('proofing_gallery', 'Build search index') }}
+				</NcButton>
+			</form>
 			<label><span>{{ t('proofing_gallery', 'Rating') }}</span><select v-model.number="ratingFilter" name="cullingRating"><option :value="-1">{{ t('proofing_gallery', 'All') }}</option><option v-for="rating in 6" :key="rating - 1" :value="rating - 1">{{ rating - 1 }} ★</option></select></label>
 			<label><span>{{ t('proofing_gallery', 'Decision') }}</span><select v-model="pickFilter" name="cullingDecision"><option value="all">{{ t('proofing_gallery', 'All') }}</option><option value="pick">{{ t('proofing_gallery', 'Picks') }}</option><option value="reject">{{ t('proofing_gallery', 'Rejects') }}</option><option value="none">{{ t('proofing_gallery', 'Undecided') }}</option></select></label>
 			<label><span>{{ t('proofing_gallery', 'Color') }}</span><select v-model="colorFilter" name="cullingColor"><option value="all">{{ t('proofing_gallery', 'All') }}</option><option v-for="color in colors" :key="color.value" :value="color.value">{{ color.label }}</option></select></label>

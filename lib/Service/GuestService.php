@@ -16,6 +16,7 @@ use OCP\Security\ISecureRandom;
 final class GuestService {
 	public const COOKIE_NAME = 'proofing_gallery_guest';
 	private const LIFETIME_SECONDS = 2592000;
+	private const MAX_ACTIVE_SESSIONS_PER_GALLERY = 10000;
 
 	public function __construct(
 		private GuestMapper $guests,
@@ -27,6 +28,10 @@ final class GuestService {
 
 	/** @return array{guest: Guest, secret: string, nonce: string} */
 	public function create(Gallery $gallery, string $displayName = '', ?string $email = null): array {
+		$now = $this->clock->getTime();
+		if ($this->guests->countActiveForGallery($gallery->getId(), $now) >= self::MAX_ACTIVE_SESSIONS_PER_GALLERY) {
+			throw new InvalidArgumentException('Guest session limit reached');
+		}
 		$displayName = trim($displayName);
 		if (mb_strlen($displayName) > 120) {
 			throw new InvalidArgumentException('Display name may contain at most 120 characters');
@@ -38,7 +43,6 @@ final class GuestService {
 		$secret = $this->random->generate(64, ISecureRandom::CHAR_ALPHANUMERIC);
 		$nonce = $this->random->generate(48, ISecureRandom::CHAR_ALPHANUMERIC);
 		$publicId = $this->uuid();
-		$now = $this->clock->getTime();
 
 		$guest = new Guest();
 		$guest->setGalleryId($gallery->getId());

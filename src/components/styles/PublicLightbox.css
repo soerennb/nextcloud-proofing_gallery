@@ -14,6 +14,12 @@
 
 :global(.proofing-pswp-video) { width: min(100%, 1400px); height: min(100%, 900px); object-fit: contain; }
 
+:global(.proofing-video-state) { display: grid; width: min(90vw, 720px); min-height: 320px; place-content: center; gap: 16px; padding: 36px; color: #fff; text-align: center; }
+
+:global(.proofing-video-state span) { color: var(--gallery-accent); font-size: 64px; }
+
+:global(.proofing-video-state p) { max-width: 42ch; margin: 0; font-size: clamp(18px, 3vw, 28px); font-weight: 650; line-height: 1.25; }
+
 .lightbox-bar { position: absolute; z-index: 5; inset: 0 0 auto; display: flex; min-height: 64px; align-items: center; justify-content: space-between; gap: 16px; padding: 8px 14px 8px 22px; border-top: 4px solid var(--gallery-accent); border-bottom: 1px solid #333; background: #0d0d0d; pointer-events: auto; }
 
 .lightbox-bar__identity { display: grid; overflow: hidden; min-width: 0; }

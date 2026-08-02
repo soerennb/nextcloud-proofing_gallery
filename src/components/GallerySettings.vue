@@ -9,7 +9,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion-v'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 import { canonicalGallerySettings } from '../domain/gallerySettings.ts'
-import { availableGallerySettingsTabs, galleryPurposeLabels as purposeLabels, publicMetadataOptions } from '../domain/gallerySettingsOptions.ts'
+import { availableGallerySettingsTabs, publicMetadataOptions, galleryPurposeLabels as purposeLabels } from '../domain/gallerySettingsOptions.ts'
 import type { SettingsTab } from '../domain/gallerySettingsOptions.ts'
 import { useGalleryPresets } from '../composables/useGalleryPresets.ts'
 import { completeGallery, fetchCollection, fetchGalleryMedia, fetchGalleryReadiness, ownerPreviewUrl, updateGallery, updateGallerySource } from '../services/galleryApi.ts'
@@ -20,6 +20,7 @@ import CullingWorkspace from './CullingWorkspace.vue'
 import FolderContent from './FolderContent.vue'
 import GalleryDesignPreview from './GalleryDesignPreview.vue'
 import ManagerPanel from './ManagerPanel.vue'
+import LivePushPanel from './LivePushPanel.vue'
 import NotificationPanel from './NotificationPanel.vue'
 import SharingModal from './SharingModal.vue'
 import SelectionManager from './SelectionManager.vue'
@@ -72,6 +73,7 @@ const readinessLabels = computed<Record<GalleryReadiness['checks'][number]['code
 	media_available: t('proofing_gallery', 'At least one photo is ready'),
 	publishing_allowed: t('proofing_gallery', 'Publishing is allowed'),
 	collection_complete: t('proofing_gallery', 'All collection files are available'),
+	artwork_scoped: t('proofing_gallery', 'Gallery artwork is safely scoped'),
 }))
 const readiness = computed(() => [
 	...(serverReadiness.value?.checks ?? [
@@ -250,7 +252,7 @@ async function chooseSource() {
 		emit('updated', gallery)
 		await loadMedia()
 		showSuccess(t('proofing_gallery', 'Source folder updated. The public link remains unchanged.'))
-	} catch (error) {
+	} catch {
 		if (rebinding.value) {
 			showError(t('proofing_gallery', 'The source folder could not be updated.'))
 		}
@@ -871,6 +873,7 @@ onBeforeUnmount(() => {
 					</fieldset>
 					<ManagerPanel :gallery-id="gallery.id" @changed="notificationPanel?.load()" />
 					<NotificationPanel v-if="gallery.permissions.role === 'owner'" ref="notificationPanel" :gallery="gallery" />
+					<LivePushPanel v-if="gallery.permissions.role === 'owner' && gallery.sourceType === 'folder'" :gallery-id="gallery.id" />
 				</section>
 
 				<section v-else-if="activeTab === 'feedback'" class="settings-section">

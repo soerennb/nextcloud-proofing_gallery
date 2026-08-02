@@ -2,6 +2,24 @@ import type { GallerySettings } from './domain/gallerySettings'
 
 export type GalleryPurpose = 'showcase' | 'delivery' | 'selection' | 'proofing' | 'uploads' | 'custom'
 
+export interface LivePushCredential {
+	id: number
+	username: string
+	label: string
+	path: string
+	createdAt: number
+	lastUsedAt: number | null
+	revokedAt: number | null
+	uploadCount: number
+	bytesReceived: number
+	password?: string
+}
+
+export interface LivePushOverview {
+	connection: { enabled: boolean; endpointPath: string; protocol: 'https-put' }
+	items: LivePushCredential[]
+}
+
 export type CapabilityName = 'galleryCreation' | 'publicPublishing' | 'guestUploads' | 'downloads'
 	| 'emailInvitations' | 'likes' | 'colors' | 'comments' | 'annotations' | 'selections'
 	| 'lifecycleAutomation' | 'xmpWriting'
@@ -87,6 +105,7 @@ export interface MediaItem {
 	sourceGalleryId?: number
 	sourceGalleryTitle?: string
 	metadata?: MediaMetadata
+	playback?: { state: 'source' | 'disabled' | 'pending' | 'processing' | 'ready' | 'failed' | 'unavailable'; playable: boolean }
 }
 
 export interface IndexedMediaItem extends MediaItem {
@@ -247,6 +266,7 @@ export interface GalleryPublicLink {
 	updatedAt: number
 	revokedAt: number | null
 	url: string
+	customDomain: { id: number; domain: string; status: 'pending' | 'verified' | 'revoked'; verificationName: string; verificationValue: string } | null
 }
 
 export interface ShareAuditItem {

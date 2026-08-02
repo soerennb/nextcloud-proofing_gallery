@@ -31,6 +31,11 @@ final class PolicyServiceTest extends TestCase {
 		self::assertSame(25000, $policies->get('maxIndexedMedia'));
 		self::assertSame(10, $policies->get('maxPublicLinks'));
 		self::assertSame(90, $policies->get('shareAuditRetentionDays'));
+		self::assertSame(10737418240, $policies->get('maxVideoInputBytes'));
+		self::assertSame(1080, $policies->get('videoMaxHeight'));
+		self::assertSame(10000, $policies->get('maxSemanticMedia'));
+		self::assertSame(3, $policies->get('maxLivePushCredentials'));
+		self::assertSame(3, $policies->get('maxCustomDomainsPerGallery'));
 	}
 
 	public function testSaveRejectsOutOfRangeValues(): void {
@@ -84,6 +89,7 @@ final class PolicyServiceTest extends TestCase {
 			'features' => ['downloads' => false],
 			'workflow' => ['defaultPurpose' => 'proofing'],
 			'branding' => ['logoAssetId' => str_repeat('A', 32) . '.png'],
+			'media' => ['ffmpegPath' => '/usr/local/bin/ffmpeg', 'transcodeConcurrency' => 2, 'transcodePreset' => 'veryfast'],
 		]);
 
 		self::assertSame(['photographers'], $saved['access']['creatorGroups']);
@@ -91,6 +97,30 @@ final class PolicyServiceTest extends TestCase {
 		self::assertTrue($saved['features']['comments']);
 		self::assertSame('proofing', $saved['workflow']['defaultPurpose']);
 		self::assertSame(str_repeat('A', 32) . '.png', $saved['branding']['logoAssetId']);
+		self::assertSame('/usr/local/bin/ffmpeg', $saved['media']['ffmpegPath']);
+		self::assertSame(2, $saved['media']['transcodeConcurrency']);
+		self::assertSame('disabled', $saved['semantic']['provider']);
+		self::assertFalse($saved['livePush']['enabled']);
+		self::assertFalse($saved['customDomains']['enabled']);
+	}
+
+	public function testExternalSemanticProviderRequiresExplicitHttpsTransfer(): void {
+		$policies = new PolicyService($this->createMock(IConfig::class));
+		$this->expectException(\InvalidArgumentException::class);
+		$policies->saveInstanceSettings(['semantic' => [
+			'provider' => 'https', 'endpoint' => 'https://vision.example/embed', 'externalTransfer' => false,
+		]]);
+	}
+
+	public function testLivePushCanEnableTheHttpsIngressWithoutGatewaySettings(): void {
+		$policies = new PolicyService($this->createMock(IConfig::class));
+		$saved = $policies->saveInstanceSettings(['livePush' => ['enabled' => true]]);
+		self::assertSame(['enabled' => true], $saved['livePush']);
+		self::assertSame([
+			'enabled' => false,
+			'endpointPath' => '/apps/proofing_gallery/live-push/upload',
+			'protocol' => 'https-put',
+		], $policies->livePushSettings());
 	}
 
 	public function testInstanceSettingsRejectUnknownFeature(): void {

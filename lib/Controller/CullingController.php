@@ -13,6 +13,8 @@ use OCA\ProofingGallery\Service\CullingService;
 use OCA\ProofingGallery\Service\CullingXmpService;
 use OCA\ProofingGallery\Service\GalleryService;
 use OCA\ProofingGallery\Service\MediaIndexService;
+use OCA\ProofingGallery\Service\CapabilityPolicyService;
+use OCA\ProofingGallery\Exception\PolicyViolationException;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
@@ -30,6 +32,7 @@ final class CullingController extends Controller {
 		private CullingService $culling,
 		private CullingXmpService $cullingXmp,
 		private IUserSession $userSession,
+		private CapabilityPolicyService $capabilities,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -38,8 +41,11 @@ final class CullingController extends Controller {
 	#[ApiRoute(verb: 'POST', url: '/api/v1/galleries/{id}/media/index')]
 	public function rebuildMediaIndex(int $id): DataResponse {
 		try {
+			$this->capabilities->assertFeature('ownerCulling');
 			$gallery = $this->galleries->get($this->userId(), $id);
 			return new DataResponse($this->mediaIndex->rebuild($gallery));
+		} catch (PolicyViolationException $exception) {
+			return new DataResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
 		} catch (DoesNotExistException|AuthorizationException|FolderAccessException) {
 			return new DataResponse(['message' => 'Gallery or folder not found'], Http::STATUS_NOT_FOUND);
 		} catch (InvalidArgumentException $exception) {
@@ -51,8 +57,11 @@ final class CullingController extends Controller {
 	#[ApiRoute(verb: 'GET', url: '/api/v1/galleries/{id}/indexed-media')]
 	public function indexedMedia(int $id, int $limit = 60, ?string $cursor = null, string $path = '', string $search = '', string $sortBy = 'name', string $sortDirection = 'asc'): DataResponse {
 		try {
+			$this->capabilities->assertFeature('ownerCulling');
 			$gallery = $this->galleries->view($this->userId(), $id);
 			return new DataResponse($this->mediaIndex->page($gallery, $limit, $cursor, $path, $search, $sortBy, $sortDirection));
+		} catch (PolicyViolationException $exception) {
+			return new DataResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
 		} catch (DoesNotExistException|AuthorizationException|FolderAccessException) {
 			return new DataResponse(['message' => 'Gallery or folder not found'], Http::STATUS_NOT_FOUND);
 		} catch (InvalidArgumentException $exception) {
@@ -65,9 +74,12 @@ final class CullingController extends Controller {
 	#[ApiRoute(verb: 'PUT', url: '/api/v1/galleries/{id}/media/cull')]
 	public function updateCulling(int $id, array $items): DataResponse {
 		try {
+			$this->capabilities->assertFeature('ownerCulling');
 			$userId = $this->userId();
 			$gallery = $this->galleries->get($userId, $id);
 			return new DataResponse(['items' => $this->culling->updateBatch($userId, $gallery, $items)]);
+		} catch (PolicyViolationException $exception) {
+			return new DataResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
 		} catch (MetadataConflictException $exception) {
 			return new DataResponse(['code' => 'revision_conflict', 'message' => $exception->getMessage()], Http::STATUS_CONFLICT);
 		} catch (DoesNotExistException|AuthorizationException|FolderAccessException) {
@@ -82,9 +94,12 @@ final class CullingController extends Controller {
 	#[ApiRoute(verb: 'GET', url: '/api/v1/galleries/{id}/media/cull')]
 	public function culling(int $id, array $fileIds = []): DataResponse {
 		try {
+			$this->capabilities->assertFeature('ownerCulling');
 			$gallery = $this->galleries->view($this->userId(), $id);
 			if (count($fileIds) > 200) throw new InvalidArgumentException('Request at most 200 media items');
 			return new DataResponse(['items' => array_values($this->culling->forFiles($gallery->getOwnerUid(), $fileIds))]);
+		} catch (PolicyViolationException $exception) {
+			return new DataResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
 		} catch (InvalidArgumentException $exception) {
@@ -108,9 +123,12 @@ final class CullingController extends Controller {
 		array $fieldChoices = [],
 	): DataResponse {
 		try {
+			$this->capabilities->assertFeature('ownerCulling');
 			$userId = $this->userId();
 			$gallery = $this->galleries->get($userId, $id);
 			return new DataResponse($this->cullingXmp->synchronize($userId, $gallery, $mode, $dryRun, $fileIds, $limit, $offset, $fieldChoices));
+		} catch (PolicyViolationException $exception) {
+			return new DataResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
 		} catch (DoesNotExistException|AuthorizationException|FolderAccessException) {
 			return new DataResponse(['message' => 'Gallery or media not found'], Http::STATUS_NOT_FOUND);
 		} catch (InvalidArgumentException $exception) {

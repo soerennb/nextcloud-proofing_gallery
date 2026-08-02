@@ -46,6 +46,18 @@ Original media is never copied into app tables. Derived watermarked previews and
 resumable upload chunks live in Nextcloud appdata. Accepted uploads move into
 the source folder through the Files API.
 
+Optional Live Push credentials are random, stored only as SHA-256 hashes, and
+scoped to one folder gallery plus destination path. The app exposes one bounded,
+write-only HTTPS PUT ingress and no FTP/FTPS server or reference gateway. An
+operator may translate a camera-specific protocol externally. No
+credential-backed read route exists.
+
+Custom domains are separate mappings to active native public-link records. DNS
+TXT ownership and a TLS-valid HTTPS endpoint are prerequisites for activation.
+The host-based entry controller resolves verified mappings and redirects on the
+same host to the native `/s/<token>` flow; a database join ensures revoked links
+cannot be revived by a stale domain mapping.
+
 Image metadata is extracted locally within administrator-defined file and batch
 bounds, stored under an app-specific Nextcloud FilesMetadata key, and bound to
 the source ETag. Public responses project only the gallery's validated allowlist.

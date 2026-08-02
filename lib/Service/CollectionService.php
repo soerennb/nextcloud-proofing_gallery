@@ -4,26 +4,22 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Service;
 
-use OCA\ProofingGallery\Db\QueryResult;
-
 use InvalidArgumentException;
+use OCA\ProofingGallery\Db\CollectionRepository;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\GalleryMapper;
-use OCA\ProofingGallery\Exception\CollectionConflictException;
 use OCA\ProofingGallery\Exception\FolderAccessException;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Utility\ITimeFactory;
-use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
-use OCP\IDBConnection;
 
 final class CollectionService {
 	public const MAX_ITEMS = 1000;
 
 	public function __construct(
-		private IDBConnection $db,
+		private CollectionRepository $repository,
 		private IRootFolder $rootFolder,
 		private GalleryMapper $galleries,
 		private FolderService $folders,
@@ -40,14 +36,7 @@ final class CollectionService {
 
 	public function initialize(Gallery $gallery): void {
 		$this->assertCollection($gallery);
-		$now = $this->clock->getTime();
-		$qb = $this->db->getQueryBuilder();
-		$qb->insert('proofing_collections')->values([
-			'gallery_id' => $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT),
-			'revision' => $qb->createNamedParameter(1, IQueryBuilder::PARAM_INT),
-			'created_at' => $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT),
-			'updated_at' => $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT),
-		])->executeStatement();
+		$this->repository->initialize($gallery->getId(), $this->clock->getTime());
 	}
 
 	public function deleteAnchor(Folder $anchor): void {
@@ -79,37 +68,7 @@ final class CollectionService {
 		}
 
 		$now = $this->clock->getTime();
-		$this->db->beginTransaction();
-		try {
-			$qb = $this->db->getQueryBuilder();
-			$qb->update('proofing_collections')
-				->set('revision', $qb->createNamedParameter($revision + 1, IQueryBuilder::PARAM_INT))
-				->set('updated_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT))
-				->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($collection->getId(), IQueryBuilder::PARAM_INT)))
-				->andWhere($qb->expr()->eq('revision', $qb->createNamedParameter($revision, IQueryBuilder::PARAM_INT)));
-			if ($qb->executeStatement() !== 1) {
-				throw new CollectionConflictException('The collection changed in another session');
-			}
-
-			$qb = $this->db->getQueryBuilder();
-			$qb->delete('proofing_collection_items')
-				->where($qb->expr()->eq('collection_id', $qb->createNamedParameter($collection->getId(), IQueryBuilder::PARAM_INT)))
-				->executeStatement();
-			foreach ($validated as $position => $item) {
-				$qb = $this->db->getQueryBuilder();
-				$qb->insert('proofing_collection_items')->values([
-					'collection_id' => $qb->createNamedParameter($collection->getId(), IQueryBuilder::PARAM_INT),
-					'source_gallery_id' => $qb->createNamedParameter($item['sourceGalleryId'], IQueryBuilder::PARAM_INT),
-					'file_id' => $qb->createNamedParameter($item['fileId'], IQueryBuilder::PARAM_INT),
-					'position' => $qb->createNamedParameter($position, IQueryBuilder::PARAM_INT),
-					'created_at' => $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT),
-				])->executeStatement();
-			}
-			$this->db->commit();
-		} catch (\Throwable $exception) {
-			$this->db->rollBack();
-			throw $exception;
-		}
+		$this->repository->replace($collection->getId(), $revision, $validated, $now);
 
 		$collection->setUpdatedAt($now);
 		$this->galleries->update($collection);
@@ -186,28 +145,20 @@ final class CollectionService {
 
 	public function resolveMedia(Gallery $collection, int $fileId): File {
 		$this->assertCollection($collection);
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('source_gallery_id')->from('proofing_collection_items')
-			->where($qb->expr()->eq('collection_id', $qb->createNamedParameter($collection->getId(), IQueryBuilder::PARAM_INT)))
-			->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)));
-		$sourceId = $qb->executeQuery()->fetchOne();
-		if ($sourceId === false) {
+		$sourceId = $this->repository->sourceGalleryId($collection->getId(), $fileId);
+		if ($sourceId === null) {
 			throw new FolderAccessException('Media file was not found in the collection');
 		}
-		$source = $this->ownedFolderGallery($collection, (int)$sourceId);
+		$source = $this->ownedFolderGallery($collection, $sourceId);
 		return $this->folders->resolveMedia($source->getOwnerUid(), $source->getFolderId(), $fileId);
 	}
 
 	public function downloadPath(Gallery $collection, File $file): string {
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('source_gallery_id')->from('proofing_collection_items')
-			->where($qb->expr()->eq('collection_id', $qb->createNamedParameter($collection->getId(), IQueryBuilder::PARAM_INT)))
-			->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($file->getId(), IQueryBuilder::PARAM_INT)));
-		$sourceId = $qb->executeQuery()->fetchOne();
-		if ($sourceId === false) {
+		$sourceId = $this->repository->sourceGalleryId($collection->getId(), $file->getId());
+		if ($sourceId === null) {
 			throw new FolderAccessException('Media file was not found in the collection');
 		}
-		$source = $this->ownedFolderGallery($collection, (int)$sourceId);
+		$source = $this->ownedFolderGallery($collection, $sourceId);
 		$folder = trim(preg_replace('/[^a-z0-9._-]+/i', '-', $source->getTitle()) ?? '', '-');
 		return ($folder !== '' ? $folder : 'source') . '/' . $file->getName();
 	}
@@ -246,22 +197,15 @@ final class CollectionService {
 
 	/** @return list<array<string, mixed>> */
 	private function rows(int $collectionId): array {
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')->from('proofing_collection_items')
-			->where($qb->expr()->eq('collection_id', $qb->createNamedParameter($collectionId, IQueryBuilder::PARAM_INT)))
-			->orderBy('position', 'ASC');
-		return QueryResult::rows($qb->executeQuery());
+		return $this->repository->items($collectionId);
 	}
 
 	private function revision(int $galleryId): int {
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('revision')->from('proofing_collections')
-			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
-		$revision = $qb->executeQuery()->fetchOne();
-		if ($revision === false) {
+		$revision = $this->repository->revision($galleryId);
+		if ($revision === null) {
 			throw new InvalidArgumentException('Collection metadata is missing');
 		}
-		return (int)$revision;
+		return $revision;
 	}
 
 	private function ownedFolderGallery(Gallery $collection, int $sourceGalleryId): Gallery {

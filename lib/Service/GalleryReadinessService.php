@@ -23,6 +23,7 @@ final class GalleryReadinessService {
 		$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
 		$sourceState = 'blocked';
 		$mediaState = 'blocked';
+		$artworkState = 'ready';
 		$collectionState = null;
 		if ($gallery->getSourceType() === 'collection') {
 			$status = $this->collections->sourceStatus($gallery);
@@ -44,6 +45,18 @@ final class GalleryReadinessService {
 			['code' => 'media_available', 'state' => $mediaState, 'action' => 'content'],
 			['code' => 'publishing_allowed', 'state' => $this->capabilities->effective($settings, $userId)['publicPublishing']['allowed'] ? 'ready' : 'blocked', 'action' => 'access'],
 		];
+		foreach ([$settings->presentation->heroFileId, $settings->presentation->logoFileId] as $fileId) {
+			if ($fileId === null) continue;
+			try {
+				$file = $gallery->getSourceType() === 'collection'
+					? $this->collections->resolveMedia($gallery, $fileId)
+					: $this->folders->resolveMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $fileId);
+				if (!str_starts_with($file->getMimeType(), 'image/')) $artworkState = 'blocked';
+			} catch (FolderAccessException|\OCP\Files\NotFoundException) {
+				$artworkState = 'blocked';
+			}
+		}
+		$checks[] = ['code' => 'artwork_scoped', 'state' => $artworkState, 'action' => 'style'];
 		if ($collectionState !== null) {
 			$checks[] = ['code' => 'collection_complete', 'state' => $collectionState, 'action' => 'content'];
 		}

@@ -13,11 +13,10 @@ use OCP\Files\IRootFolder;
 use OCP\Files\Node;
 
 final class FolderService {
-	private const SUPPORTED_VIDEO_MIMES = ['video/mp4', 'video/webm'];
-
 	public function __construct(
 		private IRootFolder $rootFolder,
 		private MediaMetadataService $metadata,
+		private MediaTypePolicy $mediaTypes,
 	) {
 	}
 
@@ -54,29 +53,49 @@ final class FolderService {
 		throw new FolderAccessException('Media file was not found in the gallery');
 	}
 
-	public function uploadMedia(string $userId, int $folderId, string $path, string $filename, string $temporaryPath, string $conflict = 'fail'): ?MediaItem {
+	public function uploadMedia(string $userId, int $folderId, string $path, string $filename, string $temporaryPath, string $conflict = 'fail', ?string $declaredMimeType = null): ?MediaItem {
 		$root = $this->resolveFolder($userId, $folderId);
 		$target = $this->folderAt($root, trim($path, '/'));
 		$filename = $this->safeName($filename);
 		if (!$target->isUpdateable()) throw new FolderAccessException('The destination is not writable');
+		$existing = null;
 		if ($target->nodeExists($filename)) {
 			if ($conflict === 'skip') return null;
-			if ($conflict === 'overwrite') $target->get($filename)->delete();
+			if ($conflict === 'overwrite') $existing = $target->get($filename);
 			elseif ($conflict === 'rename') $filename = $this->conflictFreeName($target, $filename);
 			else throw new FolderAccessException('The filename already exists');
 		}
+		$extension = pathinfo($filename, PATHINFO_EXTENSION);
+		$stem = pathinfo($filename, PATHINFO_FILENAME);
+		$temporaryName = '.' . $stem . '.upload-' . bin2hex(random_bytes(8)) . ($extension === '' ? '' : '.' . $extension);
 		$stream = fopen($temporaryPath, 'rb');
 		if ($stream === false) {
 			throw new FolderAccessException('The uploaded file could not be read');
 		}
 		try {
-			$file = $target->newFile($filename, $stream);
+			$file = $target->newFile($temporaryName, $stream);
 		} finally {
 			if (is_resource($stream)) fclose($stream);
 		}
-		if (!$this->isSupported($file)) {
+		if (!$this->isSupported($file) || ($declaredMimeType !== null && !$this->mediaTypes->matches($declaredMimeType, $file))) {
 			$file->delete();
-			throw new \InvalidArgumentException('Only images, MP4 and WebM files are accepted');
+			throw new \InvalidArgumentException($declaredMimeType === null
+				? 'The uploaded media type is not supported'
+				: 'Uploaded content does not match the declared media type');
+		}
+		$backup = null;
+		try {
+			if ($existing !== null) {
+				$backupName = '.' . $filename . '.replaced-' . bin2hex(random_bytes(8));
+				$existing->move($target->getPath() . '/' . $backupName);
+				$backup = $existing;
+			}
+			$file->move($target->getPath() . '/' . $filename);
+			$backup?->delete();
+		} catch (\Throwable $exception) {
+			try { if ($file->getName() === $temporaryName) $file->delete(); } catch (\Throwable) {}
+			try { if ($backup !== null) $backup->move($target->getPath() . '/' . $filename); } catch (\Throwable) {}
+			throw new FolderAccessException('The uploaded file could not be committed safely', previous: $exception);
 		}
 		return $this->mediaItem($file);
 	}
@@ -358,7 +377,6 @@ final class FolderService {
 	}
 
 	private function isSupported(File $file): bool {
-		return str_starts_with($file->getMimeType(), 'image/')
-			|| in_array($file->getMimeType(), self::SUPPORTED_VIDEO_MIMES, true);
+		return $this->mediaTypes->supports($file);
 	}
 }

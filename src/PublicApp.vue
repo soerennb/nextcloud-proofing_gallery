@@ -62,7 +62,7 @@ const groupBy = ref(savedView?.groupBy === 'folder' && !settings.value.navigatio
 	: savedView?.groupBy ?? settings.value.navigation?.groupBy ?? 'none')
 const savedLayout = localStorage.getItem(`proofing-gallery-layout:${props.gallery.token}`)
 const layout = ref<'grid' | 'masonry' | 'list'>(
-	 savedView?.layout === 'grid' || savedView?.layout === 'masonry' || savedView?.layout === 'list'
+	savedView?.layout === 'grid' || savedView?.layout === 'masonry' || savedView?.layout === 'list'
 		? savedView.layout
 		: savedLayout === 'grid' || savedLayout === 'masonry' || savedLayout === 'list'
 			? savedLayout
@@ -311,7 +311,8 @@ async function loadCollaboration() {
 			headers: { Accept: 'application/json' },
 		})
 		if (!response.ok) throw new Error('Collaboration request failed')
-		collaboration.value = await response.json() as CollaborationState
+		const payload = await response.json() as CollaborationState | { unchanged: true; cursor: number }
+		if (!('unchanged' in payload)) collaboration.value = payload
 		collaborationError.value = ''
 	} catch {
 		collaborationError.value = t('proofing_gallery', 'Review updates are temporarily unavailable.')
@@ -564,7 +565,7 @@ function upOneLevel() {
 					class="gallery-toolbar__more"
 					type="button"
 					:aria-expanded="mobileToolsOpen"
-					:aria-controls="'proofing-gallery-view-tools'"
+					aria-controls="proofing-gallery-view-tools"
 					@click="mobileToolsOpen = !mobileToolsOpen">
 					{{ t('proofing_gallery', 'Filter & view') }}<span v-if="activeFilterCount">{{ activeFilterCount }}</span>
 				</button>
@@ -808,7 +809,6 @@ function upOneLevel() {
 			:initial-index="activeIndex"
 			:settings="settings"
 			:collaboration="collaboration"
-			:guest="guest"
 			:dimensions="mediaDimensions"
 			:mutate="mutateCollaboration"
 			:preview-url="previewUrl"

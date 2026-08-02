@@ -21,6 +21,7 @@ final class PublicGalleryDataService {
 		private PublicLinkScopeService $linkScopes,
 		private PublicMediaResolver $publicMedia,
 		private MediaTypePolicy $mediaTypes,
+		private VideoTranscodeService $videoTranscodes,
 	) {
 	}
 
@@ -236,6 +237,18 @@ final class PublicGalleryDataService {
 		$serialized['review']['ratings'] = $serialized['review']['ratings'] && $this->capabilities->feature('guestRatings');
 		$serialized['review']['pick'] = $serialized['review']['pick'] && $this->capabilities->feature('guestRatings');
 		if ($context->link->getPublicLocale() !== null) $serialized['publicLocale'] = $context->link->getPublicLocale();
+		foreach ($items as &$item) {
+			if (!str_starts_with((string)($item['mimeType'] ?? ''), 'video/')) continue;
+			try {
+				$item['playback'] = $this->videoTranscodes->request(
+					$gallery->getOwnerUid(),
+					$this->publicMedia->resolve($context, (int)$item['id']),
+				);
+			} catch (\Throwable) {
+				$item['playback'] = ['state' => 'unavailable', 'playable' => false];
+			}
+		}
+		unset($item);
 		return [
 			'gallery' => [
 				'id' => $gallery->getId(),

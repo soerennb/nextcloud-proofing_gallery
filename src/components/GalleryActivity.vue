@@ -10,10 +10,8 @@ import {
 	acceptUpload,
 	fetchActivity,
 	fetchInbox,
-	rejectUpload,
-	type GalleryActivity,
-	type InboxUpload,
-} from '../services/galleryApi.ts'
+	rejectUpload} from '../services/galleryApi.ts'
+import type {GalleryActivity, InboxUpload} from '../services/galleryApi.ts'
 
 const props = withDefaults(defineProps<{
 	galleryId: number
@@ -83,6 +81,7 @@ function eventLabel(type: string): string {
 		'upload.received': t('proofing_gallery', 'Guest upload received'),
 		'upload.accepted': t('proofing_gallery', 'Guest upload accepted'),
 		'upload.rejected': t('proofing_gallery', 'Guest upload deleted'),
+		'live_push.uploaded': t('proofing_gallery', 'Camera upload received'),
 		'comment.created': t('proofing_gallery', 'Comment added'),
 		'comment.updated': t('proofing_gallery', 'Comment edited'),
 		'comment.deleted': t('proofing_gallery', 'Comment deleted'),

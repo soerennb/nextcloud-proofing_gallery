@@ -81,7 +81,8 @@ final class GalleryAccessService {
 			$items[] = $gallery;
 			$seen[$galleryId] = true;
 		}
-		usort($items, static fn (Gallery $left, Gallery $right): int => $right->getUpdatedAt() <=> $left->getUpdatedAt());
+		usort($items, static fn (Gallery $left, Gallery $right): int =>
+			($right->getUpdatedAt() <=> $left->getUpdatedAt()) ?: ($right->getId() <=> $left->getId()));
 		return $items;
 	}
 

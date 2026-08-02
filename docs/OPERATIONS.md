@@ -51,6 +51,42 @@ failed Nextcloud background jobs. Cleanup is eventual, so allow headroom for int
 uploads. Native Nextcloud retention, backup, encryption, and object-storage
 policies still apply to gallery source folders.
 
+## HTTPS Live Push ingress
+
+Live Push is disabled by default. An administrator enables the HTTPS ingress
+before photographers can create credentials. Every credential is scoped to one
+folder gallery and an optional subfolder, has no read/list/delete capability,
+and can be rotated or revoked without changing public links.
+
+Clients send each file as an HTTPS `PUT` to
+`/apps/proofing_gallery/live-push/upload?filename=<url-encoded-name>` on the
+Nextcloud origin using the generated username and password as HTTP Basic
+authentication. The request body is the file body; success returns HTTP 201.
+The app rejects disabled, revoked, archived, oversized, unsupported, or
+invalidly scoped uploads and rate-limits anonymous requests.
+
+The app does not implement FTP or FTPS. If a camera cannot send HTTPS PUT, an
+operator-managed gateway may translate its protocol to this ingress. That
+gateway is outside this app's security boundary and must deny listing and
+downloads, avoid logging passwords, and validate Nextcloud's TLS certificate.
+
+## Custom gallery domains
+
+Custom domains are disabled by default. After enabling them, a photographer can
+request one domain for an active client link. The app displays a unique TXT
+challenge at `_proofing-gallery.<domain>`. An administrator verifies the request;
+activation requires both the exact public DNS value and a TLS-valid HTTPS
+endpoint. IP literals and private/reserved host suffixes are rejected.
+
+Before verification, configure the domain as a Nextcloud `trusted_domain`, issue
+its TLS certificate, and route the domain to the same Nextcloud frontend. Rewrite
+only `/` to `/apps/proofing_gallery/domain`; forward `/s/*`, `/apps/*`, `/ocs/*`,
+and static Nextcloud paths unchanged while preserving the original `Host` header.
+The entry endpoint redirects to the mapped native share on the same HTTPS host,
+so password, expiry, capability, and revocation enforcement remains in Nextcloud.
+Never use a redirect to a different untrusted origin. Removing DNS alone is not
+revocation: revoke the mapping or its public link in Proofing Gallery as well.
+
 The **Photo metadata** administration section separately bounds the maximum
 image size processed for embedded EXIF/IPTC data and the number of files in one
 manual indexing run. XMP sidecar writing can be disabled instance-wide without
@@ -80,6 +116,51 @@ and stop at the administrator-defined maximum. Public links can further reduce
 the visible result by start path and minimum owner rating. Monitor background
 jobs and the administration health summary after enabling recursive delivery on
 large existing folders.
+
+### Video transcoding
+
+Install `ffmpeg` and `ffprobe` on every Nextcloud web and cron worker that may
+run Proofing Gallery jobs. The Administration settings page verifies the
+configured executable and reports pending, failed, and completed derivatives.
+Conversion is enabled by default but fails closed: MP4/WebM sources continue to
+stream directly, while camera formats that a browser cannot play show a clear
+preparation or unavailable state until a derivative is ready.
+
+Each source is copied to a private temporary file and processed without a shell.
+The app verifies the duration with `ffprobe`, enforces source-size, duration,
+height, concurrency, and wall-clock limits, and writes an H.264/AAC MP4 plus a
+JPEG poster to appdata. Originals are read-only. Jobs are keyed by owner, file,
+ETag, and profile, so repeated page views do not duplicate work and replacing a
+source invalidates the old result. Failures retry at most three times with a
+cooldown. The lifecycle job removes derivatives after the configured retention
+period; active content is regenerated on demand.
+
+For production, keep the executable field at a trusted absolute path (for
+example `/usr/bin/ffmpeg`), run cron at least every five minutes, and budget
+temporary disk for one source plus one output per configured parallel job.
+Restricting concurrency is especially important on shared PHP workers.
+
+### Semantic search
+
+Semantic search is off by default. The local provider hashes filenames and a
+small allowlist of descriptive metadata into normalized vectors entirely inside
+Nextcloud. It is useful for bilingual concept queries without moving previews.
+The HTTPS vision provider is a separate opt-in: administrators must configure
+an HTTPS endpoint and explicitly allow external preview transfer. Requests
+contain only a bounded 384-pixel preview or the search text; originals, GPS,
+ratings, private keywords, and gallery credentials are never included.
+
+The provider endpoint accepts `POST` JSON with `model` and an `input` object
+(`type=image`, `mimeType`, `data` or `type=text`, `text`) and returns an
+`embedding` number array plus optional `concepts`. Redirects, oversized
+responses, non-finite vectors, and unexpected status codes fail closed.
+Nextcloud's outbound HTTP protections remain active.
+
+Administrators control the provider, model, image/video scope, maximum media
+per gallery, batch size, and preview budget. Photographers explicitly queue an
+index from the culling desk. Indices are tied to source ETags and provider/model;
+they can be deleted per gallery through the API or instance-wide from
+Administration settings → Proofing Gallery → Semantic search.
 
 Administrators can inspect the same bounded scan without changing files. The
 endpoint defaults to dry-run; pass `dryRun=false` only after reviewing the

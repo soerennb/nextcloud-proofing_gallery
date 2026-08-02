@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ProofingGallery\Tests\Unit\Service;
 
 use InvalidArgumentException;
+use OCA\ProofingGallery\Service\EmbeddedMetadataExtractor;
 use OCA\ProofingGallery\Service\MediaMetadataService;
 use OCA\ProofingGallery\Service\PolicyService;
 use OCP\Files\File;
@@ -115,7 +116,8 @@ final class MediaMetadataServiceTest extends TestCase {
 		]);
 		$manager = $this->createMock(IFilesMetadataManager::class);
 		$manager->method('getMetadata')->willReturn($stored);
-		$service = new MediaMetadataService($manager, new PolicyService($this->createMock(IConfig::class)));
+		$policies = new PolicyService($this->createMock(IConfig::class));
+		$service = new MediaMetadataService($manager, $policies, new EmbeddedMetadataExtractor($policies));
 
 		self::assertSame(
 			['state' => 'ready', 'camera' => 'Example Camera'],
@@ -124,7 +126,10 @@ final class MediaMetadataServiceTest extends TestCase {
 	}
 
 	public function testGpsCoordinatesAreNormalizedFromExifFractions(): void {
-		$gps = $this->invoke($this->service(), 'gps', [
+		$extractor = new EmbeddedMetadataExtractor(new PolicyService($this->createMock(IConfig::class)));
+		$method = new \ReflectionMethod($extractor, 'gps');
+		$method->setAccessible(true);
+		$gps = $method->invoke($extractor, [
 			'gpslatitude' => ['52/1', '31/1', '12/1'],
 			'gpslatituderef' => 'N',
 			'gpslongitude' => ['13/1', '24/1', '18/1'],
@@ -135,9 +140,11 @@ final class MediaMetadataServiceTest extends TestCase {
 	}
 
 	private function service(): MediaMetadataService {
+		$policies = new PolicyService($this->createMock(IConfig::class));
 		return new MediaMetadataService(
 			$this->createMock(IFilesMetadataManager::class),
-			new PolicyService($this->createMock(IConfig::class)),
+			$policies,
+			new EmbeddedMetadataExtractor($policies),
 		);
 	}
 

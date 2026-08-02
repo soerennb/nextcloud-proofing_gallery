@@ -12,6 +12,15 @@ guest feedback, selections, secure downloads, and an upload inbox.
 - standard Nextcloud public-link protection, password, and expiry
 - responsive image/video gallery with nested folders, previews, lightbox,
   slideshow, zoom, pan, and byte-range video streaming
+- bounded FFmpeg background transcoding for camera formats, with browser-ready
+  H.264/AAC MP4 derivatives, generated posters, and administrator controls
+- optional owner search over local filenames and metadata, plus scene search
+  through an explicitly enabled HTTPS vision provider
+- optional HTTPS Live Push ingestion through upload-only, gallery-scoped
+  credentials that can be rotated or revoked independently; camera-protocol
+  translation is deliberately left to an operator-managed gateway
+- administrator-approved custom gallery domains with DNS ownership and HTTPS
+  verification, immediate revocation, and canonical link generation
 - logo, hero image/focal point, accent, typography, welcome copy, filenames,
   and server-rendered preview watermarks
 - likes, color states, comments, image annotations, named selections, and

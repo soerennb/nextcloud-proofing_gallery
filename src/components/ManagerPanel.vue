@@ -9,9 +9,8 @@ import {
 	fetchManagers,
 	removeManager,
 	saveManager,
-	searchPrincipals,
-	type PrincipalOption,
-} from '../services/galleryApi.ts'
+	searchPrincipals} from '../services/galleryApi.ts'
+import type {PrincipalOption} from '../services/galleryApi.ts'
 import type { GalleryManager } from '../types.ts'
 
 const props = defineProps<{ galleryId: number }>()

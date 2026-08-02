@@ -13,6 +13,12 @@ tracking pixels, or external media services.
 - pending upload metadata and temporary chunks
 - locally extracted EXIF/IPTC technical and descriptive metadata, plus optional
   XMP sidecars stored beside originals
+- optional semantic vectors and short concept labels; with explicit instance
+  opt-in, reduced previews may be sent to the configured HTTPS vision provider
+- Live Push credential labels, destinations, one-way password hashes, and
+  upload counters; camera passwords are returned only on creation or rotation
+- requested custom domains, public DNS verification challenges, verification
+  state, and their associated public-link IDs
 - privacy-minimal operational activity such as action type, gallery, time, and
   a display label needed by the owner
 
@@ -20,7 +26,23 @@ Guest session secrets and mutation nonces are random, independently hashed, and
 never stored in plaintext. Public share passwords are managed by Nextcloud.
 Optional email addresses use the server's secret-derived encryption.
 
-Embedded metadata processing never sends image content to an external service.
+Embedded metadata processing and local filename/metadata search never send
+image content to an external service. The optional HTTPS vision provider is
+disabled until an administrator selects it and separately permits external
+preview transfer. It receives bounded previews, never originals, GPS, ratings,
+private keywords, gallery credentials, or guest data. Its operator becomes an
+additional processor under the administrator's responsibility.
+
+The optional Live Push feature receives file bodies through a dedicated HTTPS
+PUT ingress. The app provides no FTP/FTPS listener and offers no listing, read,
+rename, or delete operation for those credentials. An external protocol gateway,
+if deployed by an operator, is a separate component. Disabling Live Push or
+revoking a credential takes effect before another file body is accepted.
+
+Custom-domain verification queries the public `_proofing-gallery` TXT record
+and connects to the requested hostname over HTTPS. No gallery or guest data is
+sent during verification. A verified domain resolves only while its mapped
+native Nextcloud public link remains active; revocation fails closed.
 Public galleries receive no metadata fields unless the owner selects them for
 that gallery. The public allowlist excludes GPS coordinates, keywords, ratings,
 and workflow labels even if those values exist in Files or an XMP sidecar.

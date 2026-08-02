@@ -17,6 +17,7 @@ use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
+use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 use OCP\ISession;
@@ -34,6 +35,7 @@ final class UploadController extends ResolvedPublicShareController {
 
 	#[PublicPage]
 	#[NoCSRFRequired]
+	#[AnonRateLimit(limit: 120, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/public/{token}/uploads')]
 	public function initiate(string $filename, string $mimeType, int $size): JSONResponse {
 		return $this->mutation(
@@ -61,10 +63,11 @@ final class UploadController extends ResolvedPublicShareController {
 
 	#[PublicPage]
 	#[NoCSRFRequired]
+	#[AnonRateLimit(limit: 2000, period: 3600)]
 	#[FrontpageRoute(verb: 'PUT', url: '/public/{token}/uploads/{uploadId}/chunks/{index}')]
 	public function putChunk(string $uploadId, int $index): JSONResponse {
 		return $this->mutation(function (Guest $guest) use ($uploadId, $index): array {
-			$content = file_get_contents('php://input');
+			$content = file_get_contents('php://input', false, null, 0, UploadService::CHUNK_SIZE + 1);
 			if ($content === false) {
 				throw new InvalidArgumentException('Upload chunk could not be read');
 			}
@@ -81,6 +84,7 @@ final class UploadController extends ResolvedPublicShareController {
 
 	#[PublicPage]
 	#[NoCSRFRequired]
+	#[AnonRateLimit(limit: 120, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/public/{token}/uploads/{uploadId}/finalize')]
 	public function finalize(string $uploadId): JSONResponse {
 		return $this->mutation(fn (Guest $guest): array => $this->uploads->finalize(

@@ -6,7 +6,9 @@ namespace OCA\ProofingGallery\Tests\Unit\Service;
 
 use OCA\ProofingGallery\Service\FolderService;
 use OCA\ProofingGallery\Service\MediaMetadataService;
+use OCA\ProofingGallery\Service\EmbeddedMetadataExtractor;
 use OCA\ProofingGallery\Service\PolicyService;
+use OCA\ProofingGallery\Service\MediaTypePolicy;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
@@ -80,12 +82,14 @@ final class FolderServiceTest extends TestCase {
 		$root = $this->createMock(IRootFolder::class);
 		$root->method('getUserFolder')->with('owner')->willReturn($userFolder);
 
+		$policies = new PolicyService($this->createMock(IConfig::class));
 		$metadata = new MediaMetadataService(
 			$this->createMock(IFilesMetadataManager::class),
-			new PolicyService($this->createMock(IConfig::class)),
+			$policies,
+			new EmbeddedMetadataExtractor($policies),
 		);
 
-		return new FolderService($root, $metadata);
+		return new FolderService($root, $metadata, new MediaTypePolicy());
 	}
 
 	private function file(int $id, string $name, string $mime, int $modifiedAt = 1_700_000_000): File {

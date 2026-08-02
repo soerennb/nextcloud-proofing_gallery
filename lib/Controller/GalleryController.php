@@ -11,12 +11,8 @@ use OCA\ProofingGallery\Exception\AuthorizationException;
 use OCA\ProofingGallery\Service\FolderService;
 use OCA\ProofingGallery\Service\GalleryService;
 use OCA\ProofingGallery\Service\MediaSummaryService;
-use OCA\ProofingGallery\Service\VersionService;
 use OCA\ProofingGallery\Service\CollectionService;
-use OCA\ProofingGallery\Service\CollaborationService;
 use OCA\ProofingGallery\Service\MediaMetadataService;
-use OCA\ProofingGallery\Http\TemporaryFileResponse;
-use OCA\ProofingGallery\Exception\CollectionConflictException;
 use OCA\ProofingGallery\Exception\MetadataConflictException;
 use OCA\ProofingGallery\Exception\GalleryConflictException;
 use OCA\ProofingGallery\Exception\PolicyViolationException;
@@ -31,8 +27,8 @@ use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Http\DataDisplayResponse;
-use OCP\AppFramework\Http\DataDownloadResponse;
 use OCP\AppFramework\Http\Response;
+use OCP\AppFramework\Http\ZipResponse;
 use OCP\IPreview;
 use OCP\IRequest;
 use OCP\IUserSession;
@@ -47,8 +43,6 @@ final class GalleryController extends Controller {
 		private CollectionService $collections,
 		private IPreview $preview,
 		private MediaSummaryService $summaries,
-		private VersionService $versions,
-		private CollaborationService $collaboration,
 		private MediaMetadataService $metadata,
 		private \OCA\ProofingGallery\Service\PolicyService $policies,
 		private GalleryReadinessService $readiness,
@@ -65,6 +59,8 @@ final class GalleryController extends Controller {
 			return new DataResponse($this->readiness->evaluate($this->galleries->view($userId, $id), $userId));
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		} catch (InvalidArgumentException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
 	}
 
@@ -197,6 +193,8 @@ final class GalleryController extends Controller {
 			return new DataResponse($this->galleries->present($userId, $this->galleries->archive($userId, $id)));
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		} catch (InvalidArgumentException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
 	}
 
@@ -448,206 +446,21 @@ final class GalleryController extends Controller {
 			if ($ids === [] || count($ids) > 200) {
 				throw new InvalidArgumentException('Select between 1 and 200 files');
 			}
-			$temporaryPath = tempnam(sys_get_temp_dir(), 'proofing-gallery-owner-');
-			if ($temporaryPath === false) {
-				throw new \RuntimeException('Temporary archive could not be created');
-			}
-			$archive = new \ZipArchive();
-			if ($archive->open($temporaryPath, \ZipArchive::OVERWRITE) !== true) {
-				@unlink($temporaryPath);
-				throw new \RuntimeException('Archive could not be created');
-			}
+			$maxBytes = $this->policies->get('maxSelectionBytes');
+			$totalBytes = 0;
+			$filename = preg_replace('/[^a-z0-9._-]+/i', '-', $gallery->getTitle()) ?: 'gallery';
+			$archive = new ZipResponse($this->request, trim($filename, '-') . '-files.zip');
 			foreach ($ids as $fileId) {
 				$file = $this->folders->resolveMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $fileId);
-				$archive->addFromString($fileId . '-' . $file->getName(), $file->getContent());
+				$totalBytes += (int)$file->getSize();
+				if ($totalBytes > $maxBytes) throw new InvalidArgumentException('Selection is too large');
+				$stream = $file->fopen('rb');
+				if (!is_resource($stream)) throw new FolderAccessException('Media file could not be opened');
+				$archive->addResource($stream, $fileId . '-' . $file->getName(), (int)$file->getSize(), (int)$file->getMTime());
 			}
-			$archive->close();
-			$filename = preg_replace('/[^a-z0-9._-]+/i', '-', $gallery->getTitle()) ?: 'gallery';
-			return new TemporaryFileResponse($temporaryPath, trim($filename, '-') . '-files.zip', 'application/zip');
+			return $archive;
 		} catch (DoesNotExistException|AuthorizationException|FolderAccessException|InvalidArgumentException) {
 			return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
-		}
-	}
-
-	#[NoAdminRequired]
-	#[ApiRoute(verb: 'GET', url: '/api/v1/galleries/{id}/selections')]
-	public function selections(int $id): DataResponse {
-		try {
-			$gallery = $this->galleries->get($this->userId(), $id);
-			return new DataResponse(['items' => $this->collaboration->ownerSelections($gallery)]);
-		} catch (DoesNotExistException|AuthorizationException) {
-			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
-		}
-	}
-
-	#[NoAdminRequired]
-	#[ApiRoute(verb: 'PUT', url: '/api/v1/galleries/{id}/selections/{selectionId}')]
-	public function updateSelection(int $id, string $selectionId, string $name, string $status): DataResponse {
-		try {
-			$gallery = $this->galleries->get($this->userId(), $id);
-			$this->collaboration->updateOwnerSelection($gallery, $selectionId, $name, $status);
-			return new DataResponse([]);
-		} catch (DoesNotExistException|AuthorizationException) {
-			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
-		} catch (InvalidArgumentException $exception) {
-			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
-		}
-	}
-
-	#[NoAdminRequired]
-	#[ApiRoute(verb: 'DELETE', url: '/api/v1/galleries/{id}/selections/{selectionId}')]
-	public function deleteSelection(int $id, string $selectionId): DataResponse {
-		try {
-			$gallery = $this->galleries->get($this->userId(), $id);
-			$this->collaboration->deleteOwnerSelection($gallery, $selectionId);
-			return new DataResponse([], Http::STATUS_NO_CONTENT);
-		} catch (DoesNotExistException|AuthorizationException) {
-			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
-		} catch (InvalidArgumentException $exception) {
-			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
-		}
-	}
-
-	#[NoAdminRequired]
-	#[ApiRoute(verb: 'GET', url: '/api/v1/galleries/{id}/selections/{selectionId}/export')]
-	public function exportSelection(int $id, string $selectionId, string $format = 'csv', string $fields = ''): Response {
-		try {
-			$gallery = $this->galleries->get($this->userId(), $id);
-			$export = $this->collaboration->exportOwnerSelection($gallery, $selectionId, $format, array_filter(explode(',', $fields)));
-			return new DataDownloadResponse($export['content'], $export['filename'], $export['mimeType']);
-		} catch (DoesNotExistException|AuthorizationException|InvalidArgumentException) {
-			return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
-		}
-	}
-
-	#[NoAdminRequired]
-	#[ApiRoute(verb: 'POST', url: '/api/v1/galleries/{id}/selections/{selectionId}/xmp')]
-	public function exportSelectionXmp(int $id, string $selectionId): DataResponse {
-		try {
-			$userId = $this->userId();
-			$gallery = $this->galleries->get($userId, $id);
-			$selection = null;
-			foreach ($this->collaboration->ownerSelections($gallery) as $candidate) {
-				if (hash_equals((string)$candidate['id'], $selectionId)) {
-					$selection = $candidate;
-					break;
-				}
-			}
-			if ($selection === null) throw new InvalidArgumentException('Selection not found');
-			$fileIds = array_values(array_unique(array_map('intval', $selection['fileIds'])));
-			if ($fileIds === [] || count($fileIds) > 200) {
-				throw new InvalidArgumentException('Select between 1 and 200 files');
-			}
-			$state = $this->collaboration->state($gallery, null, 0);
-			$results = [];
-			$written = 0;
-			foreach ($fileIds as $fileId) {
-				try {
-					$file = $this->metadataFile($gallery, $fileId);
-					$current = $this->metadata->index($file);
-					$colorCounts = $state['colorStates'][$fileId] ?? [];
-					arsort($colorCounts);
-					$label = array_key_first($colorCounts);
-					$this->metadata->writeProofingSidecar($file, [
-						'galleryId' => $gallery->getId(),
-						'galleryTitle' => $gallery->getTitle(),
-						'selectionId' => $selectionId,
-						'selectionName' => (string)$selection['name'],
-						'likeCount' => (int)($state['likes'][$fileId]['count'] ?? 0),
-						'label' => is_string($label) ? $label : null,
-					], $file->getEtag(), $current['sidecar']['etag'] ?? null);
-					$results[] = ['fileId' => $fileId, 'status' => 'written'];
-					$written++;
-				} catch (MetadataConflictException|InvalidArgumentException|FolderAccessException $exception) {
-					$results[] = ['fileId' => $fileId, 'status' => 'failed', 'message' => $exception->getMessage()];
-				}
-			}
-			return new DataResponse([
-				'written' => $written,
-				'failed' => count($fileIds) - $written,
-				'items' => $results,
-			]);
-		} catch (DoesNotExistException|AuthorizationException) {
-			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
-		} catch (InvalidArgumentException $exception) {
-			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
-		}
-	}
-
-	#[NoAdminRequired]
-	#[ApiRoute(verb: 'GET', url: '/api/v1/galleries/{id}/media/{fileId}/versions')]
-	public function versions(int $id, int $fileId): DataResponse {
-		try {
-			$gallery = $this->galleries->get($this->userId(), $id);
-			return new DataResponse(['items' => $this->versions->list($gallery, $fileId)]);
-		} catch (DoesNotExistException|AuthorizationException|FolderAccessException) {
-			return new DataResponse(['message' => 'Gallery item not found'], Http::STATUS_NOT_FOUND);
-		}
-	}
-
-	#[NoAdminRequired]
-	#[ApiRoute(verb: 'POST', url: '/api/v1/galleries/{id}/media/{fileId}/versions')]
-	public function replaceMedia(int $id, int $fileId): DataResponse {
-		try {
-			$userId = $this->userId();
-			$gallery = $this->galleries->get($userId, $id);
-			$upload = $this->request->getUploadedFile('file');
-			if (!is_array($upload) || ($upload['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
-				|| !is_string($upload['tmp_name'] ?? null)) {
-				throw new InvalidArgumentException('A valid replacement upload is required');
-			}
-			$this->versions->replace($gallery, $fileId, $upload['tmp_name'], $userId);
-			$this->summaries->invalidate($gallery->getId());
-			return new DataResponse(['items' => $this->versions->list($gallery, $fileId)], Http::STATUS_CREATED);
-		} catch (DoesNotExistException|AuthorizationException|FolderAccessException) {
-			return new DataResponse(['message' => 'Gallery item not found'], Http::STATUS_NOT_FOUND);
-		} catch (InvalidArgumentException $exception) {
-			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
-		}
-	}
-
-	#[NoAdminRequired]
-	#[ApiRoute(verb: 'POST', url: '/api/v1/galleries/{id}/media/{fileId}/versions/{versionId}/restore')]
-	public function restoreMediaVersion(int $id, int $fileId, string $versionId): DataResponse {
-		try {
-			$userId = $this->userId();
-			$gallery = $this->galleries->get($userId, $id);
-			$this->versions->restore($gallery, $fileId, $versionId, $userId);
-			$this->summaries->invalidate($gallery->getId());
-			return new DataResponse(['items' => $this->versions->list($gallery, $fileId)]);
-		} catch (DoesNotExistException|AuthorizationException|FolderAccessException) {
-			return new DataResponse(['message' => 'Gallery item not found'], Http::STATUS_NOT_FOUND);
-		} catch (InvalidArgumentException $exception) {
-			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
-		}
-	}
-
-	#[NoAdminRequired]
-	#[ApiRoute(verb: 'GET', url: '/api/v1/galleries/{id}/collection')]
-	public function collection(int $id): DataResponse {
-		try {
-			$gallery = $this->galleries->get($this->userId(), $id);
-			return new DataResponse($this->collections->document($gallery));
-		} catch (DoesNotExistException|AuthorizationException) {
-			return new DataResponse(['message' => 'Collection not found'], Http::STATUS_NOT_FOUND);
-		} catch (InvalidArgumentException $exception) {
-			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
-		}
-	}
-
-	/** @param list<array{sourceGalleryId: int, fileId: int}> $items */
-	#[NoAdminRequired]
-	#[ApiRoute(verb: 'PUT', url: '/api/v1/galleries/{id}/collection')]
-	public function updateCollection(int $id, int $revision, array $items): DataResponse {
-		try {
-			$gallery = $this->galleries->get($this->userId(), $id);
-			return new DataResponse($this->collections->replace($gallery, $revision, $items));
-		} catch (DoesNotExistException|AuthorizationException) {
-			return new DataResponse(['message' => 'Collection not found'], Http::STATUS_NOT_FOUND);
-		} catch (CollectionConflictException $exception) {
-			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_CONFLICT);
-		} catch (InvalidArgumentException|FolderAccessException $exception) {
-			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
 	}
 

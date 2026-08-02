@@ -72,6 +72,16 @@ const elementVirtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>(comput
 const virtualizer = computed(() => props.contained ? elementVirtualizer.value : windowVirtualizer.value)
 
 const virtualRows = computed(() => virtualizer.value.getVirtualItems())
+const renderedRows = computed(() => {
+	const visible = virtualRows.value.map(row => ({ index: row.index, key: row.key }))
+	if (visible.length > 0 || rows.value === 0) return visible
+	// Resize/scroll observers can be delayed in a newly revealed iframe. Keep the
+	// first viewport useful until the virtualizer publishes its initial range.
+	return Array.from({ length: Math.min(rows.value, 6) }, (_, index) => ({
+		index,
+		key: `initial:${columns.value}:${Math.round(rowHeight.value)}:${index}`,
+	}))
+})
 const totalHeight = computed(() => layout.value.totalHeight)
 const viewportHeight = computed(() => props.contained
 	? Math.min(totalHeight.value, Math.max(360, Math.min(760, Math.round((typeof window === 'undefined' ? 900 : window.innerHeight) * 0.66))))
@@ -118,7 +128,7 @@ onBeforeUnmount(() => {
 		:style="{ height: `${viewportHeight}px` }">
 		<div class="virtual-media__canvas" :style="{ height: `${totalHeight}px` }">
 			<div
-				v-for="virtualRow in virtualRows"
+				v-for="virtualRow in renderedRows"
 				:key="String(virtualRow.key)"
 				class="virtual-media__row"
 				:style="{

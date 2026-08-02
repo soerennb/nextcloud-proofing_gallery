@@ -4,7 +4,7 @@ import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import QRCode from 'qrcode'
 import { onMounted, ref } from 'vue'
-import { fetchGallery, fetchPublicLinks, fetchShareAudit, makePublicLinkPrimary, revokePublicLink, savePublicLink } from '../services/galleryApi.ts'
+import { fetchGallery, fetchPublicLinks, fetchShareAudit, makePublicLinkPrimary, requestCustomDomain, revokeCustomDomain, revokePublicLink, savePublicLink } from '../services/galleryApi.ts'
 import type { Gallery, GalleryPublicLink, PublicLinkPolicy, ShareAuditItem } from '../types.ts'
 
 const props = defineProps<{ gallery: Gallery }>()
@@ -101,6 +101,31 @@ async function copy(link: GalleryPublicLink) {
 	showSuccess(t('proofing_gallery', 'Gallery link copied.'))
 }
 
+async function addDomain(link: GalleryPublicLink) {
+	const domain = window.prompt(t('proofing_gallery', 'Enter the custom domain for this link'))?.trim()
+	if (!domain) return
+	try {
+		await requestCustomDomain(props.gallery.id, link.id, domain)
+		await load()
+		showSuccess(t('proofing_gallery', 'Domain requested. Add the displayed DNS TXT record, then ask an administrator to verify it.'))
+	} catch { showError(t('proofing_gallery', 'The custom domain could not be requested.')) }
+}
+
+async function copyDomainRecord(link: GalleryPublicLink) {
+	if (!link.customDomain) return
+	await navigator.clipboard.writeText(`${link.customDomain.verificationName} TXT ${link.customDomain.verificationValue}`)
+	showSuccess(t('proofing_gallery', 'DNS verification record copied.'))
+}
+
+async function removeDomain(link: GalleryPublicLink) {
+	if (!link.customDomain || !window.confirm(t('proofing_gallery', 'Revoke this custom domain? The standard gallery link remains available.'))) return
+	try {
+		await revokeCustomDomain(props.gallery.id, link.customDomain.id)
+		await load()
+		showSuccess(t('proofing_gallery', 'Custom domain revoked.'))
+	} catch { showError(t('proofing_gallery', 'The custom domain could not be revoked.')) }
+}
+
 function formatDate(timestamp: number) { return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(timestamp * 1000) }
 onMounted(load)
 </script>
@@ -129,6 +154,16 @@ onMounted(load)
 					<div><strong>{{ link.name }}</strong><span v-if="link.primary">{{ t('proofing_gallery', 'PRIMARY') }}</span></div><small>{{ link.status === 'active' ? t('proofing_gallery', 'Active') : t('proofing_gallery', 'Revoked') }}</small>
 				</div>
 				<p>{{ link.viewMode === 'recursive' ? t('proofing_gallery', 'Recursive') : t('proofing_gallery', 'Folder view') }} · {{ link.startPath || t('proofing_gallery', 'Gallery root') }} · {{ link.policy.downloadScope }}</p>
+				<div v-if="link.customDomain" class="link-domain" :data-status="link.customDomain.status">
+					<div><strong>{{ link.customDomain.domain }}</strong><span>{{ link.customDomain.status === 'verified' ? t('proofing_gallery', 'Verified HTTPS domain') : t('proofing_gallery', 'Waiting for DNS and administrator verification') }}</span></div>
+					<code v-if="link.customDomain.status === 'pending'">{{ link.customDomain.verificationName }} TXT {{ link.customDomain.verificationValue }}</code>
+					<NcButton v-if="link.customDomain.status === 'pending'" variant="tertiary" @click="copyDomainRecord(link)">
+						{{ t('proofing_gallery', 'Copy DNS record') }}
+					</NcButton>
+					<NcButton variant="tertiary" @click="removeDomain(link)">
+						{{ t('proofing_gallery', 'Remove domain') }}
+					</NcButton>
+				</div>
 				<div v-if="link.status === 'active'" class="link-card__actions">
 					<NcButton variant="tertiary" @click="copy(link)">
 						{{ t('proofing_gallery', 'Copy') }}
@@ -139,6 +174,9 @@ onMounted(load)
 					<a :href="`mailto:?subject=${encodeURIComponent(gallery.title)}&body=${encodeURIComponent(link.url)}`">{{ t('proofing_gallery', 'Email') }}</a>
 					<NcButton variant="tertiary" @click="edit(link)">
 						{{ t('proofing_gallery', 'Edit') }}
+					</NcButton>
+					<NcButton v-if="!link.customDomain" variant="tertiary" @click="addDomain(link)">
+						{{ t('proofing_gallery', 'Custom domain') }}
 					</NcButton>
 					<NcButton v-if="!link.primary" variant="tertiary" @click="makePrimary(link)">
 						{{ t('proofing_gallery', 'Make primary') }}
@@ -226,6 +264,16 @@ onMounted(load)
 
 .link-card__actions a { padding: 7px 10px; color: var(--color-main-text); }
 
+.link-domain { display: grid; gap: 8px; padding: 11px; border-radius: 10px; background: color-mix(in srgb, var(--color-primary-element) 9%, var(--color-background-dark)); }
+
+.link-domain > div { display: grid; gap: 2px; }
+
+.link-domain span { color: var(--color-text-maxcontrast); font-size: 12px; }
+
+.link-domain code { overflow-wrap: anywhere; font-size: 11px; }
+
+.link-domain[data-status="verified"] { box-shadow: inset 3px 0 #20a66a; }
+
 .link-editor { display: grid; gap: 16px; padding: 20px; border: 2px solid var(--color-primary-element); background: var(--color-background-dark); }
 
 .link-editor h4 { margin: 0; font-size: 20px; }
@@ -259,5 +307,6 @@ onMounted(load)
 .link-audit ol { display: grid; gap: 8px; padding: 12px 0 0; margin: 0; list-style: none; }
 
 .link-audit li { display: grid; grid-template-columns: 100px 1fr auto; gap: 10px; font-size: 12px; }
+
 @media (max-width: 640px) { .link-manager > header { align-items: stretch; flex-direction: column; }.link-editor__grid { grid-template-columns: 1fr; }.link-qr { flex-direction: column; }.link-audit li { grid-template-columns: 80px 1fr; }.link-audit li small { grid-column: 1 / -1; } }
 </style>

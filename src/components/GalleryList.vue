@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { t } from '@nextcloud/l10n'
-import NcButton from '@nextcloud/vue/components/NcButton'
 import { ownerPreviewUrl } from '../services/galleryApi.ts'
 import type { Gallery } from '../types.ts'
+import GalleryActionsMenu from './GalleryActionsMenu.vue'
 
 defineProps<{ galleries: Gallery[]; archived: boolean; view: 'list' | 'grid' }>()
 const emit = defineEmits<{
@@ -50,28 +50,40 @@ function previewUrl(gallery: Gallery): string {
 				</span>
 				<span class="gallery-row__date">{{ formattedDate(gallery.updatedAt) }}</span>
 			</button>
-			<details class="gallery-row__actions">
-				<summary role="button" :aria-label="t('proofing_gallery', 'Actions for {title}', { title: gallery.title })">
-					•••
-				</summary>
-				<div>
-					<NcButton v-if="!archived && gallery.permissions.canManageAccess" variant="tertiary" @click="emit('share', gallery)">
-						{{ t('proofing_gallery', 'Share') }}
-					</NcButton>
-					<NcButton v-if="archived && gallery.permissions.canArchive" variant="tertiary" @click="emit('restore', gallery)">
-						{{ t('proofing_gallery', 'Restore') }}
-					</NcButton>
-					<NcButton v-else-if="gallery.permissions.canArchive" variant="tertiary" @click="emit('archive', gallery)">
-						{{ t('proofing_gallery', 'Archive') }}
-					</NcButton>
-				</div>
-			</details>
+			<GalleryActionsMenu
+				class="gallery-row__actions"
+				:label="t('proofing_gallery', 'Actions for {title}', { title: gallery.title })">
+				<button
+					v-if="!archived && gallery.permissions.canManageAccess"
+					role="menuitem"
+					type="button"
+					@click="emit('share', gallery)">
+					{{ t('proofing_gallery', 'Share') }}
+				</button>
+				<button
+					v-if="archived && gallery.permissions.canArchive"
+					role="menuitem"
+					type="button"
+					@click="emit('restore', gallery)">
+					{{ t('proofing_gallery', 'Restore') }}
+				</button>
+				<button
+					v-else-if="gallery.permissions.canArchive"
+					role="menuitem"
+					type="button"
+					@click="emit('archive', gallery)">
+					{{ t('proofing_gallery', 'Archive') }}
+				</button>
+			</GalleryActionsMenu>
 		</article>
 	</div>
 </template>
 
 <style scoped>
 .gallery-list {
+	box-sizing: border-box;
+	width: 100%;
+	max-width: 100%;
 	min-width: 0;
 	border-top: 1px solid var(--color-border);
 }
@@ -92,6 +104,7 @@ function previewUrl(gallery: Gallery): string {
 }
 
 .gallery-row__main {
+	box-sizing: border-box;
 	display: grid;
 	min-width: 0;
 	grid-template-columns: 112px minmax(160px, 1fr) 130px;
@@ -137,6 +150,10 @@ function previewUrl(gallery: Gallery): string {
 	display: block;
 }
 
+.gallery-row__identity {
+	min-width: 0;
+}
+
 .gallery-row__identity strong {
 	overflow: hidden;
 	font-size: 15px;
@@ -152,46 +169,7 @@ function previewUrl(gallery: Gallery): string {
 }
 
 .gallery-row__actions {
-	position: relative;
 	padding-inline-end: 6px;
-}
-
-.gallery-row__actions summary {
-	display: grid;
-	width: 42px;
-	height: 42px;
-	place-items: center;
-	border-radius: 6px;
-	color: var(--color-text-maxcontrast);
-	cursor: pointer;
-	list-style: none;
-}
-
-.gallery-row__actions summary::-webkit-details-marker {
-	display: none;
-}
-
-.gallery-row__actions summary:hover,
-.gallery-row__actions summary:focus-visible {
-	background: var(--color-background-hover);
-}
-
-.gallery-row__actions summary:focus-visible {
-	outline: 2px solid var(--color-primary-element);
-	outline-offset: -2px;
-}
-
-.gallery-row__actions > div {
-	position: absolute;
-	z-index: 5;
-	inset: 44px 6px auto auto;
-	display: grid;
-	min-width: 150px;
-	padding: 4px;
-	border: 1px solid var(--color-border);
-	border-radius: 8px;
-	background: var(--color-main-background);
-	box-shadow: 0 2px 8px var(--color-box-shadow);
 }
 
 .gallery-list--grid .gallery-row {
@@ -245,6 +223,14 @@ function previewUrl(gallery: Gallery): string {
 
 @media (max-width: 760px) {
 	.gallery-list--grid { grid-template-columns: 1fr; }
+	.gallery-list--grid .gallery-row,
+	.gallery-list--grid .gallery-row__main,
+	.gallery-list--grid .gallery-row__cover,
+	.gallery-list--grid .gallery-row__identity {
+		box-sizing: border-box;
+		width: 100%;
+		max-width: 100%;
+	}
 	.gallery-row {
 		grid-template-columns: minmax(0, 1fr) auto;
 		gap: 4px;

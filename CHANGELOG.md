@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.5.0-alpha.3 — 2026-08-02
+
+- make archive and restore fail closed while preserving public-link credentials
+- stream media and ZIP exports, bound request bodies, and commit uploads atomically
+- add retryable video leases plus atomic media and generation-based search indexing
+- enforce feature gates, scoped presentation assets, public rate limits, and collaboration quotas
+- revalidate custom domains continuously and fail closed when verification becomes stale
+- align Live Push with its implemented HTTPS PUT ingress and clarify local metadata search
+- split workflow routes out of the gallery controller and expand lifecycle cleanup
+
+## 0.5.0-alpha.2 — 2026-08-02
+
+- Added upload-only Live Push credentials with independent rotation and
+  revocation for direct camera-to-gallery delivery.
+- Added administrator-approved custom gallery domains with DNS ownership,
+  public-address, TLS, and Nextcloud endpoint verification.
+- Added optional local semantic search and video derivatives with explicit
+  capability reporting and privacy-safe lifecycle cleanup.
+- Split growing gallery workflows into focused repositories and services,
+  modernized the frontend toolchain, and tightened responsive navigation,
+  action-menu layering, accessibility, and reduced-motion behavior.
+
 ## 0.5.0-alpha.1 — 2026-08-01
 
 - Added an indexed, cursor-paged media foundation with recursive folder views,

@@ -8,6 +8,8 @@ use InvalidArgumentException;
 use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Exception\AuthorizationException;
 use OCA\ProofingGallery\Exception\MetadataConflictException;
+use OCA\ProofingGallery\Exception\PolicyViolationException;
+use OCA\ProofingGallery\Exception\GalleryNotReadyException;
 use OCA\ProofingGallery\Dto\PublicLinkConfiguration;
 use OCA\ProofingGallery\Service\GalleryService;
 use OCA\ProofingGallery\Service\GuestRatingService;
@@ -42,6 +44,8 @@ final class PublicLinkController extends Controller {
 			return new DataResponse($this->guestRatings->aggregate($gallery));
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		} catch (PolicyViolationException $exception) {
+			return new DataResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
 		}
 	}
 
@@ -54,6 +58,8 @@ final class PublicLinkController extends Controller {
 			return new DataResponse(['items' => $this->guestRatings->promotionPlan($gallery, $fileIds)]);
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		} catch (PolicyViolationException $exception) {
+			return new DataResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
 		}
 	}
 
@@ -66,6 +72,8 @@ final class PublicLinkController extends Controller {
 			return new DataResponse(['items' => $this->guestRatings->promote($this->userId(), $gallery, $items)]);
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		} catch (PolicyViolationException $exception) {
+			return new DataResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
 		} catch (InvalidArgumentException|MetadataConflictException $exception) {
 			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_CONFLICT);
 		}
@@ -106,6 +114,10 @@ final class PublicLinkController extends Controller {
 			), Http::STATUS_CREATED);
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		} catch (PolicyViolationException $exception) {
+			return new DataResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
+		} catch (GalleryNotReadyException $exception) {
+			return new DataResponse(['code' => 'gallery_not_ready', 'message' => $exception->getMessage(), ...$exception->report], Http::STATUS_UNPROCESSABLE_ENTITY);
 		} catch (InvalidArgumentException $exception) {
 			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
@@ -138,6 +150,10 @@ final class PublicLinkController extends Controller {
 			));
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		} catch (PolicyViolationException $exception) {
+			return new DataResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
+		} catch (GalleryNotReadyException $exception) {
+			return new DataResponse(['code' => 'gallery_not_ready', 'message' => $exception->getMessage(), ...$exception->report], Http::STATUS_UNPROCESSABLE_ENTITY);
 		} catch (InvalidArgumentException $exception) {
 			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
@@ -150,6 +166,8 @@ final class PublicLinkController extends Controller {
 			return new DataResponse($this->publicLinks->makePrimary($this->galleries->get($this->userId(), $id), $linkId));
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		} catch (PolicyViolationException $exception) {
+			return new DataResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
 		} catch (InvalidArgumentException $exception) {
 			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}

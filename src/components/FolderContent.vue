@@ -52,6 +52,11 @@ let scrollTimer: ReturnType<typeof setTimeout> | undefined
 const crumbs = computed(() => path.value.split('/').filter(Boolean))
 const hasMore = computed(() => items.value.length < total.value)
 
+function isCancelledRequest(error: unknown): boolean {
+	return (error instanceof DOMException && error.name === 'AbortError')
+		|| (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ERR_CANCELED')
+}
+
 async function load(offset = 0) {
 	if (offset > 0 && loadingMore.value) return
 	if (offset === 0) loadController?.abort()
@@ -72,8 +77,7 @@ async function load(offset = 0) {
 		selectedIds.value = selectedIds.value.filter(id => items.value.some(item => item.id === id))
 		if (offset === 0) await nextTick(restoreScroll)
 	} catch (error) {
-		if ((error instanceof DOMException && error.name === 'AbortError')
-			|| (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ERR_CANCELED')) return
+		if (isCancelledRequest(error)) return
 		showError(t('proofing_gallery', 'Gallery files could not be loaded.'))
 	} finally {
 		if (loadController === controller) {
@@ -400,7 +404,7 @@ onBeforeUnmount(() => {
 					class="visually-hidden"
 					type="file"
 					:aria-label="t('proofing_gallery', 'Choose files to upload')"
-					accept="image/*,video/mp4,video/webm"
+					accept="image/*,video/*"
 					multiple
 					@change="upload">
 				<NcButton :disabled="uploading" @click="fileInput?.click()">
@@ -605,7 +609,7 @@ onBeforeUnmount(() => {
 				class="visually-hidden"
 				type="file"
 				:aria-label="t('proofing_gallery', 'Choose a new file version')"
-				accept="image/*,video/mp4,video/webm"
+				accept="image/*,video/*"
 				@change="replaceVersion">
 			<NcButton :disabled="versionsLoading" @click="replacementInput?.click()">
 				{{ t('proofing_gallery', 'Upload new version') }}

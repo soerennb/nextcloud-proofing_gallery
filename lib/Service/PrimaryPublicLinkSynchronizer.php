@@ -81,8 +81,22 @@ final class PrimaryPublicLinkSynchronizer {
 		$this->links->update($link);
 	}
 
+	public function suspend(PublicLink $link): PublicLink {
+		if ($link->getStatus() !== 'active') return $link;
+		$link->setStatus('suspended');
+		$link->setUpdatedAt($this->clock->getTime());
+		return $this->links->update($link);
+	}
+
+	public function activate(PublicLink $link): PublicLink {
+		if ($link->getStatus() !== 'suspended') return $link;
+		$link->setStatus('active');
+		$link->setUpdatedAt($this->clock->getTime());
+		return $this->links->update($link);
+	}
+
 	public function assertBelowLimit(Gallery $gallery): void {
-		if (count($this->links->findForGallery($gallery->getId())) >= $this->instancePolicies->get('maxPublicLinks')) {
+		if ($this->links->countUsableForGallery($gallery->getId()) >= $this->instancePolicies->get('maxPublicLinks')) {
 			throw new \InvalidArgumentException('The gallery has reached its public link limit');
 		}
 	}

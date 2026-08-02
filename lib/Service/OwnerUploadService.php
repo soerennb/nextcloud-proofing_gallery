@@ -13,6 +13,7 @@ use OCP\Files\IAppData;
 use OCP\Files\NotFoundException;
 use OCP\Files\SimpleFS\ISimpleFolder;
 use OCP\Security\ISecureRandom;
+use OCP\Lock\ILockingProvider;
 
 final class OwnerUploadService {
 	public const CHUNK_SIZE = 5 * 1024 * 1024;
@@ -24,6 +25,8 @@ final class OwnerUploadService {
 		private ITimeFactory $clock,
 		private FolderService $folders,
 		private PolicyService $policies,
+		private MediaTypePolicy $mediaTypes,
+		private ILockingProvider $locks,
 	) {
 	}
 
@@ -42,7 +45,7 @@ final class OwnerUploadService {
 		$path = trim($path, '/');
 		if (in_array('..', explode('/', $path), true)) throw new InvalidArgumentException('Invalid upload path');
 		if ($size <= 0 || $size > $this->policies->get('maxUploadBytes')) throw new InvalidArgumentException('Upload size is outside the allowed range');
-		if (!$this->supportedMime($mimeType)) throw new InvalidArgumentException('Only images, MP4 and WebM files are accepted');
+		if (!$this->mediaTypes->supports($mimeType)) throw new InvalidArgumentException('The declared media type is not supported');
 		if (!in_array($conflict, ['fail', 'rename', 'overwrite', 'skip'], true)) throw new InvalidArgumentException('Unknown conflict strategy');
 
 		$id = $this->random->generate(40, ISecureRandom::CHAR_ALPHANUMERIC);
@@ -59,8 +62,13 @@ final class OwnerUploadService {
 			'createdAt' => $this->clock->getTime(),
 			'updatedAt' => $this->clock->getTime(),
 		];
-		$folder->newFile('manifest.json', json_encode($manifest, JSON_THROW_ON_ERROR));
-		$folder->newFolder('chunks');
+		try {
+			$folder->newFile('manifest.json', json_encode($manifest, JSON_THROW_ON_ERROR));
+			$folder->newFolder('chunks');
+		} catch (\Throwable $exception) {
+			$folder->delete();
+			throw $exception;
+		}
 		return $this->response($folder, $manifest);
 	}
 
@@ -86,6 +94,17 @@ final class OwnerUploadService {
 
 	/** @return array{status: string, item?: MediaItem} */
 	public function finalize(Gallery $gallery, string $ownerUid, string $uploadId): array {
+		$lock = 'proofing-gallery/owner-upload-gallery/' . $gallery->getId();
+		$this->locks->acquireLock($lock, ILockingProvider::LOCK_EXCLUSIVE, 'Proofing Gallery owner upload');
+		try {
+			return $this->finalizeLocked($gallery, $ownerUid, $uploadId);
+		} finally {
+			$this->locks->releaseLock($lock, ILockingProvider::LOCK_EXCLUSIVE);
+		}
+	}
+
+	/** @return array{status: string, item?: MediaItem} */
+	private function finalizeLocked(Gallery $gallery, string $ownerUid, string $uploadId): array {
 		[$folder, $manifest] = $this->session($gallery, $ownerUid, $uploadId);
 		$expected = (int)ceil((int)$manifest['size'] / self::CHUNK_SIZE);
 		if ($this->uploadedChunks($folder) !== range(0, $expected - 1)) throw new InvalidArgumentException('Upload is incomplete');
@@ -115,6 +134,7 @@ final class OwnerUploadService {
 				(string)$manifest['filename'],
 				$temporaryPath,
 				(string)$manifest['conflict'],
+				(string)$manifest['mimeType'],
 			);
 		} finally {
 			@unlink($temporaryPath);
@@ -180,7 +200,4 @@ final class OwnerUploadService {
 		return $filename;
 	}
 
-	private function supportedMime(string $mimeType): bool {
-		return str_starts_with($mimeType, 'image/') || in_array($mimeType, ['video/mp4', 'video/webm'], true);
-	}
 }

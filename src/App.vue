@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { emit } from '@nextcloud/event-bus'
 import { n, t } from '@nextcloud/l10n'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
 import NcAppNavigation from '@nextcloud/vue/components/NcAppNavigation'
@@ -55,6 +56,13 @@ function resetFilters() {
 	sourceFilter.value = 'all'
 	statusFilter.value = 'all'
 	mobileFiltersOpen.value = false
+}
+
+function showArchive(value: boolean) {
+	archived.value = value
+	if (mobileViewport.value) {
+		emit('toggle-navigation', { open: false })
+	}
 }
 
 async function notify(kind: 'error' | 'success', message: string) {
@@ -148,14 +156,14 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 
 <template>
 	<NcContent app-name="proofing_gallery">
-		<NcAppNavigation>
+		<NcAppNavigation :aria-label="t('proofing_gallery', 'Gallery navigation')">
 			<template #list>
 				<li class="gallery-nav__entry">
 					<button
 						class="gallery-nav__item"
 						:class="{ 'gallery-nav__item--active': !archived }"
 						type="button"
-						@click="archived = false">
+						@click="showArchive(false)">
 						<span>{{ t('proofing_gallery', 'Galleries') }}</span>
 					</button>
 				</li>
@@ -164,7 +172,7 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 						class="gallery-nav__item"
 						:class="{ 'gallery-nav__item--active': archived }"
 						type="button"
-						@click="archived = true">
+						@click="showArchive(true)">
 						<span>{{ t('proofing_gallery', 'Archive') }}</span>
 					</button>
 				</li>
@@ -177,9 +185,11 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 				:gallery="selectedGallery"
 				@back="closeSettings"
 				@updated="updateSelected" />
-			<main v-else class="gallery-page">
+			<section v-else class="gallery-page" aria-labelledby="gallery-page-title">
 				<header class="gallery-page__header">
-					<h1>{{ archived ? t('proofing_gallery', 'Archive') : t('proofing_gallery', 'Galleries') }}</h1>
+					<h1 id="gallery-page-title">
+						{{ archived ? t('proofing_gallery', 'Archive') : t('proofing_gallery', 'Galleries') }}
+					</h1>
 					<div class="gallery-page__actions">
 						<div class="view-switch" :aria-label="t('proofing_gallery', 'Gallery view')">
 							<button type="button"
@@ -294,7 +304,7 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 						</NcButton>
 					</template>
 				</NcEmptyContent>
-			</main>
+			</section>
 		</NcAppContent>
 
 		<CreateGalleryModal

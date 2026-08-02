@@ -7,22 +7,23 @@ namespace OCA\ProofingGallery\Controller;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\PublicLink;
 use OCA\ProofingGallery\Dto\PublicGalleryQuery;
-use OCA\ProofingGallery\Http\TemporaryFileResponse;
+use OCA\ProofingGallery\Http\RangedStreamResponse;
 use OCA\ProofingGallery\Service\PolicyService;
 use OCA\ProofingGallery\Service\PublicGalleryDataService;
 use OCA\ProofingGallery\Service\PublicShareContextResolver;
 use OCA\ProofingGallery\Service\WatermarkPreviewService;
+use OCA\ProofingGallery\Service\VideoTranscodeService;
 use OCA\ProofingGallery\Service\CollectionService;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
+use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\DataDisplayResponse;
-use OCP\AppFramework\Http\DataDownloadResponse;
+use OCP\AppFramework\Http\ZipResponse;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\Files\File;
-use OCP\Files\IRootFolder;
 use OCP\IPreview;
 use OCP\IRequest;
 use OCP\ISession;
@@ -32,7 +33,7 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		IRequest $request,
 		ISession $session,
 		PublicShareContextResolver $contextResolver,
-		private IRootFolder $rootFolder,
+		private \OCA\ProofingGallery\Service\FolderService $folders,
 		private IPreview $preview,
 		private WatermarkPreviewService $watermarks,
 		private PublicGalleryDataService $galleryData,
@@ -42,6 +43,7 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		private \OCA\ProofingGallery\Service\CapabilityPolicyService $capabilities,
 		private \OCA\ProofingGallery\Service\BrandingAssetService $branding,
 		private \OCA\ProofingGallery\Service\ShareAuditService $shareAudit,
+		private VideoTranscodeService $videoTranscodes,
 	) {
 		parent::__construct($request, $session, $contextResolver);
 	}
@@ -75,62 +77,44 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/media/{fileId}/preview')]
 	public function preview(int $fileId, int $x = 1200, int $y = 1200, string $mode = 'cover'): DataDisplayResponse {
 		$file = $this->fileInShare($fileId);
+		if (str_starts_with($file->getMimeType(), 'video/')) {
+			$this->videoTranscodes->request($this->resolvedGallery()->getOwnerUid(), $file);
+			$poster = $this->videoTranscodes->derivative($this->resolvedGallery()->getOwnerUid(), $file, true);
+			if ($poster !== null) return new DataDisplayResponse($poster->getContent(), Http::STATUS_OK, [
+				'Content-Type' => 'image/jpeg', 'Cache-Control' => 'private, max-age=86400, immutable', 'ETag' => '"' . $poster->getETag() . '"',
+			]);
+		}
 		return $this->previewResponse($file, $x, $y, true, $mode);
 	}
 
 	#[PublicPage]
 	#[NoCSRFRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/media/{fileId}/stream')]
-	public function mediaStream(int $fileId): DataDisplayResponse {
+	public function mediaStream(int $fileId): Response {
 		$file = $this->fileInShare($fileId);
-		$size = (int)$file->getSize();
-		$start = 0;
-		$end = max(0, $size - 1);
-		$status = Http::STATUS_OK;
-		$range = $this->request->getHeader('Range');
-		if ($range !== '' && preg_match('/^bytes=(\d*)-(\d*)$/', $range, $matches) === 1) {
-			if ($matches[1] === '' && $matches[2] !== '') {
-				$start = max(0, $size - (int)$matches[2]);
-			} else {
-				$start = (int)$matches[1];
-			}
-			if ($matches[2] !== '' && $matches[1] !== '') {
-				$end = min($end, (int)$matches[2]);
-			}
-			if ($start > $end || $start >= $size) {
-				return new DataDisplayResponse('', Http::STATUS_REQUEST_RANGE_NOT_SATISFIABLE, [
-					'Content-Range' => 'bytes */' . $size,
-				]);
-			}
-			$status = Http::STATUS_PARTIAL_CONTENT;
+		if (str_starts_with($file->getMimeType(), 'video/')) {
+			$state = $this->videoTranscodes->request($this->resolvedGallery()->getOwnerUid(), $file);
+			$derivative = $this->videoTranscodes->derivative($this->resolvedGallery()->getOwnerUid(), $file);
+			if ($derivative !== null) return $this->streamResponse(
+				(int)$derivative->getSize(), 'video/mp4', $derivative->getETag(), static fn () => $derivative->read(),
+			);
+			if (!$state['playable']) return new DataDisplayResponse('', Http::STATUS_ACCEPTED, [
+				'Retry-After' => '5', 'Cache-Control' => 'private, no-store', 'X-Proofing-Video-State' => $state['state'],
+			]);
 		}
-		$length = $end - $start + 1;
+		return $this->streamResponse(
+			(int)$file->getSize(), $file->getMimeType(), $file->getEtag(), static fn () => $file->fopen('rb'),
+		);
+	}
 
-		$stream = $file->fopen('rb');
-		if (!is_resource($stream) || fseek($stream, $start) !== 0) {
-			return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
-		}
-		$content = stream_get_contents($stream, $length);
-		fclose($stream);
-		if ($content === false) {
-			return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
-		}
-
-		$headers = [
-			'Accept-Ranges' => 'bytes',
-			'Content-Length' => (string)$length,
-			'Content-Type' => $file->getMimeType(),
-			'Cache-Control' => 'private, max-age=3600',
-			'ETag' => '"' . $file->getEtag() . '"',
-		];
-		if ($status === Http::STATUS_PARTIAL_CONTENT) {
-			$headers['Content-Range'] = sprintf('bytes %d-%d/%d', $start, $end, $size);
-		}
-		return new DataDisplayResponse($content, $status, $headers);
+	/** @param callable(): mixed $open */
+	private function streamResponse(int $size, string $mimeType, string $etag, callable $open): Response {
+		return new RangedStreamResponse($this->request, $open, $size, $mimeType, $etag);
 	}
 
 	#[PublicPage]
 	#[NoCSRFRequired]
+	#[AnonRateLimit(limit: 240, period: 3600)]
 	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/media/{fileId}/download')]
 	public function download(int $fileId): Response {
 		if (!$this->downloadAllowed('individual')) {
@@ -139,16 +123,20 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		}
 		$file = $this->fileInShare($fileId);
 		$this->shareAudit->record($this->resolvedPublicLink(), 'download', fileId: $fileId);
-		return new DataDownloadResponse(
-			$file->getContent(),
-			$file->getName(),
+		return new RangedStreamResponse(
+			$this->request,
+			static fn () => $file->fopen('rb'),
+			(int)$file->getSize(),
 			$file->getMimeType(),
-			headers: ['Cache-Control' => 'private, no-store'],
+			$file->getEtag(),
+			$file->getName(),
+			'private, no-store',
 		);
 	}
 
 	#[PublicPage]
 	#[NoCSRFRequired]
+	#[AnonRateLimit(limit: 60, period: 3600)]
 	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/download/selection')]
 	public function downloadSelection(string $fileIds): Response {
 		if (!$this->downloadAllowed('selection')) {
@@ -158,29 +146,23 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		if ($files === []) {
 			return new DataDisplayResponse('', Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
-		$temporaryPath = tempnam(sys_get_temp_dir(), 'proofing-gallery-');
-		if ($temporaryPath === false) {
-			return new DataDisplayResponse('', Http::STATUS_INTERNAL_SERVER_ERROR);
-		}
-		$archive = new \ZipArchive();
-		if ($archive->open($temporaryPath, \ZipArchive::OVERWRITE) !== true) {
-			@unlink($temporaryPath);
-			return new DataDisplayResponse('', Http::STATUS_INTERNAL_SERVER_ERROR);
-		}
+		$filename = preg_replace('/[^a-z0-9._-]+/i', '-', $this->resolvedGallery()->getTitle()) ?: 'gallery';
+		$archive = new ZipResponse($this->request, trim($filename, '-') . '-selection.zip');
 		foreach ($files as $file) {
 			$name = $this->resolvedGallery()->getSourceType() === 'collection'
 				? $this->collections->downloadPath($this->resolvedGallery(), $file)
 				: $file->getName();
-			$archive->addFromString($name, $file->getContent());
+			$stream = $file->fopen('rb');
+			if (!is_resource($stream)) return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
+			$archive->addResource($stream, $name, (int)$file->getSize(), (int)$file->getMTime());
 		}
 		$this->shareAudit->record($this->resolvedPublicLink(), 'export');
-		$archive->close();
-		$filename = preg_replace('/[^a-z0-9._-]+/i', '-', $this->resolvedGallery()->getTitle()) ?: 'gallery';
-		return new TemporaryFileResponse($temporaryPath, trim($filename, '-') . '-selection.zip', 'application/zip');
+		return $archive;
 	}
 
 	#[PublicPage]
 	#[NoCSRFRequired]
+	#[AnonRateLimit(limit: 60, period: 3600)]
 	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/contact-sheet')]
 	public function contactSheet(string $fileIds): DataDisplayResponse {
 		if (!$this->downloadAllowed('contactSheet')) {
@@ -239,10 +221,13 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		if ($fileId === null) {
 			return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
 		}
-		foreach ($this->rootFolder->getUserFolder($this->resolvedGallery()->getOwnerUid())->getById($fileId) as $node) {
-			if ($node instanceof File && str_starts_with($node->getMimeType(), 'image/') && $node->isReadable()) {
-				return $this->previewResponse($node, $x, $y, false);
-			}
+		try {
+			$gallery = $this->resolvedGallery();
+			$file = $gallery->getSourceType() === 'collection'
+				? $this->collections->resolveMedia($gallery, $fileId)
+				: $this->folders->resolveMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $fileId);
+			if (str_starts_with($file->getMimeType(), 'image/')) return $this->previewResponse($file, $x, $y, false);
+		} catch (\OCA\ProofingGallery\Exception\FolderAccessException|\OCP\Files\NotFoundException) {
 		}
 		return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
 	}

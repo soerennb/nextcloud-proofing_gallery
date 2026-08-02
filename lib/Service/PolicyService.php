@@ -45,6 +45,16 @@ final class PolicyService {
 		'maxIndexedMedia' => ['default' => 25000, 'min' => 100, 'max' => 100000],
 		'maxPublicLinks' => ['default' => 10, 'min' => 1, 'max' => 100],
 		'shareAuditRetentionDays' => ['default' => 90, 'min' => 7, 'max' => 3650],
+		'maxVideoInputBytes' => ['default' => 10737418240, 'min' => 1048576, 'max' => 53687091200],
+		'maxVideoDurationSeconds' => ['default' => 7200, 'min' => 10, 'max' => 43200],
+		'videoMaxHeight' => ['default' => 1080, 'min' => 360, 'max' => 2160],
+		'videoTranscodeTimeoutSeconds' => ['default' => 1800, 'min' => 30, 'max' => 14400],
+		'videoDerivativeRetentionDays' => ['default' => 30, 'min' => 1, 'max' => 365],
+		'maxSemanticMedia' => ['default' => 10000, 'min' => 100, 'max' => 100000],
+		'semanticBatchSize' => ['default' => 50, 'min' => 1, 'max' => 200],
+		'semanticPreviewMaxBytes' => ['default' => 1048576, 'min' => 65536, 'max' => 8388608],
+		'maxLivePushCredentials' => ['default' => 3, 'min' => 1, 'max' => 20],
+		'maxCustomDomainsPerGallery' => ['default' => 3, 'min' => 1, 'max' => 20],
 	];
 
 	public function __construct(private IConfig $config) {
@@ -107,6 +117,10 @@ final class PolicyService {
 			'features' => self::FEATURE_DEFAULTS,
 			'workflow' => ['defaultPurpose' => 'delivery'],
 			'branding' => ['studioName' => '', 'accentColor' => '#1f6f8b', 'logoAssetId' => null],
+			'media' => ['videoTranscoding' => true, 'ffmpegPath' => 'ffmpeg', 'transcodeConcurrency' => 1, 'transcodePreset' => 'medium'],
+			'semantic' => ['provider' => 'disabled', 'endpoint' => '', 'model' => 'metadata-v1', 'scope' => 'images', 'externalTransfer' => false],
+			'livePush' => ['enabled' => false],
+			'customDomains' => ['enabled' => false],
 		];
 		$raw = $this->config->getAppValue(Application::APP_ID, self::SETTINGS_KEY, '');
 		if ($raw === '') return $defaults;
@@ -119,6 +133,10 @@ final class PolicyService {
 				'features' => array_replace($defaults['features'], is_array($stored['features'] ?? null) ? $stored['features'] : []),
 				'workflow' => array_replace($defaults['workflow'], is_array($stored['workflow'] ?? null) ? $stored['workflow'] : []),
 				'branding' => array_replace($defaults['branding'], is_array($stored['branding'] ?? null) ? $stored['branding'] : []),
+				'media' => array_replace($defaults['media'], is_array($stored['media'] ?? null) ? $stored['media'] : []),
+				'semantic' => array_replace($defaults['semantic'], is_array($stored['semantic'] ?? null) ? $stored['semantic'] : []),
+				'livePush' => ['enabled' => (bool)($stored['livePush']['enabled'] ?? false)],
+				'customDomains' => array_replace($defaults['customDomains'], is_array($stored['customDomains'] ?? null) ? $stored['customDomains'] : []),
 			];
 		} catch (\Throwable) {
 			return $defaults;
@@ -130,7 +148,7 @@ final class PolicyService {
 	 * @return array<string, mixed>
 	 */
 	public function saveInstanceSettings(array $patch): array {
-		$allowedSections = ['access', 'features', 'workflow', 'branding'];
+		$allowedSections = ['access', 'features', 'workflow', 'branding', 'media', 'semantic', 'livePush', 'customDomains'];
 		$unknownSections = array_diff(array_keys($patch), $allowedSections);
 		if ($unknownSections !== []) throw new \InvalidArgumentException('Unknown instance setting: ' . reset($unknownSections));
 		$current = $this->instanceSettings();
@@ -167,6 +185,28 @@ final class PolicyService {
 			&& (!is_string($current['branding']['logoAssetId']) || preg_match('/^[A-Za-z0-9]{32}\.(png|jpg|webp|svg)$/', $current['branding']['logoAssetId']) !== 1)) {
 			throw new \InvalidArgumentException('Invalid branding logo asset');
 		}
+		if (!is_bool($current['media']['videoTranscoding'])) throw new \InvalidArgumentException('videoTranscoding must be a boolean');
+		$current['media']['ffmpegPath'] = trim((string)$current['media']['ffmpegPath']);
+		if (preg_match('~^(?:[A-Za-z]:[\\\\/]|/)?[A-Za-z0-9._/\\\\-]+$~', $current['media']['ffmpegPath']) !== 1
+			|| mb_strlen($current['media']['ffmpegPath']) > 255) throw new \InvalidArgumentException('Invalid FFmpeg path');
+		$current['media']['transcodeConcurrency'] = (int)$current['media']['transcodeConcurrency'];
+		if ($current['media']['transcodeConcurrency'] < 1 || $current['media']['transcodeConcurrency'] > 4) throw new \InvalidArgumentException('Invalid transcode concurrency');
+		if (!in_array($current['media']['transcodePreset'], ['veryfast', 'medium', 'slow'], true)) throw new \InvalidArgumentException('Invalid transcode preset');
+		if (!in_array($current['semantic']['provider'], ['disabled', 'local', 'https'], true)) throw new \InvalidArgumentException('Invalid semantic provider');
+		$current['semantic']['externalTransfer'] = (bool)$current['semantic']['externalTransfer'];
+		$current['semantic']['endpoint'] = trim((string)$current['semantic']['endpoint']);
+		$current['semantic']['model'] = trim((string)$current['semantic']['model']);
+		if (preg_match('/^[A-Za-z0-9._-]{1,80}$/', $current['semantic']['model']) !== 1) throw new \InvalidArgumentException('Invalid semantic model');
+		if (!in_array($current['semantic']['scope'], ['images', 'images_and_video'], true)) throw new \InvalidArgumentException('Invalid semantic scope');
+		if ($current['semantic']['provider'] === 'https') {
+			if (!$current['semantic']['externalTransfer']) throw new \InvalidArgumentException('External transfer must be explicitly enabled');
+			if (filter_var($current['semantic']['endpoint'], FILTER_VALIDATE_URL) === false || !str_starts_with($current['semantic']['endpoint'], 'https://')) {
+				throw new \InvalidArgumentException('Semantic provider must use HTTPS');
+			}
+		}
+		if (!is_bool($current['livePush']['enabled'])) throw new \InvalidArgumentException('livePush enabled must be a boolean');
+		$current['livePush'] = ['enabled' => $current['livePush']['enabled']];
+		if (!is_bool($current['customDomains']['enabled'])) throw new \InvalidArgumentException('customDomains enabled must be a boolean');
 		$current['schemaVersion'] = 2;
 		$this->config->setAppValue(Application::APP_ID, self::SETTINGS_KEY, json_encode($current, JSON_THROW_ON_ERROR));
 		return $current;
@@ -175,5 +215,33 @@ final class PolicyService {
 	public function feature(string $key): bool {
 		if (!array_key_exists($key, self::FEATURE_DEFAULTS)) throw new \InvalidArgumentException('Unknown feature policy');
 		return $this->instanceSettings()['features'][$key];
+	}
+
+	/** @return array{enabled: bool, ffmpegPath: string, concurrency: int, preset: string} */
+	public function videoSettings(): array {
+		$media = $this->instanceSettings()['media'];
+		return [
+			'enabled' => (bool)$media['videoTranscoding'],
+			'ffmpegPath' => (string)$media['ffmpegPath'],
+			'concurrency' => (int)$media['transcodeConcurrency'],
+			'preset' => (string)$media['transcodePreset'],
+		];
+	}
+
+	/** @return array{provider: string, endpoint: string, model: string, scope: string, externalTransfer: bool} */
+	public function semanticSettings(): array {
+		$settings = $this->instanceSettings()['semantic'];
+		return ['provider' => (string)$settings['provider'], 'endpoint' => (string)$settings['endpoint'],
+			'model' => (string)$settings['model'], 'scope' => (string)$settings['scope'], 'externalTransfer' => (bool)$settings['externalTransfer']];
+	}
+
+	/** @return array{enabled: bool, endpointPath: string, protocol: string} */
+	public function livePushSettings(): array {
+		$settings = $this->instanceSettings()['livePush'];
+		return ['enabled' => (bool)$settings['enabled'], 'endpointPath' => '/apps/proofing_gallery/live-push/upload', 'protocol' => 'https-put'];
+	}
+
+	public function customDomainsEnabled(): bool {
+		return (bool)$this->instanceSettings()['customDomains']['enabled'];
 	}
 }

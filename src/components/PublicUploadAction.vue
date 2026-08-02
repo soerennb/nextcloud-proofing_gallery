@@ -93,7 +93,7 @@ function endpoint(path: string) {
 				name="guestFiles"
 				type="file"
 				multiple
-				accept="image/*,video/mp4,video/webm"
+				accept="image/*,video/*"
 				:disabled="uploading"
 				@change="uploadFiles">
 		</label>

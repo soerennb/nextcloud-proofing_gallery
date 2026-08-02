@@ -4,26 +4,24 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Service;
 
-use OCA\ProofingGallery\Db\QueryResult;
-
 use InvalidArgumentException;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\Guest;
+use OCA\ProofingGallery\Db\UploadRepository;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCP\AppFramework\Utility\ITimeFactory;
-use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IAppData;
-use OCP\IDBConnection;
 use OCP\Security\ISecureRandom;
+use OCP\Lock\ILockingProvider;
 
 final class UploadService {
 	public const CHUNK_SIZE = 5 * 1024 * 1024;
 	private const INBOX_NAME = '.proofing-gallery-inbox';
 
 	public function __construct(
-		private IDBConnection $db,
+		private UploadRepository $repository,
 		private ITimeFactory $clock,
 		private IAppData $appData,
 		private ISecureRandom $random,
@@ -31,6 +29,8 @@ final class UploadService {
 		private ActivityService $activity,
 		private PolicyService $policies,
 		private CapabilityPolicyService $capabilities,
+		private MediaTypePolicy $mediaTypes,
+		private ILockingProvider $locks,
 	) {
 	}
 
@@ -41,25 +41,18 @@ final class UploadService {
 		if ($size <= 0 || $size > $this->policies->get('maxUploadBytes')) {
 			throw new InvalidArgumentException('Upload size is outside the allowed range');
 		}
-		if (!$this->supportedMime($mimeType)) {
-			throw new InvalidArgumentException('Only images, MP4 and WebM files are accepted');
+		if (!$this->mediaTypes->supports($mimeType)) {
+			throw new InvalidArgumentException('The declared media type is not supported');
 		}
 		$uploadId = $this->random->generate(40, ISecureRandom::CHAR_ALPHANUMERIC);
 		$now = $this->clock->getTime();
-		$qb = $this->db->getQueryBuilder();
-		$qb->insert('proofing_uploads')->values([
-			'gallery_id' => $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT),
-			'guest_id' => $qb->createNamedParameter($guest->getId(), IQueryBuilder::PARAM_INT),
-			'upload_id' => $qb->createNamedParameter($uploadId),
-			'file_id' => $qb->createNamedParameter(null),
-			'filename' => $qb->createNamedParameter($filename),
-			'mime_type' => $qb->createNamedParameter($mimeType),
-			'size' => $qb->createNamedParameter($size, IQueryBuilder::PARAM_INT),
-			'status' => $qb->createNamedParameter('pending'),
-			'created_at' => $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT),
-			'updated_at' => $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT),
-		])->executeStatement();
-		$this->uploadRoot()->newFolder($uploadId);
+		$folder = $this->uploadRoot()->newFolder($uploadId);
+		try {
+			$this->repository->insert($gallery->getId(), $guest->getId(), $uploadId, $filename, $mimeType, $size, $now);
+		} catch (\Throwable $exception) {
+			$folder->delete();
+			throw $exception;
+		}
 		return [
 			'id' => $uploadId,
 			'chunkSize' => self::CHUNK_SIZE,
@@ -90,6 +83,10 @@ final class UploadService {
 		if ($index >= $expectedChunks) {
 			throw new InvalidArgumentException('Chunk index is outside the upload');
 		}
+		$expectedSize = $index === $expectedChunks - 1
+			? (int)$row['size'] - ($index * self::CHUNK_SIZE)
+			: self::CHUNK_SIZE;
+		if (strlen($content) !== $expectedSize) throw new InvalidArgumentException('Upload chunk has an unexpected size');
 		$folder = $this->uploadFolder($uploadId);
 		$name = sprintf('%08d.chunk', $index);
 		if ($folder->fileExists($name)) {
@@ -102,6 +99,17 @@ final class UploadService {
 
 	/** @return array<string, mixed> */
 	public function finalize(Gallery $gallery, Guest $guest, string $uploadId): array {
+		$lock = 'proofing-gallery/guest-upload-gallery/' . $gallery->getId();
+		$this->locks->acquireLock($lock, ILockingProvider::LOCK_EXCLUSIVE, 'Proofing Gallery guest upload');
+		try {
+			return $this->finalizeLocked($gallery, $guest, $uploadId);
+		} finally {
+			$this->locks->releaseLock($lock, ILockingProvider::LOCK_EXCLUSIVE);
+		}
+	}
+
+	/** @return array<string, mixed> */
+	private function finalizeLocked(Gallery $gallery, Guest $guest, string $uploadId): array {
 		$row = $this->upload($gallery, $guest, $uploadId);
 		if ($row['status'] !== 'pending') {
 			throw new InvalidArgumentException('Upload is not pending');
@@ -134,19 +142,16 @@ final class UploadService {
 		if (is_resource($stream)) {
 			fclose($stream);
 		}
-		if (!$file instanceof File || !$this->supportedMime($file->getMimeType())) {
+		if (!$file instanceof File || !$this->mediaTypes->matches((string)$row['mime_type'], $file)) {
 			$file->delete();
-			throw new InvalidArgumentException('Uploaded file content is unsupported');
+			throw new InvalidArgumentException('Uploaded content does not match the declared media type');
 		}
-		$qb = $this->db->getQueryBuilder();
-		$qb->update('proofing_uploads')
-			->set('file_id', $qb->createNamedParameter($file->getId(), IQueryBuilder::PARAM_INT))
-			->set('filename', $qb->createNamedParameter($filename))
-			->set('mime_type', $qb->createNamedParameter($file->getMimeType()))
-			->set('status', $qb->createNamedParameter('awaiting_review'))
-			->set('updated_at', $qb->createNamedParameter($this->clock->getTime(), IQueryBuilder::PARAM_INT))
-			->where($qb->expr()->eq('upload_id', $qb->createNamedParameter($uploadId)))
-			->executeStatement();
+		try {
+			$this->repository->finalize($uploadId, $file->getId(), $filename, $file->getMimeType(), $this->clock->getTime());
+		} catch (\Throwable $exception) {
+			$file->delete();
+			throw $exception;
+		}
 		$this->uploadFolder($uploadId)->delete();
 		$this->activity->record($gallery, $guest, 'upload.received', [
 			'uploadId' => $uploadId,
@@ -158,25 +163,12 @@ final class UploadService {
 	}
 
 	private function markResponseReceived(Gallery $gallery): void {
-		$qb = $this->db->getQueryBuilder();
-		$qb->update('proofing_galleries')
-			->set('workflow_state', $qb->createNamedParameter('response_received'))
-			->set('updated_at', $qb->createNamedParameter($this->clock->getTime(), IQueryBuilder::PARAM_INT))
-			->set('revision', $qb->createFunction('revision + 1'))
-			->where($qb->expr()->eq('id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
-			->andWhere($qb->expr()->neq('workflow_state', $qb->createNamedParameter('completed')))
-			->executeStatement();
+		$this->repository->markResponseReceived($gallery->getId(), $this->clock->getTime());
 	}
 
 	/** @return list<array<string, mixed>> */
 	public function listForGallery(Gallery $gallery): array {
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('u.*', 'g.display_name')
-			->from('proofing_uploads', 'u')
-			->leftJoin('u', 'proofing_guests', 'g', $qb->expr()->eq('u.guest_id', 'g.id'))
-			->where($qb->expr()->eq('u.gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
-			->orderBy('u.created_at', 'DESC');
-		return QueryResult::rows($qb->executeQuery());
+		return $this->repository->list($gallery->getId());
 	}
 
 	public function moderate(Gallery $gallery, string $uploadId, bool $accept): void {
@@ -191,18 +183,28 @@ final class UploadService {
 		if ($accept) {
 			$target = $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId());
 			$name = $this->conflictFreeName($target, $file->getName());
+			$originalPath = $file->getPath();
 			$file->move($target->getPath() . '/' . $name);
 			$status = 'accepted';
+			try {
+				if (!$this->repository->moderate($uploadId, $status, $this->clock->getTime())) throw new \RuntimeException('Upload moderation state changed concurrently');
+			} catch (\Throwable $exception) {
+				try { $file->move($originalPath); } catch (\Throwable) {}
+				throw $exception;
+			}
 		} else {
-			$file->delete();
 			$status = 'rejected';
+			$originalPath = $file->getPath();
+			$quarantinePath = $file->getParent()->getPath() . '/.rejected-' . $uploadId;
+			$file->move($quarantinePath);
+			try {
+				if (!$this->repository->moderate($uploadId, $status, $this->clock->getTime())) throw new \RuntimeException('Upload moderation state changed concurrently');
+			} catch (\Throwable $exception) {
+				try { $file->move($originalPath); } catch (\Throwable) {}
+				throw $exception;
+			}
+			$file->delete();
 		}
-		$qb = $this->db->getQueryBuilder();
-		$qb->update('proofing_uploads')
-			->set('status', $qb->createNamedParameter($status))
-			->set('updated_at', $qb->createNamedParameter($this->clock->getTime(), IQueryBuilder::PARAM_INT))
-			->where($qb->expr()->eq('upload_id', $qb->createNamedParameter($uploadId)))
-			->executeStatement();
 		$this->activity->record($gallery, null, 'upload.' . $status, ['uploadId' => $uploadId]);
 	}
 
@@ -219,13 +221,8 @@ final class UploadService {
 
 	/** @return array<string, mixed> */
 	private function upload(Gallery $gallery, Guest $guest, string $uploadId): array {
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')->from('proofing_uploads')
-			->where($qb->expr()->eq('upload_id', $qb->createNamedParameter($uploadId)))
-			->andWhere($qb->expr()->eq('gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
-			->andWhere($qb->expr()->eq('guest_id', $qb->createNamedParameter($guest->getId(), IQueryBuilder::PARAM_INT)));
-		$row = QueryResult::row($qb->executeQuery());
-		if ($row === false) {
+		$row = $this->repository->find($gallery->getId(), $uploadId, $guest->getId());
+		if ($row === null) {
 			throw new InvalidArgumentException('Upload not found');
 		}
 		return $row;
@@ -233,12 +230,8 @@ final class UploadService {
 
 	/** @return array<string, mixed> */
 	private function uploadForGallery(Gallery $gallery, string $uploadId): array {
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('*')->from('proofing_uploads')
-			->where($qb->expr()->eq('upload_id', $qb->createNamedParameter($uploadId)))
-			->andWhere($qb->expr()->eq('gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)));
-		$row = QueryResult::row($qb->executeQuery());
-		if ($row === false) {
+		$row = $this->repository->find($gallery->getId(), $uploadId);
+		if ($row === null) {
 			throw new InvalidArgumentException('Upload not found');
 		}
 		return $row;
@@ -257,11 +250,7 @@ final class UploadService {
 	}
 
 	private function touch(string $uploadId): void {
-		$qb = $this->db->getQueryBuilder();
-		$qb->update('proofing_uploads')
-			->set('updated_at', $qb->createNamedParameter($this->clock->getTime(), IQueryBuilder::PARAM_INT))
-			->where($qb->expr()->eq('upload_id', $qb->createNamedParameter($uploadId)))
-			->executeStatement();
+		$this->repository->touch($uploadId, $this->clock->getTime());
 	}
 
 	private function uploadRoot(): \OCP\Files\SimpleFS\ISimpleFolder {
@@ -310,10 +299,6 @@ final class UploadService {
 			throw new InvalidArgumentException('Invalid filename');
 		}
 		return $filename;
-	}
-
-	private function supportedMime(string $mimeType): bool {
-		return str_starts_with($mimeType, 'image/') || in_array($mimeType, ['video/mp4', 'video/webm'], true);
 	}
 
 }

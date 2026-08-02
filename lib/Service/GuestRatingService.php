@@ -20,10 +20,12 @@ final class GuestRatingService {
 		private CullingService $culling,
 		private \OCP\IDBConnection $db,
 		private GuestRatingAggregator $aggregator,
+		private CapabilityPolicyService $capabilities,
 	) {
 	}
 
 	public function save(PublicLink $link, Guest $guest, int $fileId, int $rating, string $pick = 'none'): GuestRating {
+		$this->capabilities->assertFeature('guestRatings');
 		if ($rating < 0 || $rating > 5 || !in_array($pick, ['none', 'pick', 'reject'], true)) {
 			throw new \InvalidArgumentException('Invalid guest rating');
 		}
@@ -52,6 +54,7 @@ final class GuestRatingService {
 
 	/** @return list<GuestRating> */
 	public function forGuest(Guest $guest): array {
+		$this->capabilities->assertFeature('guestRatings');
 		return $this->ratings->findForGuest($guest->getGalleryId(), $guest->getId());
 	}
 
@@ -60,6 +63,7 @@ final class GuestRatingService {
 	 * @return array{items: list<array<string, mixed>>, guests: array<int, string>}
 	 */
 	public function aggregate(\OCA\ProofingGallery\Db\Gallery $gallery, array $fileIds = []): array {
+		$this->capabilities->assertFeature('guestRatings');
 		$grouped = [];
 		$guests = [];
 		$values = $fileIds === [] ? $this->ratings->findForGallery($gallery->getId()) : $this->ratings->findForGalleryFiles($gallery->getId(), $fileIds);

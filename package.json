@@ -1,35 +1,41 @@
 {
   "name": "proofing_gallery",
-  "version": "0.5.0-alpha.1",
+  "version": "0.5.0-alpha.3",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {
-    "build": "vite build",
     "prebuild": "node scripts/clean-build.mjs",
+    "build": "vite build",
     "postbuild": "node scripts/check-bundle-size.mjs",
     "build:l10n": "node scripts/build-l10n.mjs --write",
     "check:l10n": "node scripts/build-l10n.mjs --check",
     "check:source-size": "node scripts/check-source-size.mjs",
     "dev": "vite --mode development build",
-    "watch": "vite --mode development build --watch",
     "lint": "npm run check:l10n && npm run check:source-size && npm run lint:js && npm run lint:style && npm run typecheck",
     "lint:js": "eslint src --max-warnings=0",
     "lint:style": "stylelint \"src/**/*.{vue,css,scss}\"",
     "perf:public": "node scripts/measure-public-lcp.mjs",
-    "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",
-		"test:e2e": "node scripts/run-e2e.mjs",
-		"test:e2e:raw": "playwright test",
+    "test:e2e": "node scripts/run-e2e.mjs",
+    "test:e2e:raw": "playwright test",
     "test:e2e:update": "playwright test --update-snapshots",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "typecheck": "vue-tsc --noEmit",
+    "watch": "vite --mode development build --watch"
   },
   "browserslist": [
     "extends @nextcloud/browserslist-config"
   ],
+  "overrides": {
+    "webdav": {
+      "minimatch": "10.2.6"
+    }
+  },
   "dependencies": {
     "@nextcloud/axios": "^2.5.0",
     "@nextcloud/dialogs": "^7.4.1",
+    "@nextcloud/event-bus": "^3.3.3",
     "@nextcloud/initial-state": "^3.0.0",
     "@nextcloud/l10n": "^3.3.0",
     "@nextcloud/router": "^3.0.1",
@@ -43,7 +49,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
     "@nextcloud/browserslist-config": "^3.1.2",
-    "@nextcloud/eslint-config": "^8.4.2",
+    "@nextcloud/eslint-config": "^9.0.1",
     "@nextcloud/stylelint-config": "^3.1.1",
     "@nextcloud/vite-config": "^2.5.2",
     "@playwright/test": "^1.62.0",
@@ -53,17 +59,14 @@
     "@vitest/coverage-v8": "^3.2.0",
     "@vue/test-utils": "^2.4.6",
     "@vue/tsconfig": "^0.9.1",
+    "eslint": "^10.0.0",
     "jsdom": "^26.0.0",
+    "magic-string": "^1.1.0",
     "stylelint": "^17.9.1",
     "typescript": "^5.9.3",
     "vite": "^7.3.2",
     "vitest": "^3.2.0",
     "vue-tsc": "^3.0.0"
-  },
-  "overrides": {
-    "webdav": {
-      "minimatch": "10.2.6"
-    }
   },
   "engines": {
     "node": "^24.11.0",

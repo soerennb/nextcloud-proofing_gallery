@@ -4,21 +4,19 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Service;
 
-use OCA\ProofingGallery\Db\QueryResult;
-
 use OCA\ProofingGallery\Db\GalleryMapper;
+use OCA\ProofingGallery\Db\LifecycleRepository;
+use OCA\ProofingGallery\Db\VideoDerivativeRepository;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCA\ProofingGallery\Dto\Settings\LifecycleSettings;
 use OCP\AppFramework\Utility\ITimeFactory;
-use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\Files\IAppData;
-use OCP\IDBConnection;
 
 final class LifecycleService {
 	private const BATCH_SIZE = 1000;
 
 	public function __construct(
-		private IDBConnection $db,
+		private LifecycleRepository $repository,
 		private ITimeFactory $clock,
 		private IAppData $appData,
 		private PolicyService $policies,
@@ -29,31 +27,39 @@ final class LifecycleService {
 		private CapabilityPolicyService $capabilities,
 		private NativeNotificationService $notifications,
 		private ActivityService $activity,
+		private VideoDerivativeRepository $videoDerivatives,
 	) {
 	}
 
 	/** @return array<string, int> */
 	public function cleanup(): array {
 		$now = $this->clock->getTime();
-		$events = $this->deleteOldRows(
+		$events = $this->repository->deleteOldRows(
 			'proofing_events',
 			'created_at',
-			$now - $this->policies->get('eventRetentionDays') * 86400,
+			$now - $this->policies->get('eventRetentionDays') * 86400, self::BATCH_SIZE,
 		);
-		$shareAudit = $this->deleteOldRows(
+		$shareAudit = $this->repository->deleteOldRows(
 			'proofing_share_audit',
 			'created_at',
-			$now - $this->policies->get('shareAuditRetentionDays') * 86400,
+			$now - $this->policies->get('shareAuditRetentionDays') * 86400, self::BATCH_SIZE,
 		);
-		$uploads = $this->cleanupUploads($now);
+		$uploads = $this->cleanupUploads($now) + $this->cleanupOwnerUploads(
+			$now - $this->policies->get('pendingUploadRetentionHours') * 3600,
+		);
 		$previews = $this->cleanupPreviewCache(
 			$now - $this->policies->get('previewRetentionDays') * 86400,
 		);
+		$video = $this->cleanupVideoDerivatives($now - $this->policies->get('videoDerivativeRetentionDays') * 86400);
 		$orphans = $this->cleanupOrphanMetadata();
 		$collectionAnchors = $this->collectionAnchors->reconcile(false)['deleted'];
 		$versions = $this->versions->cleanupExpired(self::BATCH_SIZE);
+		$suspended = 0;
+		foreach ($this->galleries->findArchivedWithActiveLinks() as $gallery) {
+			$suspended += $this->shares->reconcileArchived($gallery);
+		}
 		['revoked' => $revoked, 'archived' => $archived] = $this->automateGalleries($now);
-		return compact('events', 'shareAudit', 'uploads', 'previews', 'versions', 'orphans', 'collectionAnchors', 'revoked', 'archived');
+		return compact('events', 'shareAudit', 'uploads', 'previews', 'video', 'versions', 'orphans', 'collectionAnchors', 'suspended', 'revoked', 'archived');
 	}
 
 	/** @return array{revoked: int, archived: int} */
@@ -105,42 +111,12 @@ final class LifecycleService {
 		return $date === false ? null : $date->setTime(23, 59, 59)->getTimestamp();
 	}
 
-	private function deleteOldRows(string $table, string $column, int $before): int {
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('id')->from($table)
-			->where($qb->expr()->lt($column, $qb->createNamedParameter($before, IQueryBuilder::PARAM_INT)))
-			->orderBy('id', 'ASC')->setMaxResults(self::BATCH_SIZE);
-		$ids = array_map('intval', QueryResult::column($qb->executeQuery()));
-		if ($ids === []) {
-			return 0;
-		}
-		$qb = $this->db->getQueryBuilder();
-		$qb->delete($table)
-			->where($qb->expr()->in('id', $qb->createNamedParameter($ids, IQueryBuilder::PARAM_INT_ARRAY)));
-		return $qb->executeStatement();
-	}
-
 	private function cleanupUploads(int $now): int {
-		$qb = $this->db->getQueryBuilder();
-		$qb->select('id', 'upload_id', 'status')->from('proofing_uploads')
-			->where($qb->expr()->orX(
-				$qb->expr()->andX(
-					$qb->expr()->eq('status', $qb->createNamedParameter('pending')),
-					$qb->expr()->lt('updated_at', $qb->createNamedParameter(
-						$now - $this->policies->get('pendingUploadRetentionHours') * 3600,
-						IQueryBuilder::PARAM_INT,
-					)),
-				),
-				$qb->expr()->andX(
-					$qb->expr()->in('status', $qb->createNamedParameter(['accepted', 'rejected'], IQueryBuilder::PARAM_STR_ARRAY)),
-					$qb->expr()->lt('updated_at', $qb->createNamedParameter(
-						$now - $this->policies->get('completedUploadRetentionDays') * 86400,
-						IQueryBuilder::PARAM_INT,
-					)),
-				),
-			))
-			->orderBy('id', 'ASC')->setMaxResults(self::BATCH_SIZE);
-		$rows = QueryResult::rows($qb->executeQuery());
+		$rows = $this->repository->expiredUploads(
+			$now - $this->policies->get('pendingUploadRetentionHours') * 3600,
+			$now - $this->policies->get('completedUploadRetentionDays') * 86400,
+			self::BATCH_SIZE,
+		);
 		if ($rows === []) {
 			return 0;
 		}
@@ -153,10 +129,28 @@ final class LifecycleService {
 			}
 		}
 		$ids = array_map(static fn (array $row): int => (int)$row['id'], $rows);
-		$qb = $this->db->getQueryBuilder();
-		$qb->delete('proofing_uploads')
-			->where($qb->expr()->in('id', $qb->createNamedParameter($ids, IQueryBuilder::PARAM_INT_ARRAY)));
-		return $qb->executeStatement();
+		return $this->repository->deleteUploads($ids);
+	}
+
+	private function cleanupOwnerUploads(int $before): int {
+		try {
+			$root = $this->appData->getFolder('owner-uploads');
+		} catch (\OCP\Files\NotFoundException) {
+			return 0;
+		}
+		$deleted = 0;
+		foreach ($root->getDirectoryListing() as $session) {
+			if ($deleted >= self::BATCH_SIZE || !$session instanceof \OCP\Files\SimpleFS\ISimpleFolder) continue;
+			try {
+				if ($session->getFile('manifest.json')->getMTime() >= $before) continue;
+				$session->delete();
+				$deleted++;
+			} catch (\OCP\Files\NotFoundException) {
+				$session->delete();
+				$deleted++;
+			}
+		}
+		return $deleted;
 	}
 
 	private function cleanupPreviewCache(int $before): int {
@@ -179,38 +173,23 @@ final class LifecycleService {
 	}
 
 	private function cleanupOrphanMetadata(): int {
-		$deleted = 0;
-		foreach (['proofing_events', 'proofing_uploads', 'proofing_collections', 'proofing_notify_subs', 'proofing_native_notify', 'proofing_media_index', 'proofing_public_links', 'proofing_guest_ratings', 'proofing_share_audit'] as $table) {
-			$qb = $this->db->getQueryBuilder();
-			$qb->selectDistinct('gallery_id')->from($table)->setMaxResults(100);
-			foreach (QueryResult::column($qb->executeQuery()) as $galleryId) {
-				$check = $this->db->getQueryBuilder();
-				$check->select('id')->from('proofing_galleries')
-					->where($check->expr()->eq('id', $check->createNamedParameter((int)$galleryId, IQueryBuilder::PARAM_INT)));
-				if ($check->executeQuery()->fetchOne() !== false) {
-					continue;
-				}
-				$delete = $this->db->getQueryBuilder();
-				$delete->delete($table)
-					->where($delete->expr()->eq('gallery_id', $delete->createNamedParameter((int)$galleryId, IQueryBuilder::PARAM_INT)));
-				$deleted += $delete->executeStatement();
-			}
-		}
+		return $this->repository->cleanupOrphans();
+	}
 
-		$qb = $this->db->getQueryBuilder();
-		$qb->selectDistinct('collection_id')->from('proofing_collection_items')->setMaxResults(100);
-		foreach (QueryResult::column($qb->executeQuery()) as $collectionId) {
-			$check = $this->db->getQueryBuilder();
-			$check->select('gallery_id')->from('proofing_collections')
-				->where($check->expr()->eq('gallery_id', $check->createNamedParameter((int)$collectionId, IQueryBuilder::PARAM_INT)));
-			if ($check->executeQuery()->fetchOne() !== false) {
-				continue;
+	private function cleanupVideoDerivatives(int $before): int {
+		$rows = $this->videoDerivatives->expired($before, self::BATCH_SIZE);
+		if ($rows === []) return 0;
+		try {
+			$folder = $this->appData->getFolder('video-derivatives');
+			foreach ($rows as $row) foreach ([$row['storage_key'], $row['poster_key']] as $key) {
+				if (!is_string($key)) continue;
+				try {
+					$folder->getFile($key)->delete();
+				} catch (\OCP\Files\NotFoundException) {
+				}
 			}
-			$delete = $this->db->getQueryBuilder();
-			$delete->delete('proofing_collection_items')
-				->where($delete->expr()->eq('collection_id', $delete->createNamedParameter((int)$collectionId, IQueryBuilder::PARAM_INT)));
-			$deleted += $delete->executeStatement();
+		} catch (\OCP\Files\NotFoundException) {
 		}
-		return $deleted;
+		return $this->videoDerivatives->delete(array_column($rows, 'id'));
 	}
 }

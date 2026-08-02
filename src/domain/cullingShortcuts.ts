@@ -1,5 +1,5 @@
-export type CullingShortcut =
-	| { type: 'move'; delta: -1 | 1 }
+export type CullingShortcut
+	= | { type: 'move'; delta: -1 | 1 }
 	| { type: 'rating'; rating: number }
 	| { type: 'toggle-pick' }
 	| { type: 'toggle-reject' }

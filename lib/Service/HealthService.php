@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace OCA\ProofingGallery\Service;
 
 use OCA\ProofingGallery\Db\QueryResult;
+use OCA\ProofingGallery\Db\VideoDerivativeRepository;
+use OCA\ProofingGallery\Db\SemanticIndexRepository;
+use OCA\ProofingGallery\Db\LivePushRepository;
 
 use OCP\App\IAppManager;
 use OCP\DB\QueryBuilder\IQueryBuilder;
@@ -17,6 +20,10 @@ final class HealthService {
 		private IAppData $appData,
 		private CleanupTelemetryService $cleanupTelemetry,
 		private IAppManager $apps,
+		private VideoDerivativeRepository $videoDerivatives,
+		private VideoTranscodeService $videoTranscodes,
+		private SemanticIndexRepository $semanticIndex,
+		private LivePushRepository $livePush,
 	) {
 	}
 
@@ -26,7 +33,8 @@ final class HealthService {
 	 *   awaitingReview: int,
 	 *   previewCacheBytes: int,
 	 *   notifications: array{available: bool, pending: int, failed: int},
-	 *   cleanup: array<string, int|string|null>
+	 *   cleanup: array<string, int|string|null>,
+	 *   video: array<string, int|string|bool|null>
 	 * }
 	 */
 	public function status(): array {
@@ -71,6 +79,9 @@ final class HealthService {
 				'pending' => $notificationCounts['pending'],
 				'failed' => $notificationCounts['failed'],
 			],
+			'video' => [...$this->videoDerivatives->health(), ...$this->videoTranscodes->availability()],
+			'semantic' => $this->semanticIndex->health(),
+			'livePush' => $this->livePush->health(),
 			'cleanup' => $this->cleanupTelemetry->status(),
 		];
 	}

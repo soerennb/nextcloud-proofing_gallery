@@ -25,11 +25,21 @@ final class PublicShareTemplateProvider implements IPublicShareTemplateProvider 
 	}
 
 	public function shouldRespond(IShare $share): bool {
-		return $this->contexts->tryResolveShare($share) !== null;
+		return $this->contexts->isManagedShare($share);
 	}
 
 	public function renderPage(IShare $share, string $token, string $path): TemplateResponse {
-		$context = $this->contexts->resolveShare($share);
+		$context = $this->contexts->tryResolveShare($share);
+		if ($context === null) {
+			$response = new PublicTemplateResponse(
+				Application::APP_ID,
+				'public-unavailable',
+				status: \OCP\AppFramework\Http::STATUS_NOT_FOUND,
+				headers: ['Cache-Control' => 'private, no-store'],
+			);
+			$response->setHeaderTitle('Gallery unavailable');
+			return $response;
+		}
 		$gallery = $context->gallery;
 		$initialPage = $this->galleryData->page($context, new PublicGalleryQuery(path: $path));
 		$firstImage = null;

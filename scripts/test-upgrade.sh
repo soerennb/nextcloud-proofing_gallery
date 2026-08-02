@@ -67,10 +67,12 @@ compose exec -T --user www-data sqlite php occ upgrade
 compose exec -T --user www-data sqlite php -r '
 	require "/var/www/html/lib/base.php";
 	$db = \OC::$server->get(\OCP\IDBConnection::class);
-	foreach (["proofing_presets", "proofing_inv_templates", "proofing_notify_subs", "proofing_notify_queue", "proofing_media_index", "proofing_media_cull", "proofing_public_links", "proofing_guest_ratings", "proofing_share_audit"] as $table) {
+	foreach (["proofing_presets", "proofing_inv_templates", "proofing_notify_subs", "proofing_notify_queue", "proofing_media_index", "proofing_media_cull", "proofing_public_links", "proofing_guest_ratings", "proofing_share_audit", "proofing_video_deriv", "proofing_semantic_idx", "proofing_live_push", "proofing_domains"] as $table) {
 		$q = $db->getQueryBuilder();
 		$q->select($q->func()->count())->from($table)->executeQuery()->fetchOne();
 	}
+	$q = $db->getQueryBuilder();
+	$q->select("generation")->from("proofing_semantic_idx")->setMaxResults(1)->executeQuery();
 	$q = $db->getQueryBuilder();
 	$count = $q->select($q->func()->count())->from("proofing_galleries")
 		->where($q->expr()->eq("slug", $q->createNamedParameter("upgrade-sentinel")))

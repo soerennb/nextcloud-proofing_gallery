@@ -97,7 +97,9 @@ final class GalleryService {
 			$personalDesign,
 			$settings,
 		);
-		$gallery->setSettings(json_encode(GallerySettings::merge(GallerySettings::defaults(), $composed), JSON_THROW_ON_ERROR));
+		$gallerySettings = GallerySettings::merge(GallerySettings::defaults(), $composed);
+		$this->assertPresentationAssets($gallery, $gallerySettings);
+		$gallery->setSettings(json_encode($gallerySettings, JSON_THROW_ON_ERROR));
 		$gallery->setCreatedAt($now);
 		$gallery->setUpdatedAt($now);
 
@@ -336,7 +338,9 @@ final class GalleryService {
 				throw new InvalidArgumentException('Guest uploads are unavailable for collections');
 			}
 			$current = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
-			$gallery->setSettings(json_encode(GallerySettings::merge($current, $settings), JSON_THROW_ON_ERROR));
+			$merged = GallerySettings::merge($current, $settings);
+			$this->assertPresentationAssets($gallery, $merged);
+			$gallery->setSettings(json_encode($merged, JSON_THROW_ON_ERROR));
 		}
 		$gallery->setUpdatedAt($this->clock->getTime());
 
@@ -347,13 +351,7 @@ final class GalleryService {
 
 	public function archive(string $ownerUid, int $id): Gallery {
 		$gallery = $this->get($ownerUid, $id);
-		$now = $this->clock->getTime();
-		$gallery->setStatus(GalleryStatus::Archived->value);
-		$gallery->setArchivedAt($now);
-		$gallery->setUpdatedAt($now);
-		$gallery->setRevision($gallery->getRevision() + 1);
-
-		return $this->mapper->update($gallery);
+		return $this->shares->archive($gallery);
 	}
 
 	public function restore(string $ownerUid, int $id): Gallery {
@@ -361,14 +359,7 @@ final class GalleryService {
 		if ($gallery->getStatus() !== GalleryStatus::Archived->value) {
 			throw new InvalidArgumentException('Only archived galleries can be restored');
 		}
-		$gallery->setStatus($gallery->getShareToken() === null
-			? GalleryStatus::Draft->value
-			: GalleryStatus::Published->value);
-		$gallery->setArchivedAt(null);
-		$gallery->setUpdatedAt($this->clock->getTime());
-		$gallery->setRevision($gallery->getRevision() + 1);
-
-		return $this->mapper->update($gallery);
+		return $this->shares->restore($gallery);
 	}
 
 	public function complete(string $ownerUid, int $id): Gallery {
@@ -387,6 +378,22 @@ final class GalleryService {
 			throw new InvalidArgumentException('Title must contain 1 to 255 characters');
 		}
 		return $title;
+	}
+
+	private function assertPresentationAssets(Gallery $gallery, GallerySettings $settings): void {
+		foreach ([$settings->presentation->heroFileId, $settings->presentation->logoFileId] as $fileId) {
+			if ($fileId === null) continue;
+			try {
+				$file = $gallery->getSourceType() === 'collection'
+					? $this->collections->resolveMedia($gallery, $fileId)
+					: $this->folders->resolveMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $fileId);
+			} catch (\OCA\ProofingGallery\Exception\FolderAccessException $exception) {
+				throw new InvalidArgumentException('Gallery artwork must be an image inside the gallery source', previous: $exception);
+			}
+			if (!str_starts_with($file->getMimeType(), 'image/')) {
+				throw new InvalidArgumentException('Gallery artwork must be an image inside the gallery source');
+			}
+		}
 	}
 
 	private function uniqueSlug(string $ownerUid, string $title): string {

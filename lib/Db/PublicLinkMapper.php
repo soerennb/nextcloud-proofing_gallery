@@ -50,6 +50,24 @@ final class PublicLinkMapper extends QBMapper {
 		return $this->findEntities($qb);
 	}
 
+	/** @return list<PublicLink> */
+	public function findUsableForGallery(int $galleryId): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')->from($this->tableName)
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->in('status', $qb->createNamedParameter(['active', 'suspended'], IQueryBuilder::PARAM_STR_ARRAY)))
+			->orderBy('is_primary', 'DESC')->addOrderBy('created_at', 'ASC');
+		return $this->findEntities($qb);
+	}
+
+	public function countUsableForGallery(int $galleryId): int {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select($qb->func()->count())->from($this->tableName)
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->in('status', $qb->createNamedParameter(['active', 'suspended'], IQueryBuilder::PARAM_STR_ARRAY)));
+		return (int)$qb->executeQuery()->fetchOne();
+	}
+
 	public function clearPrimary(int $galleryId): void {
 		$qb = $this->db->getQueryBuilder();
 		$qb->update($this->tableName)

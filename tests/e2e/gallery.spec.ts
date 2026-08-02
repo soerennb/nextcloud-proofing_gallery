@@ -15,16 +15,72 @@ async function waitForGalleryImages(page: Page): Promise<void> {
 	))
 }
 
+async function login(page: Page, baseURL: string | undefined): Promise<void> {
+	await page.goto(`${baseURL}/apps/proofing_gallery/`)
+	await page.getByRole('textbox', { name: /Account name/ }).fill('admin')
+	await page.getByRole('textbox', { name: 'Password' }).fill('admin')
+	await page.getByRole('button', { name: 'Log in', exact: true }).click()
+	await expect(page.getByRole('heading', { name: 'Galleries', level: 1 })).toBeVisible()
+}
+
+async function expectActionTopmost(page: Page, actionName: string): Promise<void> {
+	const action = page.getByRole('menuitem', { name: actionName, exact: true })
+	await expect(action).toBeVisible()
+	expect(await action.evaluate(element => {
+		const rect = element.getBoundingClientRect()
+		const topmost = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+		return topmost === element || element.contains(topmost)
+	})).toBe(true)
+}
+
+test('gallery action menus stay above cards in every overview', async ({ browser, baseURL }) => {
+	const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+	const page = await context.newPage()
+	await login(page, baseURL)
+
+	const openFirstActions = async () => {
+		await page.getByRole('button', { name: /^Actions for E2E Dashboard/ }).first().click()
+		await expectActionTopmost(page, 'Archive')
+	}
+
+	await page.getByRole('button', { name: 'Grid' }).click()
+	await openFirstActions()
+	await expect(page).toHaveScreenshot('owner-dashboard-actions.png', {
+		animations: 'disabled',
+		fullPage: true,
+		maxDiffPixels: 100,
+	})
+	await page.keyboard.press('Escape')
+
+	await page.getByRole('button', { name: 'List' }).click()
+	await openFirstActions()
+	await page.keyboard.press('Escape')
+
+	await page.setViewportSize({ width: 390, height: 844 })
+	await page.getByRole('button', { name: 'Grid' }).click()
+	await openFirstActions()
+	const main = page.locator('.gallery-page')
+	expect(await main.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+	const accessibility = await new AxeBuilder({ page }).include('.gallery-page').analyze()
+	expect(accessibility.violations).toEqual([])
+	await page.keyboard.press('Escape')
+
+	await page.getByRole('button', { name: 'Open navigation' }).click()
+	await page.getByRole('button', { name: 'Archive', exact: true }).click()
+	await expect(page.getByRole('heading', { name: 'Archive', level: 1 })).toBeVisible()
+	await page.getByRole('button', { name: 'Grid' }).click()
+	await page.getByRole('button', { name: /^Actions for/ }).first().click()
+	await expectActionTopmost(page, 'Restore')
+	await context.close()
+})
+
 test('owner can move through the focused gallery workspace', async ({ browser, baseURL }) => {
 	const context = await browser.newContext({
 		viewport: { width: 1440, height: 1000 },
 	})
 	const page = await context.newPage()
 	await page.route('**/api/v1/galleries/*/activity?**', route => route.fulfill({ json: [] }))
-	await page.goto(`${baseURL}/apps/proofing_gallery/`)
-	await page.getByRole('textbox', { name: /Account name/ }).fill('admin')
-	await page.getByRole('textbox', { name: 'Password' }).fill('admin')
-	await page.getByRole('button', { name: 'Log in', exact: true }).click()
+	await login(page, baseURL)
 	await page.getByRole('button', { name: /^E2E Gallery (?:Presentation|Proofing)/ }).click()
 	await expect(page.getByRole('heading', { name: /^E2E Gallery/, level: 1 })).toBeVisible()
 	await expect(page.getByRole('navigation', { name: 'Gallery settings' })).toBeVisible()
@@ -49,6 +105,7 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await page.locator('.metadata-panel').getByRole('button', { name: 'Close' }).click()
 	await page.getByRole('button', { name: 'Cull', exact: true }).click()
 	await expect(page.getByRole('heading', { name: 'Cull and rate' })).toBeVisible()
+	await expect(page.getByLabel('Describe a scene')).toHaveCount(0)
 	await expect(page.getByRole('button', { name: 'Focus proof.png' })).toBeVisible()
 	await page.getByRole('button', { name: '4 stars' }).click()
 	await expect(page.locator('.culling-save')).toHaveText('Saved')
@@ -73,6 +130,8 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await page.setViewportSize({ width: 1440, height: 1000 })
 	await page.getByRole('button', { name: 'Deliver', exact: true }).click()
 	await expect(page.getByRole('heading', { name: 'Public access' })).toBeVisible()
+	await expect(page.getByRole('heading', { name: 'HTTPS Live Push' })).toBeVisible()
+	await expect(page.getByText(/^(Ready|Disabled by administrator)$/)).toBeVisible()
 	await page.getByRole('button', { name: 'Share', exact: true }).click()
 	await expect(page.getByRole('heading', { name: 'Client links' })).toBeVisible()
 	await page.getByRole('button', { name: 'New client link' }).click()
@@ -154,6 +213,8 @@ test('public gallery remains usable on a narrow viewport', async ({ page, baseUR
 	await expect(page).toHaveScreenshot('public-gallery-mobile.png', {
 		animations: 'disabled',
 		fullPage: true,
-		maxDiffPixels: 25,
+		// Nextcloud may regenerate JPEG previews with small encoder-level pixel
+		// differences while preserving the exact layout and source image.
+		maxDiffPixelRatio: 0.03,
 	})
 })

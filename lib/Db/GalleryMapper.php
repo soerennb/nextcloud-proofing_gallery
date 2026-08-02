@@ -65,6 +65,7 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 			->from($this->tableName)
 			->where($qb->expr()->eq('owner_uid', $qb->createNamedParameter($ownerUid)))
 			->orderBy('updated_at', 'DESC')
+			->addOrderBy('id', 'DESC')
 			->setMaxResults($limit)
 			->setFirstResult($offset);
 		$this->applyFilters($qb, $archived, $search);
@@ -119,6 +120,17 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 			->where($qb->expr()->neq('status', $qb->createNamedParameter('archived')))
 			->orderBy('updated_at', 'ASC')
 			->setMaxResults($limit);
+		return $this->findEntities($qb);
+	}
+
+	/** @return list<Gallery> */
+	public function findArchivedWithActiveLinks(int $limit = 200): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->selectDistinct('g.*')->from($this->tableName, 'g')
+			->innerJoin('g', 'proofing_public_links', 'l', $qb->expr()->eq('l.gallery_id', 'g.id'))
+			->where($qb->expr()->eq('g.status', $qb->createNamedParameter('archived')))
+			->andWhere($qb->expr()->eq('l.status', $qb->createNamedParameter('active')))
+			->orderBy('g.updated_at', 'ASC')->setMaxResults($limit);
 		return $this->findEntities($qb);
 	}
 
