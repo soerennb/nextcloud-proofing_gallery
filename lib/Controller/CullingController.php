@@ -96,6 +96,13 @@ final class CullingController extends Controller {
 		}
 	}
 
+	/** @param list<array<string, mixed>> $items */
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'POST', url: '/api/v1/galleries/{id}/media/cull/batch')]
+	public function updateCullingPost(int $id, array $items = []): DataResponse {
+		return $this->updateCulling($id, $items);
+	}
+
 	/** @param list<int> $fileIds */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/galleries/{id}/media/cull')]

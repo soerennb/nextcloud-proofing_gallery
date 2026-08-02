@@ -134,7 +134,7 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await expect(page.getByRole('button', { name: 'Focus proof.png' })).toBeVisible()
 	const cullingSave = page.locator('.culling-save')
 	const saveRating = async () => {
-		const responsePromise = page.waitForResponse(response => response.request().method() === 'PUT' && response.url().includes('/media/cull'))
+		const responsePromise = page.waitForResponse(response => response.request().method() === 'POST' && response.url().includes('/media/cull'))
 		await page.getByRole('button', { name: '4 stars' }).click()
 		await expect(cullingSave).toHaveText('Saving…')
 		return responsePromise

@@ -239,8 +239,8 @@ export async function updateMediaCulling(id: number, items: Array<MediaCull & { 
 		pick,
 		expectedRevision,
 	}))
-	const { data } = await axios.put<{ items: MediaCull[] }>(
-		`${galleriesUrl}/${id}/media/cull`,
+	const { data } = await axios.post<{ items: MediaCull[] }>(
+		`${galleriesUrl}/${id}/media/cull/batch`,
 		{ items: payload },
 		{ headers: { 'Content-Type': 'application/json', 'OCS-APIRequest': 'true' } },
 	)
