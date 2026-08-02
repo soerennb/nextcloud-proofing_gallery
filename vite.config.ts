@@ -33,7 +33,7 @@ function documentationPlugin(): Plugin {
 				.use(markdownItAnchor, { permalink: markdownItAnchor.permalink.headerLink() })
 			const defaultLink = markdown.renderer.rules.link_open
 			markdown.renderer.rules.link_open = (tokens, index, options, environment, renderer) => {
-				const href = tokens[index].attrGet('href') ?? ''
+				const href = String(tokens[index].attrGet('href') ?? '')
 				if (/^https?:\/\//i.test(href)) {
 					tokens[index].attrSet('target', '_blank')
 					tokens[index].attrSet('rel', 'noreferrer noopener')
