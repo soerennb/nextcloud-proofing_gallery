@@ -45,6 +45,7 @@ dev-up:
 dev-install:
 	@until docker compose exec -T --user www-data nextcloud php occ status --output=json 2>/dev/null | grep -q '"installed":true'; do sleep 2; done
 	docker compose exec -T --user www-data nextcloud php occ app:enable proofing_gallery
+	docker compose exec -T --user www-data nextcloud php occ app:disable firstrunwizard
 	docker compose exec -T --user www-data nextcloud php occ background:cron
 
 dev-down:

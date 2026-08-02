@@ -9,12 +9,26 @@ upgrade_root="$(mktemp -d -t proofing-gallery-upgrade.XXXXXXXX)"
 project_name="pg-upgrade-05-$$"
 app_source="${upgrade_root}/proofing_gallery"
 expected_version="$(php -r '$xml=simplexml_load_file($argv[1]); echo (string)$xml->version;' "${repo_dir}/appinfo/info.xml")"
-upgrade_from_ref="${UPGRADE_FROM_REF:-HEAD^}"
-previous_version="$(git -C "${repo_dir}" show "${upgrade_from_ref}:appinfo/info.xml" \
-	| php -r '$xml=simplexml_load_string(stream_get_contents(STDIN)); echo (string)$xml->version;')"
+upgrade_from_ref="${UPGRADE_FROM_REF:-}"
+previous_version=""
 
-if [[ "${previous_version}" == "${expected_version}" ]]; then
-	echo "Upgrade source ${upgrade_from_ref} already has version ${expected_version}; choose an older UPGRADE_FROM_REF." >&2
+if [[ -n "${upgrade_from_ref}" ]]; then
+	previous_version="$(git -C "${repo_dir}" show "${upgrade_from_ref}:appinfo/info.xml" \
+		| php -r '$xml=simplexml_load_string(stream_get_contents(STDIN)); echo (string)$xml->version;')"
+else
+	while IFS= read -r candidate_ref; do
+		candidate_version="$(git -C "${repo_dir}" show "${candidate_ref}:appinfo/info.xml" \
+			| php -r '$xml=simplexml_load_string(stream_get_contents(STDIN)); echo (string)$xml->version;')"
+		if [[ "${candidate_version}" != "${expected_version}" ]]; then
+			upgrade_from_ref="${candidate_ref}"
+			previous_version="${candidate_version}"
+			break
+		fi
+	done < <(git -C "${repo_dir}" rev-list HEAD -- appinfo/info.xml)
+fi
+
+if [[ -z "${upgrade_from_ref}" || "${previous_version}" == "${expected_version}" ]]; then
+	echo "No earlier app version is available for the upgrade test; set UPGRADE_FROM_REF explicitly." >&2
 	exit 2
 fi
 
