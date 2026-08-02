@@ -3,6 +3,7 @@
 ## 0.5.1 — 2026-08-02
 
 - fix SPDX SBOM generation for release archives
+- migrate existing public links in cursor-free batches for reliable SQLite upgrades
 
 ## 0.5.0 — 2026-08-02
 
