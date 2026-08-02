@@ -16,7 +16,7 @@ final class UserPreferenceService {
 	/** @return array<string, mixed> */
 	public function get(string $userId): array {
 		$defaults = [
-			'schemaVersion' => 2,
+			'schemaVersion' => 3,
 			'defaultPurpose' => null,
 			'parentFolder' => null,
 			'designPresetId' => null,
@@ -26,6 +26,7 @@ final class UserPreferenceService {
 				'email' => ['enabled' => false, 'events' => ['upload.received', 'comment.created', 'selection.created'], 'frequency' => 'immediate'],
 			],
 			'lifecycle' => ['enabled' => false, 'trigger' => 'after_completion', 'revokeAfterDays' => 30, 'archiveAfterDays' => 30],
+			'cullingFilmstripPlacement' => 'auto',
 			'savedViews' => [],
 		];
 		$raw = $this->config->getUserValue($userId, Application::APP_ID, self::KEY, '');
@@ -47,7 +48,7 @@ final class UserPreferenceService {
 				'email' => array_replace($defaults['notifications']['email'], is_array($storedNotifications['email'] ?? null) ? $storedNotifications['email'] : []),
 			];
 			$merged['lifecycle'] = array_replace($defaults['lifecycle'], is_array($stored['lifecycle'] ?? null) ? $stored['lifecycle'] : []);
-			$merged['schemaVersion'] = 2;
+			$merged['schemaVersion'] = 3;
 			return $merged;
 		} catch (\Throwable) {
 			return $defaults;
@@ -59,7 +60,7 @@ final class UserPreferenceService {
 	 * @return array<string, mixed>
 	 */
 	public function save(string $userId, array $patch): array {
-		$allowed = ['defaultPurpose', 'parentFolder', 'designPresetId', 'publicLocale', 'notifications', 'lifecycle', 'savedViews'];
+		$allowed = ['defaultPurpose', 'parentFolder', 'designPresetId', 'publicLocale', 'notifications', 'lifecycle', 'cullingFilmstripPlacement', 'savedViews'];
 		$unknown = array_diff(array_keys($patch), $allowed);
 		if ($unknown !== []) throw new \InvalidArgumentException('Unknown preference: ' . reset($unknown));
 		$defaults = $this->get($userId);
@@ -117,6 +118,7 @@ final class UserPreferenceService {
 			throw new \InvalidArgumentException('Invalid default gallery purpose');
 		}
 		if (!in_array($current['publicLocale'], ['auto', 'en', 'de'], true)) throw new \InvalidArgumentException('Invalid public locale');
+		if (!in_array($current['cullingFilmstripPlacement'], ['auto', 'side', 'bottom'], true)) throw new \InvalidArgumentException('Invalid culling filmstrip placement');
 		if ($current['parentFolder'] !== null) {
 			if (!is_array($current['parentFolder']) || (int)($current['parentFolder']['id'] ?? 0) <= 0) throw new \InvalidArgumentException('Invalid parent folder');
 			$current['parentFolder'] = ['id' => (int)$current['parentFolder']['id'], 'name' => mb_substr(trim((string)($current['parentFolder']['name'] ?? '')), 0, 255)];
@@ -138,7 +140,7 @@ final class UserPreferenceService {
 			if ($current['lifecycle'][$key] < 1 || $current['lifecycle'][$key] > 3650) throw new \InvalidArgumentException('Invalid lifecycle duration');
 		}
 		if (!in_array($current['lifecycle']['trigger'], ['fixed_date', 'after_completion'], true)) throw new \InvalidArgumentException('Invalid lifecycle trigger');
-		$current['schemaVersion'] = 2;
+		$current['schemaVersion'] = 3;
 		$this->config->setUserValue($userId, Application::APP_ID, self::KEY, json_encode($current, JSON_THROW_ON_ERROR));
 		return $current;
 	}

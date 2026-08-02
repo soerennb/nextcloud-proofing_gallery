@@ -8,8 +8,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { cullingShortcut } from '../domain/cullingShortcuts.ts'
 import { fetchGuestRatings, fetchIndexedMedia, fetchMediaCulling, fetchSemanticStatus, fetchUserPreferences, ownerPreviewUrl, previewGuestRatingPromotion, promoteGuestRatings, rebuildGalleryMediaIndex, rebuildSemanticIndex, searchSemanticMedia, synchronizeCullingXmp, updateMediaCulling, updateUserPreferences } from '../services/galleryApi.ts'
 import type { CullColor, CullingXmpReport, CullPick, Gallery, GuestRatingAggregate, GuestRatingPromotion, IndexedMediaItem, MediaCull, UserPreferences } from '../types.ts'
+import CullingFilmstrip from './CullingFilmstrip.vue'
 import ProgressiveImage from './ProgressiveImage.vue'
-import VirtualMediaGrid from './VirtualMediaGrid.vue'
 
 const props = defineProps<{ gallery: Gallery }>()
 
@@ -56,6 +56,8 @@ const semanticMatches = ref<number[] | null>(null)
 const semanticWorking = ref(false)
 const semanticEnabled = ref(false)
 const semanticProvider = ref<'disabled' | 'local' | 'https'>('disabled')
+const filmstripPlacement = ref<UserPreferences['cullingFilmstripPlacement']>('auto')
+const viewportWidth = ref(typeof window === 'undefined' ? 1280 : window.innerWidth)
 let controller: AbortController | undefined
 
 function defaultState(fileId: number): MediaCull {
@@ -81,6 +83,11 @@ const filteredItems = computed(() => items.value.filter(item => {
 }))
 const activeIndex = computed(() => filteredItems.value.findIndex(item => item.id === activeId.value))
 const activeItem = computed(() => activeIndex.value < 0 ? null : filteredItems.value[activeIndex.value])
+const effectiveFilmstripPlacement = computed<'side' | 'bottom'>(() => {
+	if (filmstripPlacement.value === 'bottom') return 'bottom'
+	if (filmstripPlacement.value === 'side') return viewportWidth.value >= 900 ? 'side' : 'bottom'
+	return viewportWidth.value >= 1180 ? 'side' : 'bottom'
+})
 const targetIds = computed(() => selectedIds.value.length ? selectedIds.value : activeId.value === null ? [] : [activeId.value])
 const progress = computed(() => {
 	const reviewed = items.value.filter(item => {
@@ -137,8 +144,19 @@ async function loadPage(reset = false) {
 
 async function loadSavedViews() {
 	try {
-		savedViews.value = (await fetchUserPreferences()).preferences.savedViews.filter(view => view.galleryId === props.gallery.id)
+		const preferences = (await fetchUserPreferences()).preferences
+		savedViews.value = preferences.savedViews.filter(view => view.galleryId === props.gallery.id)
+		filmstripPlacement.value = preferences.cullingFilmstripPlacement
 	} catch { /* Culling remains fully usable without presets. */ }
+}
+
+async function saveFilmstripPlacement() {
+	try {
+		const preferences = await updateUserPreferences({ cullingFilmstripPlacement: filmstripPlacement.value })
+		filmstripPlacement.value = preferences.cullingFilmstripPlacement
+	} catch {
+		showError(t('proofing_gallery', 'The filmstrip layout could not be saved.'))
+	}
 }
 
 async function loadSemanticStatus() {
@@ -362,6 +380,10 @@ function moveActive(delta: number) {
 	activeId.value = filteredItems.value[next].id
 }
 
+function updateViewportWidth() {
+	viewportWidth.value = window.innerWidth
+}
+
 function onKeydown(event: KeyboardEvent) {
 	const target = event.target as HTMLElement
 	if (target.matches('input, textarea, select, button, [contenteditable="true"]')) return
@@ -384,6 +406,7 @@ function applyShortcut(action: NonNullable<ReturnType<typeof cullingShortcut>>) 
 
 onMounted(() => {
 	window.addEventListener('keydown', onKeydown)
+	window.addEventListener('resize', updateViewportWidth, { passive: true })
 	loadSavedViews()
 	loadSemanticStatus()
 	loadPage(true)
@@ -391,6 +414,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
 	controller?.abort()
 	window.removeEventListener('keydown', onKeydown)
+	window.removeEventListener('resize', updateViewportWidth)
 })
 </script>
 
@@ -464,6 +488,7 @@ onBeforeUnmount(() => {
 			<NcButton variant="tertiary" :aria-expanded="guestOpen" @click="openGuestSignals()">
 				{{ t('proofing_gallery', 'Client signal') }}
 			</NcButton>
+			<label class="filmstrip-layout"><span>{{ t('proofing_gallery', 'Filmstrip') }}</span><select v-model="filmstripPlacement" name="filmstripPlacement" @change="saveFilmstripPlacement"><option value="auto">{{ t('proofing_gallery', 'Automatic') }}</option><option value="side">{{ t('proofing_gallery', 'Right side') }}</option><option value="bottom">{{ t('proofing_gallery', 'Below') }}</option></select></label>
 			<span class="culling-save" role="status">{{ saving ? t('proofing_gallery', 'Saving…') : failure ? t('proofing_gallery', 'Needs attention') : t('proofing_gallery', 'Saved') }}</span>
 		</div>
 		<div v-if="showShortcuts" class="shortcut-sheet">
@@ -571,77 +596,79 @@ onBeforeUnmount(() => {
 			<p>{{ t('proofing_gallery', 'No supported photos or videos were found.') }}</p>
 		</div>
 		<template v-else>
-			<section v-if="activeItem" class="culling-loupe" :aria-label="t('proofing_gallery', 'Focused photo')">
-				<div class="culling-loupe__image">
-					<ProgressiveImage :src="ownerPreviewUrl(gallery.id, activeItem.id, 1600, 1100)" :alt="activeItem.name" priority />
-					<span v-if="stateFor(activeItem.id).pick !== 'none'" class="decision-badge" :class="`decision-badge--${stateFor(activeItem.id).pick}`">{{ stateFor(activeItem.id).pick === 'pick' ? 'PICK' : 'REJECT' }}</span>
-				</div>
-				<div class="culling-loupe__controls">
-					<div><strong>{{ activeItem.name }}</strong><small>{{ activeItem.relativePath }}</small></div>
-					<div class="rating-buttons" :aria-label="t('proofing_gallery', 'Set rating')">
-						<button v-for="rating in 6"
-							:key="rating - 1"
-							type="button"
-							:class="{ active: stateFor(activeItem.id).rating === rating - 1 }"
-							:aria-label="t('proofing_gallery', '{rating} stars', { rating: rating - 1 })"
-							@click="mutate({ rating: rating - 1 })">
-							{{ rating - 1 || '–' }}<span v-if="rating > 1">★</span>
-						</button>
+			<div class="culling-stage" :class="`culling-stage--${effectiveFilmstripPlacement}`">
+				<section v-if="activeItem" class="culling-loupe" :aria-label="t('proofing_gallery', 'Focused photo')">
+					<div class="culling-loupe__image">
+						<ProgressiveImage :src="ownerPreviewUrl(gallery.id, activeItem.id, 1600, 1100)" :alt="activeItem.name" priority />
+						<span v-if="stateFor(activeItem.id).pick !== 'none'" class="decision-badge" :class="`decision-badge--${stateFor(activeItem.id).pick}`">{{ stateFor(activeItem.id).pick === 'pick' ? 'PICK' : 'REJECT' }}</span>
 					</div>
-					<div class="decision-buttons">
-						<button type="button"
-							:class="{ active: stateFor(activeItem.id).pick === 'pick' }"
-							:aria-label="t('proofing_gallery', 'Pick')"
-							@click="mutate({ pick: stateFor(activeItem.id).pick === 'pick' ? 'none' : 'pick' })">
-							✓ {{ t('proofing_gallery', 'Pick') }}
-						</button><button type="button"
-							:class="{ active: stateFor(activeItem.id).pick === 'reject' }"
-							:aria-label="t('proofing_gallery', 'Reject')"
-							@click="mutate({ pick: stateFor(activeItem.id).pick === 'reject' ? 'none' : 'reject' })">
-							× {{ t('proofing_gallery', 'Reject') }}
-						</button>
+					<div class="culling-loupe__controls">
+						<div><strong>{{ activeItem.name }}</strong><small>{{ activeItem.relativePath }}</small></div>
+						<div class="culling-navigation" :aria-label="t('proofing_gallery', 'Photo navigation')">
+							<button type="button"
+								:disabled="activeIndex <= 0"
+								:aria-label="t('proofing_gallery', 'Previous photo')"
+								@click="moveActive(-1)">
+								←
+							</button>
+							<span>{{ activeIndex + 1 }} / {{ filteredItems.length }}</span>
+							<button type="button"
+								:disabled="activeIndex >= filteredItems.length - 1"
+								:aria-label="t('proofing_gallery', 'Next photo')"
+								@click="moveActive(1)">
+								→
+							</button>
+						</div>
+						<div class="rating-buttons" :aria-label="t('proofing_gallery', 'Set rating')">
+							<button v-for="rating in 6"
+								:key="rating - 1"
+								type="button"
+								:class="{ active: stateFor(activeItem.id).rating === rating - 1 }"
+								:aria-label="t('proofing_gallery', '{rating} stars', { rating: rating - 1 })"
+								@click="mutate({ rating: rating - 1 })">
+								{{ rating - 1 || '–' }}<span v-if="rating > 1">★</span>
+							</button>
+						</div>
+						<div class="decision-buttons">
+							<button type="button"
+								:class="{ active: stateFor(activeItem.id).pick === 'pick' }"
+								:aria-label="t('proofing_gallery', 'Pick')"
+								@click="mutate({ pick: stateFor(activeItem.id).pick === 'pick' ? 'none' : 'pick' })">
+								✓ {{ t('proofing_gallery', 'Pick') }}
+							</button><button type="button"
+								:class="{ active: stateFor(activeItem.id).pick === 'reject' }"
+								:aria-label="t('proofing_gallery', 'Reject')"
+								@click="mutate({ pick: stateFor(activeItem.id).pick === 'reject' ? 'none' : 'reject' })">
+								× {{ t('proofing_gallery', 'Reject') }}
+							</button>
+						</div>
+						<div class="color-buttons" :aria-label="t('proofing_gallery', 'Set color label')">
+							<button v-for="color in colors"
+								:key="color.value"
+								type="button"
+								:class="[`color-${color.value}`, { active: stateFor(activeItem.id).color === color.value }]"
+								:aria-label="color.label"
+								@click="mutate({ color: color.value })" />
+						</div>
 					</div>
-					<div class="color-buttons" :aria-label="t('proofing_gallery', 'Set color label')">
-						<button v-for="color in colors"
-							:key="color.value"
-							type="button"
-							:class="[`color-${color.value}`, { active: stateFor(activeItem.id).color === color.value }]"
-							:aria-label="color.label"
-							@click="mutate({ color: color.value })" />
-					</div>
-				</div>
-			</section>
+				</section>
+				<CullingFilmstrip
+					:items="filteredItems"
+					:states="states"
+					:active-id="activeId"
+					:selected-ids="selectedIds"
+					:placement="effectiveFilmstripPlacement"
+					:preview-url="fileId => ownerPreviewUrl(gallery.id, fileId, 360, 260)"
+					:has-more="cursor !== null"
+					:loading-more="loadingMore"
+					@focus="select"
+					@select="toggleSelected"
+					@load-more="loadPage(false)" />
+			</div>
 
 			<div class="culling-selection">
 				<span>{{ t('proofing_gallery', '{visible} visible · {loaded} of {total} loaded', { visible: filteredItems.length, loaded: items.length, total }) }}</span><span v-if="selectedIds.length">{{ t('proofing_gallery', '{count} selected', { count: selectedIds.length }) }} <button type="button" @click="selectedIds = []">{{ t('proofing_gallery', 'Clear') }}</button></span>
 			</div>
-			<VirtualMediaGrid class="culling-grid"
-				:items="filteredItems"
-				contained
-				:min-item-width="150"
-				:item-extra-height="46"
-				:has-more="cursor !== null"
-				:loading-more="loadingMore"
-				@load-more="loadPage(false)">
-				<template #default="{ item }">
-					<article class="cull-card" :class="[{ 'cull-card--active': activeId === item.id, 'cull-card--selected': selectedIds.includes(item.id) }, `cull-card--${stateFor(item.id).pick}`]">
-						<button type="button"
-							class="cull-card__open"
-							:aria-label="t('proofing_gallery', 'Focus {name}', { name: item.name })"
-							@click="select(item, $event.shiftKey)">
-							<ProgressiveImage :src="ownerPreviewUrl(gallery.id, item.id, 360, 260)" :alt="item.name" />
-						</button>
-						<button type="button"
-							class="cull-card__select"
-							:aria-pressed="selectedIds.includes(item.id)"
-							:aria-label="t('proofing_gallery', 'Select {name}', { name: item.name })"
-							@click="toggleSelected(item.id)">
-							{{ selectedIds.includes(item.id) ? '✓' : '+' }}
-						</button>
-						<span class="cull-card__rating">{{ stateFor(item.id).rating ? `${stateFor(item.id).rating} ★` : '—' }}</span><i :class="`color-${stateFor(item.id).color}`" /><strong>{{ item.name }}</strong>
-					</article>
-				</template>
-			</VirtualMediaGrid>
 			<div v-if="loadingMore" class="culling-status culling-status--more">
 				<NcLoadingIcon :size="20" /> {{ t('proofing_gallery', 'Loading more photographs…') }}
 			</div>

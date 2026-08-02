@@ -18,7 +18,7 @@ use OCA\ProofingGallery\Dto\Settings\SecuritySettings;
 use OCA\ProofingGallery\Dto\Settings\SettingsInput;
 
 final class GallerySettings implements JsonSerializable {
-	public const SCHEMA_VERSION = 5;
+	public const SCHEMA_VERSION = 6;
 	public const PUBLIC_METADATA_FIELDS = MetadataSettings::PUBLIC_FIELDS;
 
 	private function __construct(
@@ -62,7 +62,19 @@ final class GallerySettings implements JsonSerializable {
 		if (array_key_exists('allowDownloads', $input)) $delivery['downloadScope'] = SettingsInput::bool($input['allowDownloads'], 'allowDownloads') ? 'all' : 'none';
 		if (array_key_exists('allowGuestUploads', $input)) $delivery['guestUploads'] = SettingsInput::bool($input['allowGuestUploads'], 'allowGuestUploads');
 		if (array_key_exists('showFilenames', $input)) $presentation['showFilenames'] = SettingsInput::bool($input['showFilenames'], 'showFilenames');
+		if ($openerProvided && !in_array($presentation['openerStyle'] ?? null, ['minimal', 'compact', 'cinematic'], true)) {
+			throw new InvalidArgumentException('Invalid presentation.openerStyle');
+		}
 		if (!$openerProvided && $heroProvided && ($presentation['heroFileId'] ?? null) !== null) $presentation['openerStyle'] = 'cinematic';
+		$schemaVersion = is_int($input['schemaVersion'] ?? null) ? $input['schemaVersion'] : null;
+		if (($schemaVersion !== null && $schemaVersion < self::SCHEMA_VERSION)
+			|| ($schemaVersion === null && array_key_exists('appearance', $input))) {
+			$presentation['openerStyle'] = 'cinematic';
+			$presentation['fontPreset'] = 'modern';
+			$presentation['showTitle'] = true;
+			$presentation['showMediaCount'] = true;
+			$presentation['titleSize'] = 'medium';
+		}
 
 		try {
 			$mode = GalleryMode::from(SettingsInput::string($input['mode'] ?? GalleryMode::Presentation->value, 'mode'));

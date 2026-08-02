@@ -10,8 +10,13 @@ describe('createDefaultGallerySettings', () => {
 			allowDownloads: false,
 			allowGuestUploads: false,
 			appearance: {
-				openerStyle: 'compact',
+				openerStyle: 'cinematic',
+				fontPreset: 'modern',
+				showTitle: true,
+				showMediaCount: true,
+				titleSize: 'medium',
 			},
+			schemaVersion: 6,
 		})
 	})
 

@@ -26,6 +26,9 @@ final class PresentationSettings implements JsonSerializable {
 		public readonly string $tileGap,
 		public readonly string $tileRadius,
 		public readonly string $titleAlignment,
+		public readonly bool $showTitle,
+		public readonly bool $showMediaCount,
+		public readonly string $titleSize,
 		public readonly bool $showFilenames,
 		public readonly int $slideshowInterval,
 	) {
@@ -35,9 +38,10 @@ final class PresentationSettings implements JsonSerializable {
 	public static function defaults(): array {
 		return [
 			'accentColor' => '#1f6f8b', 'welcomeMessage' => '', 'logoFileId' => null, 'instanceLogoAssetId' => null, 'heroFileId' => null,
-			'openerStyle' => 'compact', 'heroFocusX' => 50, 'heroFocusY' => 50, 'fontPreset' => 'system',
+			'openerStyle' => 'cinematic', 'heroFocusX' => 50, 'heroFocusY' => 50, 'fontPreset' => 'modern',
 			'watermarkText' => '', 'watermarkOpacity' => 24, 'theme' => 'dark', 'layout' => 'grid',
 			'tileSize' => 'medium', 'tileGap' => 'normal', 'tileRadius' => 'soft', 'titleAlignment' => 'left',
+			'showTitle' => true, 'showMediaCount' => true, 'titleSize' => 'medium',
 			'showFilenames' => true, 'slideshowInterval' => 5,
 		];
 	}
@@ -64,7 +68,7 @@ final class PresentationSettings implements JsonSerializable {
 			$accent, $welcome,
 			SettingsInput::nullableInt($value['logoFileId'], 'presentation.logoFileId'), $asset,
 			SettingsInput::nullableInt($value['heroFileId'], 'presentation.heroFileId'),
-			SettingsInput::choice($value['openerStyle'], 'presentation.openerStyle', ['compact', 'cinematic']),
+			SettingsInput::choice($value['openerStyle'], 'presentation.openerStyle', ['minimal', 'compact', 'cinematic']),
 			$x, $y, SettingsInput::choice($value['fontPreset'], 'presentation.fontPreset', ['system', 'editorial', 'modern']),
 			$watermark, $opacity, SettingsInput::choice($value['theme'], 'presentation.theme', ['auto', 'light', 'dark']),
 			SettingsInput::choice($value['layout'], 'presentation.layout', ['grid', 'masonry', 'list']),
@@ -72,6 +76,9 @@ final class PresentationSettings implements JsonSerializable {
 			SettingsInput::choice($value['tileGap'], 'presentation.tileGap', ['tight', 'normal', 'wide']),
 			SettingsInput::choice($value['tileRadius'], 'presentation.tileRadius', ['square', 'soft']),
 			SettingsInput::choice($value['titleAlignment'], 'presentation.titleAlignment', ['left', 'center']),
+			SettingsInput::bool($value['showTitle'], 'presentation.showTitle'),
+			SettingsInput::bool($value['showMediaCount'], 'presentation.showMediaCount'),
+			SettingsInput::choice($value['titleSize'], 'presentation.titleSize', ['small', 'medium', 'large']),
 			SettingsInput::bool($value['showFilenames'], 'presentation.showFilenames'), $interval,
 		);
 	}

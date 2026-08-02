@@ -1,0 +1,83 @@
+.culling-filmstrip {
+	position: relative;
+	min-width: 0;
+	min-height: 0;
+	overflow: auto;
+	overscroll-behavior: contain;
+	background: #101216;
+	scrollbar-color: #50545d #17191f;
+	scrollbar-width: thin;
+}
+
+.culling-filmstrip--side {
+	height: 100%;
+	border-inline-start: 1px solid #30333b;
+}
+
+.culling-filmstrip--bottom {
+	width: 100%;
+	height: 112px;
+	border-block-start: 1px solid #30333b;
+}
+
+.culling-filmstrip__track { position: relative; min-width: 100%; min-height: 100%; }
+
+.filmstrip-item {
+	position: absolute;
+	box-sizing: border-box;
+	padding: 4px;
+}
+
+.culling-filmstrip--side .filmstrip-item { inset: 0 0 auto; width: 100%; }
+
+.culling-filmstrip--bottom .filmstrip-item { inset: 0 auto 0 0; height: 100%; }
+
+.filmstrip-item__focus {
+	position: relative;
+	display: block;
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	padding: 0;
+	border: 2px solid transparent;
+	border-radius: 5px;
+	background: #202329;
+	cursor: pointer;
+}
+
+.filmstrip-item__focus :deep(.progressive-image img) { object-fit: cover; }
+
+.filmstrip-item--reject .filmstrip-item__focus { opacity: .42; }
+
+.filmstrip-item--active .filmstrip-item__focus { border-color: #fff; box-shadow: 0 0 0 2px #627dff; }
+
+.filmstrip-item--selected .filmstrip-item__focus { box-shadow: inset 0 0 0 2px #9b82ff; }
+
+.filmstrip-item__focus span {
+	position: absolute;
+	inset: 5px auto auto 5px;
+	padding: 2px 4px;
+	border-radius: 3px;
+	background: rgb(8 9 12 / 78%);
+	color: #fff;
+	font-size: 10px;
+}
+
+.filmstrip-item__focus i { position: absolute; inset: auto 5px 5px auto; width: 8px; height: 8px; border-radius: 50%; }
+
+.filmstrip-item__select {
+	position: absolute;
+	inset: 8px 8px auto auto;
+	display: grid;
+	width: 24px;
+	height: 24px;
+	place-items: center;
+	padding: 0;
+	border: 1px solid rgb(255 255 255 / 65%);
+	border-radius: 50%;
+	background: rgb(8 9 12 / 72%);
+	color: #fff;
+	cursor: pointer;
+}
+
+.filmstrip-item button:focus-visible { outline: 3px solid #8ea2ff; outline-offset: -3px; }

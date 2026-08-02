@@ -35,10 +35,12 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{ 'load-more': [] }>()
 const root = ref<HTMLDivElement | null>(null)
+const loadSentinel = ref<HTMLSpanElement | null>(null)
 const width = ref(1000)
 const viewportWidth = ref(1000)
 const scrollMargin = ref(0)
 let observer: ResizeObserver | undefined
+let loadObserver: IntersectionObserver | undefined
 
 const layout = computed(() => calculateMediaGridLayout({
 	containerWidth: width.value,
@@ -73,13 +75,14 @@ const virtualizer = computed(() => props.contained ? elementVirtualizer.value : 
 
 const virtualRows = computed(() => virtualizer.value.getVirtualItems())
 const renderedRows = computed(() => {
-	const visible = virtualRows.value.map(row => ({ index: row.index, key: row.key }))
+	const visible = virtualRows.value.map(row => ({ index: row.index, key: row.key, start: row.start }))
 	if (visible.length > 0 || rows.value === 0) return visible
 	// Resize/scroll observers can be delayed in a newly revealed iframe. Keep the
 	// first viewport useful until the virtualizer publishes its initial range.
 	return Array.from({ length: Math.min(rows.value, 6) }, (_, index) => ({
 		index,
 		key: `initial:${columns.value}:${Math.round(rowHeight.value)}:${index}`,
+		start: (props.contained ? 0 : scrollMargin.value) + index * (rowHeight.value + props.gap),
 	}))
 })
 const totalHeight = computed(() => layout.value.totalHeight)
@@ -100,6 +103,17 @@ function measure() {
 	virtualizer.value.measure()
 }
 
+function rowOffset(start: number): number {
+	return start - (props.contained ? 0 : scrollMargin.value)
+}
+
+function scrollToIndex(index: number, behavior: ScrollBehavior = 'auto') {
+	const row = Math.floor(Math.max(0, index) / columns.value)
+	virtualizer.value.scrollToIndex(row, { align: 'auto', behavior })
+}
+
+defineExpose({ scrollToIndex, measure })
+
 watch(virtualRows, rowsInView => {
 	const last = rowsInView.at(-1)?.index ?? -1
 	if (props.hasMore && !props.loadingMore && last >= rows.value - 3) emit('load-more')
@@ -109,12 +123,27 @@ watch([columns, rowHeight, () => props.items.length], () => nextTick(measure))
 onMounted(() => {
 	measure()
 	observer = new ResizeObserver(measure)
-	if (root.value) observer.observe(root.value)
+	if (root.value) {
+		observer.observe(root.value)
+		if (root.value.parentElement) observer.observe(root.value.parentElement)
+	}
+	if (typeof IntersectionObserver !== 'undefined') {
+		loadObserver = new IntersectionObserver(entries => {
+			if (entries.some(entry => entry.isIntersecting) && props.hasMore && !props.loadingMore) emit('load-more')
+		}, {
+			root: props.contained ? root.value : null,
+			rootMargin: '600px',
+		})
+		if (loadSentinel.value) loadObserver.observe(loadSentinel.value)
+	}
 	window.addEventListener('resize', measure, { passive: true })
+	window.visualViewport?.addEventListener('resize', measure, { passive: true })
 })
 onBeforeUnmount(() => {
 	observer?.disconnect()
+	loadObserver?.disconnect()
 	window.removeEventListener('resize', measure)
+	window.visualViewport?.removeEventListener('resize', measure)
 })
 </script>
 
@@ -135,7 +164,7 @@ onBeforeUnmount(() => {
 					gap: `${gap}px`,
 					gridTemplateColumns: `repeat(${columns}, minmax(0, ${maxItemWidth === undefined ? '1fr' : `${maxItemWidth}px`}))`,
 					height: `${rowHeight}px`,
-					transform: `translateY(${virtualRow.index * (rowHeight + gap)}px)`,
+					transform: `translateY(${rowOffset(virtualRow.start)}px)`,
 				}">
 				<div
 					v-for="entry in itemsForRow(virtualRow.index)"
@@ -145,6 +174,7 @@ onBeforeUnmount(() => {
 					<slot :item="entry.item" :index="entry.index" />
 				</div>
 			</div>
+			<span ref="loadSentinel" class="virtual-media__sentinel" aria-hidden="true" />
 		</div>
 	</div>
 </template>
@@ -182,5 +212,12 @@ onBeforeUnmount(() => {
 .virtual-media__cell {
 	min-width: 0;
 	height: 100%;
+}
+
+.virtual-media__sentinel {
+	position: absolute;
+	inset: auto 0 0;
+	height: 1px;
+	pointer-events: none;
 }
 </style>

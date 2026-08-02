@@ -31,10 +31,13 @@ final class GallerySettingsTest extends TestCase {
 		self::assertFalse($settings['allowGuestUploads']);
 		self::assertCount(4, $settings['colorLabels']);
 		self::assertSame(50, $settings['appearance']['heroFocusX']);
-		self::assertSame('system', $settings['appearance']['fontPreset']);
-		self::assertSame('compact', $settings['appearance']['openerStyle']);
+		self::assertSame('modern', $settings['appearance']['fontPreset']);
+		self::assertSame('cinematic', $settings['appearance']['openerStyle']);
+		self::assertTrue($settings['appearance']['showTitle']);
+		self::assertTrue($settings['appearance']['showMediaCount']);
+		self::assertSame('medium', $settings['appearance']['titleSize']);
 		self::assertSame('auto', $settings['publicLocale']);
-		self::assertSame(5, $settings['schemaVersion']);
+		self::assertSame(6, $settings['schemaVersion']);
 		self::assertNull($settings['presentation']['instanceLogoAssetId']);
 		self::assertFalse($settings['lifecycle']['enabled']);
 		self::assertSame([], $settings['metadata']['publicFields']);
@@ -75,7 +78,8 @@ final class GallerySettingsTest extends TestCase {
 		self::assertSame('collaboration', $settings['mode']);
 		self::assertSame('#abcdef', $settings['appearance']['accentColor']);
 		self::assertSame(50, $settings['appearance']['heroFocusY']);
-		self::assertSame('compact', $settings['appearance']['openerStyle']);
+		self::assertSame('cinematic', $settings['appearance']['openerStyle']);
+		self::assertSame('modern', $settings['appearance']['fontPreset']);
 	}
 
 	public function testPreservesCinematicLegacyHeroIntent(): void {

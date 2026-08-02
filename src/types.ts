@@ -317,7 +317,7 @@ export type NotificationEventType = 'comment.created' | 'comment.updated' | 'sel
 	| 'like.changed' | 'color.changed' | 'upload.received' | 'upload.accepted' | 'upload.rejected'
 
 export interface UserPreferences {
-	schemaVersion: 2
+	schemaVersion: 3
 	defaultPurpose: GalleryPurpose | null
 	parentFolder: { id: number; name: string } | null
 	designPresetId: number | null
@@ -327,6 +327,7 @@ export interface UserPreferences {
 		email: { enabled: boolean; events: NotificationEventType[]; frequency: 'immediate' | 'daily' }
 	}
 	lifecycle: { enabled: boolean; trigger: 'fixed_date' | 'after_completion'; revokeAfterDays: number; archiveAfterDays: number }
+	cullingFilmstripPlacement: 'auto' | 'side' | 'bottom'
 	savedViews: Array<{
 		id: string
 		name: string

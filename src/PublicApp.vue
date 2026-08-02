@@ -5,6 +5,7 @@ import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, r
 
 import { calculateMediaGridLayout } from './domain/mediaGridLayout.ts'
 import type { CollaborationState, GuestIdentity, MediaItem, PublicGallery, PublicGalleryPage } from './publicTypes.ts'
+import PublicGalleryHeader from './components/PublicGalleryHeader.vue'
 
 const PublicLightbox = defineAsyncComponent(() => import('./components/PublicLightbox.vue'))
 const PublicUploadAction = defineAsyncComponent(() => import('./components/PublicUploadAction.vue'))
@@ -37,8 +38,15 @@ const pageStyle = computed(() => ({
 	'--gallery-accent': settings.value.appearance.accentColor,
 	'--hero-focus': `${settings.value.appearance.heroFocusX}% ${settings.value.appearance.heroFocusY}%`,
 }))
-const cinematicOpener = computed(() => settings.value.appearance.openerStyle === 'cinematic')
 const mediaItems = computed(() => items.value.filter(item => !item.folder))
+const headerHeroUrl = computed(() => settings.value.presentation.heroFileId
+	? assetUrl('hero')
+	: mediaItems.value.find(item => item.mimeType.startsWith('image/'))
+		? previewUrl(mediaItems.value.find(item => item.mimeType.startsWith('image/'))!, 1800, 1200)
+		: null)
+const headerLogoUrl = computed(() => settings.value.presentation.logoFileId || settings.value.presentation.instanceLogoAssetId
+	? assetUrl('logo')
+	: null)
 const activeIndex = ref<number | null>(null)
 const selectedIds = ref<number[]>([])
 let collaborationTimer: number | undefined
@@ -473,7 +481,6 @@ function upOneLevel() {
 	<main
 		class="public-gallery"
 		:class="[
-			`public-gallery--font-${settings.appearance.fontPreset}`,
 			`public-gallery--theme-${settings.presentation?.theme ?? settings.appearance.theme ?? 'dark'}`,
 			`public-gallery--layout-${layout}`,
 			`public-gallery--tiles-${settings.presentation?.tileSize ?? settings.appearance.tileSize ?? 'medium'}`,
@@ -481,37 +488,12 @@ function upOneLevel() {
 			`public-gallery--radius-${settings.presentation?.tileRadius ?? settings.appearance.tileRadius ?? 'soft'}`,
 		]"
 		:style="pageStyle">
-		<header class="public-gallery__topbar">
-			<img
-				v-if="settings.appearance.logoFileId || settings.appearance.instanceLogoAssetId"
-				class="public-gallery__logo"
-				:src="assetUrl('logo')"
-				:alt="t('proofing_gallery', 'Gallery logo')">
-			<span v-else class="public-gallery__wordmark">Proofing Gallery</span>
-			<span class="public-gallery__mode">
-				{{ settings.mode === 'collaboration'
-					? t('proofing_gallery', 'Proofing')
-					: t('proofing_gallery', 'Gallery') }}
-			</span>
-		</header>
-
-		<section
-			class="public-gallery__hero"
-			:class="{
-				'public-gallery__hero--image': settings.appearance.heroFileId,
-				'public-gallery__hero--cinematic': cinematicOpener,
-			}"
-			:style="settings.appearance.heroFileId ? { backgroundImage: `url(${assetUrl('hero')})` } : undefined">
-			<div :class="`public-gallery__hero-copy--${settings.presentation?.titleAlignment ?? settings.appearance.titleAlignment ?? 'left'}`">
-				<span class="public-gallery__hero-count" aria-hidden="true">№ {{ total }}</span>
-				<h2 class="public-gallery__title">
-					{{ title }}
-				</h2>
-				<p v-if="settings.appearance.welcomeMessage" class="public-gallery__welcome">
-					{{ settings.appearance.welcomeMessage }}
-				</p>
-			</div>
-		</section>
+		<PublicGalleryHeader
+			:title="title"
+			:total="total"
+			:settings="settings"
+			:logo-url="headerLogoUrl"
+			:hero-url="headerHeroUrl" />
 
 		<section class="public-gallery__content" :aria-busy="loading">
 			<div v-if="settings.mode === 'collaboration' && guest" class="guest-identity">

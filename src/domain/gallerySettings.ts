@@ -7,7 +7,7 @@ export interface GalleryAppearance {
 	logoFileId: number | null
 	instanceLogoAssetId: string | null
 	heroFileId: number | null
-	openerStyle: 'compact' | 'cinematic'
+	openerStyle: 'minimal' | 'compact' | 'cinematic'
 	heroFocusX: number
 	heroFocusY: number
 	fontPreset: 'system' | 'editorial' | 'modern'
@@ -22,12 +22,15 @@ export interface GalleryPresentation extends GalleryAppearance {
 	tileGap: 'tight' | 'normal' | 'wide'
 	tileRadius: 'square' | 'soft'
 	titleAlignment: 'left' | 'center'
+	showTitle: boolean
+	showMediaCount: boolean
+	titleSize: 'small' | 'medium' | 'large'
 	showFilenames: boolean
 	slideshowInterval: number
 }
 
 export interface GallerySettings {
-	schemaVersion?: 5
+	schemaVersion?: 6
 	mode: GalleryMode
 	feedbackVisibility: FeedbackVisibility
 	allowDownloads: boolean
@@ -86,7 +89,7 @@ export type CanonicalGallerySettings = Pick<GallerySettings,
 
 export function canonicalGallerySettings(settings: GallerySettings): CanonicalGallerySettings {
 	return {
-		schemaVersion: 5,
+		schemaVersion: 6,
 		mode: settings.mode,
 		publicLocale: settings.publicLocale,
 		review: structuredClone(settings.review),
@@ -113,10 +116,10 @@ export function createDefaultGallerySettings(): GallerySettings {
 		logoFileId: null,
 		instanceLogoAssetId: null,
 		heroFileId: null,
-		openerStyle: 'compact',
+		openerStyle: 'cinematic',
 		heroFocusX: 50,
 		heroFocusY: 50,
-		fontPreset: 'system',
+		fontPreset: 'modern',
 		watermarkText: '',
 		watermarkOpacity: 24,
 		theme: 'dark',
@@ -125,11 +128,14 @@ export function createDefaultGallerySettings(): GallerySettings {
 		tileGap: 'normal',
 		tileRadius: 'soft',
 		titleAlignment: 'left',
+		showTitle: true,
+		showMediaCount: true,
+		titleSize: 'medium',
 		showFilenames: true,
 		slideshowInterval: 5,
 	}
 	return {
-		schemaVersion: 5,
+		schemaVersion: 6,
 		mode: 'presentation',
 		feedbackVisibility: 'collaborative',
 		allowDownloads: false,

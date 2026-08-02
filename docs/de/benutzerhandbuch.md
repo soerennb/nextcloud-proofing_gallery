@@ -25,9 +25,10 @@ Der Arbeitsbereich ist nach Aufgaben gegliedert:
 - **Fotos** verwaltet Ordnerinhalt, Uploads, Metadaten und Sammlungen.
 - **Auswahl** bietet Bewertungen, Picks, Ablehnungen, Farblabel, gespeicherte
   Ansichten und eine ausdrücklich ausgelöste XMP-Synchronisation.
-- **Stil** steuert Einstieg, Layout, Theme, Typografie, Logo, Titelbild,
-  Akzentfarbe, Begrüßung, Metadaten und Vorschau-Wasserzeichen. Originale
-  werden niemals mit einem Wasserzeichen verändert.
+- **Stil** steuert Einstieg, Sichtbarkeit und Größe des Titels, Sichtbarkeit
+  der Fotoanzahl, Titelschrift, Layout, Theme, Logo, Titelbild, Akzentfarbe,
+  Begrüßung, Metadaten und Vorschau-Wasserzeichen. Originale werden niemals
+  mit einem Wasserzeichen verändert.
 - **Ausliefern** erzeugt voneinander unabhängige öffentliche Links.
 - **Ergebnisse** enthält Feedback, Kundenauswahlen, Exporte und Upload-Prüfung.
 - **Verlauf** protokolliert relevante Galerieereignisse.
@@ -40,7 +41,9 @@ Galerie verändert, lade den aktuellen Stand, statt ihn unbemerkt zu überschrei
 Die Sichtung ist per Tastatur bedienbar. Pfeiltasten wechseln das Bild, 0–5
 setzt die Bewertung, **P** schaltet Pick, **X** Ablehnung, Leertaste die Auswahl
 und Strg/Befehl+Z nimmt den letzten Stapel zurück. Benannte Ansichten speichern
-Filter und Sortierung im Nextcloud-Konto.
+Filter und Sortierung im Nextcloud-Konto. Der virtualisierte Filmstreifen bleibt
+im Arbeitsbereich sichtbar und kann automatisch, rechts oder unten angeordnet
+werden; die Wahl folgt dem Nextcloud-Konto über Geräte hinweg.
 
 Bewertungen in der App bleiben von XMP getrennt, bis du eine Synchronisation
 ausdrücklich prüfst und ausführst. Gleichzeitige Änderungen an Original oder

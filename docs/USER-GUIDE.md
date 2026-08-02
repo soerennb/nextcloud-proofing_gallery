@@ -9,10 +9,12 @@
    - **Plan** shows the source folder, media count, gallery mode, and a
      preview of the files clients will see.
    - **Photos** manages files and folder-backed delivery content.
-   - **Cull** provides ratings, picks/rejects, color labels, saved views, client
-     rating signals, and explicit XMP synchronization.
-   - **Style** controls title, opener, typography, colors, logo, cover, and
-     preview watermarking. Watermarks never alter originals.
+   - **Cull** provides ratings, picks/rejects, color labels, saved views, a
+     persistent side/bottom filmstrip, client rating signals, and explicit XMP
+     synchronization.
+   - **Style** controls title visibility and size, header count, opener,
+     typography, colors, logo, cover, and preview watermarking. Watermarks never
+     alter originals.
    - **Deliver** publishes one or more independently configured client links.
    - **Results** controls review visibility, workflow labels, uploads, and the
      moderation inbox.

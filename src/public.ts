@@ -1,6 +1,8 @@
 import { loadState } from '@nextcloud/initial-state'
 import { register, setLanguage, setLocale, unregister } from '@nextcloud/l10n'
 import { createApp } from 'vue'
+import '@fontsource-variable/manrope/wght.css'
+import '@fontsource-variable/newsreader/wght.css'
 import './public-shell.css'
 
 import PublicApp from './PublicApp.vue'

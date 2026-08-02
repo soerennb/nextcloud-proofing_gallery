@@ -624,10 +624,19 @@ onBeforeUnmount(() => {
 						<label class="select-field">
 							<span>{{ t('proofing_gallery', 'Opening') }}</span>
 							<select v-model="draft.settings.presentation.openerStyle" name="openerStyle">
+								<option value="minimal">{{ t('proofing_gallery', 'Minimal introduction') }}</option>
 								<option value="compact">{{ t('proofing_gallery', 'Compact, media first') }}</option>
 								<option value="cinematic">{{ t('proofing_gallery', 'Cinematic cover') }}</option>
 							</select>
 						</label>
+						<div class="header-visibility">
+							<NcCheckboxRadioSwitch v-model="draft.settings.presentation.showTitle" type="switch">
+								{{ t('proofing_gallery', 'Show title in header') }}
+							</NcCheckboxRadioSwitch>
+							<NcCheckboxRadioSwitch v-model="draft.settings.presentation.showMediaCount" type="switch">
+								{{ t('proofing_gallery', 'Show photo count in header') }}
+							</NcCheckboxRadioSwitch>
+						</div>
 						<NcCheckboxRadioSwitch v-model="draft.settings.presentation.showFilenames" type="switch">
 							{{ t('proofing_gallery', 'Show filenames') }}
 						</NcCheckboxRadioSwitch>
@@ -726,11 +735,19 @@ onBeforeUnmount(() => {
 							</div>
 						</div>
 						<label class="select-field">
-							<span>{{ t('proofing_gallery', 'Typography') }}</span>
+							<span>{{ t('proofing_gallery', 'Title typeface') }}</span>
 							<select v-model="draft.settings.presentation.fontPreset" name="fontPreset">
 								<option value="system">{{ t('proofing_gallery', 'System') }}</option>
-								<option value="editorial">{{ t('proofing_gallery', 'Editorial') }}</option>
-								<option value="modern">{{ t('proofing_gallery', 'Modern') }}</option>
+								<option value="editorial">{{ t('proofing_gallery', 'Editorial serif') }}</option>
+								<option value="modern">{{ t('proofing_gallery', 'Studio sans') }}</option>
+							</select>
+						</label>
+						<label class="select-field">
+							<span>{{ t('proofing_gallery', 'Title size') }}</span>
+							<select v-model="draft.settings.presentation.titleSize" name="titleSize">
+								<option value="small">{{ t('proofing_gallery', 'Restrained') }}</option>
+								<option value="medium">{{ t('proofing_gallery', 'Standard') }}</option>
+								<option value="large">{{ t('proofing_gallery', 'Statement') }}</option>
 							</select>
 						</label>
 						<div v-if="draft.settings.presentation.heroFileId" class="range-fields">
@@ -769,7 +786,6 @@ onBeforeUnmount(() => {
 						:settings="draft.settings"
 						:media="previewMedia"
 						:expanded="designPreviewOpen"
-						:revision="serverRevision"
 						@close="designPreviewOpen = false" />
 				</section>
 

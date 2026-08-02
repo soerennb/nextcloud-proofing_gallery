@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.6.0 — 2026-08-02
+
+- redesign public galleries as immersive, mobile-first presentations with
+  configurable title visibility, photo count, title sizing, and local modern or
+  editorial typefaces
+- add minimal, compact, and cinematic openers plus an immediate desktop and
+  phone live preview for unpublished design changes
+- migrate existing galleries to the new modern presentation defaults while
+  retaining validated settings compatibility
+- keep every photo reachable in narrow one-column galleries with corrected
+  window virtualization, resize measurement, and independent pagination
+- reshape owner culling around a viewport-bound, virtualized Lightroom-style
+  filmstrip that adapts between the right side and bottom placement
+- persist each photographer's filmstrip preference across devices and add
+  focused previous/next navigation with automatic active-thumbnail tracking
+
 ## 0.5.1 — 2026-08-02
 
 - fix SPDX SBOM generation for release archives

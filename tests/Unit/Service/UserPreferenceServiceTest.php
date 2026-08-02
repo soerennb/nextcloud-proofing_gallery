@@ -14,6 +14,8 @@ final class UserPreferenceServiceTest extends TestCase {
 
 		self::assertFalse($preferences['notifications']['email']['enabled']);
 		self::assertTrue($preferences['notifications']['nextcloud']['enabled']);
+		self::assertSame(3, $preferences['schemaVersion']);
+		self::assertSame('auto', $preferences['cullingFilmstripPlacement']);
 	}
 
 	public function testPreferencesPersistAcrossDevicesAndFilterUnknownEvents(): void {
@@ -52,6 +54,23 @@ final class UserPreferenceServiceTest extends TestCase {
 	public function testUnknownPreferenceIsRejected(): void {
 		$this->expectException(\InvalidArgumentException::class);
 		(new UserPreferenceService($this->createMock(IConfig::class)))->save('user', ['trackingPixel' => true]);
+	}
+
+	public function testCullingFilmstripPlacementPersistsAcrossDevices(): void {
+		$stored = '';
+		$config = $this->createMock(IConfig::class);
+		$config->method('getUserValue')->willReturnCallback(
+			static function (string $user, string $app, string $key, string $default) use (&$stored): string {
+				return $stored === '' ? $default : $stored;
+			},
+		);
+		$config->method('setUserValue')->willReturnCallback(
+			static function (string $user, string $app, string $key, string $value) use (&$stored): void { $stored = $value; },
+		);
+		$service = new UserPreferenceService($config);
+
+		self::assertSame('side', $service->save('photographer', ['cullingFilmstripPlacement' => 'side'])['cullingFilmstripPlacement']);
+		self::assertSame('side', $service->get('photographer')['cullingFilmstripPlacement']);
 	}
 
 	public function testUnknownNotificationChannelPreferenceIsRejected(): void {

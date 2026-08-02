@@ -34,7 +34,9 @@ async function eagerGzipSize(entry) {
 }
 const initialGzipSize = await eagerGzipSize(main)
 const publicGzipSize = await eagerGzipSize(publicEntry)
-const publicGzipBudget = 55 * 1024
+// The shared, customizable gallery header adds a small eager component while
+// keeping the cover visible without an asynchronous above-the-fold render.
+const publicGzipBudget = 57 * 1024
 
 if (rawSize > rawBudget) {
 	throw new Error(`Owner entry ${rawSize} bytes exceeds ${rawBudget}-byte raw budget`)

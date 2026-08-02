@@ -23,8 +23,9 @@ The gallery workspace separates the common tasks:
 - **Photos** manages folder content, uploads, metadata, and collections.
 - **Cull** provides ratings, picks, rejects, color labels, saved views, and
   explicit XMP synchronization.
-- **Style** controls the opener, layout, theme, typography, logo, cover, accent,
-  welcome text, metadata, and preview watermark. Originals are never watermarked.
+- **Style** controls the opener, title visibility and size, photo-count
+  visibility, title typeface, layout, theme, logo, cover, accent, welcome text,
+  metadata, and preview watermark. Originals are never watermarked.
 - **Deliver** creates independently configured public links.
 - **Results** contains feedback, client selections, exports, and upload moderation.
 - **History** records relevant gallery activity.
@@ -37,7 +38,9 @@ same gallery, reload the current state instead of overwriting it blindly.
 The culling view is keyboard friendly. Arrow keys move between images, number
 keys 0–5 set ratings, **P** toggles pick, **X** toggles reject, Space selects,
 and Ctrl/Command+Z undoes the most recent batch. Named views store filters and
-sort order in your Nextcloud account.
+sort order in your Nextcloud account. The virtualized filmstrip remains in the
+workspace viewport and can be placed automatically, on the right, or below;
+the choice follows your Nextcloud account across devices.
 
 App culling values remain separate from XMP until you explicitly preview and
 apply an XMP synchronization. Concurrent changes to the source or sidecar stop
