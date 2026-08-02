@@ -232,7 +232,18 @@ export async function fetchMediaCulling(id: number, fileIds: number[]): Promise<
 }
 
 export async function updateMediaCulling(id: number, items: Array<MediaCull & { expectedRevision: number }>): Promise<MediaCull[]> {
-	const { data } = await axios.put<{ items: MediaCull[] }>(`${galleriesUrl}/${id}/media/cull`, { items })
+	const payload = items.map(({ fileId, rating, color, pick, expectedRevision }) => ({
+		fileId,
+		rating,
+		color,
+		pick,
+		expectedRevision,
+	}))
+	const { data } = await axios.put<{ items: MediaCull[] }>(
+		`${galleriesUrl}/${id}/media/cull`,
+		{ items: payload },
+		{ headers: { 'Content-Type': 'application/json' } },
+	)
 	return data.items
 }
 
