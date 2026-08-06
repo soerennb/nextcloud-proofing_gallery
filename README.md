@@ -95,9 +95,10 @@ make verify-package
 ```
 
 The reproducible unsigned artifact is written to
-`build/artifacts/appstore/proofing_gallery.tar.gz`. It is ready for the standard
-Nextcloud code-signing and App Store upload process; signing credentials are
-deliberately not stored in this repository.
+`build/artifacts/appstore/proofing_gallery.tar.gz`. Signing credentials are
+deliberately not stored in this repository. Maintainers should follow the
+[App Store publishing runbook](docs/APPSTORE-PUBLISHING.md) for certificate
+registration, signed package verification, and protected release automation.
 
 ### Install a GitHub release
 
@@ -113,8 +114,9 @@ tar -xzf proofing_gallery.tar.gz -C /path/to/nextcloud/custom_apps
 sudo -u www-data php /path/to/nextcloud/occ app:enable proofing_gallery
 ```
 
-The GitHub artifact is reproducible but is not yet a Nextcloud App Store signed
-package. App Store publication and its Nextcloud certificate are a later step.
+Starting with the first App Store release, the protected release workflow
+publishes the reproducible, Nextcloud-signed package to both GitHub and the
+Nextcloud App Store.
 
 ## Documentation
 
@@ -124,6 +126,7 @@ package. App Store publication and its Nextcloud certificate are a later step.
 - [English administrator guide](docs/en/admin-guide.md)
 - [German administrator guide](docs/de/administrationshandbuch.md)
 - [Development guide](docs/DEVELOPMENT.md)
+- [App Store publishing](docs/APPSTORE-PUBLISHING.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Operations](docs/OPERATIONS.md)
 - [Privacy and security](docs/PRIVACY.md)

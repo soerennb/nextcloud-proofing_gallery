@@ -24,7 +24,7 @@ else
 			previous_version="${candidate_version}"
 			break
 		fi
-	done < <(git -C "${repo_dir}" rev-list HEAD -- appinfo/info.xml)
+	done < <(git -C "${repo_dir}" tag --merged HEAD --sort=-version:refname --list 'v[0-9]*')
 fi
 
 if [[ -z "${upgrade_from_ref}" || "${previous_version}" == "${expected_version}" ]]; then
@@ -59,24 +59,52 @@ compose exec -T --user www-data sqlite php occ app:enable proofing_gallery
 compose exec -T --user www-data sqlite php -r '
 	require "/var/www/html/lib/base.php";
 	$db = \OC::$server->get(\OCP\IDBConnection::class);
-	$q = $db->getQueryBuilder();
 	$now = time();
-	$q->insert("proofing_galleries")->values([
-		"owner_uid" => $q->createNamedParameter("admin"),
-		"folder_id" => $q->createNamedParameter(1, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
-		"source_type" => $q->createNamedParameter("folder"),
-		"title" => $q->createNamedParameter("Upgrade sentinel"),
-		"slug" => $q->createNamedParameter("upgrade-sentinel"),
-		"status" => $q->createNamedParameter("draft"),
-		"settings" => $q->createNamedParameter("{}"),
-		"share_token" => $q->createNamedParameter("upgrade-sentinel-token"),
+	$insertGallery = static function (string $slug, string $token, string $status, ?int $archivedAt) use ($db, $now): int {
+		$q = $db->getQueryBuilder();
+		$q->insert("proofing_galleries")->values([
+			"owner_uid" => $q->createNamedParameter("admin"),
+			"folder_id" => $q->createNamedParameter(1, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
+			"source_type" => $q->createNamedParameter("folder"),
+			"title" => $q->createNamedParameter("Upgrade sentinel"),
+			"slug" => $q->createNamedParameter($slug),
+			"status" => $q->createNamedParameter($status),
+			"settings" => $q->createNamedParameter("{}"),
+			"share_token" => $q->createNamedParameter($token),
+			"created_at" => $q->createNamedParameter($now, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
+			"updated_at" => $q->createNamedParameter($now, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
+			"archived_at" => $q->createNamedParameter($archivedAt, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
+		])->executeStatement();
+		$find = $db->getQueryBuilder();
+		return (int)$find->select("id")->from("proofing_galleries")
+			->where($find->expr()->eq("slug", $find->createNamedParameter($slug)))
+			->executeQuery()->fetchOne();
+	};
+	$insertGallery("upgrade-active", "upgrade-active-token", "draft", null);
+	$insertGallery("upgrade-archived", "upgrade-archived-token", "archived", $now);
+	$existingId = $insertGallery("upgrade-existing", "upgrade-existing-token", "published", null);
+	$q = $db->getQueryBuilder();
+	$q->insert("proofing_public_links")->values([
+		"gallery_id" => $q->createNamedParameter($existingId, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
+		"core_share_id" => $q->createNamedParameter(null, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
+		"token" => $q->createNamedParameter("upgrade-existing-token"),
+		"name" => $q->createNamedParameter("Existing link"),
+		"status" => $q->createNamedParameter("active"),
+		"is_primary" => $q->createNamedParameter(true, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_BOOL),
+		"policy" => $q->createNamedParameter("{}"),
+		"start_path" => $q->createNamedParameter(""),
+		"view_mode" => $q->createNamedParameter("folder"),
+		"group_depth" => $q->createNamedParameter(0, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
+		"min_owner_rating" => $q->createNamedParameter(0, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
+		"public_locale" => $q->createNamedParameter(null),
 		"created_at" => $q->createNamedParameter($now, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
 		"updated_at" => $q->createNamedParameter($now, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
-		"archived_at" => $q->createNamedParameter(null),
+		"revoked_at" => $q->createNamedParameter(null, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
 	])->executeStatement();
 '
 
 tar -xzf "${archive}" -C "${upgrade_root}"
+compose exec -T --user www-data sqlite php occ upgrade
 compose exec -T --user www-data sqlite php occ upgrade
 compose exec -T --user www-data sqlite php -r '
 	require "/var/www/html/lib/base.php";
@@ -87,20 +115,32 @@ compose exec -T --user www-data sqlite php -r '
 	}
 	$q = $db->getQueryBuilder();
 	$q->select("generation")->from("proofing_semantic_idx")->setMaxResults(1)->executeQuery();
-	$q = $db->getQueryBuilder();
-	$count = $q->select($q->func()->count())->from("proofing_galleries")
-		->where($q->expr()->eq("slug", $q->createNamedParameter("upgrade-sentinel")))
-		->executeQuery()->fetchOne();
-	if ((int)$count !== 1) {
-		exit(3);
-	}
-	$q = $db->getQueryBuilder();
-	$linkCount = $q->select($q->func()->count())->from("proofing_public_links")
-		->where($q->expr()->eq("token", $q->createNamedParameter("upgrade-sentinel-token")))
-		->executeQuery()->fetchOne();
-	if ((int)$linkCount !== 1) {
-		exit(5);
-	}
+	$assertGallery = static function (string $slug) use ($db): void {
+		$q = $db->getQueryBuilder();
+		$count = (int)$q->select($q->func()->count())->from("proofing_galleries")
+			->where($q->expr()->eq("slug", $q->createNamedParameter($slug)))
+			->executeQuery()->fetchOne();
+		if ($count !== 1) throw new \RuntimeException("Upgrade scenario {$slug}: expected one gallery, found {$count}");
+	};
+	$assertLink = static function (string $token, string $status, string $name) use ($db): void {
+		$q = $db->getQueryBuilder();
+		$result = $q->select("status", "is_primary", "name")->from("proofing_public_links")
+			->where($q->expr()->eq("token", $q->createNamedParameter($token)))
+			->executeQuery();
+		$rows = $result->fetchAllAssociative();
+		$result->closeCursor();
+		if (count($rows) !== 1) throw new \RuntimeException("Upgrade scenario {$token}: expected one public link, found " . count($rows));
+		$row = $rows[0];
+		if ((string)$row["status"] !== $status) throw new \RuntimeException("Upgrade scenario {$token}: expected status {$status}, found " . (string)$row["status"]);
+		if (!(bool)$row["is_primary"]) throw new \RuntimeException("Upgrade scenario {$token}: primary flag was not preserved");
+		if ((string)$row["name"] !== $name) throw new \RuntimeException("Upgrade scenario {$token}: expected name {$name}, found " . (string)$row["name"]);
+	};
+	$assertGallery("upgrade-active");
+	$assertGallery("upgrade-archived");
+	$assertGallery("upgrade-existing");
+	$assertLink("upgrade-active-token", "active", "Primary link");
+	$assertLink("upgrade-archived-token", "suspended", "Primary link");
+	$assertLink("upgrade-existing-token", "active", "Existing link");
 '
 version="$(compose exec -T --user www-data sqlite php occ app:list --enabled --output=json \
 	| php -r '$apps=json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR); echo $apps["enabled"]["proofing_gallery"];')"

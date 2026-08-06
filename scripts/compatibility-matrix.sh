@@ -43,6 +43,10 @@ for version in ${versions}; do
 		COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION="${version}" \
 			"${compose[@]}" exec -T --user www-data "${service}" php occ app:list --enabled --output=json \
 			| php -r '$apps=json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR); exit(isset($apps["enabled"]["proofing_gallery"]) ? 0 : 1);'
+		if [[ -f "${app_source}/appinfo/signature.json" ]]; then
+			COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION="${version}" \
+				"${compose[@]}" exec -T --user www-data "${service}" php occ integrity:check-app proofing_gallery
+		fi
 		COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION="${version}" \
 			"${compose[@]}" exec -T --user www-data "${service}" php -r \
 			'require "/var/www/html/lib/base.php"; $database=\OC::$server->get(\OCP\IDBConnection::class); $query=$database->getQueryBuilder(); $query->select("id")->from("proofing_galleries")->setMaxResults(1)->executeQuery();'

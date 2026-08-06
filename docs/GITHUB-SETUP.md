@@ -20,7 +20,40 @@ them.
    protection, code scanning, and private vulnerability reporting.
 6. Create a `release` environment with `soerennb` as required reviewer. Allow
    only tags matching `v*.*.*`; do not enable “prevent self-review” for this
-   single-maintainer repository.
+   single-maintainer repository. Add `APP_PRIVATE_KEY`, `APP_PUBLIC_CRT`, and
+   `APPSTORE_TOKEN` as environment secrets only after completing the
+   [App Store certificate bootstrap](APPSTORE-PUBLISHING.md).
+
+## Internal and public histories
+
+`origin` is the authoritative internal development remote and may contain
+`.beads`, `.agents`, `AGENTS.md`, and internal author or workflow context. The
+optional `github` remote is a separate, sanitized public history. Never push
+internal branch or tag object IDs to it.
+
+Create the initial public history with `scripts/prepare-public-history.sh` and
+scan the complete rewritten history before publishing it. The sanitizer removes
+`.agents`, `.beads`, `.claude`, `.codex`, `AGENTS.md`, and `CLAUDE.md` in
+addition to rewriting configured private metadata.
+
+For later updates, use `scripts/prepare-incremental-public-history.sh` with the
+same private metadata inputs and an explicit public commit message. It starts
+from the existing public `main`, replaces its working tree with the fully
+sanitized internal end state, and creates exactly one deterministic public sync
+commit. The result must remain a fast-forward of the fetched public branch.
+
+Run the incremental preparation twice into separate new destinations and
+require identical public head hashes. Review the complete diff, retain a full
+Gitleaks history scan, and push `main` only from one of those prepared clones.
+The automation removes unreachable sanitizer objects before review. Never
+cherry-pick internal commits, reuse internal tags, or force-push public history.
+
+```bash
+PRIVATE_AUTHOR_EMAIL="..." \
+PRIVATE_CONTENT_PATTERN="..." \
+PUBLIC_COMMIT_MESSAGE="release: prepare X.Y.Z" \
+	./scripts/prepare-incremental-public-history.sh /tmp/proofing-gallery-public-a
+```
 
 ## Rulesets
 
@@ -37,13 +70,18 @@ deletion. Create release tags only after the version commit is on `main`.
 
 After the sanitized history is public and all `main` workflows are green:
 
-1. Confirm `appinfo/info.xml`, `package.json`, and the top changelog section all
-   contain the same stable version.
-2. Create and push an annotated tag such as `v0.5.0`.
+1. Confirm `appinfo/info.xml`, `package.json`, `package-lock.json`, and the top
+   changelog section all contain the same stable version.
+2. Confirm the release commit is on sanitized public `main`, then create and
+   push an annotated tag such as `v0.5.0`. Never publish the internal tag object.
 3. Approve the protected `release` environment after the full 12-combination
    compatibility matrix succeeds.
 4. Verify the GitHub release contains the tarball, checksum, SPDX SBOM, and
-   artifact attestation. Verify that GitHub Pages has deployed successfully.
+   artifact attestation. Download the release assets, run
+   `sha256sum -c SHA256SUMS`, verify the artifact attestation, and confirm that
+   GitHub Pages deployed successfully.
 
 The Nextcloud App Store is a separate later step requiring a Nextcloud-issued
-code-signing certificate and protected App Store credentials.
+code-signing certificate and protected App Store credentials. Once registered,
+the release workflow publishes the same signed GitHub artifact to the App Store;
+verify the resulting listing and a clean installation before announcing it.

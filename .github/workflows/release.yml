@@ -31,8 +31,10 @@ jobs:
           [[ "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           app_version="$(php -r '$xml=simplexml_load_file("appinfo/info.xml"); echo (string)$xml->version;')"
           package_version="$(node -p "require('./package.json').version")"
+          lock_version="$(node -p "require('./package-lock.json').version")"
           test "${version}" = "${app_version}"
           test "${version}" = "${package_version}"
+          test "${version}" = "${lock_version}"
           node scripts/release-notes.mjs "${version}" >/dev/null
       - run: npm ci
       - run: composer install --no-interaction --prefer-dist
@@ -86,25 +88,16 @@ jobs:
           make appstore
           cmp /tmp/proofing_gallery-first.tar.gz build/artifacts/appstore/proofing_gallery.tar.gz
       - run: make verify-package
-      - name: Prepare checksums and release notes
+      - name: Prepare release inputs
         run: |
           cd build/artifacts/appstore
-          sha256sum proofing_gallery.tar.gz > SHA256SUMS
+          mv proofing_gallery.tar.gz proofing_gallery-unsigned.tar.gz
           node ../../../scripts/release-notes.mjs "${GITHUB_REF_NAME#v}" > RELEASE_NOTES.md
-      - name: Generate SPDX SBOM
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
-        with:
-          file: build/artifacts/appstore/proofing_gallery.tar.gz
-          format: spdx-json
-          output-file: build/artifacts/appstore/proofing_gallery.spdx.json
-          upload-artifact: false
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: release-assets
+          name: release-inputs
           path: |
-            build/artifacts/appstore/proofing_gallery.tar.gz
-            build/artifacts/appstore/proofing_gallery.spdx.json
-            build/artifacts/appstore/SHA256SUMS
+            build/artifacts/appstore/proofing_gallery-unsigned.tar.gz
             build/artifacts/appstore/RELEASE_NOTES.md
           if-no-files-found: error
 
@@ -118,23 +111,101 @@ jobs:
       attestations: write
       artifact-metadata: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: "8.4"
+          coverage: none
+      - run: npm ci
+      - run: composer install --no-interaction --prefer-dist
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: release-assets
-          path: release-assets
+          name: release-inputs
+          path: release-inputs
+      - name: Materialize protected signing credentials
+        env:
+          APP_PRIVATE_KEY_CONTENT: ${{ secrets.APP_PRIVATE_KEY }}
+          APP_PUBLIC_CRT_CONTENT: ${{ secrets.APP_PUBLIC_CRT }}
+          APPSTORE_TOKEN_VALUE: ${{ secrets.APPSTORE_TOKEN }}
+        run: |
+          test -n "${APP_PRIVATE_KEY_CONTENT}"
+          test -n "${APP_PUBLIC_CRT_CONTENT}"
+          test -n "${APPSTORE_TOKEN_VALUE}"
+          umask 077
+          signing_dir="${RUNNER_TEMP}/proofing-gallery-signing"
+          mkdir -p "${signing_dir}"
+          printf '%s\n' "${APP_PRIVATE_KEY_CONTENT}" > "${signing_dir}/proofing_gallery.key"
+          printf '%s\n' "${APP_PUBLIC_CRT_CONTENT}" > "${signing_dir}/proofing_gallery.crt"
+          echo "APP_PRIVATE_KEY_FILE=${signing_dir}/proofing_gallery.key" >> "${GITHUB_ENV}"
+          echo "APP_PUBLIC_CRT_FILE=${signing_dir}/proofing_gallery.crt" >> "${GITHUB_ENV}"
+      - name: Build and verify the signed release twice
+        run: |
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          make appstore-signed
+          cp build/artifacts/appstore/proofing_gallery.tar.gz "${RUNNER_TEMP}/proofing_gallery-first-signed.tar.gz"
+          make verify-signed-package
+          cmp "${RUNNER_TEMP}/proofing_gallery-first-signed.tar.gz" build/artifacts/appstore/proofing_gallery.tar.gz
+      - name: Prepare signed release assets
+        run: |
+          cd build/artifacts/appstore
+          cp ../../../release-inputs/RELEASE_NOTES.md RELEASE_NOTES.md
+          sha256sum proofing_gallery.tar.gz > SHA256SUMS
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          file: build/artifacts/appstore/proofing_gallery.tar.gz
+          format: spdx-json
+          output-file: build/artifacts/appstore/proofing_gallery.spdx.json
+          upload-artifact: false
       - name: Attest release package
         uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4
         with:
-          subject-path: release-assets/proofing_gallery.tar.gz
+          subject-path: build/artifacts/appstore/proofing_gallery.tar.gz
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" \
-            release-assets/proofing_gallery.tar.gz \
-            release-assets/proofing_gallery.spdx.json \
-            release-assets/SHA256SUMS \
-            --repo "${GITHUB_REPOSITORY}" \
-            --verify-tag \
-            --title "Proofing Gallery ${GITHUB_REF_NAME#v}" \
-            --notes-file release-assets/RELEASE_NOTES.md
+          asset_dir="build/artifacts/appstore"
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            existing_dir="${RUNNER_TEMP}/proofing-gallery-existing-release"
+            rm -rf "${existing_dir}"
+            mkdir -p "${existing_dir}"
+            gh release download "${GITHUB_REF_NAME}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --dir "${existing_dir}" \
+              --pattern proofing_gallery.tar.gz \
+              --pattern proofing_gallery.spdx.json \
+              --pattern SHA256SUMS
+            cmp "${asset_dir}/proofing_gallery.tar.gz" "${existing_dir}/proofing_gallery.tar.gz"
+            cmp "${asset_dir}/SHA256SUMS" "${existing_dir}/SHA256SUMS"
+            test -s "${existing_dir}/proofing_gallery.spdx.json"
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              "${asset_dir}/proofing_gallery.tar.gz" \
+              "${asset_dir}/proofing_gallery.spdx.json" \
+              "${asset_dir}/SHA256SUMS" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --verify-tag \
+              --title "Proofing Gallery ${GITHUB_REF_NAME#v}" \
+              --notes-file "${asset_dir}/RELEASE_NOTES.md"
+          fi
+      - name: Publish stable release to the Nextcloud App Store
+        uses: R0Wi/nextcloud-appstore-push-action@ad2020a77eb694e8fe145d2ebd6bc21c246240fd # v1.0.5
+        with:
+          app_name: proofing_gallery
+          appstore_token: ${{ secrets.APPSTORE_TOKEN }}
+          download_url: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/proofing_gallery.tar.gz
+          app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+          nightly: false
+      - name: Remove signing credentials
+        if: always()
+        run: |
+          rm -f "${APP_PRIVATE_KEY_FILE:-/nonexistent}" "${APP_PUBLIC_CRT_FILE:-/nonexistent}"
+          rm -f "${GITHUB_WORKSPACE}/proofing_gallery.key"
+          rm -rf "${RUNNER_TEMP}/proofing-gallery-signing"

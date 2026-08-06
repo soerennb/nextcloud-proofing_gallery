@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.2 — 2026-08-06
+
+- repair legacy gallery share tokens with a new idempotent upgrade migration
+  while preserving existing primary public links and archived-gallery safety
+- update the transitive build-time `fast-uri` dependency to 3.1.5 to resolve
+  GHSA-7p8r-x3mc-p8w7 without unrelated lockfile churn
+- stabilize owner-dashboard visual verification and retain Playwright reports,
+  traces, screenshots, and videos when browser CI fails
+- add reproducible signed packages and protected publication to the Nextcloud
+  App Store alongside checksums, an SPDX SBOM, and artifact attestations
+
 ## 0.6.1 — 2026-08-02
 
 - keep virtualized public-gallery rows below immersive headers on desktop and

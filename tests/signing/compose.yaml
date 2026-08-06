@@ -1,0 +1,24 @@
+name: ${COMPOSE_PROJECT_NAME}
+
+services:
+  signer:
+    image: nextcloud:34-apache
+    environment:
+      NEXTCLOUD_ADMIN_USER: admin
+      NEXTCLOUD_ADMIN_PASSWORD: signing-test
+      NEXTCLOUD_TRUSTED_DOMAINS: localhost
+      SQLITE_DATABASE: nextcloud
+    volumes:
+      - signer-data:/var/www/html
+      - ${APP_SOURCE:?Set APP_SOURCE}:/opt/proofing_gallery:ro
+      - ${APP_PRIVATE_KEY_FILE:?Set APP_PRIVATE_KEY_FILE}:/run/secrets/proofing_gallery.key:ro
+      - ${APP_PUBLIC_CRT_FILE:?Set APP_PUBLIC_CRT_FILE}:/run/secrets/proofing_gallery.crt:ro
+    healthcheck:
+      test: ["CMD-SHELL", "su -s /bin/sh www-data -c \"php occ status --output=json\" | grep -q '\"installed\":true'"]
+      interval: 5s
+      timeout: 10s
+      retries: 48
+      start_period: 15s
+
+volumes:
+  signer-data:

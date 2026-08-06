@@ -15,6 +15,13 @@ async function waitForGalleryImages(page: Page): Promise<void> {
 	))
 }
 
+async function settleVisualState(page: Page): Promise<void> {
+	await page.evaluate(async () => {
+		await document.fonts.ready
+		await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+	})
+}
+
 async function login(page: Page, baseURL: string | undefined): Promise<void> {
 	await page.goto(`${baseURL}/apps/proofing_gallery/`)
 	await page.getByRole('textbox', { name: /Account name/ }).fill('admin')
@@ -45,9 +52,10 @@ test('gallery action menus stay above cards in every overview', async ({ browser
 
 	await page.getByRole('button', { name: 'Grid' }).click()
 	await openFirstActions()
-	await expect(page).toHaveScreenshot('owner-dashboard-actions.png', {
+	await settleVisualState(page)
+	await page.addStyleTag({ content: '.gallery-row__date { visibility: hidden !important; }' })
+	await expect(page.locator('.gallery-page')).toHaveScreenshot('owner-dashboard-actions.png', {
 		animations: 'disabled',
-		fullPage: true,
 		mask: [page.locator('.gallery-row__cover')],
 		maxDiffPixels: 100,
 	})

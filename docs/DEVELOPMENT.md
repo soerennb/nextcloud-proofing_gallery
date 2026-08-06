@@ -9,13 +9,18 @@ The repository is mounted as `custom_apps/proofing_gallery`.
 Build assets after changing Vue or CSS:
 
 ```bash
-npm run build:l10n
 npm run build
 ```
 
-The localization build extracts every `t()`/`n()` source key and fails when a
-German translation is missing. Edit `scripts/build-l10n.mjs`; generated files in
-`l10n/` are release inputs.
+When localized source strings were added or changed, run `npm run build:l10n`
+before the regular build. The localization build extracts every `t()`/`n()`
+source key and fails when a German translation is missing. Edit
+`scripts/build-l10n.mjs`; generated files in `l10n/` are release inputs.
+
+The app source remains bind-mounted during development. After changing public
+PHP routes, templates, or controller constructors, run
+`docker compose restart nextcloud` to clear PHP OPcache before validating the
+change.
 
 ## Quality checks
 
@@ -34,9 +39,33 @@ throttling in that disposable development container before Playwright starts.
 Remote `NEXTCLOUD_URL` targets and production installations are never changed.
 Use `npm run test:e2e:raw` when the target manages its own isolation.
 
+### Browser diagnosis
+
+Use Chrome DevTools/CDP before Playwright for fast JavaScript, DOM, and layout
+diagnosis. Check Console and Network, computed styles, `getBoundingClientRect()`
+geometry, and `elementFromPoint()` hit testing at the affected viewport.
+
+Use an isolated agent-owned browser context and close it completely when the
+check is finished. Stale public-share tabs can continue polling deleted tokens,
+trigger Nextcloud brute-force protection for the Docker gateway, and eventually
+make the shared DevTools protocol time out.
+
+Use Playwright afterward for reproducible acceptance. The standard wrapper
+resets loopback and Docker-gateway protections before the run and restores the
+original configuration afterward. For public-gallery or culling changes,
+verify desktop and 390 px mobile layouts, scroll reachability, horizontal
+overflow, media hit testing, rows below the hero, and side and bottom filmstrip
+placement inside the viewport.
+
 Playwright global setup creates and later supersedes its own E2E gallery.
 Snapshots are intentionally versioned. Update them only after reviewing the
-rendered change with `npm run test:e2e:update`.
+rendered images, preferably through the isolation-preserving wrapper:
+
+```bash
+npm run test:e2e -- <spec> --update-snapshots
+```
+
+Use `npm run test:e2e:update` only when the target manages its own isolation.
 
 `npm run perf:public` enforces the documented Slow-4G/4× CPU public-gallery
 budgets: at most 12 seconds for the first cacheless browser visit and 4 seconds
@@ -63,7 +92,10 @@ Run `make test-upgrade` as well when a release adds database migrations; it
 verifies the previous 0.2 Beta.3 schema and a preserved gallery against the
 current App Store artifact in an isolated Nextcloud 34 instance.
 Signing is performed afterward with the maintainer's Nextcloud certificate and
-private key outside this repository.
+private key outside this repository. `make appstore` remains the credential-free
+unsigned build. Once the official certificate is available, use
+`make verify-signed-package` with `APP_PRIVATE_KEY_FILE` and
+`APP_PUBLIC_CRT_FILE`; see the [App Store publishing runbook](APPSTORE-PUBLISHING.md).
 
 Metadata changes must retain the public allowlist boundary, source-ETag binding,
 1 MiB sidecar limit, DTD/network rejection, and preservation of unknown XMP

@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: build docs appstore verify-package test-upgrade watch install lint test test-e2e test-compat dev-up dev-down dev-logs dev-install dev-reset occ
+.PHONY: build docs appstore appstore-signed verify-package verify-signed-package test-upgrade watch install lint test test-e2e test-compat dev-up dev-down dev-logs dev-install dev-reset occ
 
 install:
 	npm ci
@@ -15,8 +15,14 @@ docs:
 appstore:
 	./scripts/build-appstore.sh
 
+appstore-signed:
+	./scripts/build-appstore.sh --signed
+
 verify-package:
 	./scripts/verify-appstore-package.sh
+
+verify-signed-package:
+	./scripts/verify-appstore-package.sh --signed
 
 test-upgrade:
 	./scripts/test-upgrade.sh
