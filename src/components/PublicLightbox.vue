@@ -9,12 +9,14 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { normalizeAnnotationPoint } from '../domain/collaboration.ts'
 import type { GallerySettings } from '../domain/gallerySettings.ts'
 import type { CollaborationState, MediaItem } from '../publicTypes.ts'
+import PublicLightboxFilmstrip from './PublicLightboxFilmstrip.vue'
 
 type MediaDimensions = Record<number, { width: number; height: number }>
 
 const props = defineProps<{
 	mediaItems: MediaItem[]
 	initialIndex: number
+	initialElement?: HTMLElement | null
 	settings: GallerySettings
 	collaboration: CollaborationState | null
 	dimensions: MediaDimensions
@@ -47,6 +49,11 @@ const feedbackOpen = ref(false)
 const metadataOpen = ref(false)
 const slideshow = ref(false)
 const shortcutsOpen = ref(false)
+const touchHint = ref(false)
+const chromeVisible = ref(true)
+const filmstripSessionKey = `proofing-gallery-filmstrip:${window.location.pathname}`
+const guestFilmstripHidden = ref(sessionStorage.getItem(filmstripSessionKey) === 'hidden')
+const viewportWidth = ref(window.innerWidth)
 const commentBody = ref('')
 const marking = ref(false)
 const annotationDraft = ref<{ x: number; y: number; width: number; height: number } | null>(null)
@@ -54,6 +61,23 @@ const editingCommentId = ref<number | null>(null)
 const editingCommentBody = ref('')
 const guestExportFields = ref(['filename', 'rating', 'pick'])
 const reduceMotion = useReducedMotion()
+const motionPreset = computed(() => reduceMotion.value ? 'off' : props.settings.presentation?.motionPreset ?? 'expressive')
+const configuredFilmstripPlacement = computed<'side' | 'bottom' | 'hidden'>(() => {
+	const configured = props.settings.presentation?.lightboxFilmstripPlacement ?? 'auto'
+	if (configured === 'hidden') return 'hidden'
+	if (configured === 'side') return viewportWidth.value > 900 ? 'side' : 'bottom'
+	if (configured === 'bottom') return 'bottom'
+	return viewportWidth.value >= 1180 ? 'side' : 'bottom'
+})
+const filmstripAllowed = computed(() => props.mediaItems.length > 1 && configuredFilmstripPlacement.value !== 'hidden')
+const filmstripPlacement = computed<'side' | 'bottom' | 'hidden'>(() => guestFilmstripHidden.value
+	? 'hidden'
+	: configuredFilmstripPlacement.value)
+const autoHideChrome = computed(() => props.settings.presentation?.lightboxChromeBehavior !== 'persistent')
+const chromeAutoHideDelay = computed(() => viewportWidth.value <= 760 ? 4500 : 2200)
+const loop = computed(() => props.mediaItems.length > 2)
+const canStepPrevious = computed(() => loop.value || activeIndex.value > 0)
+const canStepNext = computed(() => loop.value || activeIndex.value < props.mediaItems.length - 1)
 const sheetInitial = computed(() => reduceMotion.value ? { opacity: 0 } : { opacity: 0, y: 48 })
 const sheetExit = computed(() => reduceMotion.value ? { opacity: 0 } : { opacity: 0, y: 36 })
 const activeMetadata = computed(() => activeItem.value?.metadata)
@@ -64,6 +88,10 @@ const hasPublicMetadata = computed(() => {
 
 let pswp: PhotoSwipe | null = null
 let slideshowTimer: number | undefined
+let hintTimer: number | undefined
+let chromeTimer: number | undefined
+let lastTouchPointerUpAt = 0
+let lastChromeToggleAt = 0
 let previousBodyOverflow = ''
 let previouslyFocused: HTMLElement | null = null
 let unmounting = false
@@ -74,6 +102,7 @@ onMounted(async () => {
 	document.body.style.overflow = 'hidden'
 	window.addEventListener('keydown', onKeydown, true)
 	document.addEventListener('visibilitychange', onSlideshowVisibility)
+	window.addEventListener('resize', updateViewport, { passive: true })
 
 	const { default: PhotoSwipeConstructor } = await import('photoswipe')
 	if (unmounting || !shell.value) return
@@ -82,14 +111,19 @@ onMounted(async () => {
 		index: props.initialIndex,
 		appendToEl: shell.value,
 		bgOpacity: 0.97,
-		loop: props.mediaItems.length > 2,
+		loop: loop.value,
 		wheelToZoom: true,
 		pinchToClose: false,
 		closeOnVerticalDrag: true,
-		showHideAnimationType: reduceMotion.value ? 'none' : 'zoom',
-		showAnimationDuration: reduceMotion.value ? 0 : 240,
-		hideAnimationDuration: reduceMotion.value ? 0 : 200,
-		zoomAnimationDuration: reduceMotion.value ? 0 : 220,
+		clickToCloseNonZoomable: false,
+		imageClickAction: false,
+		bgClickAction: false,
+		tapAction: false,
+		doubleTapAction: 'zoom',
+		showHideAnimationType: motionPreset.value === 'off' ? 'none' : 'zoom',
+		showAnimationDuration: motionPreset.value === 'off' ? 0 : motionPreset.value === 'subtle' ? 180 : 360,
+		hideAnimationDuration: motionPreset.value === 'off' ? 0 : motionPreset.value === 'subtle' ? 150 : 260,
+		zoomAnimationDuration: motionPreset.value === 'off' ? 0 : motionPreset.value === 'subtle' ? 180 : 300,
 		easing: 'cubic-bezier(.2,.75,.25,1)',
 		escKey: false,
 		arrowKeys: false,
@@ -102,9 +136,9 @@ onMounted(async () => {
 		arrowNext: false,
 		paddingFn: () => ({
 			top: 64,
-			bottom: window.innerWidth <= 640 ? 58 : 18,
+			bottom: props.mediaItems.length > 1 && filmstripPlacement.value === 'bottom' ? (window.innerWidth <= 640 ? 94 : 108) : 18,
 			left: window.innerWidth <= 640 ? 8 : 72,
-			right: window.innerWidth > 760 && (feedbackOpen.value || metadataOpen.value) ? 392 : window.innerWidth <= 640 ? 8 : 72,
+			right: window.innerWidth > 760 && (feedbackOpen.value || metadataOpen.value) ? 392 : filmstripPlacement.value === 'side' ? 104 : window.innerWidth <= 640 ? 8 : 72,
 		}),
 	})
 	pswp.on('change', () => {
@@ -114,19 +148,46 @@ onMounted(async () => {
 		metadataOpen.value = false
 		marking.value = false
 		annotationDraft.value = null
+		wakeChrome()
 		nextTick(syncAnnotationHost)
 	})
+	pswp.on('pointerMove', ({ originalEvent }) => {
+		if (originalEvent.pointerType === 'mouse' || originalEvent.pointerType === 'pen') wakeChrome()
+	})
+	pswp.on('pointerUp', ({ originalEvent }) => {
+		if (originalEvent.pointerType === 'touch') lastTouchPointerUpAt = Date.now()
+	})
+	pswp.on('tapAction', event => {
+		event.preventDefault()
+		toggleChrome()
+	})
+	for (const action of ['imageClickAction', 'bgClickAction'] as const) {
+		pswp.on(action, event => {
+			event.preventDefault()
+			if (Date.now() - lastTouchPointerUpAt >= 700) toggleChrome()
+		})
+	}
 	pswp.on('afterInit', () => {
 		pswp?.element?.removeAttribute('role')
 		pswp?.element?.removeAttribute('aria-modal')
 		pswp?.element?.removeAttribute('aria-label')
 		nextTick(syncAnnotationHost)
+		if (window.matchMedia('(pointer: coarse)').matches
+			&& localStorage.getItem('proofing-gallery-touch-hint') !== 'seen') {
+			touchHint.value = true
+			localStorage.setItem('proofing-gallery-touch-hint', 'seen')
+			hintTimer = window.setTimeout(() => { touchHint.value = false }, 2600)
+		}
 	})
 	pswp.on('destroy', () => {
 		pswp = null
 		if (!unmounting) emit('close')
 	})
+	pswp.on('close', () => {
+		if (!unmounting) emit('close')
+	})
 	pswp.init()
+	wakeChrome()
 	nextTick(() => closeButton.value?.focus())
 })
 
@@ -134,19 +195,24 @@ onBeforeUnmount(() => {
 	unmounting = true
 	window.removeEventListener('keydown', onKeydown, true)
 	document.removeEventListener('visibilitychange', onSlideshowVisibility)
+	window.removeEventListener('resize', updateViewport)
 	window.clearInterval(slideshowTimer)
+	window.clearTimeout(hintTimer)
+	window.clearTimeout(chromeTimer)
 	pswp?.destroy()
 	pswp = null
 	document.body.style.overflow = previousBodyOverflow
 	previouslyFocused?.focus()
 })
 
-watch(feedbackOpen, () => nextTick(() => pswp?.updateSize(true)))
-watch(metadataOpen, () => nextTick(() => pswp?.updateSize(true)))
+watch(feedbackOpen, () => { wakeChrome(); nextTick(() => pswp?.updateSize(true)) })
+watch(metadataOpen, () => { wakeChrome(); nextTick(() => pswp?.updateSize(true)) })
+watch(shortcutsOpen, wakeChrome)
+watch(filmstripPlacement, () => nextTick(() => pswp?.updateSize(true)))
 watch(activeComments, () => nextTick(syncAnnotationHost), { deep: true })
 watch(marking, value => annotationHost.value?.classList.toggle('proofing-annotation-layer--marking', value))
 
-function toSlideData(item: MediaItem): SlideData {
+function toSlideData(item: MediaItem, index: number): SlideData {
 	if (!item.mimeType.startsWith('image/')) {
 		if (item.playback && !item.playback.playable) {
 			const message = ['pending', 'processing'].includes(item.playback.state)
@@ -180,6 +246,7 @@ function toSlideData(item: MediaItem): SlideData {
 		alt: item.name,
 		msrc: props.previewUrl(item, 320, 320, 'fit'),
 		thumbCropped: true,
+		element: index === props.initialIndex ? props.initialElement ?? undefined : undefined,
 	}
 }
 
@@ -210,12 +277,50 @@ function placeAnnotation(event: MouseEvent) {
 
 function close() {
 	setSlideshow(false)
-	pswp?.close()
+	emit('close')
+}
+
+function updateViewport() {
+	viewportWidth.value = window.innerWidth
+}
+
+function wakeChrome() {
+	chromeVisible.value = true
+	window.clearTimeout(chromeTimer)
+	if (autoHideChrome.value && !feedbackOpen.value && !metadataOpen.value && !shortcutsOpen.value) {
+		chromeTimer = window.setTimeout(() => { chromeVisible.value = false }, chromeAutoHideDelay.value)
+	}
+}
+
+function toggleChrome() {
+	if (!autoHideChrome.value) {
+		wakeChrome()
+		return
+	}
+	const now = Date.now()
+	if (now - lastChromeToggleAt < 500) return
+	lastChromeToggleAt = now
+	window.clearTimeout(chromeTimer)
+	chromeVisible.value = !chromeVisible.value
+	if (chromeVisible.value) {
+		chromeTimer = window.setTimeout(() => { chromeVisible.value = false }, chromeAutoHideDelay.value)
+	}
+}
+
+function toggleFilmstrip() {
+	guestFilmstripHidden.value = !guestFilmstripHidden.value
+	sessionStorage.setItem(filmstripSessionKey, guestFilmstripHidden.value ? 'hidden' : 'visible')
+	wakeChrome()
+	nextTick(() => pswp?.updateSize(true))
 }
 
 function step(direction: number) {
-	if (direction < 0) pswp?.prev()
-	else pswp?.next()
+	if (direction < 0 && canStepPrevious.value) pswp?.prev()
+	else if (direction > 0 && canStepNext.value) pswp?.next()
+}
+
+function goTo(index: number) {
+	pswp?.goTo(index)
 }
 
 function zoom(direction: number) {
@@ -338,15 +443,26 @@ async function saveEditedComment(commentId: number) {
 	<div v-if="activeItem"
 		ref="shell"
 		class="lightbox-shell"
+		:class="{ 'lightbox-shell--chrome-hidden': !chromeVisible, 'lightbox-shell--filmstrip-side': filmstripPlacement === 'side' }"
 		role="dialog"
 		aria-modal="true"
-		:aria-label="activeItem.name">
+		:aria-label="activeItem.name"
+		@focusin="wakeChrome">
 		<header class="lightbox-bar">
 			<div class="lightbox-bar__identity">
 				<strong>{{ activeItem.name }}</strong>
 				<span>{{ activeIndex + 1 }} / {{ mediaItems.length }}</span>
 			</div>
 			<div class="lightbox-bar__tools">
+				<button v-if="filmstripAllowed"
+					class="lightbox-bar__filmstrip"
+					type="button"
+					:aria-label="guestFilmstripHidden ? t('proofing_gallery', 'Show thumbnails') : t('proofing_gallery', 'Hide thumbnails')"
+					:aria-pressed="!guestFilmstripHidden"
+					@click="toggleFilmstrip">
+					<span aria-hidden="true">▦</span>
+					<span class="lightbox-bar__filmstrip-label">{{ guestFilmstripHidden ? t('proofing_gallery', 'Show thumbnails') : t('proofing_gallery', 'Hide thumbnails') }}</span>
+				</button>
 				<button v-if="activeItem.mimeType.startsWith('image/')"
 					class="lightbox-bar__zoom"
 					type="button"
@@ -375,9 +491,12 @@ async function saveEditedComment(commentId: number) {
 					?
 				</button>
 				<button v-if="settings.mode === 'collaboration' && settings.review?.likes !== false"
+					class="lightbox-bar__like"
 					type="button"
+					:aria-label="t('proofing_gallery', 'Like')"
 					@click="openFeedbackAndLike">
-					{{ collaboration?.likes[activeItem.id]?.mine ? '♥' : '♡' }} {{ t('proofing_gallery', 'Like') }}
+					<span class="lightbox-bar__like-icon" aria-hidden="true">{{ collaboration?.likes[activeItem.id]?.mine ? '♥' : '♡' }}</span>
+					<span class="lightbox-bar__like-label">{{ t('proofing_gallery', 'Like') }}</span>
 				</button>
 				<a v-if="canDownloadIndividual" class="lightbox-bar__download" :href="downloadUrl(activeItem)">{{ t('proofing_gallery', 'Download') }}</a>
 				<button v-if="settings.mode === 'collaboration'"
@@ -385,7 +504,7 @@ async function saveEditedComment(commentId: number) {
 					:aria-expanded="feedbackOpen"
 					@click="feedbackOpen = !feedbackOpen; metadataOpen = false">
 					{{ t('proofing_gallery', 'Feedback') }}
-					<span v-if="activeComments.length" aria-hidden="true">{{ activeComments.length }}</span>
+					<span v-if="activeComments.length" class="lightbox-bar__count" aria-hidden="true">{{ activeComments.length }}</span>
 				</button>
 				<button v-if="hasPublicMetadata"
 					type="button"
@@ -403,18 +522,36 @@ async function saveEditedComment(commentId: number) {
 			</div>
 		</header>
 
-		<button class="lightbox-nav lightbox-nav--previous"
+		<button v-if="mediaItems.length > 1"
+			class="lightbox-nav lightbox-nav--previous"
 			type="button"
+			:disabled="!canStepPrevious"
 			:aria-label="t('proofing_gallery', 'Previous')"
 			@click="step(-1)">
-			←
+			‹
 		</button>
-		<button class="lightbox-nav lightbox-nav--next"
+		<button v-if="mediaItems.length > 1"
+			class="lightbox-nav lightbox-nav--next"
 			type="button"
+			:disabled="!canStepNext"
 			:aria-label="t('proofing_gallery', 'Next')"
 			@click="step(1)">
-			→
+			›
 		</button>
+
+		<Transition name="touch-hint">
+			<p v-if="touchHint" class="lightbox-touch-hint" role="status">
+				{{ t('proofing_gallery', 'Swipe to browse · pinch to zoom · pull down to close') }}
+			</p>
+		</Transition>
+
+		<PublicLightboxFilmstrip
+			v-if="mediaItems.length > 1 && filmstripPlacement !== 'hidden'"
+			:items="mediaItems"
+			:active-index="activeIndex"
+			:placement="filmstripPlacement"
+			:preview-url="previewUrl"
+			@select="goTo" />
 
 		<Teleport v-if="annotationHost" :to="annotationHost">
 			<span v-for="comment in activeComments" :key="`annotations-${comment.id}`">

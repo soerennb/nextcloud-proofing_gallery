@@ -22,7 +22,14 @@ const logoUrl = computed(() => props.settings.presentation.logoFileId
 	: null)
 const heroUrl = computed(() => props.settings.presentation.heroFileId
 	? previewUrl(props.settings.presentation.heroFileId, 1200, 800)
-	: props.media[0] ? previewUrl(props.media[0].id, 1200, 800) : null)
+	: null)
+
+function previewItemStyle(item: MediaItem) {
+	const width = item.width ?? item.metadata?.width ?? 4
+	const height = item.height ?? item.metadata?.height ?? 3
+	const ratio = Math.min(2.5, Math.max(0.5, width / height))
+	return { aspectRatio: `${width} / ${height}`, '--preview-ratio': String(ratio) }
+}
 </script>
 
 <template>
@@ -55,8 +62,8 @@ const heroUrl = computed(() => props.settings.presentation.heroFileId
 				:settings="settings"
 				:logo-url="logoUrl"
 				:hero-url="heroUrl" />
-			<div class="gallery-preview__grid">
-				<div v-for="item in media" :key="item.id">
+			<div class="gallery-preview__grid" :class="`gallery-preview__grid--${settings.presentation.layout}`">
+				<div v-for="item in media" :key="item.id" :style="previewItemStyle(item)">
 					<img :src="previewUrl(item.id, 300, 220)" alt="">
 					<span v-if="settings.presentation.watermarkText">{{ settings.presentation.watermarkText }}</span>
 					<small v-if="settings.presentation.showFilenames">{{ item.name }}</small>

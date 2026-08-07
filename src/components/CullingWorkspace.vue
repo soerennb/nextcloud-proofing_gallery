@@ -57,6 +57,8 @@ const semanticWorking = ref(false)
 const semanticEnabled = ref(false)
 const semanticProvider = ref<'disabled' | 'local' | 'https'>('disabled')
 const filmstripPlacement = ref<UserPreferences['cullingFilmstripPlacement']>('auto')
+const filmstripSize = ref(112)
+const focusMode = ref(false)
 const viewportWidth = ref(typeof window === 'undefined' ? 1280 : window.innerWidth)
 let controller: AbortController | undefined
 
@@ -147,13 +149,15 @@ async function loadSavedViews() {
 		const preferences = (await fetchUserPreferences()).preferences
 		savedViews.value = preferences.savedViews.filter(view => view.galleryId === props.gallery.id)
 		filmstripPlacement.value = preferences.cullingFilmstripPlacement
+		filmstripSize.value = preferences.cullingFilmstripSize
 	} catch { /* Culling remains fully usable without presets. */ }
 }
 
 async function saveFilmstripPlacement() {
 	try {
-		const preferences = await updateUserPreferences({ cullingFilmstripPlacement: filmstripPlacement.value })
+		const preferences = await updateUserPreferences({ cullingFilmstripPlacement: filmstripPlacement.value, cullingFilmstripSize: filmstripSize.value })
 		filmstripPlacement.value = preferences.cullingFilmstripPlacement
+		filmstripSize.value = preferences.cullingFilmstripSize
 	} catch {
 		showError(t('proofing_gallery', 'The filmstrip layout could not be saved.'))
 	}
@@ -387,6 +391,8 @@ function updateViewportWidth() {
 function onKeydown(event: KeyboardEvent) {
 	const target = event.target as HTMLElement
 	if (target.matches('input, textarea, select, button, [contenteditable="true"]')) return
+	if (event.key === 'Escape' && focusMode.value) { event.preventDefault(); focusMode.value = false; return }
+	if (event.key.toLowerCase() === 'f') { event.preventDefault(); focusMode.value = !focusMode.value; return }
 	const action = cullingShortcut(event)
 	if (action === null) return
 	event.preventDefault()
@@ -419,7 +425,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<section class="culling-workspace" aria-labelledby="culling-title">
+	<section class="culling-workspace" :class="{ 'culling-workspace--focus': focusMode }" aria-labelledby="culling-title">
 		<header class="culling-header">
 			<div>
 				<p class="culling-header__eyebrow">
@@ -489,10 +495,20 @@ onBeforeUnmount(() => {
 				{{ t('proofing_gallery', 'Client signal') }}
 			</NcButton>
 			<label class="filmstrip-layout"><span>{{ t('proofing_gallery', 'Filmstrip') }}</span><select v-model="filmstripPlacement" name="filmstripPlacement" @change="saveFilmstripPlacement"><option value="auto">{{ t('proofing_gallery', 'Automatic') }}</option><option value="side">{{ t('proofing_gallery', 'Right side') }}</option><option value="bottom">{{ t('proofing_gallery', 'Below') }}</option></select></label>
+			<label class="filmstrip-size"><span>{{ t('proofing_gallery', 'Filmstrip size') }}</span><input v-model.number="filmstripSize"
+				name="filmstripSize"
+				type="range"
+				min="88"
+				max="220"
+				step="8"
+				@change="saveFilmstripPlacement"></label>
+			<NcButton variant="tertiary" :aria-pressed="focusMode" @click="focusMode = !focusMode">
+				{{ focusMode ? t('proofing_gallery', 'Exit focus') : t('proofing_gallery', 'Focus') }}
+			</NcButton>
 			<span class="culling-save" role="status">{{ saving ? t('proofing_gallery', 'Saving…') : failure ? t('proofing_gallery', 'Needs attention') : t('proofing_gallery', 'Saved') }}</span>
 		</div>
 		<div v-if="showShortcuts" class="shortcut-sheet">
-			<span><kbd>←</kbd><kbd>→</kbd> {{ t('proofing_gallery', 'Navigate') }}</span><span><kbd>0–5</kbd> {{ t('proofing_gallery', 'Rate') }}</span><span><kbd>P</kbd> {{ t('proofing_gallery', 'Pick') }}</span><span><kbd>X</kbd> {{ t('proofing_gallery', 'Reject') }}</span><span><kbd>Space</kbd> {{ t('proofing_gallery', 'Select') }}</span><span><kbd>Ctrl/⌘ Z</kbd> {{ t('proofing_gallery', 'Undo') }}</span>
+			<span><kbd>←</kbd><kbd>→</kbd> {{ t('proofing_gallery', 'Navigate') }}</span><span><kbd>0–5</kbd> {{ t('proofing_gallery', 'Rate') }}</span><span><kbd>P</kbd> {{ t('proofing_gallery', 'Pick') }}</span><span><kbd>X</kbd> {{ t('proofing_gallery', 'Reject') }}</span><span><kbd>F</kbd> {{ t('proofing_gallery', 'Focus') }}</span><span><kbd>Space</kbd> {{ t('proofing_gallery', 'Select') }}</span><span><kbd>Ctrl/⌘ Z</kbd> {{ t('proofing_gallery', 'Undo') }}</span>
 		</div>
 		<section v-if="xmpOpen" class="xmp-sync" aria-labelledby="xmp-sync-title">
 			<header>
@@ -596,7 +612,7 @@ onBeforeUnmount(() => {
 			<p>{{ t('proofing_gallery', 'No supported photos or videos were found.') }}</p>
 		</div>
 		<template v-else>
-			<div class="culling-stage" :class="`culling-stage--${effectiveFilmstripPlacement}`">
+			<div class="culling-stage" :class="`culling-stage--${effectiveFilmstripPlacement}`" :style="{ '--filmstrip-size': `${filmstripSize}px` }">
 				<section v-if="activeItem" class="culling-loupe" :aria-label="t('proofing_gallery', 'Focused photo')">
 					<div class="culling-loupe__image">
 						<ProgressiveImage :src="ownerPreviewUrl(gallery.id, activeItem.id, 1600, 1100)" :alt="activeItem.name" priority />
@@ -658,6 +674,7 @@ onBeforeUnmount(() => {
 					:active-id="activeId"
 					:selected-ids="selectedIds"
 					:placement="effectiveFilmstripPlacement"
+					:size="filmstripSize"
 					:preview-url="fileId => ownerPreviewUrl(gallery.id, fileId, 360, 260)"
 					:has-more="cursor !== null"
 					:loading-more="loadingMore"

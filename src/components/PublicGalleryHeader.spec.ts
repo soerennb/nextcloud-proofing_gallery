@@ -13,7 +13,7 @@ describe('PublicGalleryHeader', () => {
 		settings.presentation.titleSize = 'large'
 
 		const wrapper = mount(PublicGalleryHeader, {
-			props: { title: 'Summer story', total: 84, settings },
+			props: { title: 'Summer story', total: 84, settings, heroUrl: '/cover.jpg' },
 		})
 		const title = wrapper.get('h1')
 
@@ -24,7 +24,7 @@ describe('PublicGalleryHeader', () => {
 		expect(wrapper.find('.public-gallery__hero-count').exists()).toBe(false)
 	})
 
-	it('supports the minimal opener independently of a hero asset', () => {
+	it('collapses the minimal opener independently of a hero asset', () => {
 		const settings = createDefaultGallerySettings()
 		settings.presentation.openerStyle = 'minimal'
 
@@ -32,7 +32,21 @@ describe('PublicGalleryHeader', () => {
 			props: { title: 'A quiet opening', total: 3, settings, heroUrl: '/cover.jpg' },
 		})
 
-		expect(wrapper.get('.public-gallery__hero').classes()).toContain('public-gallery__hero--minimal')
-		expect(wrapper.get('.public-gallery__hero').attributes('style')).toContain('/cover.jpg')
+		expect(wrapper.get('header').classes()).toContain('public-gallery__header--minimal')
+		expect(wrapper.find('.public-gallery__hero').exists()).toBe(false)
+		expect(wrapper.get('h1').text()).toBe('A quiet opening')
+	})
+
+	it('falls back to a compact opener when cinematic has no explicit cover', () => {
+		const settings = createDefaultGallerySettings()
+		settings.presentation.openerStyle = 'cinematic'
+
+		const wrapper = mount(PublicGalleryHeader, {
+			props: { title: 'No accidental cover', total: 12, settings },
+		})
+
+		expect(wrapper.get('header').classes()).toContain('public-gallery__header--compact')
+		expect(wrapper.find('.public-gallery__hero').exists()).toBe(false)
+		expect(wrapper.text()).not.toContain('Proofing Gallery')
 	})
 })

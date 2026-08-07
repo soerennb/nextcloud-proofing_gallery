@@ -22,6 +22,32 @@ PHP routes, templates, or controller constructors, run
 `docker compose restart nextcloud` to clear PHP OPcache before validating the
 change.
 
+## Persistent demo studio
+
+The regular E2E tenant is disposable test infrastructure. For visual QA,
+product demos, and App Store screenshots, use the separate persistent studio:
+
+```bash
+make studio-up
+make studio-library-check
+make studio-seed
+make studio-browser-check
+make studio-screenshots
+```
+
+It uses an isolated Compose project and named volumes, serves only on
+`127.0.0.1:8081`, and keeps its galleries across `studio-down`/`studio-up`.
+Defaults are `studio` / `studio-demo`; local overrides belong in the ignored
+`.env.studio`. `studio-reset` removes only studio volumes and requires
+`CONFIRM_STUDIO_RESET=yes`.
+
+Generated demo images live in the ignored `.local/demo-library/` directory.
+Their prompts, dimensions, provenance, and checksums are versioned in
+`demo/library-manifest.json`. The seeder refuses non-loopback URLs and is
+idempotent: gallery IDs and public tokens remain stable. Approved screenshots
+are copied to `docs/public/screenshots/`; local source media never enters the
+App Store archive.
+
 ## Quality checks
 
 ```bash

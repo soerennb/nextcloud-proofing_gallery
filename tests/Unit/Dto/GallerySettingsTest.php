@@ -37,7 +37,10 @@ final class GallerySettingsTest extends TestCase {
 		self::assertTrue($settings['appearance']['showMediaCount']);
 		self::assertSame('medium', $settings['appearance']['titleSize']);
 		self::assertSame('auto', $settings['publicLocale']);
-		self::assertSame(6, $settings['schemaVersion']);
+		self::assertSame(7, $settings['schemaVersion']);
+		self::assertSame('expressive', $settings['presentation']['motionPreset']);
+		self::assertSame('auto', $settings['presentation']['lightboxFilmstripPlacement']);
+		self::assertSame('autoHide', $settings['presentation']['lightboxChromeBehavior']);
 		self::assertNull($settings['presentation']['instanceLogoAssetId']);
 		self::assertFalse($settings['lifecycle']['enabled']);
 		self::assertSame([], $settings['metadata']['publicFields']);

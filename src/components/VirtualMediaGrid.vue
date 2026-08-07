@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { useVirtualizer, useWindowVirtualizer } from '@tanstack/vue-virtual'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+
+import { calculateMediaGridLayout, calculateMediaLayout } from '../domain/mediaGridLayout.ts'
 import type { MediaItem } from '../types.ts'
-import { calculateMediaGridLayout } from '../domain/mediaGridLayout.ts'
+
+type LayoutMode = 'grid' | 'masonry' | 'list'
+type Position = { index: number; x: number; y: number; width: number; height: number }
 
 const props = withDefaults(defineProps<{
 	items: MediaItem[]
+	mode?: LayoutMode
 	minItemWidth?: number
 	maxItemWidth?: number
 	maxColumns?: number
@@ -13,12 +17,17 @@ const props = withDefaults(defineProps<{
 	itemAspectRatio?: number
 	mobileItemAspectRatio?: number
 	itemExtraHeight?: number
+	itemDimensions?: Record<number, { width: number; height: number }>
+	photographic?: boolean
+	targetRowHeight?: number
+	listRowHeight?: number
 	list?: boolean
 	contained?: boolean
 	hasMore?: boolean
 	loadingMore?: boolean
 	ariaLabel?: string
 }>(), {
+	mode: 'grid',
 	minItemWidth: 210,
 	maxItemWidth: undefined,
 	maxColumns: undefined,
@@ -26,6 +35,10 @@ const props = withDefaults(defineProps<{
 	itemAspectRatio: 4 / 3,
 	mobileItemAspectRatio: undefined,
 	itemExtraHeight: 0,
+	itemDimensions: () => ({}),
+	photographic: false,
+	targetRowHeight: 210,
+	listRowHeight: 172,
 	list: false,
 	contained: false,
 	hasMore: false,
@@ -38,109 +51,165 @@ const root = ref<HTMLDivElement | null>(null)
 const loadSentinel = ref<HTMLSpanElement | null>(null)
 const width = ref(1000)
 const viewportWidth = ref(1000)
-const scrollMargin = ref(0)
-let observer: ResizeObserver | undefined
+const visibleTop = ref(0)
+const visibleHeight = ref(900)
+const measured = ref(false)
+let resizeObserver: ResizeObserver | undefined
 let loadObserver: IntersectionObserver | undefined
+let frame = 0
 
-const layout = computed(() => calculateMediaGridLayout({
+const effectiveMode = computed<LayoutMode>(() => props.list ? 'list' : props.mode)
+const baseLayout = computed(() => calculateMediaGridLayout({
 	containerWidth: width.value,
 	itemCount: props.items.length,
 	minItemWidth: props.minItemWidth,
 	maxItemWidth: props.maxItemWidth,
 	maxColumns: props.maxColumns,
 	gap: props.gap,
-	itemAspectRatio: props.mobileItemAspectRatio !== undefined && viewportWidth.value <= 600 ? props.mobileItemAspectRatio : props.itemAspectRatio,
+	itemAspectRatio: props.mobileItemAspectRatio !== undefined && viewportWidth.value <= 600
+		? props.mobileItemAspectRatio
+		: props.itemAspectRatio,
 	itemExtraHeight: props.itemExtraHeight,
-	list: props.list,
+	list: effectiveMode.value === 'list',
 }))
-const columns = computed(() => layout.value.columns)
-const rows = computed(() => layout.value.rows)
-const rowHeight = computed(() => layout.value.rowHeight)
 
-const windowVirtualizer = useWindowVirtualizer<HTMLDivElement>(computed(() => ({
-	count: props.contained ? 0 : rows.value,
-	estimateSize: () => rowHeight.value + props.gap,
-	overscan: 5,
-	scrollMargin: scrollMargin.value,
-	getItemKey: index => `${columns.value}:${Math.round(rowHeight.value)}:${index}`,
-})))
-const elementVirtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>(computed(() => ({
-	count: props.contained ? rows.value : 0,
-	getScrollElement: () => root.value,
-	estimateSize: () => rowHeight.value + props.gap,
-	overscan: 5,
-	getItemKey: index => `${columns.value}:${Math.round(rowHeight.value)}:${index}`,
-})))
-const virtualizer = computed(() => props.contained ? elementVirtualizer.value : windowVirtualizer.value)
+function ratioFor(item: MediaItem): number {
+	const measuredSize = props.itemDimensions[item.id]
+	const mediaWidth = measuredSize?.width ?? item.width ?? item.metadata?.width ?? 0
+	const mediaHeight = measuredSize?.height ?? item.height ?? item.metadata?.height ?? 0
+	if (mediaWidth > 0 && mediaHeight > 0) return Math.min(4, Math.max(0.25, mediaWidth / mediaHeight))
+	if (item.mimeType.startsWith('video/')) return 16 / 9
+	return props.mobileItemAspectRatio !== undefined && viewportWidth.value <= 600
+		? props.mobileItemAspectRatio
+		: props.itemAspectRatio
+}
 
-const virtualRows = computed(() => virtualizer.value.getVirtualItems())
-const renderedRows = computed(() => {
-	const visible = virtualRows.value.map(row => ({ index: row.index, key: row.key }))
-	if (visible.length > 0 || rows.value === 0) return visible
-	// Resize/scroll observers can be delayed in a newly revealed iframe. Keep the
-	// first viewport useful until the virtualizer publishes its initial range.
-	return Array.from({ length: Math.min(rows.value, 6) }, (_, index) => ({
-		index,
-		key: `initial:${columns.value}:${Math.round(rowHeight.value)}:${index}`,
-	}))
+const positions = computed<Position[]>(() => {
+	if (props.photographic) {
+		return calculateMediaLayout({
+			containerWidth: width.value,
+			aspectRatios: props.items.map(ratioFor),
+			mode: effectiveMode.value,
+			gap: props.gap,
+			minItemWidth: props.minItemWidth,
+			targetRowHeight: props.targetRowHeight,
+			listRowHeight: viewportWidth.value <= 640 ? 132 : props.listRowHeight,
+			singleColumn: viewportWidth.value <= 640,
+		}).positions
+	}
+	const { columns, itemWidth, rowHeight } = baseLayout.value
+	if (effectiveMode.value === 'masonry') {
+		const lanes = Array.from({ length: columns }, () => 0)
+		return props.items.map((item, index) => {
+			const lane = lanes.indexOf(Math.min(...lanes))
+			const height = Math.max(120, itemWidth / ratioFor(item) + props.itemExtraHeight)
+			const position = { index, x: lane * (itemWidth + props.gap), y: lanes[lane], width: itemWidth, height }
+			lanes[lane] += height + props.gap
+			return position
+		})
+	}
+	return props.items.map((_, index) => {
+		const column = index % columns
+		const row = Math.floor(index / columns)
+		return {
+			index,
+			x: column * (itemWidth + props.gap),
+			y: row * (rowHeight + props.gap),
+			width: itemWidth,
+			height: rowHeight,
+		}
+	})
 })
-const totalHeight = computed(() => layout.value.totalHeight)
-const viewportHeight = computed(() => props.contained
-	? Math.min(totalHeight.value, Math.max(360, Math.min(760, Math.round((typeof window === 'undefined' ? 900 : window.innerHeight) * 0.66))))
-	: totalHeight.value)
 
-function itemsForRow(row: number): Array<{ item: MediaItem; index: number }> {
-	const start = row * columns.value
-	return props.items.slice(start, start + columns.value).map((item, offset) => ({ item, index: start + offset }))
+const totalHeight = computed(() => positions.value.reduce(
+	(maximum, position) => Math.max(maximum, position.y + position.height),
+	0,
+))
+const rootHeight = computed(() => props.contained
+	? Math.min(totalHeight.value, Math.max(360, Math.min(760, Math.round(visibleHeight.value * 0.66))))
+	: totalHeight.value)
+const overscan = computed(() => Math.max(900, visibleHeight.value * 1.5))
+const renderedPositions = computed(() => {
+	if (!measured.value) return positions.value.slice(0, 12)
+	const start = Math.max(0, visibleTop.value - overscan.value)
+	const end = visibleTop.value + visibleHeight.value + overscan.value
+	return positions.value.filter(position => position.y + position.height >= start && position.y <= end)
+})
+
+function updateViewport() {
+	window.cancelAnimationFrame(frame)
+	frame = window.requestAnimationFrame(() => {
+		if (!root.value) return
+		viewportWidth.value = window.innerWidth
+		if (props.contained) {
+			visibleTop.value = root.value.scrollTop
+			visibleHeight.value = root.value.clientHeight || window.innerHeight
+		} else {
+			const rootTop = root.value.getBoundingClientRect().top + window.scrollY
+			visibleTop.value = Math.max(0, window.scrollY - rootTop)
+			visibleHeight.value = window.visualViewport?.height ?? window.innerHeight
+		}
+		measured.value = true
+	})
 }
 
 function measure() {
 	if (!root.value) return
-	width.value = root.value.clientWidth
-	viewportWidth.value = window.innerWidth
-	scrollMargin.value = root.value.getBoundingClientRect().top + window.scrollY
-	virtualizer.value.measure()
-}
-
-function rowOffset(index: number): number {
-	return index * (rowHeight.value + props.gap)
+	width.value = Math.max(1, root.value.clientWidth)
+	updateViewport()
 }
 
 function scrollToIndex(index: number, behavior: ScrollBehavior = 'auto') {
-	const row = Math.floor(Math.max(0, index) / columns.value)
-	virtualizer.value.scrollToIndex(row, { align: 'auto', behavior })
+	const position = positions.value[Math.max(0, Math.min(index, positions.value.length - 1))]
+	if (!position || !root.value) return
+	if (props.contained) root.value.scrollTo({ top: position.y, behavior })
+	else {
+		const rootTop = root.value.getBoundingClientRect().top + window.scrollY
+		window.scrollTo({ top: rootTop + position.y, behavior })
+	}
 }
 
 defineExpose({ scrollToIndex, measure })
 
-watch(virtualRows, rowsInView => {
-	const last = rowsInView.at(-1)?.index ?? -1
-	if (props.hasMore && !props.loadingMore && last >= rows.value - 3) emit('load-more')
+watch(renderedPositions, visible => {
+	const last = visible.at(-1)?.index ?? -1
+	if (props.hasMore && !props.loadingMore && last >= props.items.length - 4) emit('load-more')
 })
-watch([columns, rowHeight, () => props.items.length], () => nextTick(measure))
+watch([
+	() => props.items.length,
+	() => props.mode,
+	() => props.list,
+	() => props.itemDimensions,
+	() => props.minItemWidth,
+	() => props.photographic,
+	() => props.targetRowHeight,
+	() => props.listRowHeight,
+], () => nextTick(measure), { deep: true })
 
 onMounted(() => {
 	measure()
-	observer = new ResizeObserver(measure)
+	resizeObserver = new ResizeObserver(measure)
 	if (root.value) {
-		observer.observe(root.value)
-		if (root.value.parentElement) observer.observe(root.value.parentElement)
+		resizeObserver.observe(root.value)
+		if (root.value.parentElement) resizeObserver.observe(root.value.parentElement)
+		if (props.contained) root.value.addEventListener('scroll', updateViewport, { passive: true })
 	}
 	if (typeof IntersectionObserver !== 'undefined') {
 		loadObserver = new IntersectionObserver(entries => {
 			if (entries.some(entry => entry.isIntersecting) && props.hasMore && !props.loadingMore) emit('load-more')
-		}, {
-			root: props.contained ? root.value : null,
-			rootMargin: '600px',
-		})
+		}, { root: props.contained ? root.value : null, rootMargin: '600px' })
 		if (loadSentinel.value) loadObserver.observe(loadSentinel.value)
 	}
+	window.addEventListener('scroll', updateViewport, { passive: true })
 	window.addEventListener('resize', measure, { passive: true })
 	window.visualViewport?.addEventListener('resize', measure, { passive: true })
 })
 onBeforeUnmount(() => {
-	observer?.disconnect()
+	window.cancelAnimationFrame(frame)
+	resizeObserver?.disconnect()
 	loadObserver?.disconnect()
+	root.value?.removeEventListener('scroll', updateViewport)
+	window.removeEventListener('scroll', updateViewport)
 	window.removeEventListener('resize', measure)
 	window.visualViewport?.removeEventListener('resize', measure)
 })
@@ -150,28 +219,22 @@ onBeforeUnmount(() => {
 	<div
 		ref="root"
 		class="virtual-media"
-		:class="{ 'virtual-media--contained': contained }"
+		:class="[`virtual-media--${effectiveMode}`, { 'virtual-media--contained': contained }]"
 		role="list"
 		:aria-label="ariaLabel"
-		:style="{ height: `${viewportHeight}px` }">
+		:style="{ height: `${rootHeight}px` }">
 		<div class="virtual-media__canvas" :style="{ height: `${totalHeight}px` }">
 			<div
-				v-for="virtualRow in renderedRows"
-				:key="String(virtualRow.key)"
-				class="virtual-media__row"
+				v-for="position in renderedPositions"
+				:key="items[position.index].id"
+				class="virtual-media__cell"
+				role="listitem"
 				:style="{
-					gap: `${gap}px`,
-					gridTemplateColumns: `repeat(${columns}, minmax(0, ${maxItemWidth === undefined ? '1fr' : `${maxItemWidth}px`}))`,
-					height: `${rowHeight}px`,
-					transform: `translateY(${rowOffset(virtualRow.index)}px)`,
+					width: `${position.width}px`,
+					height: `${position.height}px`,
+					transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
 				}">
-				<div
-					v-for="entry in itemsForRow(virtualRow.index)"
-					:key="entry.item.id"
-					class="virtual-media__cell"
-					role="listitem">
-					<slot :item="entry.item" :index="entry.index" />
-				</div>
+				<slot :item="items[position.index]" :index="position.index" />
 			</div>
 			<span ref="loadSentinel" class="virtual-media__sentinel" aria-hidden="true" />
 		</div>
@@ -199,18 +262,13 @@ onBeforeUnmount(() => {
 	width: 100%;
 }
 
-.virtual-media__row {
-	position: absolute;
-	inset: 0 0 auto;
-	display: grid;
-	box-sizing: border-box;
-	max-width: 100%;
-	width: 100%;
-}
-
 .virtual-media__cell {
+	position: absolute;
+	inset: 0 auto auto 0;
+	box-sizing: border-box;
 	min-width: 0;
-	height: 100%;
+	transition: transform 180ms ease, width 180ms ease, height 180ms ease;
+	will-change: transform;
 }
 
 .virtual-media__sentinel {
@@ -218,5 +276,9 @@ onBeforeUnmount(() => {
 	inset: auto 0 0;
 	height: 1px;
 	pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.virtual-media__cell { transition: none; }
 }
 </style>

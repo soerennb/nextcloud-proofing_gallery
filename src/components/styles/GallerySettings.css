@@ -376,6 +376,13 @@
 	color: var(--color-main-text);
 }
 
+.field-hint {
+	margin: -6px 0 4px;
+	color: var(--color-text-maxcontrast);
+	font-size: 13px;
+	line-height: 1.45;
+}
+
 .option-grid {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));

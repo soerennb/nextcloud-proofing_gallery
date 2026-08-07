@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises'
+import { readdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import type { FullConfig } from '@playwright/test'
@@ -88,6 +88,40 @@ export default async function globalSetup(config: FullConfig) {
 		},
 	).then(response => response.json()) as { gallery: { id: number, shareToken: string } }
 
+	const largeDav = `${baseURL}/remote.php/dav/files/admin/ProofingGalleryE2ELarge`
+	await fetch(largeDav, { method: 'MKCOL', headers })
+	const largeContents = await fetch(largeDav, {
+		method: 'PROPFIND',
+		headers: { ...headers, Depth: '1', 'Content-Type': 'application/xml' },
+		body: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>',
+	}).then(result => result.text())
+	const largeRoot = new URL(largeDav, baseURL).pathname.replace(/\/?$/, '/')
+	await Promise.all([...largeContents.matchAll(/<(?:d:)?href>([^<]+)<\/(?:d:)?href>/g)].map(async ([, href]) => {
+		const pathname = new URL(href, baseURL).pathname
+		if (pathname.replace(/\/?$/, '/') !== largeRoot) await fetch(new URL(pathname, baseURL), { method: 'DELETE', headers })
+	}))
+	const localFixtureDirectory = path.join(process.cwd(), '.local/test-assets/remote-gallery-DjNAceoSQSpYKYL')
+	const localFixtureNames = await readdir(localFixtureDirectory).catch(() => [])
+	const localFixtures = localFixtureNames.filter(name => name.endsWith('.webp')).sort()
+	const useLocalFixtures = localFixtures.length === 23
+	const largeImages = useLocalFixtures
+		? await Promise.all(localFixtures.map(name => readFile(path.join(localFixtureDirectory, name))))
+		: Array.from({ length: 23 }, () => png)
+	const largeExtension = useLocalFixtures ? 'webp' : 'png'
+	await Promise.all(largeImages.map((body, index) => fetch(`${largeDav}/mobile-${String(index + 1).padStart(2, '0')}.${largeExtension}`, {
+		method: 'PUT',
+		headers: { ...headers, 'Content-Type': useLocalFixtures ? 'image/webp' : 'image/png' },
+		body,
+	})))
+	const largePropfind = await fetch(largeDav, {
+		method: 'PROPFIND',
+		headers: { ...headers, Depth: '0', 'Content-Type': 'application/xml' },
+		body: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/></d:prop></d:propfind>',
+	})
+	const largeXml = await largePropfind.text()
+	const largeFolderId = Number(largeXml.match(/<(?:oc:)?fileid>(\d+)<\/(?:oc:)?fileid>/)?.[1])
+	if (!largeFolderId) throw new Error('Large E2E folder file ID could not be resolved')
+
 	for (let index = 1; index <= 4; index++) {
 		const dashboardGallery = await fetch(galleriesUrl, {
 			method: 'POST',
@@ -103,6 +137,12 @@ export default async function globalSetup(config: FullConfig) {
 
 	await writeFile(
 		path.join(process.cwd(), 'test-results-e2e-state.json'),
-		JSON.stringify({ galleryId: publish.gallery.id, token: publish.gallery.shareToken, folderId }),
+		JSON.stringify({
+			galleryId: publish.gallery.id,
+			token: publish.gallery.shareToken,
+			folderId,
+			largeFolderId,
+			largeExtension,
+		}),
 	)
 }

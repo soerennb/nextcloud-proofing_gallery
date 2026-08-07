@@ -15,11 +15,11 @@ enum GalleryPurpose: string {
 	/** @return array<string, mixed> */
 	public function settings(): array {
 		return match ($this) {
-			self::Showcase => self::patch('presentation', 'none'),
-			self::Delivery => self::patch('presentation', 'all'),
-			self::Selection => self::patch('collaboration', 'none', selections: true),
-			self::Proofing => self::patch('collaboration', 'none', likes: true, colors: true, comments: true, annotations: true, selections: true),
-			self::Uploads => [...self::patch('presentation', 'none'), 'delivery' => [
+			self::Showcase => [...self::patch('presentation', 'none'), 'presentation' => ['openerStyle' => 'cinematic']],
+			self::Delivery => [...self::patch('presentation', 'all'), 'presentation' => ['openerStyle' => 'cinematic']],
+			self::Selection => [...self::patch('collaboration', 'none', selections: true), 'presentation' => ['openerStyle' => 'compact']],
+			self::Proofing => [...self::patch('collaboration', 'none', likes: true, colors: true, comments: true, annotations: true, selections: true), 'presentation' => ['openerStyle' => 'compact']],
+			self::Uploads => [...self::patch('presentation', 'none'), 'presentation' => ['openerStyle' => 'compact'], 'delivery' => [
 				'downloadScope' => 'none',
 				'guestUploads' => true,
 			]],

@@ -19,6 +19,7 @@ import CollectionContent from './CollectionContent.vue'
 import CullingWorkspace from './CullingWorkspace.vue'
 import FolderContent from './FolderContent.vue'
 import GalleryDesignPreview from './GalleryDesignPreview.vue'
+import GalleryMotionControls from './GalleryMotionControls.vue'
 import ManagerPanel from './ManagerPanel.vue'
 import LivePushPanel from './LivePushPanel.vue'
 import NotificationPanel from './NotificationPanel.vue'
@@ -629,6 +630,9 @@ onBeforeUnmount(() => {
 								<option value="cinematic">{{ t('proofing_gallery', 'Cinematic cover') }}</option>
 							</select>
 						</label>
+						<p v-if="draft.settings.presentation.openerStyle === 'cinematic' && !draft.settings.presentation.heroFileId" class="field-hint">
+							{{ t('proofing_gallery', 'Choose a cover image for the cinematic opening. Until then, the gallery opens compactly.') }}
+						</p>
 						<div class="header-visibility">
 							<NcCheckboxRadioSwitch v-model="draft.settings.presentation.showTitle" type="switch">
 								{{ t('proofing_gallery', 'Show title in header') }}
@@ -702,7 +706,7 @@ onBeforeUnmount(() => {
 								<select v-model.number="draft.settings.presentation.slideshowInterval" name="slideshowInterval">
 									<option v-for="seconds in [3, 5, 8, 12, 15]" :key="seconds" :value="seconds">{{ t('proofing_gallery', '{seconds} seconds', { seconds }) }}</option>
 								</select>
-							</label>
+							</label><GalleryMotionControls v-model="draft.settings.presentation" />
 						</div>
 						<label class="color-field">
 							<span>{{ t('proofing_gallery', 'Accent color') }}</span>

@@ -61,10 +61,9 @@ final class PublicGalleryDataService {
 			));
 			$nodes = array_map(function (array $item) use ($gallery, $settings): array {
 				try {
-					$item['metadata'] = $this->metadata->publicSummary(
-						$this->collections->resolveMedia($gallery, (int)$item['id']),
-						$settings->metadata->publicFields,
-					);
+					$file = $this->collections->resolveMedia($gallery, (int)$item['id']);
+					$item['metadata'] = $this->metadata->publicSummary($file, $settings->metadata->publicFields);
+					$item = [...$item, ...$this->publicGeometry($file)];
 				} catch (\Throwable) {
 					$item['metadata'] = ['state' => 'unavailable'];
 				}
@@ -106,6 +105,7 @@ final class PublicGalleryDataService {
 					$item['folder'] = false;
 					$item['group'] = $this->indexedGroup((string)$item['relativePath'], (string)$item['mimeType'], $indexPath, $groupBy, $groupDepth);
 					$item['metadata'] = $this->metadata->publicSummary($file, $settings->metadata->publicFields);
+					$item = [...$item, ...$this->publicGeometry($file)];
 					$items[] = $item;
 				} catch (\Throwable) {
 					// Stale index entries never become public through a missing node.
@@ -159,19 +159,22 @@ final class PublicGalleryDataService {
 			return $sortDirection === 'desc' ? -$result : $result;
 		});
 
-		$items = array_map(fn (Node $node): array => [
-			'id' => $node->getId(),
-			'name' => $node->getName(),
-			'mimeType' => $node->getMimeType(),
-			'size' => (int)$node->getSize(),
-			'modifiedAt' => $node->getMTime(),
-			'etag' => $node->getEtag(),
-			'folder' => $node instanceof Folder,
-			'group' => self::group($node),
-			'metadata' => $node instanceof File
-				? $this->metadata->publicSummary($node, $settings->metadata->publicFields)
-				: ['state' => 'unavailable'],
-		], array_slice($nodes, $offset, $limit));
+		$items = array_map(function (Node $node) use ($settings): array {
+			$item = [
+				'id' => $node->getId(),
+				'name' => $node->getName(),
+				'mimeType' => $node->getMimeType(),
+				'size' => (int)$node->getSize(),
+				'modifiedAt' => $node->getMTime(),
+				'etag' => $node->getEtag(),
+				'folder' => $node instanceof Folder,
+				'group' => self::group($node),
+				'metadata' => $node instanceof File
+					? $this->metadata->publicSummary($node, $settings->metadata->publicFields)
+					: ['state' => 'unavailable'],
+			];
+			return $node instanceof File ? [...$item, ...$this->publicGeometry($node)] : $item;
+		}, array_slice($nodes, $offset, $limit));
 
 		$groups = [];
 		foreach ($nodes as $node) {
@@ -272,6 +275,14 @@ final class PublicGalleryDataService {
 	private static function group(Node $node): string {
 		if ($node instanceof Folder) return 'folder';
 		return str_starts_with($node->getMimeType(), 'video/') ? 'video' : 'image';
+	}
+
+	/** @return array{width?: int, height?: int} */
+	private function publicGeometry(File $file): array {
+		$summary = $this->metadata->summary($file);
+		$width = (int)($summary['width'] ?? 0);
+		$height = (int)($summary['height'] ?? 0);
+		return $width > 0 && $height > 0 ? compact('width', 'height') : [];
 	}
 
 	private function folderAt(Folder $root, string $path): Folder {

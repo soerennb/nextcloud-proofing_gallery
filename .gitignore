@@ -33,6 +33,8 @@
 # Local development state
 /.env
 /.env.local
+/.env.studio
+/.local/
 /.idea/
 /.vscode/
 *.log

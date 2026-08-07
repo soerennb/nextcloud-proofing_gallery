@@ -96,6 +96,9 @@ export interface MediaItem {
 	id: number
 	name: string
 	mimeType: string
+	/** Public-safe intrinsic media geometry used for stable gallery layout. */
+	width?: number
+	height?: number
 	size: number
 	modifiedAt: number
 	etag: string
@@ -317,7 +320,7 @@ export type NotificationEventType = 'comment.created' | 'comment.updated' | 'sel
 	| 'like.changed' | 'color.changed' | 'upload.received' | 'upload.accepted' | 'upload.rejected'
 
 export interface UserPreferences {
-	schemaVersion: 3
+	schemaVersion: 4
 	defaultPurpose: GalleryPurpose | null
 	parentFolder: { id: number; name: string } | null
 	designPresetId: number | null
@@ -328,6 +331,7 @@ export interface UserPreferences {
 	}
 	lifecycle: { enabled: boolean; trigger: 'fixed_date' | 'after_completion'; revokeAfterDays: number; archiveAfterDays: number }
 	cullingFilmstripPlacement: 'auto' | 'side' | 'bottom'
+	cullingFilmstripSize: number
 	savedViews: Array<{
 		id: string
 		name: string

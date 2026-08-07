@@ -18,7 +18,7 @@ use OCA\ProofingGallery\Dto\Settings\SecuritySettings;
 use OCA\ProofingGallery\Dto\Settings\SettingsInput;
 
 final class GallerySettings implements JsonSerializable {
-	public const SCHEMA_VERSION = 6;
+	public const SCHEMA_VERSION = 7;
 	public const PUBLIC_METADATA_FIELDS = MetadataSettings::PUBLIC_FIELDS;
 
 	private function __construct(

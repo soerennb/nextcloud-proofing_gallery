@@ -27,10 +27,13 @@ export interface GalleryPresentation extends GalleryAppearance {
 	titleSize: 'small' | 'medium' | 'large'
 	showFilenames: boolean
 	slideshowInterval: number
+	motionPreset: 'off' | 'subtle' | 'expressive'
+	lightboxFilmstripPlacement: 'auto' | 'side' | 'bottom' | 'hidden'
+	lightboxChromeBehavior: 'persistent' | 'autoHide'
 }
 
 export interface GallerySettings {
-	schemaVersion?: 6
+	schemaVersion?: 7
 	mode: GalleryMode
 	feedbackVisibility: FeedbackVisibility
 	allowDownloads: boolean
@@ -89,7 +92,7 @@ export type CanonicalGallerySettings = Pick<GallerySettings,
 
 export function canonicalGallerySettings(settings: GallerySettings): CanonicalGallerySettings {
 	return {
-		schemaVersion: 6,
+		schemaVersion: 7,
 		mode: settings.mode,
 		publicLocale: settings.publicLocale,
 		review: structuredClone(settings.review),
@@ -133,9 +136,12 @@ export function createDefaultGallerySettings(): GallerySettings {
 		titleSize: 'medium',
 		showFilenames: true,
 		slideshowInterval: 5,
+		motionPreset: 'expressive',
+		lightboxFilmstripPlacement: 'auto',
+		lightboxChromeBehavior: 'autoHide',
 	}
 	return {
-		schemaVersion: 6,
+		schemaVersion: 7,
 		mode: 'presentation',
 		feedbackVisibility: 'collaborative',
 		allowDownloads: false,

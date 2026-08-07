@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7.0 — 2026-08-07
+
+- radically modernize public galleries with configurable compact and immersive
+  openings, refined glass surfaces, responsive controls, and animated viewing
+- preserve complete portrait and landscape photographs in justified grids and
+  replace cropped list strips with a useful photographic contact sheet
+- make the lightbox touch-safe with tap-to-toggle controls, bidirectional swipe
+  navigation, pinch zoom, two visible arrows, and a hideable session filmstrip
+- keep culling navigation and virtualized side or bottom filmstrips within the
+  viewport across large collections and narrow mobile layouts
+- add a reproducible 30-photo local Studio library and six polished desktop and
+  mobile screenshots for the Nextcloud App Store
+
 ## 0.6.2 — 2026-08-06
 
 - repair legacy gallery share tokens with a new idempotent upgrade migration

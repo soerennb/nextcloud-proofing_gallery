@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: build docs appstore appstore-signed verify-package verify-signed-package test-upgrade watch install lint test test-e2e test-compat dev-up dev-down dev-logs dev-install dev-reset occ
+.PHONY: build docs appstore appstore-signed verify-package verify-signed-package test-upgrade watch install lint test test-e2e test-compat dev-up dev-down dev-logs dev-install dev-reset occ studio-up studio-down studio-restart studio-status studio-logs studio-reset studio-occ studio-library-check studio-seed studio-screenshots studio-browser-check
 
 install:
 	npm ci
@@ -67,3 +67,36 @@ dev-reset:
 
 occ:
 	docker compose exec -T --user www-data nextcloud php occ $(CMD)
+
+studio-up:
+	./scripts/studio-stack.sh up
+
+studio-down:
+	./scripts/studio-stack.sh down
+
+studio-restart:
+	./scripts/studio-stack.sh restart
+
+studio-status:
+	./scripts/studio-stack.sh status
+
+studio-logs:
+	./scripts/studio-stack.sh logs
+
+studio-reset:
+	./scripts/studio-stack.sh reset
+
+studio-occ:
+	./scripts/studio-stack.sh occ $(CMD)
+
+studio-library-check:
+	node ./scripts/validate-demo-library.mjs
+
+studio-seed: studio-up studio-library-check
+	node ./scripts/studio-seed.mjs
+
+studio-screenshots: studio-seed
+	node ./scripts/capture-studio-screenshots.mjs
+
+studio-browser-check: studio-seed
+	node ./scripts/verify-studio-browsers.mjs

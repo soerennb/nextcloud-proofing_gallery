@@ -151,9 +151,26 @@ kbd { padding: 2px 6px; border: 1px solid var(--color-border-maxcontrast); borde
 	box-shadow: 0 10px 30px rgb(0 0 0 / 18%);
 }
 
-.culling-stage--side { grid-template-columns: minmax(0, 1fr) 112px; }
+.culling-stage--side { grid-template-columns: minmax(0, 1fr) var(--filmstrip-size, 112px); }
 
-.culling-stage--bottom { grid-template-rows: minmax(0, 1fr) 112px; }
+.culling-stage--bottom { grid-template-rows: minmax(0, 1fr) var(--filmstrip-size, 112px); }
+
+.filmstrip-size input { width: 120px; accent-color: var(--color-primary-element); }
+
+.culling-workspace--focus { position: fixed; z-index: 10000; inset: 0; overflow: hidden; padding: 12px; background: #08090c; }
+
+:global(body:has(.culling-workspace--focus) #app-navigation-vue) { visibility: hidden; }
+
+:global(body:has(.culling-workspace--focus) .app-navigation-toggle) { visibility: hidden; }
+
+.culling-workspace--focus > :not(.culling-toolbar, .culling-stage) { display: none; }
+
+.culling-workspace--focus .culling-toolbar { position: absolute; z-index: 12; inset: 18px 18px auto auto; width: auto; max-width: calc(100% - 36px); opacity: 0; transition: opacity 160ms ease; }
+
+.culling-workspace--focus .culling-toolbar:hover,
+.culling-workspace--focus .culling-toolbar:focus-within { opacity: 1; }
+
+.culling-workspace--focus .culling-stage { display: grid; height: calc(100% - 24px); min-height: 0; }
 
 .culling-loupe { display: grid; min-width: 0; min-height: 0; grid-template-columns: minmax(0, 1fr) 250px; overflow: hidden; background: #0d0f13; color: #fff; }
 

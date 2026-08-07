@@ -16,7 +16,12 @@ describe('createDefaultGallerySettings', () => {
 				showMediaCount: true,
 				titleSize: 'medium',
 			},
-			schemaVersion: 6,
+			schemaVersion: 7,
+			presentation: {
+				motionPreset: 'expressive',
+				lightboxFilmstripPlacement: 'auto',
+				lightboxChromeBehavior: 'autoHide',
+			},
 		})
 	})
 

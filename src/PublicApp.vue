@@ -3,7 +3,7 @@ import { n, t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import { calculateMediaGridLayout } from './domain/mediaGridLayout.ts'
+import { calculateMediaLayout } from './domain/mediaGridLayout.ts'
 import type { CollaborationState, GuestIdentity, MediaItem, PublicGallery, PublicGalleryPage } from './publicTypes.ts'
 import PublicGalleryHeader from './components/PublicGalleryHeader.vue'
 
@@ -41,13 +41,12 @@ const pageStyle = computed(() => ({
 const mediaItems = computed(() => items.value.filter(item => !item.folder))
 const headerHeroUrl = computed(() => settings.value.presentation.heroFileId
 	? assetUrl('hero')
-	: mediaItems.value.find(item => item.mimeType.startsWith('image/'))
-		? previewUrl(mediaItems.value.find(item => item.mimeType.startsWith('image/'))!, 1800, 1200)
-		: null)
+	: null)
 const headerLogoUrl = computed(() => settings.value.presentation.logoFileId || settings.value.presentation.instanceLogoAssetId
 	? assetUrl('logo')
 	: null)
 const activeIndex = ref<number | null>(null)
+const activeOpener = ref<HTMLElement | null>(null)
 const selectedIds = ref<number[]>([])
 let collaborationTimer: number | undefined
 const guest = ref<GuestIdentity | null>(null)
@@ -87,23 +86,21 @@ let scrollTimer: number | undefined
 let pageController: AbortController | undefined
 const activeFilterCount = computed(() => Number(groupBy.value !== 'none') + Number(layout.value !== 'grid'))
 const tileGap = computed(() => settings.value.presentation?.tileGap === 'tight' ? 2 : settings.value.presentation?.tileGap === 'wide' ? 16 : 8)
-const featuredGrid = computed(() => mediaItems.value.length <= 3 && layout.value !== 'list')
-const tileMinWidth = computed(() => featuredGrid.value
-	? 360
-	: settings.value.presentation?.tileSize === 'large' ? 320 : settings.value.presentation?.tileSize === 'small' ? 170 : 230)
+const tileMinWidth = computed(() => settings.value.presentation?.tileSize === 'large' ? 320 : settings.value.presentation?.tileSize === 'small' ? 170 : 230)
+const targetRowHeight = computed(() => settings.value.presentation?.tileSize === 'large' ? 280 : settings.value.presentation?.tileSize === 'small' ? 150 : 210)
 const gridPlaceholderStyle = computed(() => {
 	if (virtualGridResolved.value) return undefined
 	const horizontalPadding = Math.max(8, Math.min(viewportWidth.value * 0.02, 28)) * 2
 	const available = Math.max(1, viewportWidth.value - horizontalPadding)
-	const grid = calculateMediaGridLayout({
+	const grid = calculateMediaLayout({
 		containerWidth: available,
-		itemCount: items.value.length,
+		aspectRatios: items.value.map(itemRatio),
+		mode: layout.value,
 		minItemWidth: tileMinWidth.value,
-		maxItemWidth: featuredGrid.value ? 520 : undefined,
-		maxColumns: featuredGrid.value ? Math.max(1, mediaItems.value.length) : undefined,
 		gap: tileGap.value,
-		itemAspectRatio: featuredGrid.value && mobileViewport.value ? 16 / 10 : 4 / 3,
-		list: layout.value === 'list',
+		targetRowHeight: targetRowHeight.value,
+		listRowHeight: mobileViewport.value ? 132 : 172,
+		singleColumn: mobileViewport.value,
 	})
 	return { minHeight: `${grid.totalHeight}px` }
 })
@@ -389,6 +386,42 @@ function tilePreviewUrl(item: MediaItem): string {
 	return previewUrl(item, 900, 900, 'fit')
 }
 
+function itemRatio(item: MediaItem): number {
+	const dimensions = mediaDimensions.value[item.id]
+	const width = dimensions?.width ?? item.width ?? item.metadata?.width ?? 0
+	const height = dimensions?.height ?? item.height ?? item.metadata?.height ?? 0
+	if (width > 0 && height > 0) return width / height
+	return item.mimeType.startsWith('video/') ? 16 / 9 : 4 / 3
+}
+
+function formatFileSize(bytes: number): string {
+	if (!Number.isFinite(bytes) || bytes < 1024) return `${Math.max(0, bytes)} B`
+	const units = ['KB', 'MB', 'GB', 'TB']
+	let value = bytes / 1024
+	let unit = units[0]
+	for (let index = 1; value >= 1024 && index < units.length; index++) {
+		value /= 1024
+		unit = units[index]
+	}
+	return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value)} ${unit}`
+}
+
+function mediaOrientation(width: number, height: number): string {
+	if (width <= 0 || height <= 0) return ''
+	if (width === height) return t('proofing_gallery', 'Square')
+	return width > height ? t('proofing_gallery', 'Landscape') : t('proofing_gallery', 'Portrait')
+}
+
+function mediaListDetails(item: MediaItem): string {
+	if (item.folder) return t('proofing_gallery', 'Folder')
+	const width = item.width ?? item.metadata?.width ?? mediaDimensions.value[item.id]?.width ?? 0
+	const height = item.height ?? item.metadata?.height ?? mediaDimensions.value[item.id]?.height ?? 0
+	const orientation = mediaOrientation(width, height)
+	const dimensions = width > 0 && height > 0 ? `${width} × ${height}` : ''
+	const type = item.mimeType.split('/').at(-1)?.toUpperCase() ?? item.mimeType
+	return [orientation, dimensions, type, formatFileSize(item.size)].filter(Boolean).join(' · ')
+}
+
 function rememberDimensions(item: MediaItem, event: Event) {
 	const image = event.currentTarget as HTMLImageElement
 	if (!image.naturalWidth || !image.naturalHeight) return
@@ -438,9 +471,10 @@ function publicEndpoint(path: string): string {
 	return generateUrl(`/apps/proofing_gallery/public/${props.gallery.token}/${path}`)
 }
 
-function openItem(item: MediaItem) {
+function openItem(item: MediaItem, event?: MouseEvent) {
 	mobileToolsOpen.value = false
 	if (!item.folder) {
+		activeOpener.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null
 		activeIndex.value = mediaItems.value.findIndex(media => media.id === item.id)
 		return
 	}
@@ -482,6 +516,7 @@ function upOneLevel() {
 		class="public-gallery"
 		:class="[
 			`public-gallery--theme-${settings.presentation?.theme ?? settings.appearance.theme ?? 'dark'}`,
+			`public-gallery--motion-${settings.presentation?.motionPreset ?? 'expressive'}`,
 			`public-gallery--layout-${layout}`,
 			`public-gallery--tiles-${settings.presentation?.tileSize ?? settings.appearance.tileSize ?? 'medium'}`,
 			`public-gallery--gap-${settings.presentation?.tileGap ?? settings.appearance.tileGap ?? 'normal'}`,
@@ -515,7 +550,10 @@ function upOneLevel() {
 				{{ collaborationError }}
 			</p>
 			<div class="gallery-toolbar" role="group" :aria-label="t('proofing_gallery', 'Gallery tools')">
-				<label class="gallery-toolbar__search">
+				<span v-if="mobileViewport" class="gallery-toolbar__mobile-summary">
+					{{ currentPath || n('proofing_gallery', '%n file', '%n files', total) }}
+				</span>
+				<label v-if="!mobileViewport" class="gallery-toolbar__search">
 					<span class="visually-hidden">{{ t('proofing_gallery', 'Filter by filename') }}</span>
 					<input
 						v-model="search"
@@ -525,7 +563,7 @@ function upOneLevel() {
 						:placeholder="t('proofing_gallery', 'Filter by filename')"
 						@input="queueSearch">
 				</label>
-				<label class="gallery-toolbar__sort">
+				<label v-if="!mobileViewport" class="gallery-toolbar__sort">
 					<span>{{ t('proofing_gallery', 'Sort') }}</span>
 					<select v-model="sortBy"
 						name="gallerySort"
@@ -536,7 +574,7 @@ function upOneLevel() {
 						<option value="size">{{ t('proofing_gallery', 'File size') }}</option>
 					</select>
 				</label>
-				<button
+				<button v-if="!mobileViewport"
 					class="gallery-toolbar__direction"
 					type="button"
 					:aria-label="t('proofing_gallery', 'Reverse order')"
@@ -557,6 +595,32 @@ function upOneLevel() {
 					:class="{ 'gallery-toolbar__secondary--open': mobileToolsOpen }"
 					:aria-hidden="mobileViewport && !mobileToolsOpen ? 'true' : undefined"
 					:inert="mobileViewport && !mobileToolsOpen">
+					<label v-if="mobileViewport" class="gallery-toolbar__search">
+						<span>{{ t('proofing_gallery', 'Filter by filename') }}</span>
+						<input v-model="search"
+							name="gallerySearch"
+							type="search"
+							:placeholder="t('proofing_gallery', 'Filter by filename')"
+							@input="queueSearch">
+					</label>
+					<label v-if="mobileViewport" class="gallery-toolbar__sort">
+						<span>{{ t('proofing_gallery', 'Sort') }}</span>
+						<select v-model="sortBy"
+							name="gallerySort"
+							:aria-label="t('proofing_gallery', 'Sort gallery')"
+							@change="applyView">
+							<option value="name">{{ t('proofing_gallery', 'Filename') }}</option>
+							<option value="modified">{{ t('proofing_gallery', 'Last changed') }}</option>
+							<option value="size">{{ t('proofing_gallery', 'File size') }}</option>
+						</select>
+					</label>
+					<button v-if="mobileViewport"
+						class="gallery-toolbar__mobile-direction"
+						type="button"
+						:aria-label="t('proofing_gallery', 'Reverse order')"
+						@click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'; applyView()">
+						{{ sortDirection === 'asc' ? '↑' : '↓' }} {{ t('proofing_gallery', 'Reverse order') }}
+					</button>
 					<label>
 						<span>{{ t('proofing_gallery', 'Group') }}</span>
 						<select v-model="groupBy"
@@ -595,7 +659,7 @@ function upOneLevel() {
 					{{ layout === 'masonry' ? t('proofing_gallery', 'Masonry') : t('proofing_gallery', 'List') }} ×
 				</button>
 			</div>
-			<div class="public-gallery__summary">
+			<div v-if="!mobileViewport || currentPath" class="public-gallery__summary">
 				<p>
 					<button v-if="currentPath" type="button" @click="upOneLevel">
 						←
@@ -678,15 +742,14 @@ function upOneLevel() {
 					class="media-grid"
 					:class="[
 						`media-grid--${layout}`,
-						{ 'media-grid--featured': featuredGrid },
 					]"
 					:items="items"
+					:mode="layout"
 					:min-item-width="tileMinWidth"
-					:max-item-width="featuredGrid ? 520 : undefined"
-					:max-columns="featuredGrid ? Math.max(1, mediaItems.length) : undefined"
-					:mobile-item-aspect-ratio="featuredGrid ? 16 / 10 : undefined"
+					:target-row-height="targetRowHeight"
+					photographic
 					:gap="tileGap"
-					:list="layout === 'list'"
+					:item-dimensions="mediaDimensions"
 					:has-more="hasMore"
 					:loading-more="loadingMore"
 					:aria-label="t('proofing_gallery', 'Gallery files')"
@@ -700,7 +763,7 @@ function upOneLevel() {
 								class="media-tile__open"
 								type="button"
 								:aria-label="mediaAccessibleName(item)"
-								@click="openItem(item)">
+								@click="openItem(item, $event)">
 								<ProgressiveImage
 									v-if="item.mimeType.startsWith('image/')"
 									:src="tilePreviewUrl(item)"
@@ -710,7 +773,11 @@ function upOneLevel() {
 									@load="rememberDimensions(item, $event)" />
 								<span v-else-if="item.folder" class="media-tile__folder" aria-hidden="true" />
 								<span v-else class="media-tile__video" aria-hidden="true">▶</span>
-								<span v-if="settings.presentation?.showFilenames ?? settings.showFilenames" class="media-tile__name" aria-hidden="true">
+								<span v-if="layout === 'list'" class="media-tile__details" aria-hidden="true">
+									<strong v-if="settings.presentation?.showFilenames ?? settings.showFilenames">{{ item.name }}</strong>
+									<span>{{ mediaListDetails(item) }}</span>
+								</span>
+								<span v-else-if="settings.presentation?.showFilenames ?? settings.showFilenames" class="media-tile__name" aria-hidden="true">
 									{{ item.name }}
 								</span>
 								<span
@@ -789,6 +856,7 @@ function upOneLevel() {
 			v-if="activeIndex !== null"
 			:media-items="mediaItems"
 			:initial-index="activeIndex"
+			:initial-element="activeOpener"
 			:settings="settings"
 			:collaboration="collaboration"
 			:dimensions="mediaDimensions"
@@ -797,7 +865,7 @@ function upOneLevel() {
 			:stream-url="streamUrl"
 			:download-url="downloadUrl"
 			:selection-export-url="selectionExportUrl"
-			@close="activeIndex = null" />
+			@close="activeIndex = null; activeOpener = null" />
 	</main>
 </template>
 

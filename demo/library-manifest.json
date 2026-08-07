@@ -1,0 +1,279 @@
+{
+  "schemaVersion": 1,
+  "libraryVersion": "v2",
+  "root": ".local/demo-library/v2/generated",
+  "source": "OpenAI ImageGen",
+  "usage": "Local development, automated tests, documentation, and Proofing Gallery marketing screenshots",
+  "assets": [
+    {
+      "file": "coastal-vows-01-hero.png",
+      "series": "coastal-vows",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "5037c3223c8ed05253ea8e5381b11b5ff01adabfeca88fd56464e12c2c98412a",
+      "prompt": "Photorealistic editorial wedding photograph, couple walking along a windswept North Sea cliff at golden hour, muted sand and slate palette, premium European wedding photography, negative space for a title."
+    },
+    {
+      "file": "coastal-vows-02-portrait.png",
+      "series": "coastal-vows",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "5891c01edb0484d312205d81c1e87c6d7c4aeadfc48bee231761c0b6cd14d2ca",
+      "prompt": "Photorealistic candid close portrait of a newly married couple outside a modern coastal venue, cloudy daylight, contemporary European documentary style."
+    },
+    {
+      "file": "coastal-vows-03-table.png",
+      "series": "coastal-vows",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "2a45c140bd9bbc6445fee4ff950bbd128649f7b872929618364fc13c5927cf78",
+      "prompt": "Photorealistic luxury wedding reception table at dusk in a minimal glass pavilion by the sea, cream ceramics, linen, wildflowers and candlelight."
+    },
+    {
+      "file": "coastal-vows-04-ceremony.png",
+      "series": "coastal-vows",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "df961158740eb43c8a251c0d4f7f108876d2eb0577e3c5d65de39b0254f607f1",
+      "prompt": "New landscape editorial wedding photograph of a small outdoor ceremony beside a windswept North Sea cliff, guests seen from behind, muted sand, slate and ivory palette, soft overcast golden-hour light."
+    },
+    {
+      "file": "coastal-vows-05-bouquet.png",
+      "series": "coastal-vows",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "90203fdd0165ee31aa3defe560fc4bb620a345eaf6ec082ddc42c84e40bb2c84",
+      "prompt": "Portrait editorial detail of a wind-tousled bridal bouquet of pale garden flowers and coastal grasses against moving ivory linen, gray sea defocused behind."
+    },
+    {
+      "file": "coastal-vows-06-dance.png",
+      "series": "coastal-vows",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "faad3178cc10529c0ec4e020972d42bea0528ddb67231cb810c8ff40cc90a720",
+      "prompt": "Portrait candid photograph of a fictional newly married couple dancing after dusk inside a minimal glass coastal pavilion, candlelight and quiet spontaneous emotion."
+    },
+    {
+      "file": "studio-no7-01-blue.png",
+      "series": "studio-no7",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "cefdac79c95b40bb64d124b625722affdf77a1ae3591617152732ac4d55af836",
+      "prompt": "Photorealistic high-fashion studio portrait of a fictional model in a sculptural cobalt garment against warm gray, architectural light."
+    },
+    {
+      "file": "studio-no7-02-tailoring.png",
+      "series": "studio-no7",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "85e8114fa60f08ae637362aec1b037c39cec7184b32fae1eddb32aa8dd8af5a6",
+      "prompt": "Photorealistic contemporary fashion campaign with a fictional model in cream tailoring seated on brushed steel in a daylight studio."
+    },
+    {
+      "file": "studio-no7-03-beauty.png",
+      "series": "studio-no7",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "7d8874390b1b5178839356c3ba9a63a376742af222d476a46e71d0a66f9d4936",
+      "prompt": "Portrait beauty close-up of a fictional model in sculptural cobalt styling against warm gray, precise architectural studio light and natural skin texture."
+    },
+    {
+      "file": "studio-no7-04-full-length.png",
+      "series": "studio-no7",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "2287d008b8e919adab5ae35a3cd60ae94e5b18c20f5cb0b605946f4e63b54a3f",
+      "prompt": "Full-length portrait of a fictional model in sculptural cream tailoring with a restrained cobalt accessory and brushed-steel studio prop."
+    },
+    {
+      "file": "studio-no7-05-cobalt-campaign.png",
+      "series": "studio-no7",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "b457c707ce3f47d8153e5d53e15184c274a5cc91a6bba4b762aeb25e13e90dcf",
+      "prompt": "Landscape campaign image of a fictional model in sculptural cobalt seated across low brushed-steel forms in a warm-gray studio with architectural light."
+    },
+    {
+      "file": "studio-no7-06-duo.png",
+      "series": "studio-no7",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "17da335cd417941e99a8e0e03d00acd7c5c40e82a7562739f12b7181251082e4",
+      "prompt": "Landscape editorial image of two fictional models in cream and cobalt sculptural tailoring crossing through a minimal warm-gray studio with long shadows."
+    },
+    {
+      "file": "northern-spaces-01-exterior.png",
+      "series": "northern-spaces",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "af0e68d1b9468094deb5f75a491061237fac959fa1485b4ee8394f9c3f098105",
+      "prompt": "Photorealistic architectural photograph of a low concrete cultural building on a windswept northern coast with dune grass and reflecting pool."
+    },
+    {
+      "file": "northern-spaces-02-interior.png",
+      "series": "northern-spaces",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "5fde1917c05f8a097c8cd4745f3667eb72131e13285f140e3aa7981e5643d82c",
+      "prompt": "Photorealistic double-height Nordic reading room with pale oak shelving, board-marked concrete, sculptural stairs and soft northern daylight."
+    },
+    {
+      "file": "northern-spaces-03-facade.png",
+      "series": "northern-spaces",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "2db2f306f5e26ee938da6d613ef655543075a07b5780d673cf066c7041aafeb0",
+      "prompt": "Portrait architectural facade detail of board-marked concrete, tall glazing, dune grass and a sheltered passage on a northern coast."
+    },
+    {
+      "file": "northern-spaces-04-stairwell.png",
+      "series": "northern-spaces",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "8c73de08084b3d30197ba8e9147d7f02e552b367ca367cac97148231432ace0b",
+      "prompt": "Portrait photograph of an austere sculptural concrete stairwell viewed upward, with a narrow skylight, pale oak handrail and soft northern daylight."
+    },
+    {
+      "file": "northern-spaces-05-reading-room.png",
+      "series": "northern-spaces",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "78a2a1580eea91c468129a7aadf1619b0c7124502021592a79a5cb3d0c32d8a2",
+      "prompt": "Wide pale-oak reading room facing the gray northern sea through floor-to-ceiling glass, board-marked concrete ceiling and sparse furniture."
+    },
+    {
+      "file": "northern-spaces-06-blue-hour.png",
+      "series": "northern-spaces",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "3fef397cd6c402c510d7adea8fafdb6446726b4d8ebbabb440e951f056434923",
+      "prompt": "Blue-hour exterior of a low concrete cultural building across dune grass and a reflecting pool, restrained warm interior light and deep slate sky."
+    },
+    {
+      "file": "live-session-01-stage.png",
+      "series": "live-session",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "da61696366c7b53aea11ec5290bce1f3876629d27ba97b2a01204b13b5a6a9e3",
+      "prompt": "Photorealistic original indie trio performing in a concrete club under amber and electric blue light, sophisticated documentary framing."
+    },
+    {
+      "file": "live-session-02-guitar.png",
+      "series": "live-session",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "58a604d41a679f06a9dad720053ef2e4f1ad2ed48af18f7d53a09aae13284a4d",
+      "prompt": "Photorealistic close documentary view of a fictional guitarist on a small-club stage in crimson light with a cyan rim."
+    },
+    {
+      "file": "live-session-03-drummer.png",
+      "series": "live-session",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "29e137ab1852f9878fbe3834ab58eec18106048e1f3bfebe0844e4e66f1d9631",
+      "prompt": "Portrait documentary concert photograph of a fictional drummer mid-performance in a concrete club under amber key and electric-blue rim light."
+    },
+    {
+      "file": "live-session-04-vocalist.png",
+      "series": "live-session",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "cf2358255b92c53d92dad5775a4c8ee07921f6c2a0fd2129318d80f23f2fc86b",
+      "prompt": "Portrait close documentary photograph of a fictional vocalist between songs in a concrete club, amber side light and electric-blue rim."
+    },
+    {
+      "file": "live-session-05-audience.png",
+      "series": "live-session",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "e4c0d1c590dadc96fa96c4159b3223c241812fd919309f1cb4dfbec3525b6634",
+      "prompt": "Landscape view from behind a tightly packed small-club audience toward a fictional indie trio under amber and electric-blue lighting."
+    },
+    {
+      "file": "live-session-06-backstage.png",
+      "series": "live-session",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "80554085f2de2d7e494a0613fe92e5a76a1ba671abc8a906532b019fe0305765",
+      "prompt": "Landscape backstage documentary photograph of a fictional trio laughing after playing in a narrow concrete green room with tungsten light and blue stage spill."
+    },
+    {
+      "file": "community-01-workshop.png",
+      "series": "community",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "936c39505ffce09960d2814ce8e4bf817dc24f7b3ed918cb5dde1192d6d40dc2",
+      "prompt": "Photorealistic documentary image of diverse adult friends lifting a bold abstract print in a sunlit community printmaking workshop."
+    },
+    {
+      "file": "community-02-table.png",
+      "series": "community",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "1202bb01ae1742c90331307c81ff9390df3f435fe186c77dd8ea19f54ab4eadc",
+      "prompt": "Photorealistic overhead editorial view of a communal artist table with abstract prints, ink rollers and candid participants."
+    },
+    {
+      "file": "community-03-inking.png",
+      "series": "community",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "076cc18d9716083b52f91d0b33949512f559052257aad1e58c0b62fc97fe6f51",
+      "prompt": "Portrait close view of diverse adult hands rolling black ink across a linocut block on a worn communal table in bright industrial-window daylight."
+    },
+    {
+      "file": "community-04-portrait.png",
+      "series": "community",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "606c4a91dedc591644f7df2d3b58462f603d88e6242c6c48a0bbac3e8cd50851",
+      "prompt": "Portrait of a fictional adult printmaker beside a drying rack in a sunlit industrial workshop, ink-marked apron and relaxed direct expression."
+    },
+    {
+      "file": "community-05-drying-rack.png",
+      "series": "community",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "bbb07d690f0bac629314d7d9834f0a65a6a92a6e3f5d3357acb0e77ef4be2185",
+      "prompt": "Landscape documentary image of two fictional adults clipping bold abstract black-and-cream prints to a long drying rack in a sunlit workshop."
+    },
+    {
+      "file": "community-06-group.png",
+      "series": "community",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "0dd2c16ce0fc28f951abe24ae15eccef46e430b42d35ae36580739b7ae70b4e3",
+      "prompt": "Landscape group photograph of diverse fictional adult printmakers gathered naturally around an ink-marked table holding finished abstract prints."
+    }
+  ]
+}

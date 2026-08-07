@@ -188,7 +188,7 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		$html = '<!doctype html><html><head><meta charset="utf-8"><title>' . $title . '</title>'
 			. '<style>@page{size:A4;margin:12mm}body{font:12px system-ui;color:#111}h1{font-size:20px}'
 			. 'main{display:grid;grid-template-columns:repeat(3,1fr);gap:8mm 5mm}figure{margin:0;break-inside:avoid}'
-			. 'img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;background:#eee}figcaption{margin-top:4px;overflow-wrap:anywhere}'
+			. 'img{display:block;width:100%;aspect-ratio:4/3;object-fit:contain;background:#eee}figcaption{margin-top:4px;overflow-wrap:anywhere}'
 			. '@media screen{body{max-width:1100px;margin:30px auto;padding:20px}}</style></head>'
 			. '<body><h1>' . $title . '</h1><main>' . $cards . '</main><script>window.addEventListener("load",()=>window.print())</script></body></html>';
 		return new DataDisplayResponse($html, Http::STATUS_OK, [

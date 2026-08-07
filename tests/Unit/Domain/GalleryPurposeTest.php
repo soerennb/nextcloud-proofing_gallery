@@ -13,6 +13,7 @@ final class GalleryPurposeTest extends TestCase {
 
 		self::assertSame('presentation', $settings['mode']);
 		self::assertSame('all', $settings['delivery']['downloadScope']);
+		self::assertSame('cinematic', $settings['presentation']['openerStyle']);
 		self::assertFalse($settings['review']['comments']);
 	}
 
@@ -30,5 +31,6 @@ final class GalleryPurposeTest extends TestCase {
 
 		self::assertTrue($settings['delivery']['guestUploads']);
 		self::assertSame('none', $settings['delivery']['downloadScope']);
+		self::assertSame('compact', $settings['presentation']['openerStyle']);
 	}
 }

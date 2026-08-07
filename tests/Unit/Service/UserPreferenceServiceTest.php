@@ -14,8 +14,9 @@ final class UserPreferenceServiceTest extends TestCase {
 
 		self::assertFalse($preferences['notifications']['email']['enabled']);
 		self::assertTrue($preferences['notifications']['nextcloud']['enabled']);
-		self::assertSame(3, $preferences['schemaVersion']);
+		self::assertSame(4, $preferences['schemaVersion']);
 		self::assertSame('auto', $preferences['cullingFilmstripPlacement']);
+		self::assertSame(112, $preferences['cullingFilmstripSize']);
 	}
 
 	public function testPreferencesPersistAcrossDevicesAndFilterUnknownEvents(): void {
@@ -71,6 +72,7 @@ final class UserPreferenceServiceTest extends TestCase {
 
 		self::assertSame('side', $service->save('photographer', ['cullingFilmstripPlacement' => 'side'])['cullingFilmstripPlacement']);
 		self::assertSame('side', $service->get('photographer')['cullingFilmstripPlacement']);
+		self::assertSame(176, $service->save('photographer', ['cullingFilmstripSize' => 176])['cullingFilmstripSize']);
 	}
 
 	public function testUnknownNotificationChannelPreferenceIsRejected(): void {

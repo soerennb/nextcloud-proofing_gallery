@@ -12,6 +12,7 @@ const props = defineProps<{
 	activeId: number | null
 	selectedIds: number[]
 	placement: 'side' | 'bottom'
+	size: number
 	previewUrl: (fileId: number) => string
 	hasMore: boolean
 	loadingMore: boolean
@@ -25,7 +26,7 @@ const emit = defineEmits<{
 
 const root = ref<HTMLElement | null>(null)
 const horizontal = computed(() => props.placement === 'bottom')
-const itemSize = computed(() => horizontal.value ? 128 : 96)
+const itemSize = computed(() => horizontal.value ? Math.round(props.size * 1.25) : Math.max(80, props.size - 12))
 const virtualizer = useVirtualizer<HTMLElement, HTMLElement>(computed(() => ({
 	count: props.items.length,
 	getScrollElement: () => root.value,

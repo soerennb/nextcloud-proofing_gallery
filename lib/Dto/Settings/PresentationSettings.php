@@ -31,6 +31,9 @@ final class PresentationSettings implements JsonSerializable {
 		public readonly string $titleSize,
 		public readonly bool $showFilenames,
 		public readonly int $slideshowInterval,
+		public readonly string $motionPreset,
+		public readonly string $lightboxFilmstripPlacement,
+		public readonly string $lightboxChromeBehavior,
 	) {
 	}
 
@@ -42,7 +45,8 @@ final class PresentationSettings implements JsonSerializable {
 			'watermarkText' => '', 'watermarkOpacity' => 24, 'theme' => 'dark', 'layout' => 'grid',
 			'tileSize' => 'medium', 'tileGap' => 'normal', 'tileRadius' => 'soft', 'titleAlignment' => 'left',
 			'showTitle' => true, 'showMediaCount' => true, 'titleSize' => 'medium',
-			'showFilenames' => true, 'slideshowInterval' => 5,
+			'showFilenames' => true, 'slideshowInterval' => 5, 'motionPreset' => 'expressive',
+			'lightboxFilmstripPlacement' => 'auto', 'lightboxChromeBehavior' => 'autoHide',
 		];
 	}
 
@@ -80,6 +84,9 @@ final class PresentationSettings implements JsonSerializable {
 			SettingsInput::bool($value['showMediaCount'], 'presentation.showMediaCount'),
 			SettingsInput::choice($value['titleSize'], 'presentation.titleSize', ['small', 'medium', 'large']),
 			SettingsInput::bool($value['showFilenames'], 'presentation.showFilenames'), $interval,
+			SettingsInput::choice($value['motionPreset'], 'presentation.motionPreset', ['off', 'subtle', 'expressive']),
+			SettingsInput::choice($value['lightboxFilmstripPlacement'], 'presentation.lightboxFilmstripPlacement', ['auto', 'side', 'bottom', 'hidden']),
+			SettingsInput::choice($value['lightboxChromeBehavior'], 'presentation.lightboxChromeBehavior', ['persistent', 'autoHide']),
 		);
 	}
 
