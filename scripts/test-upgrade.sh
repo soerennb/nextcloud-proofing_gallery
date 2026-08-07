@@ -11,6 +11,7 @@ app_source="${upgrade_root}/proofing_gallery"
 expected_version="$(php -r '$xml=simplexml_load_file($argv[1]); echo (string)$xml->version;' "${repo_dir}/appinfo/info.xml")"
 upgrade_from_ref="${UPGRADE_FROM_REF:-}"
 previous_version=""
+baseline_has_legacy_repair="false"
 
 if [[ -n "${upgrade_from_ref}" ]]; then
 	previous_version="$(git -C "${repo_dir}" show "${upgrade_from_ref}:appinfo/info.xml" \
@@ -30,6 +31,10 @@ fi
 if [[ -z "${upgrade_from_ref}" || "${previous_version}" == "${expected_version}" ]]; then
 	echo "No earlier app version is available for the upgrade test; set UPGRADE_FROM_REF explicitly." >&2
 	exit 2
+fi
+
+if git -C "${repo_dir}" cat-file -e "${upgrade_from_ref}:lib/Migration/Version000118Date20260806.php" 2>/dev/null; then
+	baseline_has_legacy_repair="true"
 fi
 
 cleanup() {
@@ -56,7 +61,7 @@ compose() {
 compose up -d --wait --wait-timeout 300 sqlite
 compose exec -T sqlite ln -s /opt/proofing_gallery /var/www/html/custom_apps/proofing_gallery
 compose exec -T --user www-data sqlite php occ app:enable proofing_gallery
-compose exec -T --user www-data sqlite php -r '
+compose exec -T -e PG_BASELINE_HAS_LEGACY_REPAIR="${baseline_has_legacy_repair}" --user www-data sqlite php -r '
 	require "/var/www/html/lib/base.php";
 	$db = \OC::$server->get(\OCP\IDBConnection::class);
 	$now = time();
@@ -80,16 +85,17 @@ compose exec -T --user www-data sqlite php -r '
 			->where($find->expr()->eq("slug", $find->createNamedParameter($slug)))
 			->executeQuery()->fetchOne();
 	};
-	$insertGallery("upgrade-active", "upgrade-active-token", "draft", null);
-	$insertGallery("upgrade-archived", "upgrade-archived-token", "archived", $now);
+	$activeId = $insertGallery("upgrade-active", "upgrade-active-token", "draft", null);
+	$archivedId = $insertGallery("upgrade-archived", "upgrade-archived-token", "archived", $now);
 	$existingId = $insertGallery("upgrade-existing", "upgrade-existing-token", "published", null);
-	$q = $db->getQueryBuilder();
-	$q->insert("proofing_public_links")->values([
-		"gallery_id" => $q->createNamedParameter($existingId, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
+	$insertLink = static function (int $galleryId, string $token, string $name, string $status) use ($db, $now): void {
+		$q = $db->getQueryBuilder();
+		$q->insert("proofing_public_links")->values([
+		"gallery_id" => $q->createNamedParameter($galleryId, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
 		"core_share_id" => $q->createNamedParameter(null, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
-		"token" => $q->createNamedParameter("upgrade-existing-token"),
-		"name" => $q->createNamedParameter("Existing link"),
-		"status" => $q->createNamedParameter("active"),
+		"token" => $q->createNamedParameter($token),
+		"name" => $q->createNamedParameter($name),
+		"status" => $q->createNamedParameter($status),
 		"is_primary" => $q->createNamedParameter(true, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_BOOL),
 		"policy" => $q->createNamedParameter("{}"),
 		"start_path" => $q->createNamedParameter(""),
@@ -100,7 +106,13 @@ compose exec -T --user www-data sqlite php -r '
 		"created_at" => $q->createNamedParameter($now, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
 		"updated_at" => $q->createNamedParameter($now, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
 		"revoked_at" => $q->createNamedParameter(null, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
-	])->executeStatement();
+		])->executeStatement();
+	};
+	$insertLink($existingId, "upgrade-existing-token", "Existing link", "active");
+	if (getenv("PG_BASELINE_HAS_LEGACY_REPAIR") === "true") {
+		$insertLink($activeId, "upgrade-active-token", "Primary link", "active");
+		$insertLink($archivedId, "upgrade-archived-token", "Primary link", "suspended");
+	}
 '
 
 tar -xzf "${archive}" -C "${upgrade_root}"
