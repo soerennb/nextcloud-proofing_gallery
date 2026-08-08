@@ -171,8 +171,26 @@ compose exec -T -e PG_BASELINE_HAS_LEGACY_REPAIR="${baseline_has_legacy_repair}"
 '
 
 tar -xzf "${archive}" -C "${upgrade_root}"
-compose exec -T --user www-data "${service}" php occ upgrade
-compose exec -T --user www-data "${service}" php occ upgrade
+run_upgrade() {
+	local output status
+	if output="$(compose exec -T --user www-data "${service}" php occ upgrade 2>&1)"; then
+		printf '%s\n' "${output}"
+		return 0
+	else
+		status=$?
+	fi
+	printf '%s\n' "${output}" >&2
+	if [[ "${database}" == "sqlite" ]] && grep -Fqi 'database is locked' <<<"${output}"; then
+		echo "SQLite upgrade met transient lock contention; retrying once." >&2
+		sleep 2
+		compose exec -T --user www-data "${service}" php occ upgrade
+		return
+	fi
+	return "${status}"
+}
+
+run_upgrade
+run_upgrade
 compose exec -T --user www-data "${service}" php -r '
 	require "/var/www/html/lib/base.php";
 	$db = \OC::$server->get(\OCP\IDBConnection::class);
