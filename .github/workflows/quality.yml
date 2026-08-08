@@ -102,6 +102,8 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run build
       - run: make dev-up
+      - name: Allow App Store installs in the disposable custom-app directory
+        run: docker compose exec -T nextcloud chown www-data:www-data /var/www/html/custom_apps
       - name: Install supported collaboration apps
         run: |
           make occ CMD="app:install calendar"
@@ -122,6 +124,12 @@ jobs:
         nextcloud: ["31", "32", "33", "34"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
       - name: Enable, migrate, and boot integrations
         env:
           NEXTCLOUD_VERSIONS: ${{ matrix.nextcloud }}

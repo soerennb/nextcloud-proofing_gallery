@@ -9,9 +9,13 @@ if (!enum_exists(MetricType::class)) {
 }
 
 if (!class_exists(Metric::class)) {
-	final readonly class Metric {
+	final class Metric {
 		/** @param array<string, string> $labels */
-		public function __construct(public int|float|bool $value = false, public array $labels = [], public int|float|null $timestamp = null) {
+		public function __construct(
+			public readonly int|float|bool $value = false,
+			public readonly array $labels = [],
+			public readonly int|float|null $timestamp = null,
+		) {
 		}
 	}
 }
