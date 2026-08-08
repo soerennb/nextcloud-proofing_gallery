@@ -171,6 +171,18 @@ final class UploadService {
 		return $this->repository->list($gallery->getId());
 	}
 
+	/** @return array{items:list<array<string,mixed>>,total:int,nextCursor:?string} */
+	public function pageForGallery(Gallery $gallery, int $limit, ?string $cursor, ScopedCursorCodec $cursors, string $status = ''): array {
+		$limit = max(1, min(100, $limit));
+		if (!in_array($status, ['', 'pending', 'awaiting_review', 'accepted', 'rejected'], true)) throw new InvalidArgumentException('Invalid upload status');
+		$scope = 'gallery-inbox:' . $gallery->getId() . ':' . $status;
+		$rows = $this->repository->page($gallery->getId(), $cursors->decode($cursor, $scope), $limit + 1, $status);
+		$hasMore = count($rows) > $limit;
+		if ($hasMore) array_pop($rows);
+		$last = $rows === [] ? null : $rows[array_key_last($rows)];
+		return ['items' => $rows, 'total' => $this->repository->countGallery($gallery->getId(), $status), 'nextCursor' => $hasMore && $last !== null ? $cursors->encode($scope, (int)$last['id']) : null];
+	}
+
 	public function moderate(Gallery $gallery, string $uploadId, bool $accept): void {
 		$row = $this->uploadForGallery($gallery, $uploadId);
 		if ($row['status'] !== 'awaiting_review' || $row['file_id'] === null) {

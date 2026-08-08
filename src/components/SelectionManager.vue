@@ -13,6 +13,9 @@ import type { OwnerSelection } from '../types.ts'
 const props = defineProps<{ galleryId: number; editable: boolean }>()
 const items = ref<OwnerSelection[]>([])
 const loading = ref(true)
+const loadingMore = ref(false)
+const nextCursor = ref<string | null>(null)
+const total = ref(0)
 const workingId = ref('')
 const loadFailed = ref(false)
 const composerId = ref('')
@@ -28,15 +31,20 @@ const exportOptions = [
 	['selection', t('proofing_gallery', 'Selection name')], ['comments', t('proofing_gallery', 'Client comments')],
 ] as const
 
-async function load() {
-	loading.value = true
+async function load(append = false) {
+	if (append && (!nextCursor.value || loadingMore.value)) return
+	append ? loadingMore.value = true : loading.value = true
 	loadFailed.value = false
 	try {
-		items.value = await fetchOwnerSelections(props.galleryId)
+		const page = await fetchOwnerSelections(props.galleryId, append ? nextCursor.value : null)
+		items.value = append ? [...items.value, ...page.items] : page.items
+		total.value = page.total
+		nextCursor.value = page.nextCursor
 	} catch {
 		loadFailed.value = true
 	} finally {
 		loading.value = false
+		loadingMore.value = false
 	}
 }
 
@@ -122,7 +130,7 @@ onMounted(load)
 				<h2>{{ t('proofing_gallery', 'Client selections') }}</h2>
 				<p>{{ t('proofing_gallery', 'Review, complete and export selections submitted by clients.') }}</p>
 			</div>
-			<NcButton variant="tertiary" :disabled="loading" @click="load">
+			<NcButton variant="tertiary" :disabled="loading" @click="load(false)">
 				{{ t('proofing_gallery', 'Refresh') }}
 			</NcButton>
 		</header>
@@ -204,6 +212,15 @@ onMounted(load)
 				</section>
 			</li>
 		</ul>
+		<footer v-if="items.length" class="selection-manager__pagination">
+			<span>{{ t('proofing_gallery', '{visible} of {total} selections', { visible: items.length, total }) }}</span>
+			<NcButton v-if="nextCursor"
+				variant="tertiary"
+				:disabled="loadingMore"
+				@click="load(true)">
+				{{ t('proofing_gallery', 'Load more') }}
+			</NcButton>
+		</footer>
 	</section>
 </template>
 
@@ -239,6 +256,8 @@ onMounted(load)
 .selection-manager__actions { display: flex; flex-wrap: wrap; gap: 6px; margin-block-start: 12px; }
 
 .selection-manager__loading { display: grid; min-height: 100px; place-items: center; }
+
+.selection-manager__pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--color-text-maxcontrast); font-size: 13px; }
 
 .export-composer { display: grid; gap: 14px; margin-top: 16px; padding: 18px; border: 1px solid color-mix(in srgb, #8c54ff 62%, var(--color-border)); border-radius: 14px; background: radial-gradient(circle at 100% 0, rgb(140 84 255 / 18%), transparent 240px), var(--color-main-background); }
 

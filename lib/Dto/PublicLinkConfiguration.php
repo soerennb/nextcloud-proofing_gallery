@@ -20,6 +20,8 @@ final class PublicLinkConfiguration {
 		public readonly ?string $publicLocale,
 		public readonly ?string $password,
 		public readonly ?DateTime $expiresAt,
+		public readonly bool $reviewEnabled,
+		public readonly ?string $reviewDueDate,
 	) {
 	}
 
@@ -42,6 +44,9 @@ final class PublicLinkConfiguration {
 		if ($locale !== null && (!is_string($locale) || !in_array($locale, ['en', 'de'], true))) throw new InvalidArgumentException('Invalid public locale');
 		$password = $input['password'] ?? null;
 		if ($password !== null && !is_string($password)) throw new InvalidArgumentException('Public link password must be a string or null');
+		$reviewEnabled = $input['reviewEnabled'] ?? false;
+		if (!is_bool($reviewEnabled)) throw new InvalidArgumentException('Review workflow setting must be a boolean');
+		$reviewDueDate = self::dateString($input['reviewDueDate'] ?? null, 'Review due date');
 		return new self(
 			$name,
 			$policy,
@@ -52,6 +57,8 @@ final class PublicLinkConfiguration {
 			$locale,
 			$password,
 			self::expirationDate($input['expiresAt'] ?? null),
+			$reviewEnabled,
+			$reviewDueDate,
 		);
 	}
 
@@ -59,6 +66,7 @@ final class PublicLinkConfiguration {
 		return new self(
 			$this->name, $this->policy, $startPath, $this->viewMode, $this->groupDepth,
 			$this->minOwnerRating, $this->publicLocale, $this->password, $this->expiresAt,
+			$this->reviewEnabled, $this->reviewDueDate,
 		);
 	}
 
@@ -78,5 +86,13 @@ final class PublicLinkConfiguration {
 		$date = DateTime::createFromFormat('!Y-m-d', $value);
 		if ($date === false || $date->format('Y-m-d') !== $value) throw new InvalidArgumentException('Expiration date must use YYYY-MM-DD');
 		return $date;
+	}
+
+	private static function dateString(mixed $value, string $label): ?string {
+		if ($value === null || $value === '') return null;
+		if (!is_string($value)) throw new InvalidArgumentException($label . ' must use YYYY-MM-DD');
+		$date = DateTime::createFromFormat('!Y-m-d', $value);
+		if ($date === false || $date->format('Y-m-d') !== $value) throw new InvalidArgumentException($label . ' must use YYYY-MM-DD');
+		return $value;
 	}
 }

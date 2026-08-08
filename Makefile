@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: build docs appstore appstore-signed verify-package verify-signed-package test-upgrade watch install lint test test-e2e test-compat dev-up dev-down dev-logs dev-install dev-reset occ studio-up studio-down studio-restart studio-status studio-logs studio-reset studio-occ studio-library-check studio-seed studio-screenshots studio-browser-check
+.PHONY: build docs appstore appstore-signed verify-package verify-signed-package test-upgrade watch install lint test test-e2e test-compat dev-up dev-pull dev-down dev-logs dev-install dev-reset dev-migration-status dev-migrate occ studio-up studio-down studio-restart studio-refresh studio-doctor studio-status studio-logs studio-reset studio-occ studio-migration-status studio-migrate studio-library-check studio-seed studio-screenshots studio-browser-check
 
 install:
 	npm ci
@@ -54,6 +54,16 @@ dev-install:
 	docker compose exec -T --user www-data nextcloud php occ app:disable firstrunwizard
 	docker compose exec -T --user www-data nextcloud php occ background:cron
 
+dev-pull:
+	docker compose pull
+
+dev-migration-status:
+	docker compose exec -T --user www-data nextcloud php /var/www/html/custom_apps/proofing_gallery/scripts/check-migrations.php
+
+dev-migrate:
+	docker compose exec -T --user www-data nextcloud php occ upgrade
+	$(MAKE) dev-migration-status
+
 dev-down:
 	docker compose down
 
@@ -77,6 +87,12 @@ studio-down:
 studio-restart:
 	./scripts/studio-stack.sh restart
 
+studio-refresh:
+	./scripts/studio-stack.sh refresh
+
+studio-doctor:
+	./scripts/studio-stack.sh doctor
+
 studio-status:
 	./scripts/studio-stack.sh status
 
@@ -88,6 +104,12 @@ studio-reset:
 
 studio-occ:
 	./scripts/studio-stack.sh occ $(CMD)
+
+studio-migration-status:
+	./scripts/studio-stack.sh migration-status
+
+studio-migrate:
+	./scripts/studio-stack.sh migrate
 
 studio-library-check:
 	node ./scripts/validate-demo-library.mjs

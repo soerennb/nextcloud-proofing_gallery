@@ -51,7 +51,7 @@ final class Notifier implements IDismissableNotifier {
 		$count = max(1, (int)$state['event_count']);
 		$category = (string)$state['category'];
 		$tab = match ($category) {
-			'comment', 'selection', 'upload' => 'feedback',
+			'comment', 'selection', 'upload', 'review' => 'feedback',
 			'lifecycle', 'revoked' => 'delivery',
 			default => 'overview',
 		};
@@ -60,6 +60,7 @@ final class Notifier implements IDismissableNotifier {
 			'comment' => $l->n('%n new comment in {gallery}', '%n new comments in {gallery}', $count),
 			'selection' => $l->n('%n new client selection in {gallery}', '%n new client selections in {gallery}', $count),
 			'upload' => $l->n('%n new upload in {gallery}', '%n new uploads in {gallery}', $count),
+			'review' => $l->n('%n review submitted in {gallery}', '%n reviews submitted in {gallery}', $count),
 			'manager' => $l->t('You can now manage {gallery}'),
 			'lifecycle' => $l->t('Public access to {gallery} will end soon'),
 			'revoked' => $l->t('Public access to {gallery} was revoked'),

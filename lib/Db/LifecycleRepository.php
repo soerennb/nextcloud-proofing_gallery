@@ -10,11 +10,14 @@ use OCP\IDBConnection;
 final class LifecycleRepository {
 	private const ORPHAN_TABLES = [
 		'proofing_events', 'proofing_uploads', 'proofing_collections', 'proofing_notify_subs',
-		'proofing_native_notify', 'proofing_media_index', 'proofing_public_links',
+		'proofing_native_notify', 'proofing_media_index', 'proofing_media_scans', 'proofing_media_scan_queue', 'proofing_public_links',
 		'proofing_guest_ratings', 'proofing_share_audit', 'proofing_live_push', 'proofing_domains',
 		'proofing_feedback', 'proofing_comments', 'proofing_annotations', 'proofing_selections',
 		'proofing_managers', 'proofing_semantic_idx', 'proofing_summaries', 'proofing_versions',
+		'proofing_review_rounds', 'proofing_ext_resources', 'proofing_int_outbox',
+		'proofing_retention_log',
 	];
+	private const GALLERY_PRIMARY_KEY_TABLES = ['proofing_collections', 'proofing_summaries', 'proofing_media_scans'];
 
 	public function __construct(private IDBConnection $db) {
 	}
@@ -23,11 +26,26 @@ final class LifecycleRepository {
 		$qb = $this->db->getQueryBuilder();
 		$ids = array_map('intval', QueryResult::column($qb->select('id')->from($table)
 			->where($qb->expr()->lt($column, $qb->createNamedParameter($before, IQueryBuilder::PARAM_INT)))
-			->orderBy('id', 'ASC')->setMaxResults($limit)->executeQuery()));
+			->orderBy($column, 'ASC')->addOrderBy('id', 'ASC')->setMaxResults($limit)->executeQuery()));
 		if ($ids === []) return 0;
 		$qb = $this->db->getQueryBuilder();
 		return $qb->delete($table)
 			->where($qb->expr()->in('id', $qb->createNamedParameter($ids, IQueryBuilder::PARAM_INT_ARRAY)))
+			->executeStatement();
+	}
+
+	/** @param list<string> $statuses */
+	public function deleteOldRowsWithStatuses(string $table, string $column, array $statuses, int $before, int $limit): int {
+		if ($statuses === []) return 0;
+		$qb = $this->db->getQueryBuilder();
+		$ids = array_map('intval', QueryResult::column($qb->select('id')->from($table)
+			->where($qb->expr()->in('status', $qb->createNamedParameter($statuses, IQueryBuilder::PARAM_STR_ARRAY)))
+			->andWhere($qb->expr()->lt($column, $qb->createNamedParameter($before, IQueryBuilder::PARAM_INT)))
+			->orderBy($column, 'ASC')->addOrderBy('id', 'ASC')->setMaxResults($limit)->executeQuery()));
+		if ($ids === []) return 0;
+		$delete = $this->db->getQueryBuilder();
+		return $delete->delete($table)
+			->where($delete->expr()->in('id', $delete->createNamedParameter($ids, IQueryBuilder::PARAM_INT_ARRAY)))
 			->executeStatement();
 	}
 
@@ -62,35 +80,35 @@ final class LifecycleRepository {
 	public function cleanupOrphans(): int {
 		$deleted = 0;
 		foreach (self::ORPHAN_TABLES as $table) {
-			$qb = $this->db->getQueryBuilder();
-			$galleryIds = QueryResult::column($qb->selectDistinct('gallery_id')->from($table)->setMaxResults(100)->executeQuery());
-			foreach ($galleryIds as $galleryId) {
-				if ($this->galleryExists((int)$galleryId)) continue;
-				$delete = $this->db->getQueryBuilder();
-				$deleted += $delete->delete($table)
-					->where($delete->expr()->eq('gallery_id', $delete->createNamedParameter((int)$galleryId, IQueryBuilder::PARAM_INT)))
-					->executeStatement();
-			}
+			$deleted += in_array($table, self::GALLERY_PRIMARY_KEY_TABLES, true)
+				? $this->deleteMissingGalleryPrimaryRows($table)
+				: $this->deleteMissingParents($table, 'gallery_id', 'proofing_galleries');
 		}
-		$qb = $this->db->getQueryBuilder();
-		$collectionIds = QueryResult::column($qb->selectDistinct('collection_id')->from('proofing_collection_items')->setMaxResults(100)->executeQuery());
-		foreach ($collectionIds as $collectionId) {
-			if ($this->collectionExists((int)$collectionId)) continue;
-			$delete = $this->db->getQueryBuilder();
-			$deleted += $delete->delete('proofing_collection_items')
-				->where($delete->expr()->eq('collection_id', $delete->createNamedParameter((int)$collectionId, IQueryBuilder::PARAM_INT)))
-				->executeStatement();
-		}
+		$deleted += $this->deleteMissingParents('proofing_collection_items', 'collection_id', 'proofing_collections', 'gallery_id');
 		$deleted += $this->deleteMissingParents('proofing_selection_items', 'selection_id', 'proofing_selections');
 		$deleted += $this->deleteMissingParents('proofing_annotations', 'comment_id', 'proofing_comments');
 		return $deleted;
 	}
 
-	private function deleteMissingParents(string $table, string $parentColumn, string $parentTable): int {
+	private function deleteMissingGalleryPrimaryRows(string $table): int {
+		$qb = $this->db->getQueryBuilder();
+		$ids = array_map('intval', QueryResult::column($qb->select('child.gallery_id')->from($table, 'child')
+			->leftJoin('child', 'proofing_galleries', 'parent', $qb->expr()->eq('child.gallery_id', 'parent.id'))
+			->where($qb->expr()->isNull('parent.id'))
+			->orderBy('child.gallery_id', 'ASC')->setMaxResults(1000)->executeQuery()));
+		if ($ids === []) return 0;
+		$delete = $this->db->getQueryBuilder();
+		return $delete->delete($table)
+			->where($delete->expr()->in('gallery_id', $delete->createNamedParameter($ids, IQueryBuilder::PARAM_INT_ARRAY)))
+			->executeStatement();
+	}
+
+	private function deleteMissingParents(string $table, string $parentColumn, string $parentTable, string $parentIdColumn = 'id'): int {
 		$qb = $this->db->getQueryBuilder();
 		$ids = array_map('intval', QueryResult::column($qb->select('child.id')->from($table, 'child')
-			->leftJoin('child', $parentTable, 'parent', $qb->expr()->eq('child.' . $parentColumn, 'parent.id'))
-			->where($qb->expr()->isNull('parent.id'))->setMaxResults(1000)->executeQuery()));
+			->leftJoin('child', $parentTable, 'parent', $qb->expr()->eq('child.' . $parentColumn, 'parent.' . $parentIdColumn))
+			->where($qb->expr()->isNull('parent.' . $parentIdColumn))
+			->orderBy('child.id', 'ASC')->setMaxResults(1000)->executeQuery()));
 		if ($ids === []) return 0;
 		$delete = $this->db->getQueryBuilder();
 		return $delete->delete($table)
@@ -98,17 +116,4 @@ final class LifecycleRepository {
 			->executeStatement();
 	}
 
-	private function galleryExists(int $galleryId): bool {
-		$qb = $this->db->getQueryBuilder();
-		return $qb->select('id')->from('proofing_galleries')
-			->where($qb->expr()->eq('id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
-			->executeQuery()->fetchOne() !== false;
-	}
-
-	private function collectionExists(int $collectionId): bool {
-		$qb = $this->db->getQueryBuilder();
-		return $qb->select('gallery_id')->from('proofing_collections')
-			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($collectionId, IQueryBuilder::PARAM_INT)))
-			->executeQuery()->fetchOne() !== false;
-	}
 }

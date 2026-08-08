@@ -12,6 +12,9 @@ const emit = defineEmits<{ 'gallery-updated': [gallery: Gallery] }>()
 const links = ref<GalleryPublicLink[]>([])
 const presets = ref<Record<string, PublicLinkPolicy>>({})
 const audit = ref<ShareAuditItem[]>([])
+const auditTotal = ref(0)
+const auditCursor = ref<string | null>(null)
+const auditLoadingMore = ref(false)
 const loading = ref(true)
 const saving = ref(false)
 const editingId = ref<number | null | 'new'>(null)
@@ -29,6 +32,8 @@ function createDraft() {
 		groupDepth: 1,
 		minOwnerRating: 0,
 		publicLocale: null as 'en' | 'de' | null,
+		reviewEnabled: ['selection', 'proofing'].includes(props.gallery.purpose),
+		reviewDueDate: '',
 		password: '',
 		expiresAt: '',
 		policy: ({ view: true, likes: false, colors: false, comments: false, annotations: false, selections: false, ratings: false, pick: false, upload: false, export: false, metadata: false, downloadScope: 'none' }) as PublicLinkPolicy,
@@ -41,7 +46,9 @@ async function load() {
 		const [linkData, auditData] = await Promise.all([fetchPublicLinks(props.gallery.id), fetchShareAudit(props.gallery.id)])
 		links.value = linkData.items
 		presets.value = linkData.presets
-		audit.value = auditData
+		audit.value = auditData.items
+		auditTotal.value = auditData.total
+		auditCursor.value = auditData.nextCursor
 	} catch { showError(t('proofing_gallery', 'Public links could not be loaded.')) } finally { loading.value = false }
 }
 
@@ -52,7 +59,7 @@ function startNew() {
 }
 
 function edit(link: GalleryPublicLink) {
-	draft.value = { ...createDraft(), name: link.name, startPath: link.startPath, viewMode: link.viewMode, groupDepth: link.groupDepth, minOwnerRating: link.minOwnerRating, publicLocale: link.publicLocale, policy: structuredClone(link.policy) }
+	draft.value = { ...createDraft(), name: link.name, startPath: link.startPath, viewMode: link.viewMode, groupDepth: link.groupDepth, minOwnerRating: link.minOwnerRating, publicLocale: link.publicLocale, reviewEnabled: link.reviewEnabled, reviewDueDate: link.reviewDueDate ?? '', policy: structuredClone(link.policy) }
 	editingId.value = link.id
 }
 
@@ -65,7 +72,7 @@ async function save() {
 	saving.value = true
 	try {
 		const link = await savePublicLink(props.gallery.id, editingId.value === 'new' ? null : editingId.value as number, {
-			...draft.value, password: draft.value.password || null, expiresAt: draft.value.expiresAt || null,
+			...draft.value, reviewDueDate: draft.value.reviewDueDate || null, password: draft.value.password || null, expiresAt: draft.value.expiresAt || null,
 		})
 		links.value = editingId.value === 'new' ? [...links.value, link] : links.value.map(item => item.id === link.id ? link : item)
 		editingId.value = null
@@ -87,8 +94,18 @@ async function revoke(link: GalleryPublicLink) {
 	try {
 		const updated = await revokePublicLink(props.gallery.id, link.id)
 		links.value = links.value.map(item => item.id === updated.id ? updated : item)
-		audit.value = await fetchShareAudit(props.gallery.id)
+		const auditPage = await fetchShareAudit(props.gallery.id)
+		audit.value = auditPage.items; auditTotal.value = auditPage.total; auditCursor.value = auditPage.nextCursor
 	} catch { showError(t('proofing_gallery', 'The public link could not be revoked.')) }
+}
+
+async function loadMoreAudit() {
+	if (!auditCursor.value || auditLoadingMore.value) return
+	auditLoadingMore.value = true
+	try {
+		const page = await fetchShareAudit(props.gallery.id, auditCursor.value)
+		audit.value.push(...page.items); auditTotal.value = page.total; auditCursor.value = page.nextCursor
+	} catch { showError(t('proofing_gallery', 'Access audit could not be loaded.')) } finally { auditLoadingMore.value = false }
 }
 
 async function showQr(link: GalleryPublicLink) {
@@ -154,6 +171,11 @@ onMounted(load)
 					<div><strong>{{ link.name }}</strong><span v-if="link.primary">{{ t('proofing_gallery', 'PRIMARY') }}</span></div><small>{{ link.status === 'active' ? t('proofing_gallery', 'Active') : t('proofing_gallery', 'Revoked') }}</small>
 				</div>
 				<p>{{ link.viewMode === 'recursive' ? t('proofing_gallery', 'Recursive') : t('proofing_gallery', 'Folder view') }} · {{ link.startPath || t('proofing_gallery', 'Gallery root') }} · {{ link.policy.downloadScope }}</p>
+				<p v-if="link.reviewEnabled" class="link-card__review">
+					{{ t('proofing_gallery', 'Review round {round}: {status}', { round: link.review.current?.round ?? 1, status: link.review.current?.status ?? 'awaiting_feedback' }) }}<template v-if="link.reviewDueDate">
+						· {{ link.reviewDueDate }}
+					</template>
+				</p>
 				<div v-if="link.customDomain" class="link-domain" :data-status="link.customDomain.status">
 					<div><strong>{{ link.customDomain.domain }}</strong><span>{{ link.customDomain.status === 'verified' ? t('proofing_gallery', 'Verified HTTPS domain') : t('proofing_gallery', 'Waiting for DNS and administrator verification') }}</span></div>
 					<code v-if="link.customDomain.status === 'pending'">{{ link.customDomain.verificationName }} TXT {{ link.customDomain.verificationValue }}</code>
@@ -205,6 +227,8 @@ onMounted(load)
 					type="password"
 					autocomplete="new-password"></label>
 				<label><span>{{ t('proofing_gallery', 'Expires on') }}</span><input v-model="draft.expiresAt" name="linkExpiry" type="date"></label>
+				<label class="link-editor__review"><span>{{ t('proofing_gallery', 'Review round') }}</span><span><input v-model="draft.reviewEnabled" name="reviewEnabled" type="checkbox"> {{ t('proofing_gallery', 'Let guests submit this link for approval') }}</span></label>
+				<label v-if="draft.reviewEnabled"><span>{{ t('proofing_gallery', 'Review due date') }}</span><input v-model="draft.reviewDueDate" name="reviewDueDate" type="date"></label>
 			</div>
 			<fieldset><legend>{{ t('proofing_gallery', 'Permissions') }}</legend><label v-for="key in permissionKeys" :key="key"><input v-model="draft.policy[key]" type="checkbox" :name="`policy-${key}`">{{ key }}</label><label><span>{{ t('proofing_gallery', 'Downloads') }}</span><select v-model="draft.policy.downloadScope" name="linkDownloads"><option value="none">none</option><option value="individual">individual</option><option value="selection">selection</option><option value="all">all</option></select></label></fieldset>
 			<div class="link-editor__actions">
@@ -224,13 +248,19 @@ onMounted(load)
 			</div>
 		</div>
 		<details class="link-audit">
-			<summary>{{ t('proofing_gallery', 'Access audit') }} <span>{{ audit.length }}</span></summary><p v-if="!audit.length">
+			<summary>{{ t('proofing_gallery', 'Access audit') }} <span>{{ audit.length }}/{{ auditTotal }}</span></summary><p v-if="!audit.length">
 				{{ t('proofing_gallery', 'No audited link activity yet.') }}
 			</p><ol v-else>
 				<li v-for="(item, index) in audit" :key="`${item.createdAt}-${index}`">
 					<strong>{{ item.event }}</strong><span>{{ item.outcome }} · {{ formatDate(item.createdAt) }}</span><small>{{ t('proofing_gallery', 'Link #{id}', { id: item.publicLinkId }) }}<template v-if="item.fileId"> · {{ t('proofing_gallery', 'File #{id}', { id: item.fileId }) }}</template></small>
 				</li>
 			</ol>
+			<NcButton v-if="auditCursor"
+				variant="tertiary"
+				:disabled="auditLoadingMore"
+				@click="loadMoreAudit">
+				{{ t('proofing_gallery', 'Load older audit entries') }}
+			</NcButton>
 		</details>
 	</section>
 </template>

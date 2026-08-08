@@ -58,6 +58,14 @@ final class GuestRatingService {
 		return $this->ratings->findForGuest($guest->getGalleryId(), $guest->getId());
 	}
 
+	/** @param list<int> $fileIds
+	 * @return list<GuestRating>
+	 */
+	public function forGuestFiles(Guest $guest, array $fileIds): array {
+		$this->capabilities->assertFeature('guestRatings');
+		return $this->ratings->findForGuestFiles($guest->getGalleryId(), $guest->getId(), $fileIds);
+	}
+
 	/**
 	 * @param list<int> $fileIds
 	 * @return array{items: list<array<string, mixed>>, guests: array<int, string>}
@@ -84,6 +92,19 @@ final class GuestRatingService {
 			$items[] = $this->aggregator->summarize((int)$fileId, $values, $guests);
 		}
 		return ['items' => $items, 'guests' => $guests];
+	}
+
+	/** @return array{items:list<array<string,mixed>>,total:int,nextCursor:?string} */
+	public function aggregatePage(\OCA\ProofingGallery\Db\Gallery $gallery, int $limit, ?string $cursor, ScopedCursorCodec $cursors): array {
+		$this->capabilities->assertFeature('guestRatings');
+		$limit = max(1, min(100, $limit));
+		$scope = 'guest-rating-results:' . $gallery->getId();
+		$fileIds = $this->ratings->fileIdPage($gallery->getId(), $cursors->decode($cursor, $scope), $limit + 1);
+		$hasMore = count($fileIds) > $limit;
+		if ($hasMore) array_pop($fileIds);
+		$items = $fileIds === [] ? [] : $this->aggregate($gallery, $fileIds)['items'];
+		$last = $fileIds === [] ? null : $fileIds[array_key_last($fileIds)];
+		return ['items' => $items, 'total' => $this->ratings->distinctFileCount($gallery->getId()), 'nextCursor' => $hasMore && $last !== null ? $cursors->encode($scope, $last) : null];
 	}
 
 	/**

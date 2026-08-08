@@ -38,6 +38,11 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 			->set('settings', $qb->createNamedParameter($gallery->getSettings()))
 			->set('updated_at', $qb->createNamedParameter($gallery->getUpdatedAt(), IQueryBuilder::PARAM_INT))
 			->set('revision', $qb->createNamedParameter($expectedRevision + 1, IQueryBuilder::PARAM_INT))
+			->set('lifecycle_revoke_at', $qb->createNamedParameter($gallery->getLifecycleRevokeAt(), IQueryBuilder::PARAM_INT))
+			->set('lifecycle_archive_at', $qb->createNamedParameter($gallery->getLifecycleArchiveAt(), IQueryBuilder::PARAM_INT))
+			->set('lifecycle_next_at', $qb->createNamedParameter($gallery->getLifecycleNextAt(), IQueryBuilder::PARAM_INT))
+			->set('mode', $qb->createNamedParameter($gallery->getMode()))
+			->set('title_sort', $qb->createNamedParameter($gallery->getTitleSort()))
 			->where($qb->expr()->eq('id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('revision', $qb->createNamedParameter($expectedRevision, IQueryBuilder::PARAM_INT)));
 
@@ -83,6 +88,95 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 		return (int)$qb->executeQuery()->fetchOne();
 	}
 
+	/**
+	 * @param list<string> $groupIds
+	 * @param array{value: int|string, id: int}|null $cursor
+	 * @return array{items: list<Gallery>, total: int}
+	 */
+	public function findAccessiblePage(
+		string $userUid,
+		array $groupIds,
+		bool $archived,
+		string $search,
+		?string $sourceType,
+		?string $status,
+		?string $mode,
+		?string $purpose,
+		bool $ownedOnly,
+		string $sort,
+		?array $cursor,
+		int $limit,
+	): array {
+		$qb = $this->accessibleQuery($userUid, $groupIds, $archived, $search, $sourceType, $status, $mode, $purpose, $ownedOnly);
+		$qb->selectDistinct('g.*');
+		$field = match ($sort) {
+			'title' => 'g.title_sort',
+			'created' => 'g.created_at',
+			default => 'g.updated_at',
+		};
+		$direction = $sort === 'title' ? 'ASC' : 'DESC';
+		if ($cursor !== null) {
+			$comparison = $direction === 'ASC' ? 'gt' : 'lt';
+			$qb->andWhere($qb->expr()->orX(
+				$qb->expr()->{$comparison}($field, $qb->createNamedParameter($cursor['value'], $sort === 'title' ? IQueryBuilder::PARAM_STR : IQueryBuilder::PARAM_INT)),
+				$qb->expr()->andX(
+					$qb->expr()->eq($field, $qb->createNamedParameter($cursor['value'], $sort === 'title' ? IQueryBuilder::PARAM_STR : IQueryBuilder::PARAM_INT)),
+					$qb->expr()->{$comparison}('g.id', $qb->createNamedParameter($cursor['id'], IQueryBuilder::PARAM_INT)),
+				),
+			));
+		}
+		$qb->orderBy($field, $direction)->addOrderBy('g.id', $direction)->setMaxResults($limit);
+		$items = $this->findEntities($qb);
+
+		$count = $this->accessibleQuery($userUid, $groupIds, $archived, $search, $sourceType, $status, $mode, $purpose, $ownedOnly);
+		$count->select($count->createFunction('COUNT(DISTINCT g.id)'));
+		return ['items' => $items, 'total' => (int)$count->executeQuery()->fetchOne()];
+	}
+
+	/** @param list<string> $groupIds */
+	private function accessibleQuery(
+		string $userUid,
+		array $groupIds,
+		bool $archived,
+		string $search,
+		?string $sourceType,
+		?string $status,
+		?string $mode,
+		?string $purpose,
+		bool $ownedOnly,
+	): IQueryBuilder {
+		$qb = $this->db->getQueryBuilder();
+		$userMembership = $qb->expr()->andX(
+			$qb->expr()->eq('m.principal_type', $qb->createNamedParameter('user')),
+			$qb->expr()->eq('m.user_uid', $qb->createNamedParameter($userUid)),
+		);
+		$membershipMatches = [$userMembership];
+		if ($groupIds !== []) {
+			$membershipMatches[] = $qb->expr()->andX(
+				$qb->expr()->eq('m.principal_type', $qb->createNamedParameter('group')),
+				$qb->expr()->in('m.user_uid', $qb->createNamedParameter($groupIds, IQueryBuilder::PARAM_STR_ARRAY)),
+			);
+		}
+		$qb->from($this->tableName, 'g')
+			->leftJoin('g', 'proofing_managers', 'm', $qb->expr()->andX(
+				$qb->expr()->eq('m.gallery_id', 'g.id'),
+				$qb->expr()->orX(...$membershipMatches),
+			));
+		$owner = $qb->expr()->eq('g.owner_uid', $qb->createNamedParameter($userUid));
+		$qb->where($ownedOnly ? $owner : $qb->expr()->orX($owner, $qb->expr()->isNotNull('m.id')));
+		$archiveStatus = $qb->createNamedParameter('archived');
+		$qb->andWhere($archived ? $qb->expr()->eq('g.status', $archiveStatus) : $qb->expr()->neq('g.status', $archiveStatus));
+		if ($status !== null) $qb->andWhere($qb->expr()->eq('g.status', $qb->createNamedParameter($status)));
+		if ($sourceType !== null) $qb->andWhere($qb->expr()->eq('g.source_type', $qb->createNamedParameter($sourceType)));
+		if ($mode !== null) $qb->andWhere($qb->expr()->eq('g.mode', $qb->createNamedParameter($mode)));
+		if ($purpose !== null) $qb->andWhere($qb->expr()->eq('g.purpose', $qb->createNamedParameter($purpose)));
+		if ($search !== '') {
+			$needle = '%' . $this->db->escapeLikeParameter($search) . '%';
+			$qb->andWhere($qb->expr()->iLike('g.title', $qb->createNamedParameter($needle)));
+		}
+		return $qb;
+	}
+
 	public function slugExists(string $ownerUid, string $slug): bool {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select($qb->func()->count())
@@ -114,13 +208,44 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 	}
 
 	/** @return list<Gallery> */
-	public function findLifecycleCandidates(int $limit = 200): array {
+	public function findLifecycleCandidates(int $now, int $limit = 200): array {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')->from($this->tableName)
 			->where($qb->expr()->neq('status', $qb->createNamedParameter('archived')))
-			->orderBy('updated_at', 'ASC')
+			->andWhere($qb->expr()->isNotNull('lifecycle_next_at'))
+			->andWhere($qb->expr()->lte('lifecycle_next_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT)))
+			->orderBy('lifecycle_next_at', 'ASC')
+			->addOrderBy('id', 'ASC')
 			->setMaxResults($limit);
 		return $this->findEntities($qb);
+	}
+
+	/** @return list<Gallery> */
+	public function findLifecycleProjectionBatch(int $afterId, int $limit = 500): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')->from($this->tableName)
+			->where($qb->expr()->gt('id', $qb->createNamedParameter($afterId, IQueryBuilder::PARAM_INT)))
+			->orderBy('id', 'ASC')->setMaxResults(max(1, min(500, $limit)));
+		return $this->findEntities($qb);
+	}
+
+	public function updateLifecycleProjection(Gallery $gallery): void {
+		$qb = $this->db->getQueryBuilder();
+		$qb->update($this->tableName)
+			->set('lifecycle_revoke_at', $qb->createNamedParameter($gallery->getLifecycleRevokeAt(), IQueryBuilder::PARAM_INT))
+			->set('lifecycle_archive_at', $qb->createNamedParameter($gallery->getLifecycleArchiveAt(), IQueryBuilder::PARAM_INT))
+			->set('lifecycle_next_at', $qb->createNamedParameter($gallery->getLifecycleNextAt(), IQueryBuilder::PARAM_INT))
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
+			->executeStatement();
+	}
+
+	public function updateListProjection(Gallery $gallery): void {
+		$qb = $this->db->getQueryBuilder();
+		$qb->update($this->tableName)
+			->set('mode', $qb->createNamedParameter($gallery->getMode()))
+			->set('title_sort', $qb->createNamedParameter($gallery->getTitleSort()))
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))
+			->executeStatement();
 	}
 
 	/** @return list<Gallery> */
@@ -142,6 +267,26 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 			->andWhere($qb->expr()->neq('status', $qb->createNamedParameter('archived')))
 			->orderBy('updated_at', 'DESC')
 			->setMaxResults(max(1, min(5000, $limit)));
+		return $this->findEntities($qb);
+	}
+
+	/** @return list<Gallery> */
+	public function findContextCandidates(int $limit = 1000): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')->from($this->tableName)
+			->where($qb->expr()->neq('status', $qb->createNamedParameter('archived')))
+			->orderBy('updated_at', 'DESC')
+			->setMaxResults(max(1, min(5000, $limit)));
+		return $this->findEntities($qb);
+	}
+
+	/** @return list<Gallery> */
+	public function findContextCandidatesAfterId(int $afterId, int $limit = 100): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')->from($this->tableName)
+			->where($qb->expr()->neq('status', $qb->createNamedParameter('archived')))
+			->andWhere($qb->expr()->gt('id', $qb->createNamedParameter($afterId, IQueryBuilder::PARAM_INT)))
+			->orderBy('id', 'ASC')->setMaxResults(max(1, min(500, $limit)));
 		return $this->findEntities($qb);
 	}
 

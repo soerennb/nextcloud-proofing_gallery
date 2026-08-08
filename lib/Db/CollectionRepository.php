@@ -63,6 +63,21 @@ final class CollectionRepository {
 			->orderBy('position', 'ASC')->executeQuery());
 	}
 
+	/** @param list<int> $collectionIds
+	 * @return array<int, int>
+	 */
+	public function counts(array $collectionIds): array {
+		if ($collectionIds === []) return [];
+		$qb = $this->db->getQueryBuilder();
+		$rows = QueryResult::rows($qb->select('collection_id', $qb->func()->count('*', 'item_count'))
+			->from('proofing_collection_items')
+			->where($qb->expr()->in('collection_id', $qb->createNamedParameter($collectionIds, IQueryBuilder::PARAM_INT_ARRAY)))
+			->groupBy('collection_id')->executeQuery());
+		$result = [];
+		foreach ($rows as $row) $result[(int)$row['collection_id']] = (int)$row['item_count'];
+		return $result;
+	}
+
 	public function sourceGalleryId(int $collectionId, int $fileId): ?int {
 		$qb = $this->db->getQueryBuilder();
 		$value = $qb->select('source_gallery_id')->from('proofing_collection_items')

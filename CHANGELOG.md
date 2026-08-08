@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.8.0 — 2026-08-08
+
+- keep large custom-domain histories bounded with status-scoped cursor pages,
+  server-side search, responsive incremental loading, and in-place operations
+- register periodic maintenance through Nextcloud app metadata so application
+  requests no longer reset cron timestamps or trigger daily jobs repeatedly
+- make schema-dependent lifecycle and gallery-list backfills resumable after
+  upgrades, retry failures from a persisted cursor, and report their state in
+  native setup checks and operational health
+- harden Calendar, Deck, and Talk review links against duplicate or orphaned
+  resources and distinguish the stable agent API from the experimental Context
+  Agent module in capabilities
+- add a checksummed public-release upgrade baseline, full privacy-purge and cron
+  regression coverage, larger scheduled scaling fixtures, and live optional-app
+  integration CI
+- pin the persistent Studio environment by platform digest while keeping the
+  disposable development stack on current image tags; add safe refresh and
+  diagnostic workflows that preserve volumes and never migrate implicitly
+- resolve release-script CodeQL findings, enforce Node 24.11 before frontend
+  gates, and update actionable transitive JavaScript security fixes
+- reorganize owner projects into deep-linkable Overview, Photos, Cull, Design,
+  Share, Review and secondary workspaces, with client results shown before
+  configuration and legacy links normalized automatically
+- refine the Editorial Darkroom with a focused loupe/inspector split, deliberate
+  tap-to-toggle and swipe navigation, and viewport-safe desktop and mobile chrome
+- add deep-linkable administration categories, live operational health refresh,
+  and a shared mobile-safe Save/Discard bar for administrator and personal settings
+
 ## 0.7.0 — 2026-08-07
 
 - radically modernize public galleries with configurable compact and immersive

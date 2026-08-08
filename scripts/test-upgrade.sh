@@ -6,14 +6,55 @@ repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 compose_file="${repo_dir}/tests/compat/compose.yaml"
 archive="${repo_dir}/build/artifacts/appstore/proofing_gallery.tar.gz"
 upgrade_root="$(mktemp -d -t proofing-gallery-upgrade.XXXXXXXX)"
-project_name="pg-upgrade-05-$$"
+database="${UPGRADE_DATABASE:-sqlite}"
+case "${database}" in
+	sqlite) service="sqlite" ;;
+	mariadb) service="nextcloud-mariadb" ;;
+	postgres) service="nextcloud-postgres" ;;
+	*) echo "Unsupported upgrade database: ${database}" >&2; exit 2 ;;
+esac
+project_name="pg-upgrade-${database}-$$"
 app_source="${upgrade_root}/proofing_gallery"
 expected_version="$(php -r '$xml=simplexml_load_file($argv[1]); echo (string)$xml->version;' "${repo_dir}/appinfo/info.xml")"
 upgrade_from_ref="${UPGRADE_FROM_REF:-}"
+upgrade_from_archive_url="${UPGRADE_FROM_ARCHIVE_URL:-}"
+upgrade_from_checksums_url="${UPGRADE_FROM_CHECKSUMS_URL:-}"
 previous_version=""
 baseline_has_legacy_repair="false"
 
-if [[ -n "${upgrade_from_ref}" ]]; then
+if [[ -n "${upgrade_from_archive_url}" ]]; then
+	if [[ -z "${upgrade_from_checksums_url}" ]]; then
+		echo "UPGRADE_FROM_CHECKSUMS_URL is required with UPGRADE_FROM_ARCHIVE_URL." >&2
+		exit 2
+	fi
+	baseline_archive="${upgrade_root}/baseline.tar.gz"
+	baseline_checksums="${upgrade_root}/SHA256SUMS"
+	curl --fail --location --silent --show-error "${upgrade_from_archive_url}" --output "${baseline_archive}"
+	curl --fail --location --silent --show-error "${upgrade_from_checksums_url}" --output "${baseline_checksums}"
+	baseline_name="$(basename "${upgrade_from_archive_url%%\?*}")"
+	expected_checksum="$(awk -v name="${baseline_name}" '$2 == name || $2 == "*" name { print $1; exit }' "${baseline_checksums}")"
+	if [[ ! "${expected_checksum}" =~ ^[0-9a-fA-F]{64}$ ]]; then
+		echo "No checksum for ${baseline_name} was found in the released SHA256SUMS." >&2
+		exit 2
+	fi
+	actual_checksum="$(sha256sum "${baseline_archive}" | awk '{print $1}')"
+	if [[ "${actual_checksum,,}" != "${expected_checksum,,}" ]]; then
+		echo "Released upgrade baseline checksum does not match." >&2
+		exit 2
+	fi
+	if tar -tzf "${baseline_archive}" | grep -Eq '(^|/)\.\.(/|$)|^/'; then
+		echo "Released upgrade baseline contains unsafe paths." >&2
+		exit 2
+	fi
+	tar -xzf "${baseline_archive}" -C "${upgrade_root}"
+	if [[ ! -f "${app_source}/appinfo/info.xml" ]]; then
+		echo "Released upgrade baseline does not contain proofing_gallery/appinfo/info.xml." >&2
+		exit 2
+	fi
+	previous_version="$(php -r '$xml=simplexml_load_file($argv[1]); echo (string)$xml->version;' "${app_source}/appinfo/info.xml")"
+	upgrade_from_ref="verified release archive"
+	[[ -f "${app_source}/lib/Migration/Version000118Date20260806.php" ]] && baseline_has_legacy_repair="true"
+elif [[ -n "${upgrade_from_ref}" ]]; then
 	previous_version="$(git -C "${repo_dir}" show "${upgrade_from_ref}:appinfo/info.xml" \
 		| php -r '$xml=simplexml_load_string(stream_get_contents(STDIN)); echo (string)$xml->version;')"
 else
@@ -28,40 +69,54 @@ else
 	done < <(git -C "${repo_dir}" tag --merged HEAD --sort=-version:refname --list 'v[0-9]*')
 fi
 
+if [[ "${UPGRADE_VERIFY_BASELINE_ONLY:-0}" == "1" ]]; then
+	if [[ -z "${upgrade_from_ref}" || -z "${previous_version}" ]]; then
+		echo "No upgrade baseline was selected for verification." >&2
+		rm -rf -- "${upgrade_root}"
+		exit 2
+	fi
+	echo "Verified released upgrade baseline ${previous_version} (${upgrade_from_ref})."
+	rm -rf -- "${upgrade_root}"
+	exit 0
+fi
+
 if [[ -z "${upgrade_from_ref}" || "${previous_version}" == "${expected_version}" ]]; then
-	echo "No earlier app version is available for the upgrade test; set UPGRADE_FROM_REF explicitly." >&2
+	echo "No earlier app version is available for the upgrade test; set a release archive URL or UPGRADE_FROM_REF explicitly." >&2
 	exit 2
 fi
 
-if git -C "${repo_dir}" cat-file -e "${upgrade_from_ref}:lib/Migration/Version000118Date20260806.php" 2>/dev/null; then
+if [[ "${upgrade_from_ref}" != "verified release archive" ]] && git -C "${repo_dir}" cat-file -e "${upgrade_from_ref}:lib/Migration/Version000118Date20260806.php" 2>/dev/null; then
 	baseline_has_legacy_repair="true"
 fi
 
 cleanup() {
 	COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION=34 \
-		docker compose -f "${compose_file}" --profile sqlite down --volumes --remove-orphans >/dev/null 2>&1 || true
+		docker compose -f "${compose_file}" --profile "${database}" down --volumes --remove-orphans >/dev/null 2>&1 || true
 	if [[ "${upgrade_root}" == /tmp/proofing-gallery-upgrade.* ]]; then
 		rm -rf -- "${upgrade_root}"
 	fi
 }
 trap cleanup EXIT
 
-if [[ ! -f "${archive}" ]]; then
-	"${repo_dir}/scripts/build-appstore.sh"
-fi
+# Always rebuild the candidate. A package left by an earlier version can make
+# Nextcloud correctly skip migrations while the test appears to exercise the
+# current checkout.
+"${repo_dir}/scripts/build-appstore.sh"
 
-install -d "${app_source}"
-git -C "${repo_dir}" archive "${upgrade_from_ref}" | tar -x -C "${app_source}"
+if [[ "${upgrade_from_ref}" != "verified release archive" ]]; then
+	install -d "${app_source}"
+	git -C "${repo_dir}" archive "${upgrade_from_ref}" | tar -x -C "${app_source}"
+fi
 
 compose() {
 	COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION=34 \
-		docker compose -f "${compose_file}" --profile sqlite "$@"
+		docker compose -f "${compose_file}" --profile "${database}" "$@"
 }
 
-compose up -d --wait --wait-timeout 300 sqlite
-compose exec -T sqlite ln -s /opt/proofing_gallery /var/www/html/custom_apps/proofing_gallery
-compose exec -T --user www-data sqlite php occ app:enable proofing_gallery
-compose exec -T -e PG_BASELINE_HAS_LEGACY_REPAIR="${baseline_has_legacy_repair}" --user www-data sqlite php -r '
+compose up -d --wait --wait-timeout 300 "${service}"
+compose exec -T "${service}" ln -s /opt/proofing_gallery /var/www/html/custom_apps/proofing_gallery
+compose exec -T --user www-data "${service}" php occ app:enable proofing_gallery
+compose exec -T -e PG_BASELINE_HAS_LEGACY_REPAIR="${baseline_has_legacy_repair}" --user www-data "${service}" php -r '
 	require "/var/www/html/lib/base.php";
 	$db = \OC::$server->get(\OCP\IDBConnection::class);
 	$now = time();
@@ -116,12 +171,12 @@ compose exec -T -e PG_BASELINE_HAS_LEGACY_REPAIR="${baseline_has_legacy_repair}"
 '
 
 tar -xzf "${archive}" -C "${upgrade_root}"
-compose exec -T --user www-data sqlite php occ upgrade
-compose exec -T --user www-data sqlite php occ upgrade
-compose exec -T --user www-data sqlite php -r '
+compose exec -T --user www-data "${service}" php occ upgrade
+compose exec -T --user www-data "${service}" php occ upgrade
+compose exec -T --user www-data "${service}" php -r '
 	require "/var/www/html/lib/base.php";
 	$db = \OC::$server->get(\OCP\IDBConnection::class);
-	foreach (["proofing_presets", "proofing_inv_templates", "proofing_notify_subs", "proofing_notify_queue", "proofing_media_index", "proofing_media_cull", "proofing_public_links", "proofing_guest_ratings", "proofing_share_audit", "proofing_video_deriv", "proofing_semantic_idx", "proofing_live_push", "proofing_domains"] as $table) {
+	foreach (["proofing_presets", "proofing_inv_templates", "proofing_notify_subs", "proofing_notify_queue", "proofing_media_index", "proofing_media_cull", "proofing_public_links", "proofing_review_rounds", "proofing_ext_resources", "proofing_guest_ratings", "proofing_share_audit", "proofing_video_deriv", "proofing_semantic_idx", "proofing_live_push", "proofing_domains", "proofing_media_scans", "proofing_media_scan_queue", "proofing_purge_requests", "proofing_retention_log"] as $table) {
 		$q = $db->getQueryBuilder();
 		$q->select($q->func()->count())->from($table)->executeQuery()->fetchOne();
 	}
@@ -136,7 +191,7 @@ compose exec -T --user www-data sqlite php -r '
 	};
 	$assertLink = static function (string $token, string $status, string $name) use ($db): void {
 		$q = $db->getQueryBuilder();
-		$result = $q->select("status", "is_primary", "name")->from("proofing_public_links")
+		$result = $q->select("status", "is_primary", "name", "review_enabled", "review_due_date")->from("proofing_public_links")
 			->where($q->expr()->eq("token", $q->createNamedParameter($token)))
 			->executeQuery();
 		$rows = $result->fetchAllAssociative();
@@ -146,6 +201,7 @@ compose exec -T --user www-data sqlite php -r '
 		if ((string)$row["status"] !== $status) throw new \RuntimeException("Upgrade scenario {$token}: expected status {$status}, found " . (string)$row["status"]);
 		if (!(bool)$row["is_primary"]) throw new \RuntimeException("Upgrade scenario {$token}: primary flag was not preserved");
 		if ((string)$row["name"] !== $name) throw new \RuntimeException("Upgrade scenario {$token}: expected name {$name}, found " . (string)$row["name"]);
+		if ((bool)$row["review_enabled"] || $row["review_due_date"] !== null) throw new \RuntimeException("Upgrade scenario {$token}: existing links must keep review workflow disabled");
 	};
 	$assertGallery("upgrade-active");
 	$assertGallery("upgrade-archived");
@@ -153,12 +209,16 @@ compose exec -T --user www-data sqlite php -r '
 	$assertLink("upgrade-active-token", "active", "Primary link");
 	$assertLink("upgrade-archived-token", "suspended", "Primary link");
 	$assertLink("upgrade-existing-token", "active", "Existing link");
+	$health = \OC::$server->get(\OCA\ProofingGallery\Service\HealthService::class)->status();
+	if (!isset($health["backlogs"]["purges"], $health["retention"]["assigned"], $health["maintenance"]["periodicJobs"], $health["maintenance"]["backfills"])) {
+		throw new \RuntimeException("Operational health diagnostics are incomplete after the upgrade");
+	}
 '
-version="$(compose exec -T --user www-data sqlite php occ app:list --enabled --output=json \
+version="$(compose exec -T --user www-data "${service}" php occ app:list --enabled --output=json \
 	| php -r '$apps=json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR); echo $apps["enabled"]["proofing_gallery"];')"
 if [[ "${version}" != "${expected_version}" ]]; then
 	echo "Unexpected upgraded version: ${version}" >&2
 	exit 4
 fi
 
-echo "${previous_version} (${upgrade_from_ref}) -> ${expected_version} schema and data upgrade passed."
+echo "${previous_version} (${upgrade_from_ref}) -> ${expected_version} schema and data upgrade passed on ${database}."

@@ -29,6 +29,8 @@
 /tests/.phpunit.cache/
 /.cache/
 /.eslintcache
+__pycache__/
+*.py[cod]
 
 # Local development state
 /.env

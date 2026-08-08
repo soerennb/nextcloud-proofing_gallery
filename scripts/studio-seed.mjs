@@ -3,6 +3,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
+import { decodeXml } from './lib/xml.mjs'
 
 const projectRoot = path.resolve(import.meta.dirname, '..')
 const manifest = JSON.parse(await readFile(path.join(projectRoot, 'demo/library-manifest.json'), 'utf8'))
@@ -150,10 +151,6 @@ async function folderEntries(parts) {
  *
  * @param value
  */
-function decodeXml(value) {
-	return value.replaceAll('&amp;', '&').replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&quot;', '"').replaceAll('&#039;', "'")
-}
-
 /**
  *
  * @param pathname

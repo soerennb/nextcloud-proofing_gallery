@@ -38,6 +38,7 @@ final class PublicShareService {
 		private GalleryReadinessService $readiness,
 		private PreviewWarmService $previewWarm,
 		private IDBConnection $db,
+		private LifecycleScheduleService $lifecycleSchedule,
 	) {
 	}
 
@@ -88,6 +89,7 @@ final class PublicShareService {
 		$gallery->setRevokedAt(null);
 		$gallery->setUpdatedAt($this->clock->getTime());
 		$gallery->setRevision($gallery->getRevision() + 1);
+		$this->lifecycleSchedule->project($gallery, $this->clock->getTime());
 
 		try {
 			$updated = $this->atomic(function () use ($gallery, $share): Gallery {
@@ -143,6 +145,7 @@ final class PublicShareService {
 		$gallery->setRevokedAt($this->clock->getTime());
 		$gallery->setUpdatedAt($this->clock->getTime());
 		$gallery->setRevision($gallery->getRevision() + 1);
+		$this->lifecycleSchedule->project($gallery, $this->clock->getTime());
 
 		return $this->galleries->update($gallery);
 	}
@@ -181,6 +184,7 @@ final class PublicShareService {
 				$gallery->setArchivedAt($now);
 				$gallery->setUpdatedAt($now);
 				$gallery->setRevision($gallery->getRevision() + 1);
+				$this->lifecycleSchedule->project($gallery, $now);
 				return $this->galleries->update($gallery);
 			}, $this->db);
 		} catch (Throwable $exception) {
@@ -244,6 +248,7 @@ final class PublicShareService {
 				$gallery->setArchivedAt(null);
 				$gallery->setUpdatedAt($this->clock->getTime());
 				$gallery->setRevision($gallery->getRevision() + 1);
+				$this->lifecycleSchedule->project($gallery, $this->clock->getTime());
 				return $this->galleries->update($gallery);
 			}, $this->db);
 		} catch (Throwable $exception) {
@@ -297,6 +302,7 @@ final class PublicShareService {
 			$gallery->setFolderId($folderId);
 			$gallery->setUpdatedAt($this->clock->getTime());
 			$gallery->setRevision($gallery->getRevision() + 1);
+			$this->lifecycleSchedule->project($gallery, $this->clock->getTime());
 			$updated = $this->galleries->update($gallery);
 			$this->summaries->invalidate($gallery->getId());
 			$this->jobs->add(RebuildMediaIndexJob::class, ['galleryId' => $gallery->getId()]);

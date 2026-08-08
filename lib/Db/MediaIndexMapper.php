@@ -21,17 +21,21 @@ final class MediaIndexMapper extends QBMapper {
 		MediaIndexQuery $query,
 		string|int|null $afterValue = null,
 		?int $afterFileId = null,
+		bool $before = false,
 	): array {
 		$sortColumn = match ($query->sortBy) {
 			'modified' => 'm.mtime',
 			'size' => 'm.size',
 			default => 'm.sort_key',
 		};
-		$direction = $query->sortDirection === 'desc' ? 'DESC' : 'ASC';
+		$naturalDirection = $query->sortDirection === 'desc' ? 'DESC' : 'ASC';
+		$direction = $before ? ($naturalDirection === 'ASC' ? 'DESC' : 'ASC') : $naturalDirection;
 		$qb = $this->filteredQuery($query);
 		$qb->select('m.*')->orderBy($sortColumn, $direction)->addOrderBy('m.file_id', $direction)->setMaxResults($query->limit);
 		if ($afterValue !== null && $afterFileId !== null) {
-			$comparison = $direction === 'ASC' ? 'gt' : 'lt';
+			$comparison = $before
+				? ($naturalDirection === 'ASC' ? 'lt' : 'gt')
+				: ($naturalDirection === 'ASC' ? 'gt' : 'lt');
 			$valueType = $sortColumn === 'm.sort_key' ? IQueryBuilder::PARAM_STR : IQueryBuilder::PARAM_INT;
 			$qb->andWhere($qb->expr()->orX(
 				$qb->expr()->{$comparison}($sortColumn, $qb->createNamedParameter($afterValue, $valueType)),
@@ -41,7 +45,8 @@ final class MediaIndexMapper extends QBMapper {
 				),
 			));
 		}
-		return $this->findEntities($qb);
+		$entities = $this->findEntities($qb);
+		return $before ? array_reverse($entities) : $entities;
 	}
 
 	public function countFiltered(MediaIndexQuery $query): int {
@@ -51,14 +56,27 @@ final class MediaIndexMapper extends QBMapper {
 	}
 
 	/** @return list<array{file_id: int, relative_path: string, mime_type: string}> */
-	public function groupingRows(MediaIndexQuery $query): array {
+	public function groupingRows(MediaIndexQuery $query, int $afterFileId = 0, int $limit = 1000): array {
 		$qb = $this->filteredQuery($query);
-		$qb->select('m.file_id', 'm.relative_path', 'm.mime_type')->orderBy('m.sort_key', 'ASC');
+		$qb->select('m.file_id', 'm.relative_path', 'm.mime_type')
+			->andWhere($qb->expr()->gt('m.file_id', $qb->createNamedParameter($afterFileId, IQueryBuilder::PARAM_INT)))
+			->orderBy('m.file_id', 'ASC')->setMaxResults(max(1, min(2000, $limit)));
 		return array_map(static fn (array $row): array => [
 			'file_id' => (int)$row['file_id'],
 			'relative_path' => (string)$row['relative_path'],
 			'mime_type' => (string)$row['mime_type'],
 		], QueryResult::rows($qb->executeQuery()));
+	}
+
+	/** @return array<string, int> */
+	public function mimeCounts(MediaIndexQuery $query): array {
+		$qb = $this->filteredQuery($query);
+		$qb->select('m.mime_type')->addSelect($qb->func()->count('m.id', 'media_count'))->groupBy('m.mime_type');
+		$counts = [];
+		$result = $qb->executeQuery();
+		while (($row = QueryResult::row($result)) !== false) $counts[(string)$row['mime_type']] = (int)$row['media_count'];
+		$result->closeCursor();
+		return $counts;
 	}
 
 	private function filteredQuery(MediaIndexQuery $query): IQueryBuilder {

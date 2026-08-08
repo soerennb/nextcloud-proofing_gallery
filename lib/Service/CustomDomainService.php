@@ -27,9 +27,24 @@ final class CustomDomainService {
 		return array_map($this->present(...), $this->repository->gallery((int)$gallery->getId()));
 	}
 
-	/** @return list<array<string, mixed>> */
-	public function adminList(): array {
-		return array_map($this->present(...), $this->repository->all());
+	/** @return array{items:list<array<string,mixed>>,total:int,nextCursor:?string} */
+	public function adminPage(int $limit, ?string $cursor, string $status, string $search, ScopedCursorCodec $cursors): array {
+		$limit = max(1, min(100, $limit));
+		$status = mb_strtolower(trim($status));
+		if (!in_array($status, ['active', 'pending', 'verified', 'revoked', 'all'], true)) {
+			throw new \InvalidArgumentException('Invalid domain status');
+		}
+		$search = mb_substr(trim($search), 0, 253);
+		$scope = 'admin-domains:' . hash('sha256', $status . "\0" . mb_strtolower($search));
+		$rows = $this->repository->adminPage($cursors->decode($cursor, $scope), $limit + 1, $status, $search);
+		$hasMore = count($rows) > $limit;
+		if ($hasMore) array_pop($rows);
+		$last = end($rows);
+		return [
+			'items' => array_map($this->present(...), $rows),
+			'total' => $this->repository->adminCount($status, $search),
+			'nextCursor' => $hasMore && is_array($last) ? $cursors->encode($scope, (int)$last['id']) : null,
+		];
 	}
 
 	/** @return array<string, mixed> */

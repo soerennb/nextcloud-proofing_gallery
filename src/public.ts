@@ -7,6 +7,7 @@ import './public-shell.css'
 
 import PublicApp from './PublicApp.vue'
 import type { GallerySettings } from './domain/gallerySettings'
+import type { PublicReviewState } from './publicTypes.ts'
 
 interface PublicGalleryState {
 	id: number
@@ -22,6 +23,7 @@ interface PublicGalleryState {
 		offset: number
 		path: string
 	}
+	review?: PublicReviewState
 }
 
 const state = loadState<PublicGalleryState>('proofing_gallery', 'public-gallery')

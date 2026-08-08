@@ -34,6 +34,7 @@ final class PresentationSettings implements JsonSerializable {
 		public readonly string $motionPreset,
 		public readonly string $lightboxFilmstripPlacement,
 		public readonly string $lightboxChromeBehavior,
+		public readonly StorySettings $story,
 	) {
 	}
 
@@ -47,6 +48,7 @@ final class PresentationSettings implements JsonSerializable {
 			'showTitle' => true, 'showMediaCount' => true, 'titleSize' => 'medium',
 			'showFilenames' => true, 'slideshowInterval' => 5, 'motionPreset' => 'expressive',
 			'lightboxFilmstripPlacement' => 'auto', 'lightboxChromeBehavior' => 'autoHide',
+			'story' => StorySettings::defaults(),
 		];
 	}
 
@@ -75,7 +77,7 @@ final class PresentationSettings implements JsonSerializable {
 			SettingsInput::choice($value['openerStyle'], 'presentation.openerStyle', ['minimal', 'compact', 'cinematic']),
 			$x, $y, SettingsInput::choice($value['fontPreset'], 'presentation.fontPreset', ['system', 'editorial', 'modern']),
 			$watermark, $opacity, SettingsInput::choice($value['theme'], 'presentation.theme', ['auto', 'light', 'dark']),
-			SettingsInput::choice($value['layout'], 'presentation.layout', ['grid', 'masonry', 'list']),
+			SettingsInput::choice($value['layout'], 'presentation.layout', ['grid', 'masonry', 'list', 'story']),
 			SettingsInput::choice($value['tileSize'], 'presentation.tileSize', ['small', 'medium', 'large']),
 			SettingsInput::choice($value['tileGap'], 'presentation.tileGap', ['tight', 'normal', 'wide']),
 			SettingsInput::choice($value['tileRadius'], 'presentation.tileRadius', ['square', 'soft']),
@@ -87,11 +89,12 @@ final class PresentationSettings implements JsonSerializable {
 			SettingsInput::choice($value['motionPreset'], 'presentation.motionPreset', ['off', 'subtle', 'expressive']),
 			SettingsInput::choice($value['lightboxFilmstripPlacement'], 'presentation.lightboxFilmstripPlacement', ['auto', 'side', 'bottom', 'hidden']),
 			SettingsInput::choice($value['lightboxChromeBehavior'], 'presentation.lightboxChromeBehavior', ['persistent', 'autoHide']),
+			StorySettings::fromArray(SettingsInput::object($value, 'story')),
 		);
 	}
 
 	/** @return array<string, mixed> */
 	public function jsonSerialize(): array {
-		return get_object_vars($this);
+		return [...get_object_vars($this), 'story' => $this->story->jsonSerialize()];
 	}
 }

@@ -73,6 +73,26 @@ final class UploadRepository {
 			->orderBy('u.created_at', 'DESC')->executeQuery());
 	}
 
+	/** @return list<array<string, mixed>> */
+	public function page(int $galleryId, ?int $beforeId, int $limit, string $status = ''): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('u.*', 'g.display_name')->from('proofing_uploads', 'u')
+			->leftJoin('u', 'proofing_guests', 'g', $qb->expr()->eq('u.guest_id', 'g.id'))
+			->where($qb->expr()->eq('u.gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->orderBy('u.id', 'DESC')->setMaxResults(max(1, min(101, $limit)));
+		if ($beforeId !== null) $qb->andWhere($qb->expr()->lt('u.id', $qb->createNamedParameter($beforeId, IQueryBuilder::PARAM_INT)));
+		if ($status !== '') $qb->andWhere($qb->expr()->eq('u.status', $qb->createNamedParameter($status)));
+		return QueryResult::rows($qb->executeQuery());
+	}
+
+	public function countGallery(int $galleryId, string $status = ''): int {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select($qb->func()->count())->from('proofing_uploads')
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
+		if ($status !== '') $qb->andWhere($qb->expr()->eq('status', $qb->createNamedParameter($status)));
+		return (int)$qb->executeQuery()->fetchOne();
+	}
+
 	public function moderate(string $uploadId, string $status, int $now): bool {
 		$qb = $this->db->getQueryBuilder();
 		return $qb->update('proofing_uploads')->set('status', $qb->createNamedParameter($status))

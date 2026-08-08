@@ -28,6 +28,19 @@ cookie and a separately hashed nonce in `X-Proofing-Nonce`. Media endpoints
 resolve requested file IDs beneath the shared folder, preventing path and
 cross-gallery access.
 
+Authenticated ecosystem integrations use one curated read model rather than
+reimplementing gallery authorization. Files actions and sidebar tabs call OCS
+routes as the active user. Unified Search, Smart Picker references, Dashboard,
+Projects, Flow, Context Chat, and the agent API all project from the same
+owner-or-manager boundary. Optional-app classes are registered only when their
+public interfaces exist, so installations without those apps still boot.
+
+Agent mutations are idempotent per user, operation, and request ID and use
+optimistic gallery revisions. The contract intentionally omits permanent
+deletion, password access, arbitrary filesystem operations, guest identities,
+and privileged impersonation. Integration events carry a unique event ID and
+are written to an outbox before dispatch so consumers can deduplicate delivery.
+
 ## Data
 
 Doctrine migrations create tables for galleries, collection revisions and
@@ -51,6 +64,12 @@ scoped to one folder gallery plus destination path. The app exposes one bounded,
 write-only HTTPS PUT ingress and no FTP/FTPS server or reference gateway. An
 operator may translate a camera-specific protocol externally. No
 credential-backed read route exists.
+
+Files Metadata exposes only boolean source membership and coarse lifecycle
+states. Context Chat receives a sanitized metadata document and a calculated
+ACL for the owner and direct managers; it never receives source media, public
+share tokens, guest feedback, or personal guest data. This is a hard privacy
+boundary, not merely a user-interface convention.
 
 Custom domains are separate mappings to active native public-link records. DNS
 TXT ownership and a TLS-valid HTTPS endpoint are prerequisites for activation.

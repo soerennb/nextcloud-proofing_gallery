@@ -24,7 +24,7 @@ final class Provider implements IProvider {
 		$type = (string)($parameters['eventType'] ?? '');
 		$title = (string)($parameters['galleryTitle'] ?? $event->getObjectName());
 		$link = $this->url->linkToRouteAbsolute('proofing_gallery.page.index') . '#gallery/' . $event->getObjectId()
-			. (in_array($type, ['comment.created', 'selection.created', 'upload.received'], true) ? '/feedback' : '/activity');
+			. (in_array($type, ['comment.created', 'selection.created', 'upload.received', 'review.submitted', 'review.changes_requested', 'review.approved', 'review.reopened'], true) ? '/feedback' : '/activity');
 		$subject = match ($type) {
 			'comment.created' => $l->t('A client added a comment in {gallery}'),
 			'comment.updated' => $l->t('A client edited a comment in {gallery}'),
@@ -34,6 +34,10 @@ final class Provider implements IProvider {
 			'upload.received' => $l->t('A client uploaded a file to {gallery}'),
 			'upload.accepted' => $l->t('An upload was accepted in {gallery}'),
 			'upload.rejected' => $l->t('An upload was rejected in {gallery}'),
+			'review.submitted' => $l->t('A client submitted a review in {gallery}'),
+			'review.changes_requested' => $l->t('Changes were requested in {gallery}'),
+			'review.approved' => $l->t('A review was approved in {gallery}'),
+			'review.reopened' => $l->t('A review was reopened in {gallery}'),
 			default => $l->t('New activity in {gallery}'),
 		};
 		return $event

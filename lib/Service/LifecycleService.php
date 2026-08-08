@@ -8,7 +8,6 @@ use OCA\ProofingGallery\Db\GalleryMapper;
 use OCA\ProofingGallery\Db\LifecycleRepository;
 use OCA\ProofingGallery\Db\VideoDerivativeRepository;
 use OCA\ProofingGallery\Dto\GallerySettings;
-use OCA\ProofingGallery\Dto\Settings\LifecycleSettings;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Files\IAppData;
 
@@ -28,6 +27,8 @@ final class LifecycleService {
 		private NativeNotificationService $notifications,
 		private ActivityService $activity,
 		private VideoDerivativeRepository $videoDerivatives,
+		private LifecycleScheduleService $lifecycleSchedule,
+		private RetentionHandoffService $retention,
 	) {
 	}
 
@@ -44,6 +45,17 @@ final class LifecycleService {
 			'created_at',
 			$now - $this->policies->get('shareAuditRetentionDays') * 86400, self::BATCH_SIZE,
 		);
+		$notificationQueue = $this->repository->deleteOldRowsWithStatuses(
+			'proofing_notify_queue', 'updated_at', ['sent', 'failed'],
+			$now - $this->policies->get('notificationQueueRetentionDays') * 86400, self::BATCH_SIZE,
+		);
+		$deadLetters = $this->repository->deleteOldRowsWithStatuses(
+			'proofing_int_outbox', 'dead_at', ['dead'],
+			$now - $this->policies->get('deadLetterRetentionDays') * 86400, self::BATCH_SIZE,
+		);
+		$agentRequests = $this->repository->deleteOldRows(
+			'proofing_agent_requests', 'expires_at', $now, self::BATCH_SIZE,
+		);
 		$uploads = $this->cleanupUploads($now) + $this->cleanupOwnerUploads(
 			$now - $this->policies->get('pendingUploadRetentionHours') * 3600,
 		);
@@ -58,21 +70,38 @@ final class LifecycleService {
 		foreach ($this->galleries->findArchivedWithActiveLinks() as $gallery) {
 			$suspended += $this->shares->reconcileArchived($gallery);
 		}
-		['revoked' => $revoked, 'archived' => $archived] = $this->automateGalleries($now);
-		return compact('events', 'shareAudit', 'uploads', 'previews', 'video', 'versions', 'orphans', 'collectionAnchors', 'suspended', 'revoked', 'archived');
+		['revoked' => $revoked, 'archived' => $archived, 'processed' => $lifecycleProcessed] = $this->automateGalleries($now);
+		$remaining = (int)($events === self::BATCH_SIZE
+			|| $shareAudit === self::BATCH_SIZE
+			|| $notificationQueue === self::BATCH_SIZE
+			|| $deadLetters === self::BATCH_SIZE
+			|| $agentRequests === self::BATCH_SIZE
+			|| $uploads >= self::BATCH_SIZE
+			|| $previews === self::BATCH_SIZE
+			|| $video === self::BATCH_SIZE
+			|| $versions === self::BATCH_SIZE
+			|| $orphans >= self::BATCH_SIZE
+			|| $lifecycleProcessed === 200);
+		return compact('events', 'shareAudit', 'notificationQueue', 'deadLetters', 'agentRequests', 'uploads', 'previews', 'video', 'versions', 'orphans', 'collectionAnchors', 'suspended', 'revoked', 'archived', 'lifecycleProcessed', 'remaining');
 	}
 
-	/** @return array{revoked: int, archived: int} */
+	/** @return array{revoked: int, archived: int, processed: int} */
 	private function automateGalleries(int $now): array {
-		if (!$this->capabilities->feature('lifecycleAutomation')) return ['revoked' => 0, 'archived' => 0];
+		if (!$this->capabilities->feature('lifecycleAutomation')) return ['revoked' => 0, 'archived' => 0, 'processed' => 0];
 		$revoked = 0;
 		$archived = 0;
-		foreach ($this->galleries->findLifecycleCandidates() as $gallery) {
+		$processed = 0;
+		foreach ($this->galleries->findLifecycleCandidates($now) as $gallery) {
+			$processed++;
 			$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
 			$rule = $settings->lifecycle;
-			if (!$rule->enabled) continue;
+			if (!$rule->enabled) {
+				$this->lifecycleSchedule->project($gallery, $now, false);
+				$this->galleries->updateLifecycleProjection($gallery);
+				continue;
+			}
 
-			$revokeAt = $this->revokeTimestamp($gallery->getCompletedAt(), $rule);
+			$revokeAt = $this->lifecycleSchedule->revokeTimestamp($gallery->getCompletedAt(), $rule);
 			if ($gallery->getShareToken() !== null && $revokeAt !== null && $now < $revokeAt) {
 				foreach (array_values(array_unique($rule->reminderDays)) as $days) {
 					if ($now < $revokeAt - $days * 86400) continue;
@@ -95,20 +124,14 @@ final class LifecycleService {
 				$gallery->setUpdatedAt($now);
 				$gallery->setRevision($gallery->getRevision() + 1);
 				$this->galleries->update($gallery);
+				$this->retention->assignOnArchive($gallery, 'system:lifecycle');
 				$this->activity->recordOnce($gallery, 'lifecycle.archived', (string)$gallery->getArchivedAt(), ['actionAt' => $gallery->getArchivedAt()]);
 				$archived++;
 			}
+			$this->lifecycleSchedule->project($gallery, $now, false);
+			$this->galleries->updateLifecycleProjection($gallery);
 		}
-		return compact('revoked', 'archived');
-	}
-
-	private function revokeTimestamp(?int $completedAt, LifecycleSettings $rule): ?int {
-		if ($rule->trigger === 'after_completion') {
-			return $completedAt === null ? null : $completedAt + $rule->revokeAfterDays * 86400;
-		}
-		if ($rule->revokeAt === '') return null;
-		$date = \DateTimeImmutable::createFromFormat('!Y-m-d', $rule->revokeAt, new \DateTimeZone('UTC'));
-		return $date === false ? null : $date->setTime(23, 59, 59)->getTimestamp();
+		return compact('revoked', 'archived', 'processed');
 	}
 
 	private function cleanupUploads(int $now): int {

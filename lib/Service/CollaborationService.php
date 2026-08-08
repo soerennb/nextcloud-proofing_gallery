@@ -32,11 +32,14 @@ final class CollaborationService {
 	) {
 	}
 
-	/** @return array<string, mixed> */
-	public function state(Gallery $gallery, ?Guest $guest, int $cursor): array {
+	/** @param list<int> $visibleFileIds
+	 * @return array<string, mixed> */
+	public function state(Gallery $gallery, ?Guest $guest, int $cursor, array $visibleFileIds = []): array {
 		$settings = $this->settings($gallery);
 		$visibleGuestId = $settings->review->visibility === FeedbackVisibility::Private ? $guest?->getId() : null;
-		$state = $this->repository->state($gallery->getId(), $visibleGuestId, $cursor);
+		$visibleFileIds = array_values(array_unique(array_filter(array_map('intval', $visibleFileIds), static fn (int $id): bool => $id > 0)));
+		if (count($visibleFileIds) > 200) throw new InvalidArgumentException('Too many visible media IDs');
+		$state = $this->repository->state($gallery->getId(), $visibleGuestId, $cursor, $visibleFileIds);
 		if (($state['unchanged'] ?? false) === true) return ['unchanged' => true, 'cursor' => $cursor];
 		$feedback = $state['feedback'];
 		$comments = $state['comments'];
@@ -107,7 +110,21 @@ final class CollaborationService {
 			'selections' => $this->presentSelections($selections, $guest),
 			'events' => $events,
 			'cursor' => $nextCursor,
+			'delta' => (bool)($state['delta'] ?? false),
 		];
+	}
+
+	/** @return array{items:list<array<string,mixed>>,total:int,nextCursor:?string} */
+	public function ownerSelectionPage(Gallery $gallery, int $limit, ?string $cursor, ScopedCursorCodec $cursors): array {
+		$limit = max(1, min(100, $limit));
+		$scope = 'owner-selections:' . $gallery->getId();
+		$rows = $this->repository->selectionPage($gallery->getId(), null, $cursors->decode($cursor, $scope), $limit + 1);
+		$hasMore = count($rows) > $limit;
+		if ($hasMore) array_pop($rows);
+		$this->repository->decorateSelections($rows);
+		$items = $this->presentSelections($rows, null);
+		$last = $rows === [] ? null : $rows[array_key_last($rows)];
+		return ['items' => $items, 'total' => $this->repository->selectionCount($gallery->getId()), 'nextCursor' => $hasMore && $last !== null ? $cursors->encode($scope, (int)$last['id']) : null];
 	}
 
 	public function toggleLike(Gallery $gallery, Guest $guest, int $fileId): bool {
@@ -127,6 +144,10 @@ final class CollaborationService {
 		}
 		$this->event($gallery, $guest, 'like.changed', ['fileId' => $fileId, 'liked' => $liked]);
 		return $liked;
+	}
+
+	public function recordRatingChanged(Gallery $gallery, Guest $guest, int $fileId): void {
+		$this->event($gallery, $guest, 'rating.changed', ['fileId' => $fileId]);
 	}
 
 	public function setColor(Gallery $gallery, Guest $guest, int $fileId, ?string $value): void {
@@ -374,8 +395,8 @@ final class CollaborationService {
 	}
 
 	private function assertQuota(string $table, int $galleryId, int $guestId, int $galleryLimit, int $guestLimit): void {
-		if ($this->repository->countRows($table, $galleryId) >= $galleryLimit
-			|| $this->repository->countRows($table, $galleryId, $guestId) >= $guestLimit) {
+		if ($this->repository->hasAtLeastRows($table, $galleryId, $galleryLimit)
+			|| $this->repository->hasAtLeastRows($table, $galleryId, $guestLimit, $guestId)) {
 			throw new InvalidArgumentException('Collaboration data limit reached');
 		}
 	}

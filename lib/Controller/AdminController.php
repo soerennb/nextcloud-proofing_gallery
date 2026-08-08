@@ -13,6 +13,7 @@ use OCA\ProofingGallery\Service\CoreSharingPolicyService;
 use OCA\ProofingGallery\Service\SettingsRolloutService;
 use OCA\ProofingGallery\Service\BrandingAssetService;
 use OCA\ProofingGallery\Db\SemanticIndexRepository;
+use OCA\ProofingGallery\Service\RetentionHandoffService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\ApiRoute;
@@ -29,6 +30,7 @@ final class AdminController extends Controller {
 		private SettingsRolloutService $rollout,
 		private BrandingAssetService $branding,
 		private SemanticIndexRepository $semanticIndex,
+		private RetentionHandoffService $retention,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -100,6 +102,7 @@ final class AdminController extends Controller {
 			'galleryDefaults' => $this->policies->galleryDefaults(),
 			'coreSharing' => $this->coreSharing->status(),
 			'health' => $this->health->status(),
+			'retentionConfiguration' => $this->retention->configuration(),
 		]);
 	}
 

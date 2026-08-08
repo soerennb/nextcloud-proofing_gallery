@@ -90,6 +90,30 @@ final class GalleryController extends Controller {
 		}
 	}
 
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/v2/galleries')]
+	public function indexV2(
+		int $limit = 50,
+		?string $cursor = null,
+		bool $archived = false,
+		string $search = '',
+		?string $sourceType = null,
+		?string $status = null,
+		?string $mode = null,
+		?string $purpose = null,
+		bool $ownedOnly = false,
+		string $sort = 'updated',
+	): DataResponse {
+		try {
+			return new DataResponse($this->galleries->listV2(
+				$this->userId(), $limit, $cursor, $archived, $search,
+				$sourceType, $status, $mode, $purpose, $ownedOnly, $sort,
+			));
+		} catch (InvalidArgumentException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+	}
+
 	/** @param array<string, mixed> $settings */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/galleries')]

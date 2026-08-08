@@ -1,23 +1,23 @@
 <script setup lang="ts">
 import { t } from '@nextcloud/l10n'
 import { ownerPreviewUrl } from '../services/galleryApi.ts'
-import type { Gallery } from '../types.ts'
+import type { GalleryListItem } from '../types.ts'
 import GalleryActionsMenu from './GalleryActionsMenu.vue'
 
-defineProps<{ galleries: Gallery[]; archived: boolean; view: 'list' | 'grid' }>()
+defineProps<{ galleries: GalleryListItem[]; archived: boolean; view: 'list' | 'grid' }>()
 const emit = defineEmits<{
-	select: [gallery: Gallery]
-	share: [gallery: Gallery]
-	archive: [gallery: Gallery]
-	restore: [gallery: Gallery]
+	select: [gallery: GalleryListItem]
+	share: [gallery: GalleryListItem]
+	archive: [gallery: GalleryListItem]
+	restore: [gallery: GalleryListItem]
 }>()
 
 function formattedDate(timestamp: number): string {
 	return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(timestamp * 1000))
 }
 
-function previewUrl(gallery: Gallery): string {
-	const fileId = gallery.settings.presentation.heroFileId ?? gallery.mediaSummary.coverFileId
+function previewUrl(gallery: GalleryListItem): string {
+	const fileId = gallery.heroFileId ?? gallery.mediaSummary.coverFileId
 	return fileId
 		? ownerPreviewUrl(gallery.id, fileId, 360, 204)
 		: ''
@@ -31,13 +31,13 @@ function previewUrl(gallery: Gallery): string {
 			<button class="gallery-row__main" type="button" @click="emit('select', gallery)">
 				<span class="gallery-row__cover" aria-hidden="true">
 					<img v-if="previewUrl(gallery)" :src="previewUrl(gallery)" alt="">
-					<span v-else>{{ gallery.settings.mode === 'collaboration' ? '✓' : '▧' }}</span>
+					<span v-else>{{ gallery.mode === 'collaboration' ? '✓' : '▧' }}</span>
 				</span>
 				<span class="gallery-row__identity">
 					<strong>{{ gallery.title }}</strong>
 					<small>
 						{{ gallery.sourceType === 'collection' ? t('proofing_gallery', 'Collection') + ' · ' : '' }}
-						{{ gallery.settings.mode === 'collaboration'
+						{{ gallery.mode === 'collaboration'
 							? t('proofing_gallery', 'Proofing')
 							: t('proofing_gallery', 'Presentation') }}
 						·

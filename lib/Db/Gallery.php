@@ -43,6 +43,16 @@ use OCP\DB\Types;
  * @method void setCompletedAt(?int $completedAt)
  * @method ?int getRevokedAt()
  * @method void setRevokedAt(?int $revokedAt)
+ * @method ?int getLifecycleRevokeAt()
+ * @method void setLifecycleRevokeAt(?int $lifecycleRevokeAt)
+ * @method ?int getLifecycleArchiveAt()
+ * @method void setLifecycleArchiveAt(?int $lifecycleArchiveAt)
+ * @method ?int getLifecycleNextAt()
+ * @method void setLifecycleNextAt(?int $lifecycleNextAt)
+ * @method string getMode()
+ * @method void setMode(string $mode)
+ * @method string getTitleSort()
+ * @method void setTitleSort(string $titleSort)
  */
 final class Gallery extends Entity implements \JsonSerializable {
 	protected string $ownerUid = '';
@@ -62,6 +72,11 @@ final class Gallery extends Entity implements \JsonSerializable {
 	protected ?int $publishedAt = null;
 	protected ?int $completedAt = null;
 	protected ?int $revokedAt = null;
+	protected ?int $lifecycleRevokeAt = null;
+	protected ?int $lifecycleArchiveAt = null;
+	protected ?int $lifecycleNextAt = null;
+	protected string $mode = 'presentation';
+	protected string $titleSort = '';
 
 	public function __construct() {
 		$this->addType('folderId', Types::BIGINT);
@@ -72,6 +87,9 @@ final class Gallery extends Entity implements \JsonSerializable {
 		$this->addType('publishedAt', Types::BIGINT);
 		$this->addType('completedAt', Types::BIGINT);
 		$this->addType('revokedAt', Types::BIGINT);
+		$this->addType('lifecycleRevokeAt', Types::BIGINT);
+		$this->addType('lifecycleArchiveAt', Types::BIGINT);
+		$this->addType('lifecycleNextAt', Types::BIGINT);
 	}
 
 	/** @return array<string, mixed> */
@@ -97,6 +115,9 @@ final class Gallery extends Entity implements \JsonSerializable {
 			'publishedAt' => $this->getPublishedAt(),
 			'completedAt' => $this->getCompletedAt(),
 			'revokedAt' => $this->getRevokedAt(),
+			'lifecycleRevokeAt' => $this->getLifecycleRevokeAt(),
+			'lifecycleArchiveAt' => $this->getLifecycleArchiveAt(),
+			'lifecycleNextAt' => $this->getLifecycleNextAt(),
 		];
 	}
 }

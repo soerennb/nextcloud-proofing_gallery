@@ -16,12 +16,13 @@ final class LifecycleSettings implements JsonSerializable {
 		public readonly int $revokeAfterDays,
 		public readonly int $archiveAfterDays,
 		public readonly array $reminderDays,
+		public readonly bool $retentionHandoff,
 	) {
 	}
 
 	/** @return array<string, mixed> */
 	public static function defaults(): array {
-		return ['enabled' => false, 'trigger' => 'after_completion', 'revokeAt' => '', 'revokeAfterDays' => 30, 'archiveAfterDays' => 30, 'reminderDays' => [7, 1]];
+		return ['enabled' => false, 'trigger' => 'after_completion', 'revokeAt' => '', 'revokeAfterDays' => 30, 'archiveAfterDays' => 30, 'reminderDays' => [7, 1], 'retentionHandoff' => false];
 	}
 
 	/** @param array<string, mixed> $input */
@@ -39,7 +40,7 @@ final class LifecycleSettings implements JsonSerializable {
 		return new self(
 			SettingsInput::bool($value['enabled'], 'lifecycle.enabled'),
 			SettingsInput::choice($value['trigger'], 'lifecycle trigger', ['fixed_date', 'after_completion']),
-			$revokeAt, $revokeDays, $archiveDays, $reminders,
+			$revokeAt, $revokeDays, $archiveDays, $reminders, SettingsInput::bool($value['retentionHandoff'], 'lifecycle.retentionHandoff'),
 		);
 	}
 

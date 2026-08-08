@@ -1,4 +1,5 @@
 import type { GallerySettings } from './domain/gallerySettings'
+import type { PublicReviewState, ReviewRound } from './publicTypes.ts'
 
 export type GalleryPurpose = 'showcase' | 'delivery' | 'selection' | 'proofing' | 'uploads' | 'custom'
 
@@ -45,6 +46,9 @@ export interface Gallery {
 	publishedAt: number | null
 	completedAt: number | null
 	revokedAt: number | null
+	lifecycleRevokeAt: number | null
+	lifecycleArchiveAt: number | null
+	lifecycleNextAt: number | null
 	source: {
 		type: 'folder'
 		folderId: number
@@ -68,6 +72,7 @@ export interface Gallery {
 		canArchive: boolean
 	}
 	effectiveCapabilities: EffectiveCapabilities
+	retention: { available: boolean; configuredTagId: string; assigned: boolean; lastAction: { action: string; outcome: string; errorCode: string | null; createdAt: number } | null }
 }
 
 export interface MediaMetadata {
@@ -160,6 +165,7 @@ export interface GuestRatingPromotion {
 
 export interface IndexedMediaPage {
 	items: IndexedMediaItem[]
+	previousCursor: string | null
 	nextCursor: string | null
 	total: number
 }
@@ -265,11 +271,29 @@ export interface GalleryPublicLink {
 	groupDepth: number
 	minOwnerRating: number
 	publicLocale: 'en' | 'de' | null
+	reviewEnabled: boolean
+	reviewDueDate: string | null
+	review: PublicReviewState
 	createdAt: number
 	updatedAt: number
 	revokedAt: number | null
 	url: string
 	customDomain: { id: number; domain: string; status: 'pending' | 'verified' | 'revoked'; verificationName: string; verificationValue: string } | null
+}
+
+export interface ReviewLinkOverview {
+	linkId: number
+	name: string
+	linkStatus: 'active' | 'revoked'
+	enabled: boolean
+	dueDate: string | null
+	current: ReviewRound | null
+	history: ReviewRound[]
+}
+
+export interface ReviewOverview {
+	items: ReviewLinkOverview[]
+	canEdit: boolean
 }
 
 export interface ShareAuditItem {
@@ -288,6 +312,28 @@ export interface GalleryPage {
 	total: number
 	limit: number
 	offset: number
+}
+
+export interface GalleryListItem {
+	id: number
+	title: string
+	status: 'draft' | 'published' | 'archived'
+	mode: 'presentation' | 'collaboration'
+	sourceType: 'folder' | 'collection'
+	purpose: GalleryPurpose
+	workflowState: Gallery['workflowState']
+	createdAt: number
+	updatedAt: number
+	heroFileId: number | null
+	lifecycleNextAt: number | null
+	mediaSummary: Gallery['mediaSummary']
+	permissions: Gallery['permissions']
+}
+
+export interface GalleryCursorPage {
+	items: GalleryListItem[]
+	total: number
+	nextCursor: string | null
 }
 
 export interface GalleryReadiness {
@@ -329,7 +375,7 @@ export interface UserPreferences {
 		nextcloud: { enabled: boolean; events: NotificationEventType[] }
 		email: { enabled: boolean; events: NotificationEventType[]; frequency: 'immediate' | 'daily' }
 	}
-	lifecycle: { enabled: boolean; trigger: 'fixed_date' | 'after_completion'; revokeAfterDays: number; archiveAfterDays: number }
+	lifecycle: { enabled: boolean; trigger: 'fixed_date' | 'after_completion'; revokeAfterDays: number; archiveAfterDays: number; retentionHandoff: boolean }
 	cullingFilmstripPlacement: 'auto' | 'side' | 'bottom'
 	cullingFilmstripSize: number
 	savedViews: Array<{

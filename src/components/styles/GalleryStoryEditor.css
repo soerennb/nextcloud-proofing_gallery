@@ -1,0 +1,32 @@
+.story-editor { display: grid; gap: 18px; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--color-border); }
+
+.story-editor > header { display: flex; align-items: start; justify-content: space-between; gap: 20px; }
+
+.story-editor h3, .story-editor p { margin: 0; }
+
+.story-editor header p { max-width: 52ch; margin-top: 5px; color: var(--color-text-maxcontrast); line-height: 1.5; }
+
+.story-editor__empty { padding: 26px; border: 1px dashed var(--color-border-maxcontrast); color: var(--color-text-maxcontrast); text-align: center; }
+
+.story-editor__section { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--color-border); background: var(--color-main-background); }
+
+.story-editor__section-head { display: flex; align-items: center; gap: 10px; }
+
+.story-editor__section-head strong { flex: 1; }
+
+.story-editor__handle { color: var(--color-text-maxcontrast); cursor: grab; font-size: 20px; }
+
+.story-editor__section input, .story-editor__section textarea, .story-editor__section select { min-height: 40px; padding: 8px 10px; border: 1px solid var(--color-border-maxcontrast); border-radius: 3px; background: var(--color-main-background); color: var(--color-main-text); }
+
+.story-editor__section textarea { resize: vertical; }
+
+.story-editor__media { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+
+.story-editor__media button { position: relative; overflow: hidden; min-height: 72px; padding: 0; border: 1px solid transparent; border-radius: 2px; background: var(--color-background-dark); cursor: pointer; }
+
+.story-editor__media img { display: block; width: 100%; height: 72px; object-fit: cover; }
+
+.story-editor__media span { position: absolute; inset-inline-end: 5px; bottom: 5px; display: grid; width: 24px; height: 24px; border-radius: 50%; background: rgb(0 0 0 / 72%); color: #fff; place-items: center; }
+
+.story-editor__media-item--active { border-color: var(--color-primary-element) !important; }
+@media (max-width: 720px) { .story-editor > header, .story-editor__section-head { align-items: stretch; flex-direction: column; } .story-editor__handle { display: none; } }

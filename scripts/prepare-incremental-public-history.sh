@@ -97,7 +97,7 @@ fi
 
 git -C "${destination}" reflog expire --expire=now --all
 git -C "${destination}" gc --prune=now >/dev/null
-gitleaks git --redact --no-banner "${destination}"
+"${repo_dir}/scripts/scan-git-history.sh" "${destination}"
 
 echo "Incremental sanitized public clone prepared at ${destination}"
 echo "Public base: ${public_base}"

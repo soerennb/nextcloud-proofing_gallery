@@ -1,0 +1,12 @@
+.public-review-bar { position: sticky; z-index: 12; bottom: max(12px, env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: space-between; gap: 20px; width: min(680px, calc(100% - 24px)); margin: 24px auto 12px; padding: 12px 14px 12px 18px; border: 1px solid color-mix(in srgb, var(--gallery-foreground) 16%, transparent); border-radius: 18px; background: color-mix(in srgb, var(--gallery-background) 88%, transparent); box-shadow: 0 12px 36px rgb(0 0 0 / 18%); backdrop-filter: blur(18px) saturate(130%); }
+
+.public-review-bar > div { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; align-items: baseline; }
+
+.public-review-bar span, .public-review-bar small { color: var(--gallery-muted); font-size: 12px; }
+
+.public-review-bar small { grid-column: 2; }
+
+.public-review-bar button { min-height: 40px; padding: 0 18px; border: 0; border-radius: 12px; color: var(--gallery-background); background: var(--gallery-foreground); font-weight: 700; white-space: nowrap; }
+
+.public-review-bar[data-state="approved"] { border-color: color-mix(in srgb, #36b37e 54%, transparent); }
+@media (max-width: 520px) { .public-review-bar { align-items: stretch; bottom: max(8px, env(safe-area-inset-bottom)); } .public-review-bar > div { grid-template-columns: 1fr; } .public-review-bar small { grid-column: 1; } }

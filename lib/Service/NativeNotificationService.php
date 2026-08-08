@@ -13,7 +13,7 @@ use OCP\Notification\IManager;
 use Psr\Log\LoggerInterface;
 
 final class NativeNotificationService {
-	public const EVENT_TYPES = ['comment.created', 'selection.created', 'upload.received'];
+	public const EVENT_TYPES = ['comment.created', 'selection.created', 'upload.received', 'review.submitted'];
 
 	public function __construct(
 		private NativeNotificationRepository $repository,
@@ -40,7 +40,7 @@ final class NativeNotificationService {
 	}
 
 	public function signalCategory(int $galleryId, string $userUid, string $category, ?int $eventId = null): void {
-		if (!in_array($category, ['comment', 'selection', 'upload', 'manager', 'lifecycle', 'revoked'], true)
+		if (!in_array($category, ['comment', 'selection', 'upload', 'review', 'manager', 'lifecycle', 'revoked'], true)
 			|| !$this->available($userUid)) return;
 
 		$state = $this->repository->signal($galleryId, $userUid, $category, $eventId, $this->clock->getTime());
@@ -104,6 +104,7 @@ final class NativeNotificationService {
 			'comment.created' => 'comment',
 			'selection.created' => 'selection',
 			'upload.received' => 'upload',
+			'review.submitted' => 'review',
 			default => null,
 		};
 	}

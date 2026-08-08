@@ -11,16 +11,27 @@ import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import GalleryList from './components/GalleryList.vue'
-import { archiveGallery, fetchGalleries, restoreGallery } from './services/galleryApi.ts'
-import type { Gallery } from './types.ts'
+import { toGalleryListItem } from './domain/galleryListItem.ts'
+import { galleryWorkspacePath, normalizeGalleryWorkspace } from './domain/gallerySettingsOptions.ts'
+import { archiveGallery, fetchGallery, fetchGalleryPage, restoreGallery } from './services/galleryApi.ts'
+import type { Gallery, GalleryListItem } from './types.ts'
 
 const CreateGalleryModal = defineAsyncComponent(() => import('./components/CreateGalleryModal.vue'))
 const GallerySettings = defineAsyncComponent(() => import('./components/GallerySettings.vue'))
 const HelpView = defineAsyncComponent(() => import('./components/HelpView.vue'))
 const SharingModal = defineAsyncComponent(() => import('./components/SharingModal.vue'))
 
-const galleries = ref<Gallery[]>([])
+const initialGalleryRoute = window.location.hash.match(/^#gallery\/(\d+)(?:\/([^/]+))?/)
+if (initialGalleryRoute) {
+	const canonicalRoute = galleryWorkspacePath(Number(initialGalleryRoute[1]), normalizeGalleryWorkspace(initialGalleryRoute[2]))
+	if (window.location.hash !== canonicalRoute) history.replaceState(null, '', canonicalRoute)
+}
+
+const galleries = ref<GalleryListItem[]>([])
 const loading = ref(true)
+const loadingMore = ref(false)
+const galleryTotal = ref(0)
+const nextCursor = ref<string | null>(null)
 const archived = ref(false)
 const helpOpen = ref(window.location.hash === '#help')
 const search = ref('')
@@ -36,17 +47,10 @@ const mobileViewport = ref(mobileViewportQuery.matches)
 const showCreate = ref(false)
 const selectedGallery = ref<Gallery | null>(null)
 const shareGallery = ref<Gallery | null>(null)
+const immersiveWorkspace = ref(false)
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 
-const visibleGalleries = computed(() => [...galleries.value]
-	.filter(gallery => modeFilter.value === 'all' || gallery.settings.mode === modeFilter.value)
-	.filter(gallery => sourceFilter.value === 'all' || gallery.sourceType === sourceFilter.value)
-	.filter(gallery => archived.value || statusFilter.value === 'all' || gallery.status === statusFilter.value)
-	.sort((left, right) => {
-		if (gallerySort.value === 'title') return left.title.localeCompare(right.title)
-		if (gallerySort.value === 'created') return right.createdAt - left.createdAt
-		return right.updatedAt - left.updatedAt
-	}))
+const visibleGalleries = computed(() => galleries.value)
 const activeFilterCount = computed(() => Number(modeFilter.value !== 'all')
 	+ Number(sourceFilter.value !== 'all')
 	+ Number(!archived.value && statusFilter.value !== 'all'))
@@ -76,32 +80,76 @@ async function notify(kind: 'error' | 'success', message: string) {
 	else dialogs.showSuccess(message)
 }
 
-async function load() {
-	loading.value = true
+async function load(reset = true) {
+	if (reset) loading.value = true
+	else loadingMore.value = true
 	try {
-		galleries.value = (await fetchGalleries({ archived: archived.value, search: search.value })).items
+		const page = await fetchGalleryPage({
+			archived: archived.value,
+			search: search.value,
+			cursor: reset ? null : nextCursor.value,
+			mode: modeFilter.value === 'all' ? undefined : modeFilter.value,
+			sourceType: sourceFilter.value === 'all' ? undefined : sourceFilter.value,
+			status: archived.value || statusFilter.value === 'all' ? undefined : statusFilter.value,
+			sort: gallerySort.value,
+		})
+		galleries.value = reset ? page.items : [...galleries.value, ...page.items]
+		galleryTotal.value = page.total
+		nextCursor.value = page.nextCursor
 		const match = window.location.hash.match(/^#gallery\/(\d+)/)
 		if (match && !selectedGallery.value) {
-			selectedGallery.value = galleries.value.find(gallery => gallery.id === Number(match[1])) ?? null
+			selectedGallery.value = await fetchGallery(Number(match[1]))
 		}
 	} catch {
 		notify('error', t('proofing_gallery', 'Galleries could not be loaded.')).catch(() => {})
 	} finally {
-		loading.value = false
+		if (reset) loading.value = false
+		else loadingMore.value = false
 	}
+}
+
+function loadMore() {
+	if (nextCursor.value !== null && !loadingMore.value) load(false)
 }
 
 function created(gallery: Gallery) {
 	showCreate.value = false
-	galleries.value.unshift(gallery)
 	selectGallery(gallery)
+	load().catch(() => {})
 	notify('success', t('proofing_gallery', 'Project created. Add photos when you are ready.')).catch(() => {})
 }
 
-function selectGallery(gallery: Gallery) {
+async function selectGallery(gallery: Gallery | GalleryListItem) {
 	helpOpen.value = false
-	selectedGallery.value = gallery
 	window.location.hash = `gallery/${gallery.id}`
+	try {
+		selectedGallery.value = 'settings' in gallery ? gallery : await fetchGallery(gallery.id)
+	} catch {
+		notify('error', t('proofing_gallery', 'Gallery details could not be loaded.')).catch(() => {})
+	}
+}
+
+async function syncRouteFromHash() {
+	const match = window.location.hash.match(/^#gallery\/(\d+)(?:\/([^/]+))?/)
+	if (!match) return
+	const galleryId = Number(match[1])
+	const canonicalRoute = galleryWorkspacePath(galleryId, normalizeGalleryWorkspace(match[2]))
+	if (window.location.hash !== canonicalRoute) history.replaceState(null, '', canonicalRoute)
+	helpOpen.value = false
+	if (selectedGallery.value?.id === galleryId) return
+	try {
+		selectedGallery.value = await fetchGallery(galleryId)
+	} catch {
+		notify('error', t('proofing_gallery', 'Gallery details could not be loaded.')).catch(() => {})
+	}
+}
+
+async function openShare(gallery: GalleryListItem) {
+	try {
+		shareGallery.value = await fetchGallery(gallery.id)
+	} catch {
+		notify('error', t('proofing_gallery', 'Gallery details could not be loaded.')).catch(() => {})
+	}
 }
 
 function showHelp() {
@@ -118,16 +166,17 @@ function updateSelected(gallery: Gallery) {
 	}
 	const index = galleries.value.findIndex(item => item.id === gallery.id)
 	if (index !== -1) {
-		galleries.value[index] = gallery
+		galleries.value[index] = toGalleryListItem(gallery)
 	}
 }
 
 function closeSettings() {
+	immersiveWorkspace.value = false
 	selectedGallery.value = null
 	history.replaceState(null, '', window.location.pathname)
 }
 
-async function archive(gallery: Gallery) {
+async function archive(gallery: GalleryListItem) {
 	if (!window.confirm(t('proofing_gallery', 'Archive “{title}”? Its public link will stop working until the gallery is restored.', { title: gallery.title }))) {
 		return
 	}
@@ -140,7 +189,7 @@ async function archive(gallery: Gallery) {
 	}
 }
 
-async function restore(gallery: Gallery) {
+async function restore(gallery: GalleryListItem) {
 	try {
 		await restoreGallery(gallery.id)
 		galleries.value = galleries.value.filter(item => item.id !== gallery.id)
@@ -150,16 +199,21 @@ async function restore(gallery: Gallery) {
 	}
 }
 
-watch(archived, load)
+watch(archived, () => load())
 watch(search, () => {
 	clearTimeout(searchTimer)
 	searchTimer = setTimeout(load, 250)
 })
+watch([modeFilter, sourceFilter, statusFilter, gallerySort], () => load())
 onMounted(() => {
 	load()
+	window.addEventListener('hashchange', syncRouteFromHash)
 	mobileViewportQuery.addEventListener('change', onMobileViewportChange)
 })
-onBeforeUnmount(() => mobileViewportQuery.removeEventListener('change', onMobileViewportChange))
+onBeforeUnmount(() => {
+	window.removeEventListener('hashchange', syncRouteFromHash)
+	mobileViewportQuery.removeEventListener('change', onMobileViewportChange)
+})
 
 function onMobileViewportChange(event: MediaQueryListEvent) {
 	mobileViewport.value = event.matches
@@ -168,8 +222,8 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 </script>
 
 <template>
-	<NcContent app-name="proofing_gallery">
-		<NcAppNavigation :aria-label="t('proofing_gallery', 'Gallery navigation')">
+	<NcContent app-name="proofing_gallery" :class="{ 'app-content--immersive': immersiveWorkspace }">
+		<NcAppNavigation v-if="!immersiveWorkspace" :aria-label="t('proofing_gallery', 'Gallery navigation')">
 			<template #list>
 				<li class="gallery-nav__entry">
 					<button
@@ -207,6 +261,7 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 				v-else-if="selectedGallery"
 				:gallery="selectedGallery"
 				@back="closeSettings"
+				@workspace-mode="immersiveWorkspace = $event"
 				@updated="updateSelected" />
 			<section v-else class="gallery-page" aria-labelledby="gallery-page-title">
 				<header class="gallery-page__header">
@@ -219,13 +274,13 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 								:aria-pressed="dashboardView === 'grid'"
 								:aria-label="t('proofing_gallery', 'Grid')"
 								@click="dashboardView = 'grid'">
-								▦
+								<span class="view-switch__grid" aria-hidden="true"><i /><i /><i /><i /></span>
 							</button>
 							<button type="button"
 								:aria-pressed="dashboardView === 'list'"
 								:aria-label="t('proofing_gallery', 'List')"
 								@click="dashboardView = 'list'">
-								☷
+								<span class="view-switch__list" aria-hidden="true"><i /><i /><i /></span>
 							</button>
 						</div>
 						<NcButton v-if="!archived" variant="primary" @click="showCreate = true">
@@ -286,7 +341,7 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 								<option value="title">{{ t('proofing_gallery', 'Title') }}</option>
 							</select>
 						</label>
-						<p>{{ n('proofing_gallery', '%n gallery', '%n galleries', visibleGalleries.length) }}</p>
+						<p>{{ n('proofing_gallery', '%n gallery', '%n galleries', galleryTotal) }}</p>
 						<button v-if="activeFilterCount"
 							class="gallery-toolbar__reset"
 							type="button"
@@ -307,9 +362,17 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 					:archived="archived"
 					:view="dashboardView"
 					@select="selectGallery"
-					@share="shareGallery = $event"
+					@share="openShare"
 					@archive="archive"
 					@restore="restore" />
+
+				<div v-if="!loading && visibleGalleries.length > 0" class="gallery-page__pagination" aria-live="polite">
+					<span>{{ t('proofing_gallery', '{shown} of {total} galleries', { shown: visibleGalleries.length, total: galleryTotal }) }}</span>
+					<NcButton v-if="nextCursor" :disabled="loadingMore" @click="loadMore">
+						<NcLoadingIcon v-if="loadingMore" :size="18" />
+						{{ loadingMore ? t('proofing_gallery', 'Loading…') : t('proofing_gallery', 'Load more galleries') }}
+					</NcButton>
+				</div>
 
 				<NcEmptyContent
 					v-else
@@ -435,6 +498,20 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 	color: var(--color-primary-element-text);
 }
 
+.view-switch__grid {
+	display: grid;
+	width: 16px;
+	height: 16px;
+	grid-template-columns: 1fr 1fr;
+	gap: 2px;
+}
+
+.view-switch__grid i { border: 1.5px solid currentColor; border-radius: 1px; }
+
+.view-switch__list { display: grid; width: 17px; gap: 3px; }
+
+.view-switch__list i { height: 2px; border-radius: 2px; background: currentColor; }
+
 .gallery-page h1 {
 	margin: 0;
 	font-size: 30px;
@@ -496,6 +573,19 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 	justify-content: center;
 	gap: 12px;
 	color: var(--color-text-maxcontrast);
+}
+
+.gallery-page__pagination {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	min-height: 52px;
+	margin-top: 16px;
+	padding-top: 12px;
+	border-top: 1px solid var(--color-border);
+	color: var(--color-text-maxcontrast);
+	font-size: 13px;
 }
 
 @media (max-width: 600px) {
@@ -600,5 +690,24 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 
 @media (prefers-reduced-motion: reduce) {
 	.gallery-toolbar__filters { transition: none; }
+}
+</style>
+
+<style>
+.app-content--immersive > .app-content {
+	border-radius: 0 !important;
+}
+
+.app-content--immersive .app-content {
+	width: 100% !important;
+	margin-inline-start: 0 !important;
+}
+
+.app-content--immersive .app-navigation-toggle {
+	display: none !important;
+}
+
+.app-content--immersive .app-content__content {
+	overflow: hidden;
 }
 </style>

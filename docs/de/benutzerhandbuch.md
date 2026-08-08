@@ -1,6 +1,6 @@
 # Benutzerhandbuch
 
-Dieses Handbuch beschreibt Proofing Gallery 0.5.0 für Eigentümer und
+Dieses Handbuch beschreibt Proofing Gallery für Eigentümer und
 Galerie-Manager. Welche Funktionen verfügbar sind, kann die
 Nextcloud-Administration einschränken.
 
@@ -74,6 +74,23 @@ Kundenbewertungen bleiben von der Eigentümer-Sichtung getrennt. Berechtigte
 Personen können Zusammenfassungen prüfen und eine Übernahme ausdrücklich in
 einer Vorschau bestätigen. XMP wird dadurch nie automatisch verändert.
 
+## Prüfrunden und Nextcloud-Nachverfolgung
+
+Jeder aktive Kundenlink kann einen eigenen Prüfablauf mit optionaler Frist
+haben. Der Gast reicht die aktuelle Runde nach der Identifikation für Feedback
+ein. Der Eigentümer kann freigeben, Änderungen anfordern (dadurch beginnt die
+nächste Runde) oder eine Freigabe erneut öffnen. Dies ist eine
+Workflow-Entscheidung, keine elektronische Signatur oder rechtlich fixierte
+Momentaufnahme.
+
+Unter **Ergebnisse** stehen aktueller Status und nachvollziehbarer
+Rundenverlauf. Sind die jeweiligen Apps verfügbar, lässt sich die Frist in
+einen beschreibbaren Nextcloud-Kalender übernehmen und die Prüfung als
+Deck-Karte anlegen. Die Ressourcen verwenden die Rechte des aktuellen
+Benutzers; Proofing Gallery speichert weder Zugangsdaten noch den öffentlichen
+Link-Token. Context Agent kann den Status lesen und Eigentümerentscheidungen
+nur als bestätigte, idempotente Aktionen anbieten.
+
 ## Downloads und Gast-Uploads
 
 Abhängig vom Link dürfen Gäste einzelne Originale, ein ZIP ihrer Auswahl oder
@@ -108,6 +125,13 @@ Stelle die Galerie über **Archiv** wieder her. Fehlt ein Quellordner, wähle ei
 eigenen Ersatzordner; der Server prüft ihn, bevor Link und Historie weiterlaufen.
 
 ## Datenschutz und Fehlerbehebung
+
+Nach der Identifikation für die Zusammenarbeit können Gäste mit **Meine Daten
+exportieren** ihre eigenen Bewertungsdaten herunterladen oder sie mit **Meine
+Daten löschen** entfernen und die Gastsitzung beenden. Eigentümer können
+vollständige App-Datensätze exportieren. Bei archivierten Galerien lässt sich
+die Löschung der App-Daten mit 30 Tagen Widerrufsfrist planen; Quellordner und
+ursprüngliche Nextcloud-Dateien werden nicht entfernt.
 
 Ist ein Link möglicherweise bekannt geworden, widerrufe ihn zuerst und erzeuge
 einen neuen. Versende Passwort und Link nicht im selben Kanal. Sicherheitsfehler

@@ -1,6 +1,6 @@
 # User guide
 
-This guide describes Proofing Gallery 0.5.0 for gallery owners and managers.
+This guide describes Proofing Gallery for gallery owners and managers.
 The controls available to you can be restricted by your Nextcloud administrator.
 
 ## Create a gallery
@@ -74,6 +74,21 @@ Selection exports can include paths, owner culling values, client aggregates,
 selection names, or comments. Guests can export only filenames and their own
 rating or decision. Review the UTF-8 CSV preview before downloading or copying it.
 
+## Review rounds and Nextcloud follow-up
+
+Each active client link can have its own review workflow and optional due date.
+The guest submits the current round only after identifying for feedback. The
+gallery owner can approve it, request changes (which opens the next round), or
+reopen an approved result. This is a workflow decision, not an electronic
+signature or a frozen legal snapshot.
+
+Under **Results**, owners see the current state and traceable round history.
+When the corresponding apps are available, a due date can be added to a
+writable Nextcloud Calendar and the review can be created as a Deck card. These
+resources run with the current user's permissions; Proofing Gallery stores no
+credentials or public link token. Context Agent can read this status and offers
+owner decisions only as confirmed, idempotent actions.
+
 ## Downloads and guest uploads
 
 Depending on link policy, guests can download individual originals, a ZIP of a
@@ -107,6 +122,12 @@ replacement owned folder; the existing link and review history are retained
 only after the server validates the new source.
 
 ## Privacy and troubleshooting
+
+After identifying for collaboration, use **Export my data** to download your
+own review records or **Delete my data** to erase them and end the guest
+session. Owners can export complete app records. For archived galleries they
+can schedule app-data deletion with a 30-day cancellation period; the source
+folder and original Nextcloud files are not removed.
 
 If a link may have leaked, revoke it first and create a new one. Do not send
 passwords in the same channel as links. Report unexpected access behavior to

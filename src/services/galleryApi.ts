@@ -1,15 +1,16 @@
 import axios from '@nextcloud/axios'
 import { generateOcsUrl, generateUrl } from '@nextcloud/router'
 
-import type { CollectionDocument, CullingXmpReport, Gallery, GalleryPage, GalleryPublicLink, GalleryReadiness, GuestRatingAggregate, GuestRatingPromotion, IndexedMediaPage, InvitationTemplate, LivePushCredential, LivePushOverview, MediaCull, MediaItem, MediaMetadata, MediaPage, MediaVersion, OwnerSelection, PublicLinkPolicy, ShareAuditItem } from '../types'
+import type { CollectionDocument, CullingXmpReport, Gallery, GalleryCursorPage, GalleryPage, GalleryPublicLink, GalleryReadiness, GuestRatingAggregate, GuestRatingPromotion, IndexedMediaPage, InvitationTemplate, LivePushCredential, LivePushOverview, MediaCull, MediaItem, MediaMetadata, MediaPage, MediaVersion, OwnerSelection, PublicLinkPolicy, ReviewOverview, ShareAuditItem } from '../types'
 import type { CanonicalGallerySettings, GallerySettings } from '../domain/gallerySettings'
 
 export { uploadGalleryMedia } from './ownerUploadApi.ts'
 export { applyPreset, createPreset, createProject, deletePreset, fetchPresets, fetchUserPreferences, updatePreset, updateUserPreferences } from './projectApi.ts'
-export { acceptUpload, deleteNotificationSubscription, fetchActivity, fetchInbox, fetchManagers, fetchNotificationSubscriptions, rejectUpload, removeManager, saveManager, saveNotificationSubscription, searchPrincipals } from './collaborationAdminApi.ts'
+export { acceptUpload, deleteNotificationSubscription, fetchActivity, fetchActivityPage, fetchInbox, fetchInboxPage, fetchManagers, fetchNotificationSubscriptions, rejectUpload, removeManager, saveManager, saveNotificationSubscription, searchPrincipals } from './collaborationAdminApi.ts'
 export type { GalleryActivity, InboxUpload, PrincipalOption } from './collaborationAdminApi.ts'
 
 const galleriesUrl = generateOcsUrl('/apps/proofing_gallery/api/v1/galleries')
+const galleriesV2Url = generateOcsUrl('/apps/proofing_gallery/api/v2/galleries')
 
 export interface GalleryQuery {
 	archived?: boolean
@@ -31,6 +32,26 @@ export async function fetchGalleries(query: GalleryQuery = {}): Promise<GalleryP
 			ownedOnly: query.ownedOnly,
 			format: 'json',
 		},
+	})
+	return data
+}
+
+export interface GalleryCursorQuery {
+	archived?: boolean
+	search?: string
+	limit?: number
+	cursor?: string | null
+	sourceType?: 'folder' | 'collection'
+	status?: 'draft' | 'published' | 'archived'
+	mode?: 'presentation' | 'collaboration'
+	purpose?: Gallery['purpose']
+	ownedOnly?: boolean
+	sort?: 'updated' | 'created' | 'title'
+}
+
+export async function fetchGalleryPage(query: GalleryCursorQuery = {}): Promise<GalleryCursorPage> {
+	const { data } = await axios.get<GalleryCursorPage>(galleriesV2Url, {
+		params: { ...query, archived: query.archived ?? false, limit: query.limit ?? 50, format: 'json' },
 	})
 	return data
 }
@@ -87,11 +108,55 @@ export async function savePublicLink(id: number, linkId: number | null, payload:
 	groupDepth: number
 	minOwnerRating: number
 	publicLocale: 'en' | 'de' | null
+	reviewEnabled: boolean
+	reviewDueDate: string | null
 	password?: string | null
 	expiresAt?: string | null
 }): Promise<GalleryPublicLink> {
 	const url = linkId === null ? `${galleriesUrl}/${id}/public-links` : `${galleriesUrl}/${id}/public-links/${linkId}`
 	const { data } = linkId === null ? await axios.post(url, payload) : await axios.put(url, payload)
+	return data
+}
+
+export async function fetchReviewOverview(id: number): Promise<ReviewOverview> {
+	const { data } = await axios.get<ReviewOverview>(`${galleriesUrl}/${id}/reviews`)
+	return data
+}
+
+export async function transitionReview(id: number, linkId: number, action: 'approve' | 'request-changes' | 'reopen'): Promise<ReviewOverview> {
+	const { data } = await axios.post<ReviewOverview>(`${galleriesUrl}/${id}/public-links/${linkId}/review/${action}`)
+	return data
+}
+
+export interface ReviewIntegrationStatus {
+	calendar: { available: boolean; items: Array<{ uri: string; name: string; color: string | null }> }
+	deck: { available: boolean }
+	talk: { available: boolean }
+	links: Array<{ linkId: number; provider: 'calendar' | 'deck' | 'talk'; status: string; remote: { url?: string } }>
+}
+
+export async function fetchReviewIntegrations(id: number): Promise<ReviewIntegrationStatus> {
+	const { data } = await axios.get<ReviewIntegrationStatus>(`${galleriesUrl}/${id}/review-integrations`)
+	return data
+}
+
+export async function createReviewCalendarEvent(id: number, linkId: number, calendarUri: string): Promise<ReviewIntegrationStatus> {
+	const { data } = await axios.post<ReviewIntegrationStatus>(`${galleriesUrl}/${id}/public-links/${linkId}/review-integrations/calendar`, { calendarUri })
+	return data
+}
+
+export async function registerReviewDeckCard(id: number, linkId: number, boardId: number, stackId: number, cardId: number): Promise<ReviewIntegrationStatus> {
+	const { data } = await axios.post<ReviewIntegrationStatus>(`${galleriesUrl}/${id}/public-links/${linkId}/review-integrations/deck`, { boardId, stackId, cardId })
+	return data
+}
+
+export async function createReviewTalkConversation(id: number, linkId: number): Promise<ReviewIntegrationStatus> {
+	const { data } = await axios.post<ReviewIntegrationStatus>(`${galleriesUrl}/${id}/public-links/${linkId}/review-integrations/talk`)
+	return data
+}
+
+export async function deleteReviewTalkConversation(id: number, linkId: number): Promise<ReviewIntegrationStatus> {
+	const { data } = await axios.delete<ReviewIntegrationStatus>(`${galleriesUrl}/${id}/public-links/${linkId}/review-integrations/talk`)
 	return data
 }
 
@@ -113,9 +178,9 @@ export async function revokeCustomDomain(id: number, domainId: number): Promise<
 	await axios.delete(`${galleriesUrl}/${id}/domains/${domainId}`)
 }
 
-export async function fetchShareAudit(id: number): Promise<ShareAuditItem[]> {
-	const { data } = await axios.get<{ items: ShareAuditItem[] }>(`${galleriesUrl}/${id}/share-audit`)
-	return data.items
+export async function fetchShareAudit(id: number, cursor: string | null = null): Promise<{ items: ShareAuditItem[]; total: number; nextCursor: string | null }> {
+	const { data } = await axios.get<{ items: ShareAuditItem[]; total: number; nextCursor: string | null }>(`${galleriesV2Url}/${id}/share-audit`, { params: { limit: 50, cursor } })
+	return data
 }
 
 export async function fetchGalleryMedia(
@@ -247,9 +312,9 @@ export async function updateMediaCulling(id: number, items: Array<MediaCull & { 
 	return data.items
 }
 
-export async function fetchGuestRatings(id: number): Promise<GuestRatingAggregate[]> {
-	const { data } = await axios.get<{ items: GuestRatingAggregate[] }>(`${galleriesUrl}/${id}/guest-ratings`)
-	return data.items
+export async function fetchGuestRatings(id: number, cursor: string | null = null): Promise<{ items: GuestRatingAggregate[]; total: number; nextCursor: string | null }> {
+	const { data } = await axios.get<{ items: GuestRatingAggregate[]; total: number; nextCursor: string | null }>(`${galleriesV2Url}/${id}/guest-ratings`, { params: { limit: 50, cursor } })
+	return data
 }
 
 export async function previewGuestRatingPromotion(id: number, fileIds: number[]): Promise<GuestRatingPromotion[]> {
@@ -301,9 +366,9 @@ export function ownerMediaDownloadUrl(id: number, fileIds: number[]): string {
 	return url.toString()
 }
 
-export async function fetchOwnerSelections(id: number): Promise<OwnerSelection[]> {
-	const { data } = await axios.get<{ items: OwnerSelection[] }>(`${galleriesUrl}/${id}/selections`)
-	return data.items
+export async function fetchOwnerSelections(id: number, cursor: string | null = null): Promise<{ items: OwnerSelection[]; total: number; nextCursor: string | null }> {
+	const { data } = await axios.get<{ items: OwnerSelection[]; total: number; nextCursor: string | null }>(`${galleriesV2Url}/${id}/selections`, { params: { limit: 50, cursor } })
+	return data
 }
 
 export async function updateOwnerSelection(galleryId: number, selection: OwnerSelection): Promise<void> {
@@ -370,6 +435,30 @@ export async function archiveGallery(id: number): Promise<Gallery> {
 	const { data } = await axios.delete<Gallery>(`${galleriesUrl}/${id}`)
 	return data
 }
+
+export interface GalleryPrivacyPreview {
+	galleryId: number
+	title: string
+	categories: Record<'feedback' | 'access' | 'operations' | 'processing', number>
+	totalAppRows: number
+	graceDays: number
+	originalFilesAffected: false
+	activeRequest: { id: number; status: string; executeAfter: number; createdAt: number; stage: number } | null
+}
+
+export async function fetchGalleryPrivacy(id: number): Promise<GalleryPrivacyPreview> {
+	return (await axios.get<GalleryPrivacyPreview>(`${galleriesUrl}/${id}/privacy`)).data
+}
+
+export function galleryPrivacyExportUrl(id: number): string { return `${galleriesUrl}/${id}/privacy/export` }
+
+export async function scheduleGalleryPurge(id: number): Promise<void> { await axios.post(`${galleriesUrl}/${id}/privacy/purge`) }
+
+export async function cancelGalleryPurge(id: number, requestId: number): Promise<void> { await axios.delete(`${galleriesUrl}/${id}/privacy/purge/${requestId}`) }
+
+export async function assignGalleryRetention(id: number): Promise<Gallery['retention']> { return (await axios.post<Gallery['retention']>(`${galleriesUrl}/${id}/retention`)).data }
+
+export async function removeGalleryRetention(id: number): Promise<Gallery['retention']> { return (await axios.delete<Gallery['retention']>(`${galleriesUrl}/${id}/retention`)).data }
 
 export async function restoreGallery(id: number): Promise<Gallery> {
 	const { data } = await axios.post<Gallery>(`${galleriesUrl}/${id}/restore`)

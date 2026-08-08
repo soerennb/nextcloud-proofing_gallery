@@ -42,8 +42,10 @@ final class CollaborationController extends ResolvedPublicShareController {
 	#[PublicPage]
 	#[NoCSRFRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/collaboration')]
-	public function state(int $cursor = 0): JSONResponse {
-		$state = $this->collaboration->state($this->resolvedGallery(), $this->optionalGuest(), $cursor);
+	public function state(int $cursor = 0, string $fileIds = ''): JSONResponse {
+		$visibleFileIds = $fileIds === '' ? [] : array_map('intval', array_filter(explode(',', $fileIds)));
+		$state = $this->collaboration->state($this->resolvedGallery(), $this->optionalGuest(), $cursor, $visibleFileIds);
+		if (($state['unchanged'] ?? false) === true) return new JSONResponse($state);
 		$policy = $this->policy();
 		foreach (['likes', 'colors', 'comments', 'annotations', 'selections'] as $feature) {
 			$state['policy']['features'][$feature] = ($state['policy']['features'][$feature] ?? true) && $policy[$feature];
@@ -60,7 +62,7 @@ final class CollaborationController extends ResolvedPublicShareController {
 			? []
 			: array_values(array_map(
 				static fn ($rating): array => $rating->jsonSerialize(),
-				array_filter($this->guestRatings->forGuest($guest), fn ($rating): bool => $this->allowsFile($rating->getFileId())),
+				array_filter($visibleFileIds === [] ? $this->guestRatings->forGuest($guest) : $this->guestRatings->forGuestFiles($guest, $visibleFileIds), fn ($rating): bool => $this->allowsFile($rating->getFileId())),
 			));
 		return new JSONResponse($state);
 	}
@@ -80,6 +82,7 @@ final class CollaborationController extends ResolvedPublicShareController {
 			$rating = $permissions['ratings'] ? $rating : ($current?->getRating() ?? 0);
 			$pick = $permissions['pick'] ? $pick : ($current?->getPickState() ?? 'none');
 			$value = $this->guestRatings->save($this->resolvedPublicLink(), $guest, $fileId, $rating, $pick);
+			$this->collaboration->recordRatingChanged($this->resolvedGallery(), $guest, $fileId);
 			$this->shareAudit->record($this->resolvedPublicLink(), 'feedback', $guest->getId(), fileId: $fileId);
 			return new JSONResponse($value);
 		} catch (DoesNotExistException) {

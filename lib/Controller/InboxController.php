@@ -23,9 +23,22 @@ final class InboxController extends Controller {
 		IRequest $request,
 		private GalleryService $galleries,
 		private UploadService $uploads,
+		private \OCA\ProofingGallery\Service\ScopedCursorCodec $cursors,
 		private IUserSession $userSession,
 	) {
 		parent::__construct(Application::APP_ID, $request);
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/v2/galleries/{galleryId}/inbox')]
+	public function page(int $galleryId, int $limit = 50, ?string $cursor = null, string $status = ''): DataResponse {
+		try {
+			return new DataResponse($this->uploads->pageForGallery($this->galleries->view($this->userId(), $galleryId), $limit, $cursor, $this->cursors, $status));
+		} catch (DoesNotExistException|AuthorizationException) {
+			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		} catch (InvalidArgumentException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
 	}
 
 	#[NoAdminRequired]

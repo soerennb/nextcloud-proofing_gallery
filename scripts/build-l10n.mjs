@@ -26,11 +26,11 @@ const plurals = new Map()
 
 for (const source of sources) {
 	for (const match of source.matchAll(/\bt\(\s*'proofing_gallery'\s*,\s*'([^']+)'/g)) singular.add(match[1])
-	for (const match of source.matchAll(/\$(?:l|l10n)->t\(\s*'([^']+)'/g)) singular.add(match[1])
+	for (const match of source.matchAll(/(?:\$(?:l|l10n)|->(?:l|l10n))?->t\(\s*'([^']+)'/g)) singular.add(match[1])
 	for (const match of source.matchAll(/\bn\(\s*'proofing_gallery'\s*,\s*'([^']+)'\s*,\s*'([^']+)'/g)) {
 		plurals.set(`_${match[1]}_::_${match[2]}_`, [match[1], match[2]])
 	}
-	for (const match of source.matchAll(/\$l->n\(\s*'([^']+)'\s*,\s*'([^']+)'/g)) {
+	for (const match of source.matchAll(/(?:\$(?:l|l10n)|->(?:l|l10n))?->n\(\s*'([^']+)'\s*,\s*'([^']+)'/g)) {
 		plurals.set(`_${match[1]}_::_${match[2]}_`, [match[1], match[2]])
 	}
 }

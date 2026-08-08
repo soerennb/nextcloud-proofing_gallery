@@ -114,6 +114,16 @@ final class NativeNotificationRepository {
 			->executeQuery()));
 	}
 
+	/** @return list<array<string, mixed>> */
+	public function activeForUser(string $userUid, int $limit = 20): array {
+		$qb = $this->db->getQueryBuilder();
+		return QueryResult::rows($qb->select('*')->from('proofing_native_notify')
+			->where($qb->expr()->eq('user_uid', $qb->createNamedParameter($userUid)))
+			->andWhere($qb->expr()->eq('active', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL)))
+			->orderBy('updated_at', 'DESC')->addOrderBy('id', 'DESC')
+			->setMaxResults(max(1, min(100, $limit)))->executeQuery());
+	}
+
 	/** @return array<string, mixed>|null */
 	public function claim(int $id, int $now): ?array {
 		$qb = $this->db->getQueryBuilder();

@@ -36,6 +36,21 @@ final class GuestRatingMapper extends QBMapper {
 		return $this->findEntities($qb);
 	}
 
+	/** @param list<int> $fileIds
+	 * @return list<GuestRating>
+	 */
+	public function findForGuestFiles(int $galleryId, int $guestId, array $fileIds): array {
+		$fileIds = array_values(array_unique(array_filter(array_map('intval', $fileIds), static fn (int $id): bool => $id > 0)));
+		if ($fileIds === []) return [];
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')->from($this->tableName)
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('guest_id', $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->in('file_id', $qb->createNamedParameter($fileIds, IQueryBuilder::PARAM_INT_ARRAY)))
+			->orderBy('file_id', 'ASC');
+		return $this->findEntities($qb);
+	}
+
 	/** @return list<GuestRating> */
 	public function findForGallery(int $galleryId): array {
 		$qb = $this->db->getQueryBuilder();
@@ -43,6 +58,23 @@ final class GuestRatingMapper extends QBMapper {
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->orderBy('file_id', 'ASC')->addOrderBy('guest_id', 'ASC');
 		return $this->findEntities($qb);
+	}
+
+	/** @return list<int> */
+	public function fileIdPage(int $galleryId, ?int $afterFileId, int $limit): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->selectDistinct('file_id')->from($this->tableName)
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->orderBy('file_id', 'ASC')->setMaxResults(max(1, min(101, $limit)));
+		if ($afterFileId !== null) $qb->andWhere($qb->expr()->gt('file_id', $qb->createNamedParameter($afterFileId, IQueryBuilder::PARAM_INT)));
+		return array_map('intval', QueryResult::column($qb->executeQuery()));
+	}
+
+	public function distinctFileCount(int $galleryId): int {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select($qb->createFunction('COUNT(DISTINCT file_id)'))->from($this->tableName)
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
+		return (int)$qb->executeQuery()->fetchOne();
 	}
 
 	/**

@@ -60,9 +60,14 @@ export async function searchPrincipals(search: string): Promise<PrincipalOption[
 
 export interface InboxUpload { upload_id: string; file_id: number | null; filename: string; mime_type: string; size: number; status: 'pending' | 'awaiting_review' | 'accepted' | 'rejected'; created_at: number; display_name: string | null }
 export interface GalleryActivity { id: number; type: string; actor: string; payload: Record<string, unknown>; createdAt: number }
+export interface CursorPage<T> { items: T[]; total: number; nextCursor: string | null }
 
 export async function fetchInbox(galleryId: number): Promise<InboxUpload[]> {
 	return (await axios.get<InboxUpload[]>(`${galleriesUrl}/${galleryId}/inbox`)).data
+}
+
+export async function fetchInboxPage(galleryId: number, cursor: string | null = null): Promise<CursorPage<InboxUpload>> {
+	return (await axios.get<CursorPage<InboxUpload>>(generateOcsUrl(`/apps/proofing_gallery/api/v2/galleries/${galleryId}/inbox`), { params: { limit: 50, cursor, status: 'awaiting_review' } })).data
 }
 
 export async function acceptUpload(galleryId: number, uploadId: string): Promise<void> {
@@ -75,4 +80,8 @@ export async function rejectUpload(galleryId: number, uploadId: string): Promise
 
 export async function fetchActivity(galleryId: number, type = ''): Promise<GalleryActivity[]> {
 	return (await axios.get<GalleryActivity[]>(`${galleriesUrl}/${galleryId}/activity`, { params: { type } })).data
+}
+
+export async function fetchActivityPage(galleryId: number, type = '', cursor: string | null = null): Promise<CursorPage<GalleryActivity>> {
+	return (await axios.get<CursorPage<GalleryActivity>>(generateOcsUrl(`/apps/proofing_gallery/api/v2/galleries/${galleryId}/activity`), { params: { limit: 50, type, cursor } })).data
 }

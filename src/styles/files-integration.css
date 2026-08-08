@@ -1,0 +1,46 @@
+.proofing-files-sidebar {
+	display: grid;
+	gap: 12px;
+	padding: 16px;
+}
+
+.proofing-files-intro,
+.proofing-files-empty {
+	margin: 0;
+	color: var(--color-text-maxcontrast);
+	line-height: 1.45;
+}
+
+.proofing-files-empty {
+	padding: 24px 16px;
+}
+
+.proofing-files-gallery {
+	display: grid;
+	gap: 3px;
+	padding: 12px 0;
+	border-bottom: 1px solid var(--color-border);
+	color: var(--color-main-text);
+	text-decoration: none;
+}
+
+.proofing-files-gallery span {
+	color: var(--color-text-maxcontrast);
+	font-size: .875rem;
+}
+
+.proofing-files-create {
+	min-height: 44px;
+	padding: 0 18px;
+	border: 0;
+	border-radius: var(--border-radius-pill);
+	background: var(--color-primary-element);
+	color: var(--color-primary-element-text);
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.proofing-files-create:disabled {
+	opacity: .55;
+	cursor: wait;
+}

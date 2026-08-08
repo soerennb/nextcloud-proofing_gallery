@@ -25,6 +25,13 @@ final class PresetMapper extends QBMapper {
 		return $this->findEntities($qb);
 	}
 
+	public function countOwned(string $ownerUid): int {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select($qb->func()->count())->from($this->tableName)
+			->where($qb->expr()->eq('owner_uid', $qb->createNamedParameter($ownerUid)));
+		return (int)$qb->executeQuery()->fetchOne();
+	}
+
 	/** @throws DoesNotExistException|MultipleObjectsReturnedException */
 	public function findOwned(int $id, string $ownerUid): Preset {
 		$qb = $this->db->getQueryBuilder();

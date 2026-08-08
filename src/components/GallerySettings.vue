@@ -2,29 +2,27 @@
 import { FilePickerType, getFilePickerBuilder, showError, showSuccess } from '@nextcloud/dialogs'
 import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
-import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
-import NcTextArea from '@nextcloud/vue/components/NcTextArea'
-import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { AnimatePresence, motion, useReducedMotion } from 'motion-v'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
 import { canonicalGallerySettings } from '../domain/gallerySettings.ts'
-import { availableGallerySettingsTabs, publicMetadataOptions, galleryPurposeLabels as purposeLabels } from '../domain/gallerySettingsOptions.ts'
-import type { SettingsTab } from '../domain/gallerySettingsOptions.ts'
+import { availableGalleryWorkspaces, galleryWorkspaceFromReadinessAction, galleryWorkspacePath, normalizeGalleryWorkspace, galleryPurposeLabels as purposeLabels } from '../domain/gallerySettingsOptions.ts'
+import type { GalleryWorkspace } from '../domain/gallerySettingsOptions.ts'
 import { useGalleryPresets } from '../composables/useGalleryPresets.ts'
-import { completeGallery, fetchCollection, fetchGalleryMedia, fetchGalleryReadiness, ownerPreviewUrl, updateGallery, updateGallerySource } from '../services/galleryApi.ts'
+import { completeGallery, fetchCollection, fetchGalleryMedia, fetchGalleryReadiness, updateGallery, updateGallerySource } from '../services/galleryApi.ts'
 import type { Gallery, GalleryReadiness, MediaItem } from '../types.ts'
-import GalleryActivity from './GalleryActivity.vue'
 import CollectionContent from './CollectionContent.vue'
 import CullingWorkspace from './CullingWorkspace.vue'
 import FolderContent from './FolderContent.vue'
-import GalleryDesignPreview from './GalleryDesignPreview.vue'
-import GalleryMotionControls from './GalleryMotionControls.vue'
-import ManagerPanel from './ManagerPanel.vue'
-import LivePushPanel from './LivePushPanel.vue'
-import NotificationPanel from './NotificationPanel.vue'
 import SharingModal from './SharingModal.vue'
-import SelectionManager from './SelectionManager.vue'
+import GalleryAutomationWorkspace from './workspaces/GalleryAutomationWorkspace.vue'
+import GalleryDesignWorkspace from './workspaces/GalleryDesignWorkspace.vue'
+import GalleryHistoryWorkspace from './workspaces/GalleryHistoryWorkspace.vue'
+import GalleryOverviewWorkspace from './workspaces/GalleryOverviewWorkspace.vue'
+import GalleryPrivacyWorkspace from './workspaces/GalleryPrivacyWorkspace.vue'
+import GalleryReviewWorkspace from './workspaces/GalleryReviewWorkspace.vue'
+import GalleryShareWorkspace from './workspaces/GalleryShareWorkspace.vue'
+import GalleryTeamWorkspace from './workspaces/GalleryTeamWorkspace.vue'
 
 type SaveState = 'saved' | 'pending' | 'saving' | 'offline' | 'error' | 'conflict' | 'invalid'
 
@@ -32,14 +30,15 @@ const props = defineProps<{ gallery: Gallery }>()
 const emit = defineEmits<{
 	back: []
 	updated: [gallery: Gallery]
+	'workspace-mode': [immersive: boolean]
 }>()
 const reduceMotion = useReducedMotion()
 
-const advancedOpen = ref(false)
-const availableTabs = computed(() => availableGallerySettingsTabs(props.gallery, advancedOpen.value))
-const activeTab = ref<SettingsTab>(tabFromHash())
-const saving = ref(false)
-const saveState = ref<SaveState>('saved')
+const availableTabs = computed(() => availableGalleryWorkspaces(props.gallery))
+const [activeTab, saving, saveState] = [ref<GalleryWorkspace>(tabFromHash()), ref(false), ref<SaveState>('saved')]
+const primaryTabs = computed(() => availableTabs.value.filter(tab => tab.group === 'primary'))
+const moreTabs = computed(() => availableTabs.value.filter(tab => tab.group === 'more'))
+const activeMore = computed(() => moreTabs.value.some(tab => tab.id === activeTab.value))
 const saveTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 const serverRevision = ref(props.gallery.revision)
 const conflictGallery = ref<Gallery | null>(null)
@@ -47,7 +46,6 @@ let savePromise: Promise<boolean> | null = null
 const rebinding = ref(false)
 const showSharing = ref(false)
 const designPreviewOpen = ref(false)
-const notificationPanel = ref<InstanceType<typeof NotificationPanel> | null>(null)
 const media = ref<MediaItem[]>([])
 const mediaTotal = ref(0)
 const mediaLoading = ref(true)
@@ -68,7 +66,7 @@ const saveStateLabel = computed(() => ({
 	conflict: t('proofing_gallery', 'Changed in another session'),
 	invalid: t('proofing_gallery', 'Enter a gallery title'),
 })[saveState.value])
-const previewMedia = computed(() => media.value.filter(item => !item.folder).slice(0, 8))
+const storyMedia = computed(() => media.value.filter(item => !item.folder).slice(0, 60)); const previewMedia = computed(() => storyMedia.value.slice(0, 8))
 const readinessLabels = computed<Record<GalleryReadiness['checks'][number]['code'], string>>(() => ({
 	source_readable: t('proofing_gallery', 'Project folder is available'),
 	media_available: t('proofing_gallery', 'At least one photo is ready'),
@@ -84,19 +82,19 @@ const readiness = computed(() => [
 		label: readinessLabels.value[check.code],
 		ready: check.state !== 'blocked',
 		warning: check.state === 'warning',
-		action: check.action as SettingsTab,
+		action: galleryWorkspaceFromReadinessAction(check.action),
 	})),
-	{ label: t('proofing_gallery', 'All changes are saved'), ready: !dirty.value && saveState.value === 'saved', warning: false, action: 'overview' as SettingsTab },
+	{ label: t('proofing_gallery', 'All changes are saved'), ready: !dirty.value && saveState.value === 'saved', warning: false, action: 'overview' as GalleryWorkspace },
 ])
 const publishReady = computed(() => readiness.value.every(item => item.ready))
 const nextStep = computed(() => {
 	const missing = readiness.value.find(item => !item.ready)
 	if (missing) return { label: missing.label, tab: missing.action }
-	if (!props.gallery.shareToken) return { label: t('proofing_gallery', 'Publish and send'), tab: 'access' as SettingsTab }
+	if (!props.gallery.shareToken) return { label: t('proofing_gallery', 'Publish and send'), tab: 'share' as GalleryWorkspace }
 	if (['selection', 'proofing', 'uploads'].includes(props.gallery.purpose)) {
-		return { label: t('proofing_gallery', 'Review client results'), tab: 'feedback' as SettingsTab }
+		return { label: t('proofing_gallery', 'Review client results'), tab: 'review' as GalleryWorkspace }
 	}
-	return { label: t('proofing_gallery', 'Manage delivery'), tab: 'access' as SettingsTab }
+	return { label: t('proofing_gallery', 'Manage delivery'), tab: 'share' as GalleryWorkspace }
 })
 const {
 	presets,
@@ -134,19 +132,21 @@ watch(serializedDraft, () => {
 	scheduleSave()
 })
 
-function tabFromHash(): SettingsTab {
-	const tab = window.location.hash.split('/')[2] as SettingsTab | undefined
-	return availableTabs.value.some(item => item.id === tab) ? tab! : 'overview'
+function tabFromHash(): GalleryWorkspace {
+	const workspace = normalizeGalleryWorkspace(window.location.hash.split('/')[2])
+	return availableTabs.value.some(item => item.id === workspace) ? workspace : 'overview'
 }
 
-function setTab(tab: SettingsTab) {
-	activeTab.value = tab
-	history.replaceState(null, '', `#gallery/${props.gallery.id}/${tab}`)
+function setTab(tab: GalleryWorkspace, historyMode: 'push' | 'replace' = 'push') {
+	const target = availableTabs.value.some(item => item.id === tab) ? tab : 'overview'
+	activeTab.value = target
+	emit('workspace-mode', target === 'cull')
+	const path = galleryWorkspacePath(props.gallery.id, target)
+	if (window.location.hash !== path) history[historyMode === 'push' ? 'pushState' : 'replaceState'](null, '', path)
 }
 
-function toggleAdvanced() {
-	advancedOpen.value = !advancedOpen.value
-	if (!advancedOpen.value && !availableTabs.value.some(tab => tab.id === activeTab.value)) setTab('overview')
+function syncTabFromHistory() {
+	setTab(tabFromHash(), 'replace')
 }
 
 function resetDraft(gallery = props.gallery) {
@@ -189,7 +189,7 @@ async function loadMedia() {
 			mediaTotal.value = collection.items.length
 			return
 		}
-		const page = await fetchGalleryMedia(props.gallery.id, 12)
+		const page = await fetchGalleryMedia(props.gallery.id, 60)
 		media.value = page.items
 		mediaTotal.value = page.total
 	} catch {
@@ -206,10 +206,6 @@ async function loadReadiness() {
 	} catch {
 		serverReadiness.value = null
 	}
-}
-
-function previewUrl(fileId: number, width = 560, height = 360): string {
-	return ownerPreviewUrl(props.gallery.id, fileId, width, height)
 }
 
 function collectionChanged() {
@@ -230,9 +226,7 @@ async function chooseImage(kind: 'heroFileId' | 'logoFileId') {
 			return
 		}
 		draft.settings.presentation[kind] = image.fileid
-	} catch {
-		// Closing the picker is not an error.
-	}
+	} catch { /* Closing the picker is not an error. */ }
 }
 
 async function chooseSource() {
@@ -385,39 +379,54 @@ function handleOffline() {
 }
 
 onMounted(() => {
-	resetDraft()
-	loadMedia()
-	loadReadiness()
-	loadPresets()
+	setTab(activeTab.value, 'replace')
+	resetDraft(); loadMedia(); loadReadiness(); loadPresets()
 	window.addEventListener('beforeunload', beforeUnload)
 	window.addEventListener('online', handleOnline)
 	window.addEventListener('offline', handleOffline)
+	window.addEventListener('popstate', syncTabFromHistory)
 })
 onBeforeUnmount(() => {
-	clearSaveTimer()
-	window.removeEventListener('beforeunload', beforeUnload)
-	window.removeEventListener('online', handleOnline)
-	window.removeEventListener('offline', handleOffline)
+	emit('workspace-mode', false)
+	clearSaveTimer(); window.removeEventListener('beforeunload', beforeUnload)
+	window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline)
+	window.removeEventListener('popstate', syncTabFromHistory)
 })
 </script>
 
 <template>
-	<div class="settings-page">
-		<header class="settings-header">
-			<div>
+	<div class="settings-page" :class="{ 'settings-page--workspace': activeTab === 'cull' }">
+		<header v-if="activeTab !== 'cull'" class="settings-header">
+			<div class="settings-header__identity">
 				<button class="back-button" type="button" @click="leave">
 					<span aria-hidden="true">←</span>
 					{{ t('proofing_gallery', 'All galleries') }}
 				</button>
 				<h1>{{ gallery.title }}</h1>
-				<p>
-					{{ gallery.status === 'published'
+				<div class="project-meta">
+					<span class="project-status">{{ gallery.status === 'published'
 						? t('proofing_gallery', 'Published')
 						: gallery.status === 'archived'
 							? t('proofing_gallery', 'Archived')
-							: t('proofing_gallery', 'Draft') }}
-				</p>
-				<span class="purpose-name">{{ purposeLabels[gallery.purpose] }}</span>
+							: t('proofing_gallery', 'Draft') }}</span>
+					<span class="purpose-name">{{ purposeLabels[gallery.purpose] }}</span>
+					<details class="readiness-popover">
+						<summary :aria-label="t('proofing_gallery', 'Project readiness')">
+							<span :class="{ ready: publishReady }" aria-hidden="true">{{ publishReady ? '✓' : '!' }}</span>
+							{{ publishReady ? t('proofing_gallery', 'Ready') : t('proofing_gallery', '{count} open', { count: readiness.filter(item => !item.ready).length }) }}
+						</summary>
+						<div class="readiness-popover__panel">
+							<header><strong>{{ publishReady ? t('proofing_gallery', 'Ready to deliver') : t('proofing_gallery', 'Prepare for delivery') }}</strong><small>{{ t('proofing_gallery', 'Project readiness') }}</small></header>
+							<ul>
+								<li v-for="item in readiness" :key="item.label" :class="{ ready: item.ready }">
+									<button type="button" @click="setTab(item.action)">
+										<span aria-hidden="true">{{ item.ready ? '✓' : '○' }}</span>{{ item.label }}
+									</button>
+								</li>
+							</ul>
+						</div>
+					</details>
+				</div>
 			</div>
 			<div class="settings-header__actions">
 				<div class="save-indicator"
@@ -436,21 +445,27 @@ onBeforeUnmount(() => {
 			</div>
 		</header>
 
-		<nav class="settings-tabs" :aria-label="t('proofing_gallery', 'Gallery settings')">
+		<nav v-if="activeTab !== 'cull'" class="settings-tabs" :aria-label="t('proofing_gallery', 'Gallery settings')">
 			<button
-				v-for="tab in availableTabs"
+				v-for="tab in primaryTabs"
 				:key="tab.id"
 				type="button"
 				:aria-current="activeTab === tab.id ? 'page' : undefined"
 				@click="setTab(tab.id)">
 				{{ tab.label }}
 			</button>
-			<button class="settings-tabs__advanced"
-				type="button"
-				:aria-expanded="advancedOpen"
-				@click="toggleAdvanced">
-				{{ advancedOpen ? t('proofing_gallery', 'Hide advanced') : t('proofing_gallery', 'Advanced') }}
-			</button>
+			<details v-if="moreTabs.length" class="settings-more" :class="{ 'settings-more--active': activeMore }">
+				<summary>{{ t('proofing_gallery', 'More') }}</summary>
+				<div>
+					<button v-for="tab in moreTabs"
+						:key="tab.id"
+						type="button"
+						:aria-current="activeTab === tab.id ? 'page' : undefined"
+						@click="setTab(tab.id)">
+						{{ tab.label }}
+					</button>
+				</div>
+			</details>
 		</nav>
 
 		<AnimatePresence mode="wait">
@@ -461,507 +476,71 @@ onBeforeUnmount(() => {
 				:animate="{ opacity: 1, x: 0 }"
 				:exit="reduceMotion ? { opacity: 0 } : { opacity: 0, x: -18 }"
 				:transition="{ duration: reduceMotion ? 0 : 0.2, ease: [0.2, 0.75, 0.25, 1] }">
-				<section v-if="activeTab === 'overview'" class="settings-section">
-					<div class="production-status">
-						<div>
-							<strong>{{ publishReady ? t('proofing_gallery', 'Ready to deliver') : t('proofing_gallery', 'Prepare for delivery') }}</strong>
-							<span>{{ publishReady
-								? t('proofing_gallery', 'Preview the client experience, then publish the link.')
-								: t('proofing_gallery', 'Complete the open steps. Changes save automatically.') }}</span>
-						</div>
-						<ul>
-							<li v-for="item in readiness" :key="item.label" :class="{ ready: item.ready }">
-								<button type="button" @click="setTab(item.action)">
-									<span aria-hidden="true">{{ item.ready ? '✓' : '○' }}</span>
-									{{ item.label }}
-								</button>
-							</li>
-						</ul>
-					</div>
-					<div class="section-heading">
-						<h2>{{ t('proofing_gallery', 'Gallery details') }}</h2>
-						<p>{{ t('proofing_gallery', 'Choose the purpose and the title your clients will recognize.') }}</p>
-					</div>
-					<NcTextField
-						v-if="gallery.permissions.canEdit"
-						id="proofing-gallery-settings-title"
-						v-model="draft.title"
-						name="title"
-						:label="t('proofing_gallery', 'Gallery title')" />
-					<fieldset v-if="gallery.permissions.canEdit" class="mode-field">
-						<legend>{{ t('proofing_gallery', 'Gallery mode') }}</legend>
-						<label>
-							<input v-model="draft.settings.mode"
-								name="galleryMode"
-								type="radio"
-								value="presentation">
-							<span>
-								<strong>{{ t('proofing_gallery', 'Presentation') }}</strong>
-								<small>{{ t('proofing_gallery', 'Deliver finished work without review controls.') }}</small>
-							</span>
-						</label>
-						<label>
-							<input v-model="draft.settings.mode"
-								name="galleryMode"
-								type="radio"
-								value="collaboration">
-							<span>
-								<strong>{{ t('proofing_gallery', 'Proofing') }}</strong>
-								<small>{{ t('proofing_gallery', 'Collect selections, likes, colors and comments.') }}</small>
-							</span>
-						</label>
-					</fieldset>
-					<label v-if="gallery.permissions.canEdit" class="select-field">
-						<span>{{ t('proofing_gallery', 'Public gallery language') }}</span>
-						<select v-model="draft.settings.publicLocale" name="publicLocale">
-							<option value="auto">{{ t('proofing_gallery', 'Automatic') }}</option>
-							<option value="en">English</option>
-							<option value="de">Deutsch</option>
-						</select>
-					</label>
-					<details v-if="gallery.permissions.role === 'owner'" class="preset-panel">
-						<summary role="button" :aria-label="t('proofing_gallery', 'Reusable preset')">
-							<h3 id="preset-title">
-								{{ t('proofing_gallery', 'Reusable preset') }}
-							</h3>
-							<p>{{ t('proofing_gallery', 'Apply saved design, access and feedback defaults without changing this gallery’s link or source.') }}</p>
-						</summary>
-						<label>
-							<span>{{ t('proofing_gallery', 'Saved preset') }}</span>
-							<select v-model="selectedPresetId"
-								name="savedPreset"
-								:disabled="presetsLoading || presetSaving"
-								@change="selectPreset">
-								<option :value="null">{{ presetsLoading ? t('proofing_gallery', 'Loading…') : t('proofing_gallery', 'Choose a preset') }}</option>
-								<option v-for="preset in presets" :key="preset.id" :value="preset.id">{{ preset.name }}</option>
-							</select>
-						</label>
-						<NcTextField
-							id="proofing-gallery-preset-name"
-							v-model="presetName"
-							name="presetName"
-							:label="t('proofing_gallery', 'Preset name')" />
-						<div class="preset-actions">
-							<NcButton :disabled="presetSaving || !presetName.trim()" @click="saveNewPreset">
-								{{ t('proofing_gallery', 'Save as new') }}
-							</NcButton>
-							<NcButton :disabled="presetSaving || selectedPresetId === null" @click="applySelectedPreset">
-								{{ t('proofing_gallery', 'Apply') }}
-							</NcButton>
-							<NcButton variant="tertiary" :disabled="presetSaving || selectedPresetId === null || !presetName.trim()" @click="updateSelectedPreset">
-								{{ t('proofing_gallery', 'Update preset') }}
-							</NcButton>
-							<NcButton variant="tertiary" :disabled="presetSaving || selectedPresetId === null" @click="removeSelectedPreset">
-								{{ t('proofing_gallery', 'Delete preset') }}
-							</NcButton>
-						</div>
-						<p v-if="!presetsLoading && presets.length === 0" class="preset-empty">
-							{{ t('proofing_gallery', 'No presets yet. Enter a name to save the current settings.') }}
-						</p>
-					</details>
-					<dl class="gallery-facts">
-						<div v-if="gallery.source.type === 'folder'">
-							<dt>{{ t('proofing_gallery', 'Source folder') }}</dt>
-							<dd>
-								<span :class="{ 'source-missing': gallery.source.state === 'missing' }">
-									{{ gallery.source.state === 'missing'
-										? t('proofing_gallery', 'Folder unavailable')
-										: gallery.source.displayPath }}
-								</span>
-								<NcButton
-									v-if="gallery.permissions.role === 'owner'"
-									variant="tertiary"
-									:disabled="rebinding"
-									@click="chooseSource">
-									{{ gallery.source.state === 'missing'
-										? t('proofing_gallery', 'Choose another folder')
-										: t('proofing_gallery', 'Change') }}
-								</NcButton>
-							</dd>
-						</div>
-						<div v-else>
-							<dt>{{ t('proofing_gallery', 'Collection') }}</dt>
-							<dd>
-								<span :class="{ 'source-missing': gallery.source.state === 'degraded' }">
-									{{ gallery.source.state === 'degraded'
-										? t('proofing_gallery', '{count} unavailable', { count: gallery.source.unavailableCount })
-										: t('proofing_gallery', 'All source files available') }}
-								</span>
-								<NcButton v-if="gallery.permissions.role === 'owner'" variant="tertiary" @click="setTab('content')">
-									{{ t('proofing_gallery', 'Manage content') }}
-								</NcButton>
-							</dd>
-						</div>
-						<div><dt>{{ t('proofing_gallery', 'Files shown') }}</dt><dd>{{ mediaLoading ? gallery.mediaSummary.total : mediaTotal }}</dd></div>
-						<div><dt>{{ t('proofing_gallery', 'Last changed') }}</dt><dd>{{ new Date(gallery.updatedAt * 1000).toLocaleString() }}</dd></div>
-					</dl>
-					<div v-if="previewMedia.length" class="contact-strip" :aria-label="t('proofing_gallery', 'Gallery preview')">
-						<img
-							v-for="item in previewMedia"
-							:key="item.id"
-							:src="previewUrl(item.id, 260, 180)"
-							:alt="item.name">
-					</div>
-				</section>
-
+				<GalleryOverviewWorkspace
+					v-if="activeTab === 'overview'"
+					v-model:title="draft.title"
+					v-model:settings="draft.settings"
+					v-model:selected-preset-id="selectedPresetId"
+					v-model:preset-name="presetName"
+					:gallery="gallery"
+					:media-loading="mediaLoading"
+					:media-total="mediaTotal"
+					:preview-media="previewMedia"
+					:rebinding="rebinding"
+					:presets="presets"
+					:presets-loading="presetsLoading"
+					:preset-saving="presetSaving"
+					@choose-source="chooseSource"
+					@select-preset="selectPreset"
+					@apply-preset="applySelectedPreset"
+					@save-preset="saveNewPreset"
+					@update-preset="updateSelectedPreset"
+					@remove-preset="removeSelectedPreset"
+					@navigate="setTab" />
 				<CollectionContent
-					v-else-if="activeTab === 'content' && gallery.sourceType === 'collection'"
+					v-else-if="activeTab === 'photos' && gallery.sourceType === 'collection'"
 					:gallery="gallery"
 					@changed="collectionChanged" />
 				<FolderContent
-					v-else-if="activeTab === 'content' && gallery.sourceType === 'folder'"
+					v-else-if="activeTab === 'photos' && gallery.sourceType === 'folder'"
 					:gallery="gallery"
 					@changed="collectionChanged" />
 				<CullingWorkspace
-					v-else-if="activeTab === 'culling'"
-					:gallery="gallery" />
+					v-else-if="activeTab === 'cull'"
+					:gallery="gallery"
+					@exit="setTab('overview')" />
 
-				<section v-else-if="activeTab === 'design'" class="design-layout">
-					<div class="settings-section design-fields">
-						<div class="section-heading">
-							<h2>{{ t('proofing_gallery', 'Appearance') }}</h2>
-							<p>{{ t('proofing_gallery', 'Use a compact opening for fast review or a cinematic cover for final delivery.') }}</p>
-						</div>
-						<label class="select-field">
-							<span>{{ t('proofing_gallery', 'Opening') }}</span>
-							<select v-model="draft.settings.presentation.openerStyle" name="openerStyle">
-								<option value="minimal">{{ t('proofing_gallery', 'Minimal introduction') }}</option>
-								<option value="compact">{{ t('proofing_gallery', 'Compact, media first') }}</option>
-								<option value="cinematic">{{ t('proofing_gallery', 'Cinematic cover') }}</option>
-							</select>
-						</label>
-						<p v-if="draft.settings.presentation.openerStyle === 'cinematic' && !draft.settings.presentation.heroFileId" class="field-hint">
-							{{ t('proofing_gallery', 'Choose a cover image for the cinematic opening. Until then, the gallery opens compactly.') }}
-						</p>
-						<div class="header-visibility">
-							<NcCheckboxRadioSwitch v-model="draft.settings.presentation.showTitle" type="switch">
-								{{ t('proofing_gallery', 'Show title in header') }}
-							</NcCheckboxRadioSwitch>
-							<NcCheckboxRadioSwitch v-model="draft.settings.presentation.showMediaCount" type="switch">
-								{{ t('proofing_gallery', 'Show photo count in header') }}
-							</NcCheckboxRadioSwitch>
-						</div>
-						<NcCheckboxRadioSwitch v-model="draft.settings.presentation.showFilenames" type="switch">
-							{{ t('proofing_gallery', 'Show filenames') }}
-						</NcCheckboxRadioSwitch>
-						<fieldset class="metadata-disclosure">
-							<legend>{{ t('proofing_gallery', 'Public image information') }}</legend>
-							<p>{{ t('proofing_gallery', 'Nothing is shared by default. GPS, keywords, ratings and labels always remain private.') }}</p>
-							<div>
-								<label v-for="option in publicMetadataOptions" :key="option.value">
-									<input v-model="draft.settings.metadata.publicFields" type="checkbox" :value="option.value">
-									<span>{{ option.label }}</span>
-								</label>
-							</div>
-						</fieldset>
-						<div class="option-grid">
-							<label class="select-field">
-								<span>{{ t('proofing_gallery', 'Theme') }}</span>
-								<select v-model="draft.settings.presentation.theme" name="theme">
-									<option value="auto">{{ t('proofing_gallery', 'Follow device') }}</option>
-									<option value="light">{{ t('proofing_gallery', 'Light') }}</option>
-									<option value="dark">{{ t('proofing_gallery', 'Dark') }}</option>
-								</select>
-							</label>
-							<label class="select-field">
-								<span>{{ t('proofing_gallery', 'Gallery layout') }}</span>
-								<select v-model="draft.settings.presentation.layout" name="layout">
-									<option value="grid">{{ t('proofing_gallery', 'Grid') }}</option>
-									<option value="masonry">{{ t('proofing_gallery', 'Masonry') }}</option>
-									<option value="list">{{ t('proofing_gallery', 'List') }}</option>
-								</select>
-							</label>
-							<label class="select-field">
-								<span>{{ t('proofing_gallery', 'Thumbnail size') }}</span>
-								<select v-model="draft.settings.presentation.tileSize" name="tileSize">
-									<option value="small">{{ t('proofing_gallery', 'Small') }}</option>
-									<option value="medium">{{ t('proofing_gallery', 'Medium') }}</option>
-									<option value="large">{{ t('proofing_gallery', 'Large') }}</option>
-								</select>
-							</label>
-							<label class="select-field">
-								<span>{{ t('proofing_gallery', 'Spacing') }}</span>
-								<select v-model="draft.settings.presentation.tileGap" name="tileGap">
-									<option value="tight">{{ t('proofing_gallery', 'Tight') }}</option>
-									<option value="normal">{{ t('proofing_gallery', 'Balanced') }}</option>
-									<option value="wide">{{ t('proofing_gallery', 'Wide') }}</option>
-								</select>
-							</label>
-							<label class="select-field">
-								<span>{{ t('proofing_gallery', 'Image corners') }}</span>
-								<select v-model="draft.settings.presentation.tileRadius" name="tileRadius">
-									<option value="square">{{ t('proofing_gallery', 'Square') }}</option>
-									<option value="soft">{{ t('proofing_gallery', 'Soft') }}</option>
-								</select>
-							</label>
-							<label class="select-field">
-								<span>{{ t('proofing_gallery', 'Title alignment') }}</span>
-								<select v-model="draft.settings.presentation.titleAlignment" name="titleAlignment">
-									<option value="left">{{ t('proofing_gallery', 'Left') }}</option>
-									<option value="center">{{ t('proofing_gallery', 'Centered') }}</option>
-								</select>
-							</label>
-							<label class="select-field">
-								<span>{{ t('proofing_gallery', 'Slideshow timing') }}</span>
-								<select v-model.number="draft.settings.presentation.slideshowInterval" name="slideshowInterval">
-									<option v-for="seconds in [3, 5, 8, 12, 15]" :key="seconds" :value="seconds">{{ t('proofing_gallery', '{seconds} seconds', { seconds }) }}</option>
-								</select>
-							</label><GalleryMotionControls v-model="draft.settings.presentation" />
-						</div>
-						<label class="color-field">
-							<span>{{ t('proofing_gallery', 'Accent color') }}</span>
-							<input v-model="draft.settings.presentation.accentColor" name="accentColor" type="color">
-							<code>{{ draft.settings.presentation.accentColor }}</code>
-						</label>
-						<NcTextArea
-							id="proofing-gallery-welcome"
-							v-model="draft.settings.presentation.welcomeMessage"
-							name="welcomeMessage"
-							:label="t('proofing_gallery', 'Welcome message')" />
-						<div class="asset-fields">
-							<div>
-								<span>{{ t('proofing_gallery', 'Logo') }}</span>
-								<NcButton @click="chooseImage('logoFileId')">
-									{{ draft.settings.presentation.logoFileId ? t('proofing_gallery', 'Change') : t('proofing_gallery', 'Choose') }}
-								</NcButton>
-								<NcButton v-if="draft.settings.presentation.logoFileId" variant="tertiary" @click="draft.settings.presentation.logoFileId = null">
-									{{ t('proofing_gallery', 'Remove') }}
-								</NcButton>
-							</div>
-							<div>
-								<span>{{ t('proofing_gallery', 'Cover image') }}</span>
-								<NcButton @click="chooseImage('heroFileId')">
-									{{ draft.settings.presentation.heroFileId ? t('proofing_gallery', 'Change') : t('proofing_gallery', 'Choose') }}
-								</NcButton>
-								<NcButton v-if="draft.settings.presentation.heroFileId" variant="tertiary" @click="draft.settings.presentation.heroFileId = null">
-									{{ t('proofing_gallery', 'Remove') }}
-								</NcButton>
-							</div>
-						</div>
-						<label class="select-field">
-							<span>{{ t('proofing_gallery', 'Title typeface') }}</span>
-							<select v-model="draft.settings.presentation.fontPreset" name="fontPreset">
-								<option value="system">{{ t('proofing_gallery', 'System') }}</option>
-								<option value="editorial">{{ t('proofing_gallery', 'Editorial serif') }}</option>
-								<option value="modern">{{ t('proofing_gallery', 'Studio sans') }}</option>
-							</select>
-						</label>
-						<label class="select-field">
-							<span>{{ t('proofing_gallery', 'Title size') }}</span>
-							<select v-model="draft.settings.presentation.titleSize" name="titleSize">
-								<option value="small">{{ t('proofing_gallery', 'Restrained') }}</option>
-								<option value="medium">{{ t('proofing_gallery', 'Standard') }}</option>
-								<option value="large">{{ t('proofing_gallery', 'Statement') }}</option>
-							</select>
-						</label>
-						<div v-if="draft.settings.presentation.heroFileId" class="range-fields">
-							<label>
-								<span>{{ t('proofing_gallery', 'Horizontal cover focus') }}</span>
-								<input v-model.number="draft.settings.presentation.heroFocusX"
-									name="heroFocusX"
-									type="range"
-									min="0"
-									max="100">
-								<output>{{ draft.settings.presentation.heroFocusX }}%</output>
-							</label>
-							<label>
-								<span>{{ t('proofing_gallery', 'Vertical cover focus') }}</span>
-								<input v-model.number="draft.settings.presentation.heroFocusY"
-									name="heroFocusY"
-									type="range"
-									min="0"
-									max="100">
-								<output>{{ draft.settings.presentation.heroFocusY }}%</output>
-							</label>
-						</div>
-						<NcTextField
-							id="proofing-gallery-watermark"
-							v-model="draft.settings.presentation.watermarkText"
-							name="watermarkText"
-							:label="t('proofing_gallery', 'Preview watermark')" />
-						<NcButton class="mobile-preview-button" @click="designPreviewOpen = true">
-							{{ t('proofing_gallery', 'Preview gallery') }}
-						</NcButton>
-					</div>
+				<GalleryDesignWorkspace
+					v-else-if="activeTab === 'design'"
+					v-model:title="draft.title"
+					v-model:settings="draft.settings"
+					:gallery="gallery"
+					:media="storyMedia"
+					:preview-media="previewMedia"
+					:preview-open="designPreviewOpen"
+					@choose-image="chooseImage"
+					@update:preview-open="designPreviewOpen = $event" />
 
-					<GalleryDesignPreview
-						:gallery="gallery"
-						:title="draft.title"
-						:settings="draft.settings"
-						:media="previewMedia"
-						:expanded="designPreviewOpen"
-						@close="designPreviewOpen = false" />
-				</section>
+				<GalleryShareWorkspace
+					v-else-if="activeTab === 'share'"
+					v-model:settings="draft.settings"
+					:gallery="gallery"
+					@open-sharing="openSharing"
+					@updated="emit('updated', $event)" />
 
-				<section v-else-if="activeTab === 'access'" class="settings-section">
-					<div class="section-heading">
-						<h2>{{ t('proofing_gallery', 'Public access') }}</h2>
-						<p>
-							{{ gallery.shareToken
-								? t('proofing_gallery', 'The gallery has an active public link.')
-								: t('proofing_gallery', 'Publish the gallery when it is ready for clients.') }}
-						</p>
-					</div>
-					<NcButton variant="primary" @click="openSharing">
-						{{ gallery.shareToken ? t('proofing_gallery', 'Manage public link') : t('proofing_gallery', 'Publish gallery') }}
-					</NcButton>
-					<div class="settings-subsection">
-						<h3>{{ t('proofing_gallery', 'Delivery and navigation') }}</h3>
-						<div class="option-grid">
-							<label class="select-field">
-								<span>{{ t('proofing_gallery', 'Downloads') }}</span>
-								<select v-model="draft.settings.delivery.downloadScope" name="downloadScope">
-									<option value="none">{{ t('proofing_gallery', 'Disabled') }}</option>
-									<option value="individual">{{ t('proofing_gallery', 'Individual files') }}</option>
-									<option value="selection">{{ t('proofing_gallery', 'Saved selections') }}</option>
-									<option value="all">{{ t('proofing_gallery', 'Files and selections') }}</option>
-								</select>
-							</label>
-							<label class="select-field">
-								<span>{{ t('proofing_gallery', 'Default sort') }}</span>
-								<select v-model="draft.settings.navigation.sortBy" name="sortBy">
-									<option value="name">{{ t('proofing_gallery', 'Filename') }}</option>
-									<option value="modified">{{ t('proofing_gallery', 'Last modified') }}</option>
-									<option value="size">{{ t('proofing_gallery', 'File size') }}</option>
-								</select>
-							</label>
-							<label class="select-field">
-								<span>{{ t('proofing_gallery', 'Sort direction') }}</span>
-								<select v-model="draft.settings.navigation.sortDirection" name="sortDirection">
-									<option value="asc">{{ t('proofing_gallery', 'Ascending') }}</option>
-									<option value="desc">{{ t('proofing_gallery', 'Descending') }}</option>
-								</select>
-							</label>
-							<label class="select-field">
-								<span>{{ t('proofing_gallery', 'Group media') }}</span>
-								<select v-model="draft.settings.navigation.groupBy" name="groupBy">
-									<option value="none">{{ t('proofing_gallery', 'No grouping') }}</option>
-									<option value="type">{{ t('proofing_gallery', 'By file type') }}</option>
-									<option value="folder">{{ t('proofing_gallery', 'By folder') }}</option>
-								</select>
-							</label>
-							<label v-if="gallery.sourceType === 'folder' && draft.settings.navigation.groupBy === 'folder'" class="select-field">
-								<span>{{ t('proofing_gallery', 'Folder grouping depth') }}</span>
-								<select v-model.number="draft.settings.navigation.groupDepth" name="groupDepth">
-									<option v-for="depth in 8" :key="depth" :value="depth">{{ depth }}</option>
-								</select>
-							</label>
-						</div>
-						<NcCheckboxRadioSwitch v-model="draft.settings.delivery.contactSheet" type="switch">
-							{{ t('proofing_gallery', 'Allow PDF contact sheets') }}
-						</NcCheckboxRadioSwitch>
-						<NcCheckboxRadioSwitch v-if="gallery.sourceType === 'folder'" v-model="draft.settings.navigation.folders" type="switch">
-							{{ t('proofing_gallery', 'Let clients browse subfolders') }}
-						</NcCheckboxRadioSwitch>
-						<NcCheckboxRadioSwitch v-if="gallery.sourceType === 'folder'" v-model="draft.settings.navigation.recursive" type="switch">
-							{{ t('proofing_gallery', 'Show media from every subfolder in one continuous gallery') }}
-						</NcCheckboxRadioSwitch>
-					</div>
-					<fieldset class="automation-settings">
-						<legend>{{ t('proofing_gallery', 'Project automation') }}</legend>
-						<NcCheckboxRadioSwitch v-model="draft.settings.lifecycle.enabled" type="switch">
-							{{ t('proofing_gallery', 'Automatically revoke and archive this gallery') }}
-						</NcCheckboxRadioSwitch>
-						<template v-if="draft.settings.lifecycle.enabled">
-							<label class="select-field">
-								<span>{{ t('proofing_gallery', 'Revoke the public link') }}</span>
-								<select v-model="draft.settings.lifecycle.trigger">
-									<option value="after_completion">{{ t('proofing_gallery', 'After the project is completed') }}</option>
-									<option value="fixed_date">{{ t('proofing_gallery', 'On a fixed date') }}</option>
-								</select>
-							</label>
-							<label v-if="draft.settings.lifecycle.trigger === 'fixed_date'" class="date-field">
-								<span>{{ t('proofing_gallery', 'Revoke on') }}</span>
-								<input v-model="draft.settings.lifecycle.revokeAt" type="date">
-							</label>
-							<label v-else class="number-field">
-								<span>{{ t('proofing_gallery', 'Days after completion') }}</span>
-								<input v-model.number="draft.settings.lifecycle.revokeAfterDays"
-									type="number"
-									min="0"
-									max="3650">
-							</label>
-							<label class="number-field">
-								<span>{{ t('proofing_gallery', 'Archive days after link revocation') }}</span>
-								<input v-model.number="draft.settings.lifecycle.archiveAfterDays"
-									type="number"
-									min="0"
-									max="3650">
-							</label>
-							<p>{{ t('proofing_gallery', 'Archiving never deletes original files and can be reversed.') }}</p>
-						</template>
-					</fieldset>
-					<ManagerPanel :gallery-id="gallery.id" @changed="notificationPanel?.load()" />
-					<NotificationPanel v-if="gallery.permissions.role === 'owner'" ref="notificationPanel" :gallery="gallery" />
-					<LivePushPanel v-if="gallery.permissions.role === 'owner' && gallery.sourceType === 'folder'" :gallery-id="gallery.id" />
-				</section>
+				<GalleryTeamWorkspace v-else-if="activeTab === 'team'" :gallery="gallery" />
 
-				<section v-else-if="activeTab === 'feedback'" class="settings-section">
-					<div class="workflow-completion">
-						<div>
-							<strong>{{ gallery.workflowState === 'completed' ? t('proofing_gallery', 'Project completed') : t('proofing_gallery', 'Finish the project') }}</strong>
-							<span>{{ gallery.workflowState === 'completed'
-								? t('proofing_gallery', 'Configured lifecycle rules now count from the completion date.')
-								: t('proofing_gallery', 'Confirm completion when the client result has been processed.') }}</span>
-						</div>
-						<NcButton v-if="gallery.workflowState !== 'completed'" variant="primary" @click="completeProject">
-							{{ t('proofing_gallery', 'Mark completed') }}
-						</NcButton>
-					</div>
-					<div class="section-heading">
-						<h2>{{ t('proofing_gallery', 'Review workflow') }}</h2>
-						<p>{{ t('proofing_gallery', 'Control what reviewers can contribute and whether they see each other.') }}</p>
-					</div>
-					<NcCheckboxRadioSwitch
-						:model-value="draft.settings.review.visibility === 'collaborative'"
-						type="switch"
-						@update:model-value="draft.settings.review.visibility = $event ? 'collaborative' : 'private'">
-						{{ t('proofing_gallery', 'Reviewers see each other’s feedback') }}
-					</NcCheckboxRadioSwitch>
-					<NcCheckboxRadioSwitch v-if="gallery.sourceType === 'folder'" v-model="draft.settings.delivery.guestUploads" type="switch">
-						{{ t('proofing_gallery', 'Allow guest uploads to an inbox') }}
-					</NcCheckboxRadioSwitch>
-					<div v-if="draft.settings.mode === 'collaboration'" class="feedback-switches">
-						<NcCheckboxRadioSwitch v-model="draft.settings.review.likes" type="switch">
-							{{ t('proofing_gallery', 'Likes') }}
-						</NcCheckboxRadioSwitch>
-						<NcCheckboxRadioSwitch v-model="draft.settings.review.colors" type="switch">
-							{{ t('proofing_gallery', 'Color labels') }}
-						</NcCheckboxRadioSwitch>
-						<NcCheckboxRadioSwitch v-model="draft.settings.review.comments" type="switch">
-							{{ t('proofing_gallery', 'Comments') }}
-						</NcCheckboxRadioSwitch>
-						<NcCheckboxRadioSwitch v-model="draft.settings.review.annotations" type="switch" :disabled="!draft.settings.review.comments">
-							{{ t('proofing_gallery', 'Image annotations') }}
-						</NcCheckboxRadioSwitch>
-						<NcCheckboxRadioSwitch v-model="draft.settings.review.selections" type="switch">
-							{{ t('proofing_gallery', 'Saved selections') }}
-						</NcCheckboxRadioSwitch>
-						<NcCheckboxRadioSwitch v-model="draft.settings.review.ratings" type="switch">
-							{{ t('proofing_gallery', 'Private guest star ratings') }}
-						</NcCheckboxRadioSwitch>
-						<NcCheckboxRadioSwitch v-model="draft.settings.review.pick" type="switch">
-							{{ t('proofing_gallery', 'Private guest pick or reject') }}
-						</NcCheckboxRadioSwitch>
-					</div>
-					<div v-if="draft.settings.mode === 'collaboration'" class="color-labels">
-						<div v-for="(_, index) in draft.settings.review.colorLabels" :key="index" class="color-label-row">
-							<NcCheckboxRadioSwitch v-model="draft.settings.review.colorEnabled[index]" :aria-label="t('proofing_gallery', 'Enable color {number}', { number: index + 1 })" />
-							<NcTextField
-								:id="`proofing-gallery-color-${index}`"
-								v-model="draft.settings.review.colorLabels[index]"
-								:name="`colorLabel${index}`"
-								:disabled="!draft.settings.review.colorEnabled[index]"
-								:label="t('proofing_gallery', 'Color {number}', { number: index + 1 })" />
-						</div>
-					</div>
-					<GalleryActivity :gallery-id="gallery.id" mode="inbox" />
-					<SelectionManager v-if="gallery.permissions.role === 'owner'" :gallery-id="gallery.id" :editable="true" />
-				</section>
+				<GalleryAutomationWorkspace v-else-if="activeTab === 'automation'" v-model:settings="draft.settings" :gallery="gallery" />
 
-				<section v-else class="settings-section">
-					<GalleryActivity :gallery-id="gallery.id" mode="activity" />
-				</section>
+				<GalleryPrivacyWorkspace v-else-if="activeTab === 'privacy'" :gallery="gallery" />
+
+				<GalleryReviewWorkspace
+					v-else-if="activeTab === 'review'"
+					v-model:settings="draft.settings"
+					:gallery="gallery"
+					@complete="completeProject" />
+
+				<GalleryHistoryWorkspace v-else-if="activeTab === 'history'" :gallery="gallery" />
 			</motion.div>
 		</AnimatePresence>
 
@@ -991,4 +570,4 @@ onBeforeUnmount(() => {
 	</div>
 </template>
 
-<style scoped src="./styles/GallerySettings.css"></style>
+<style src="./styles/GallerySettings.css"></style>

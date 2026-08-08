@@ -28,11 +28,17 @@ final class GuestMapper extends QBMapper {
 		return $this->findEntity($qb);
 	}
 
-	public function deleteExpired(int $now): int {
+	public function deleteExpired(int $now, int $limit = 1000): int {
 		$qb = $this->db->getQueryBuilder();
-		$qb->delete($this->tableName)
-			->where($qb->expr()->lte('expires_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT)));
-		return $qb->executeStatement();
+		$ids = array_map('intval', QueryResult::column($qb->select('id')->from($this->tableName)
+			->where($qb->expr()->lte('expires_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT)))
+			->orderBy('expires_at', 'ASC')->addOrderBy('id', 'ASC')
+			->setMaxResults(max(1, min(5000, $limit)))->executeQuery()));
+		if ($ids === []) return 0;
+		$delete = $this->db->getQueryBuilder();
+		return $delete->delete($this->tableName)
+			->where($delete->expr()->in('id', $delete->createNamedParameter($ids, IQueryBuilder::PARAM_INT_ARRAY)))
+			->executeStatement();
 	}
 
 	public function countActiveForGallery(int $galleryId, int $now): int {

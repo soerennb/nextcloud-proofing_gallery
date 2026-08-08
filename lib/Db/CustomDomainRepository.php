@@ -22,12 +22,26 @@ final class CustomDomainRepository {
 	}
 
 	/** @return list<array<string, mixed>> */
-	public function all(): array {
+	public function adminPage(?int $beforeId, int $limit, string $status, string $search): array {
 		$qb = $this->db->getQueryBuilder();
-		return QueryResult::rows($qb->select('d.*', 'g.title', 'l.name')->from(self::TABLE, 'd')
+		$qb->select('d.*', 'g.title', 'l.name')->from(self::TABLE, 'd')
 			->innerJoin('d', 'proofing_galleries', 'g', $qb->expr()->eq('d.gallery_id', 'g.id'))
 			->innerJoin('d', 'proofing_public_links', 'l', $qb->expr()->eq('d.public_link_id', 'l.id'))
-			->orderBy('d.created_at', 'DESC')->setMaxResults(500)->executeQuery());
+			->orderBy('d.id', 'DESC')->setMaxResults(max(1, min(101, $limit)));
+		$this->applyAdminFilters($qb, $status, $search);
+		if ($beforeId !== null) {
+			$qb->andWhere($qb->expr()->lt('d.id', $qb->createNamedParameter($beforeId, IQueryBuilder::PARAM_INT)));
+		}
+		return QueryResult::rows($qb->executeQuery());
+	}
+
+	public function adminCount(string $status, string $search): int {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select($qb->func()->count())->from(self::TABLE, 'd')
+			->innerJoin('d', 'proofing_galleries', 'g', $qb->expr()->eq('d.gallery_id', 'g.id'))
+			->innerJoin('d', 'proofing_public_links', 'l', $qb->expr()->eq('d.public_link_id', 'l.id'));
+		$this->applyAdminFilters($qb, $status, $search);
+		return (int)$qb->executeQuery()->fetchOne();
 	}
 
 	/** @return array<string, mixed>|null */
@@ -100,5 +114,21 @@ final class CustomDomainRepository {
 			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)));
 		if ($galleryId !== null) $qb->andWhere($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
 		return $qb->executeStatement() === 1;
+	}
+
+	private function applyAdminFilters(IQueryBuilder $qb, string $status, string $search): void {
+		if ($status === 'active') {
+			$qb->andWhere($qb->expr()->neq('d.status', $qb->createNamedParameter('revoked')));
+		} elseif ($status !== 'all') {
+			$qb->andWhere($qb->expr()->eq('d.status', $qb->createNamedParameter($status)));
+		}
+		if ($search !== '') {
+			$needle = '%' . $this->db->escapeLikeParameter($search) . '%';
+			$qb->andWhere($qb->expr()->orX(
+				$qb->expr()->iLike('d.domain', $qb->createNamedParameter($needle)),
+				$qb->expr()->iLike('g.title', $qb->createNamedParameter($needle)),
+				$qb->expr()->iLike('l.name', $qb->createNamedParameter($needle)),
+			));
+		}
 	}
 }

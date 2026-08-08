@@ -7,14 +7,17 @@ namespace OCA\ProofingGallery\BackgroundJob;
 use OCA\ProofingGallery\Db\GalleryMapper;
 use OCA\ProofingGallery\Service\PreviewWarmService;
 use OCP\BackgroundJob\QueuedJob;
+use OCP\AppFramework\Utility\ITimeFactory;
 use Psr\Log\LoggerInterface;
 
 final class WarmGalleryPreviewJob extends QueuedJob {
 	public function __construct(
+		ITimeFactory $time,
 		private GalleryMapper $galleries,
 		private PreviewWarmService $previews,
 		private LoggerInterface $logger,
 	) {
+		parent::__construct($time);
 	}
 
 	/** @param mixed $argument */

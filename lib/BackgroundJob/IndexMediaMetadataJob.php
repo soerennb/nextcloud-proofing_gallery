@@ -8,15 +8,18 @@ use OCA\ProofingGallery\Db\GalleryMapper;
 use OCA\ProofingGallery\Service\FolderService;
 use OCA\ProofingGallery\Service\MediaMetadataService;
 use OCP\BackgroundJob\QueuedJob;
+use OCP\AppFramework\Utility\ITimeFactory;
 use Psr\Log\LoggerInterface;
 
 final class IndexMediaMetadataJob extends QueuedJob {
 	public function __construct(
+		ITimeFactory $time,
 		private GalleryMapper $galleries,
 		private FolderService $folders,
 		private MediaMetadataService $metadata,
 		private LoggerInterface $logger,
 	) {
+		parent::__construct($time);
 	}
 
 	/** @param mixed $argument */

@@ -7,10 +7,12 @@ namespace OCA\ProofingGallery\BackgroundJob;
 use OCA\ProofingGallery\Db\GalleryMapper;
 use OCA\ProofingGallery\Service\SemanticSearchService;
 use OCP\BackgroundJob\QueuedJob;
+use OCP\AppFramework\Utility\ITimeFactory;
 use Psr\Log\LoggerInterface;
 
 final class IndexSemanticGalleryJob extends QueuedJob {
-	public function __construct(private GalleryMapper $galleries, private SemanticSearchService $semantic, private LoggerInterface $logger) {
+	public function __construct(ITimeFactory $time, private GalleryMapper $galleries, private SemanticSearchService $semantic, private LoggerInterface $logger) {
+		parent::__construct($time);
 	}
 
 	/** @param mixed $argument */

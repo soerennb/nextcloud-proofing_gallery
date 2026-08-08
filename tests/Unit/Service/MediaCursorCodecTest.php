@@ -16,7 +16,9 @@ final class MediaCursorCodecTest extends TestCase {
 		$entry->setFileId(17);
 		$entry->setSortKey('portrait.jpg');
 		$cursor = (new MediaCursorCodec())->encode($entry, $query);
-		self::assertSame(['portrait.jpg', 17], (new MediaCursorCodec())->decode($cursor, $query));
+		self::assertSame(['portrait.jpg', 17, 'next'], (new MediaCursorCodec())->decode($cursor, $query));
+		$previous = (new MediaCursorCodec())->encode($entry, $query, 'previous');
+		self::assertSame(['portrait.jpg', 17, 'previous'], (new MediaCursorCodec())->decode($previous, $query));
 	}
 
 	public function testRatingChangeInvalidatesCursor(): void {
@@ -37,6 +39,8 @@ final class MediaCursorCodecTest extends TestCase {
 		$cursor = $codec->encode($entry, $this->query(3));
 
 		foreach ([
+			new MediaIndexQuery(5, 'owner', 60, 'portraits', 'ada', 'name', 'asc', 3),
+			new MediaIndexQuery(4, 'other-owner', 60, 'portraits', 'ada', 'name', 'asc', 3),
 			new MediaIndexQuery(4, 'owner', 60, 'other', 'ada', 'name', 'asc', 3),
 			new MediaIndexQuery(4, 'owner', 60, 'portraits', 'other', 'name', 'asc', 3),
 			new MediaIndexQuery(4, 'owner', 60, 'portraits', 'ada', 'name', 'desc', 3),

@@ -1,0 +1,44 @@
+.review-panel { display: grid; gap: 12px; margin-block: 20px; }
+
+.review-panel > header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+
+.review-panel h3, .review-panel h4, .review-panel p { margin: 0; }
+
+.review-panel header p, .review-panel__empty span, .review-panel__main p { color: var(--color-text-maxcontrast); }
+
+.review-panel__empty { display: grid; gap: 4px; padding: 18px; border: 1px dashed var(--color-border-maxcontrast); border-radius: var(--border-radius-large); }
+
+.review-panel__list { display: grid; gap: 8px; }
+
+.review-panel__integrations { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 12px; border-radius: var(--border-radius-large); background: var(--color-background-hover); }
+
+.review-panel__integrations label { display: grid; gap: 3px; min-width: 160px; margin: 0; }
+
+.review-panel__integrations label span { color: var(--color-text-maxcontrast); font-size: .78rem; }
+
+.review-panel__integrations select { min-height: 36px; }
+
+.review-panel article { display: grid; grid-template-columns: minmax(120px, .55fr) minmax(180px, 1fr) auto; gap: 16px; align-items: center; padding: 14px 16px; border: 1px solid var(--color-border); border-radius: var(--border-radius-large); background: var(--color-main-background); }
+
+.review-panel article[data-state="submitted"] { border-inline-start: 4px solid var(--color-primary-element); }
+
+.review-panel article[data-state="approved"] { border-inline-start: 4px solid var(--color-success); }
+
+.review-panel__state { display: grid; gap: 2px; }
+
+.review-panel__state span { color: var(--color-text-maxcontrast); font-size: .82rem; }
+
+.review-panel__actions { display: flex; flex-wrap: wrap; justify-content: end; gap: 6px; }
+
+.review-panel__actions > a { align-self: center; padding: 8px; }
+
+.review-panel details { grid-column: 1 / -1; border-top: 1px solid var(--color-border); padding-top: 8px; }
+
+.review-panel details summary { cursor: pointer; color: var(--color-text-maxcontrast); }
+
+.review-panel ol { display: grid; gap: 6px; padding: 8px 0 0; margin: 0; list-style: none; }
+
+.review-panel li { display: grid; grid-template-columns: 100px 1fr auto; gap: 12px; }
+
+.review-panel time { color: var(--color-text-maxcontrast); }
+@media (max-width: 700px) { .review-panel article { grid-template-columns: 1fr; } .review-panel__actions { justify-content: start; } .review-panel li { grid-template-columns: 1fr; gap: 1px; } }

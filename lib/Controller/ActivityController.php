@@ -22,9 +22,22 @@ final class ActivityController extends Controller {
 		IRequest $request,
 		private GalleryService $galleries,
 		private ActivityService $activity,
+		private \OCA\ProofingGallery\Service\ScopedCursorCodec $cursors,
 		private IUserSession $userSession,
 	) {
 		parent::__construct(Application::APP_ID, $request);
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/v2/galleries/{galleryId}/activity')]
+	public function page(int $galleryId, int $limit = 50, ?string $cursor = null, string $type = ''): DataResponse {
+		try {
+			return new DataResponse($this->activity->page($this->galleries->view($this->userId(), $galleryId), $limit, $cursor, $type, $this->cursors));
+		} catch (DoesNotExistException|AuthorizationException) {
+			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		} catch (\InvalidArgumentException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
 	}
 
 	#[NoAdminRequired]

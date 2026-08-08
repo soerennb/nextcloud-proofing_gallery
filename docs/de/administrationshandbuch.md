@@ -1,6 +1,6 @@
 # Administrationshandbuch
 
-Dieses Handbuch beschreibt Installation und Betrieb von Proofing Gallery 0.5.0.
+Dieses Handbuch beschreibt Installation und Betrieb von Proofing Gallery.
 
 ## Voraussetzungen und Installation
 
@@ -34,6 +34,62 @@ Prüfe Freigabe-, Mail- und Gruppenrichtlinien vor der Einführung. Aktiviere
 Gast-Downloads und -Uploads nur bei Bedarf. Richte Grenzen nach PHP, Proxy,
 Speicher und Worker-Kapazität aus, nicht nach Browservalidierung.
 
+## Integration in den Nextcloud-Kosmos
+
+Proofing Gallery fügt sich in den Nextcloud-Arbeitsbereich ein; die
+Dateiberechtigungen aus Files bleiben dabei immer maßgeblich:
+
+- **Files** erhält für Ordner die Aktion „Kundengalerie öffnen oder erstellen“
+  und einen Sidebar-Reiter. Die Files-Metadaten enthalten ausschließlich, ob
+  ein Ordner Quelle einer Galerie ist, sowie grobe Galerie- und Workflowstatus.
+  Titel, öffentliche Links, Gastdaten und interne IDs werden dort nicht abgelegt.
+- Die **globale Suche** findet Galerien, die der aktuelle Benutzer besitzt oder
+  direkt verwaltet. Vorschauen im **Smart Picker** verwenden dieselbe
+  Berechtigungsprüfung.
+- Das **Dashboard** zeigt Galerien mit Handlungsbedarf, etwa nach neuem Feedback
+  oder bei einem noch nicht abgeschlossenen Auslieferungsablauf.
+- **Projekte** können eine berechtigte Galerie als native Ressource verknüpfen.
+  Das Entfernen der Verknüpfung löscht oder widerruft die Galerie nicht.
+- **Flow** bietet umkehrbare Aktionen wie Archivieren, Wiederherstellen,
+  Abschließen, Veröffentlichen und Widerrufen. Begrenze Regeln eng; jede Aktion
+  wird mit den Rechten des auslösenden Benutzers geprüft.
+- **Context Chat** wird bei vorhandener optionaler App und kompatibler
+  Nextcloud-API automatisch angebunden. Indexiert werden nur bereinigte
+  Galeriemetadaten. Quelldateien, Vorschauen, öffentliche Tokens, Gastidentitäten,
+  Kommentare, Passwörter und private Links bleiben ausgeschlossen.
+- **Talk** kann pro Kundenlink einen privaten Review-Raum erstellen. Der
+  aktuelle Benutzer ist Moderator; der Raum wird nie öffentlich und lässt sich
+  im Review-Bereich entfernen. Gespeichert werden nur ID und URL.
+- Termine in **Calendar** und Karten in **Deck** gehören dem Benutzer. Eine
+  Galerie-Löschung entfernt nur die lokale Verknüpfung; die Einträge werden in
+  Calendar beziehungsweise Deck manuell gelöscht. Von der App erzeugte
+  Talk-Räume werden vor dem Entfernen der lokalen Referenz gelöscht.
+
+Context Chat und Projekte sind optional. Fehlen sie, muss die Kernanwendung
+uneingeschränkt weiterarbeiten. Leere nach dem Aktivieren oder Deaktivieren
+optionaler Apps gegebenenfalls den PHP-OPcache beziehungsweise starte die
+PHP-Worker neu.
+
+### Agenten- und Automations-API
+
+Unter `/ocs/v2.php/apps/proofing_gallery/api/v1/agent` steht eine
+authentifizierte OCS-API im Kontext des aktuellen Benutzers bereit. Sie bietet
+gezielte Lesezugriffe und ausdrücklich definierte, umkehrbare Änderungen.
+Änderungen benötigen eine Idempotenz-ID, Zustandsänderungen zusätzlich die
+erwartete Galerie-Revision. Absichtlich nicht verfügbar sind Passwörter
+öffentlicher Links, rohe personenbezogene Gastdaten, endgültiges Löschen,
+beliebige Dateizugriffe und Admin-Impersonation.
+
+Die OCS-Agenten-API ist ein stabiler App-Vertrag. Das Repository enthält unter
+`integrations/context_agent/proofing_gallery.py` zusätzlich ein experimentelles,
+für Upstream vorbereitetes Context-Agent-Modul. Es wird nicht automatisch
+von der PHP-App geladen, sondern über den für die jeweilige Context-Agent-
+Installation vorgesehenen Mechanismus installiert. Dateinamen und Kommentare
+sind als nicht vertrauenswürdige Benutzerinhalte zu behandeln. Ein separater
+externer MCP-Server ist bewusst nicht nötig: Das Modul verwendet denselben
+authentifizierten OCS-Vertrag und übernimmt dessen Rechte-, Revisions- und
+Idempotenzregeln.
+
 ## Hintergrundaufträge und Überwachung
 
 Starte Nextcloud-Cron mindestens alle fünf Minuten. Überwache Nextcloud-Logs für
@@ -42,10 +98,24 @@ den Abschnitt **Systemstatus** der App. Er zeigt begrenzte Betriebskennzahlen zu
 Bereinigung, Uploads, Video, Suche, Benachrichtigungen und Vorschauen, aber keine
 Zugangsdaten oder Benutzerpfade.
 
+Periodische Jobs sind im App-Manifest deklariert und werden von Nextcloud bei
+Installation oder Upgrade registriert; normale Webaufrufe registrieren sie
+nicht erneut. Projektions-Backfills starten erst nach Datenbankmigrationen,
+speichern Cursor und Fehlerzustand und setzen fehlgeschlagene Batches
+automatisch fort. Der Setup-Check meldet fehlende Jobs sowie laufende oder
+fehlgeschlagene Projektionen.
+
 Berücksichtige bei der Kapazitätsplanung Originale in Files, fortsetzbare
 Uploadteile, Vorschauen, Videoderivate, Datenbankindizes und angenommene Uploads.
 Bereinigung wirkt verzögert; halte Reserve für unterbrochene Aufträge vor. Für
 Feedback und Upload-Eingang müssen Datenbank und Appdata konsistent gesichert sein.
+
+Dieselben Prüfungen erscheinen als native Setup-Checks unter
+Administrationseinstellungen → Übersicht. Ab Nextcloud 33 stellt `/metrics`
+begrenzte OpenMetrics-Werte zu Galerie-Lebenszyklen, Warteschlangen,
+Integrationszustand, letzter Bereinigung und Ableitungsgröße bereit. Sie
+enthalten keine Nutzer-, Galerie-, Datei-, Pfad-, Link- oder Gastkennungen. Der
+Zugriff sollte mit `openmetrics_allowed_clients` eingeschränkt werden.
 
 ## Videoverarbeitung
 
@@ -108,9 +178,35 @@ Benutzerdateien ab. Die Bereinigung entfernt nur alte, leere, unreferenzierte
 Anker mit dem erzeugten Namensformat. Rekursive Galerien indexieren begrenzte
 Datei- und Sortiermetadaten, niemals Bildinhalte.
 
+Eigentümer archivierter Galerien können eine kategorisierte Vorschau prüfen,
+App-Daten exportieren und deren Löschung mit 30 Tagen Schonfrist planen. Der
+gestufte Hintergrundjob entfernt ausschließlich Datensätze und privates Appdata
+von Proofing Gallery; Originale bleiben in Nextcloud. Der Systemstatus zeigt
+fällige Löschungen, Lebenszyklusaktionen, Gastsitzungen, Medienindex-,
+Integrations- und Retention-Rückstände über indizierte Zähler.
+
+Für die optionale Übergabe an Files Retention wird unter Sicherheit ein
+vorhandener System-Tag gewählt. Eigentümer aktivieren sie je Ordnergalerie. Der
+Tag wird beim Archivieren gesetzt und beim Wiederherstellen entfernt. Proofing
+Gallery löscht den markierten Ordner niemals; teste die unabhängige
+Nextcloud-Retention-Regel zuerst mit entbehrlichen Daten.
+
 Deaktivieren bewahrt Daten und beendet App-Zugriff. Exportiere vor Deinstallation
 benötigte Auswahlen und kläre offene Uploads. Bei einem bekannt gewordenen Token
 ist das Widerrufen des öffentlichen Links die schnellste Sofortmaßnahme.
+
+## Benutzermigration
+
+Über Nextclouds Benutzermigrations-Framework werden ordnerbasierte Galerien als
+unveröffentlichte Entwürfe, Designvorlagen, Einladungsvorlagen und persönliche
+Einstellungen übertragen. Ordner werden über relative Pfade aufgelöst. Der
+Import ist additiv. Öffentliche Links, Passwörter, Gäste, Feedback, Freigaben,
+Auditdaten, Branding-Dateien, instanzgebundene Datei-IDs und aktive
+Aufbewahrungsregeln werden nicht übertragen. Sammlungen und Einträge mit
+Collection-Mitglieder werden als nutzerrelative Pfade exportiert und nach ihren
+ordnerbasierten Quellgalerien neu aufgebaut. Fehlende Quellordner oder nicht mehr
+verfügbare Collection-Mitglieder werden gemeldet und sicher übersprungen, ohne
+eine unvollständige Galerie zu veröffentlichen.
 
 ## Prüfung nach Upgrade und Wiederherstellung
 

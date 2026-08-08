@@ -2,14 +2,21 @@
 <info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	  xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
 	<id>proofing_gallery</id>
-	<name>Proofing Gallery</name>
-	<summary>Branded client galleries and collaborative photo proofing</summary>
-	<description><![CDATA[
+	<name lang="en">Proofing Gallery</name>
+	<name lang="de">Proofing Gallery – Kundengalerien</name>
+	<summary lang="en">Branded client galleries and collaborative photo proofing</summary>
+	<summary lang="de">Moderne Kundengalerien für Bildauswahl, Feedback und Freigabe</summary>
+	<description lang="en"><![CDATA[
 Publish existing Nextcloud folders as customizable client galleries.
 Collect likes, workflow states, comments, annotations, and named selections
 without copying or changing original files.
 	]]></description>
-	<version>0.7.0</version>
+	<description lang="de"><![CDATA[
+Veröffentliche vorhandene Nextcloud-Ordner als individuell gestaltbare
+Kundengalerien. Sammle Favoriten, Bearbeitungsstände, Kommentare, Anmerkungen
+und benannte Auswahlen, ohne Originaldateien zu kopieren oder zu verändern.
+	]]></description>
+	<version>0.8.0</version>
 	<licence>AGPL-3.0-or-later</licence>
 	<author>soerennb</author>
 	<namespace>ProofingGallery</namespace>
@@ -55,6 +62,33 @@ without copying or changing original files.
 			<provider>OCA\ProofingGallery\Activity\Provider</provider>
 		</providers>
 	</activity>
+	<openmetrics>
+		<exporter>OCA\ProofingGallery\OpenMetrics\GalleryTotalMetric</exporter>
+		<exporter>OCA\ProofingGallery\OpenMetrics\BacklogMetric</exporter>
+		<exporter>OCA\ProofingGallery\OpenMetrics\IntegrationOutboxMetric</exporter>
+		<exporter>OCA\ProofingGallery\OpenMetrics\CleanupSuccessMetric</exporter>
+		<exporter>OCA\ProofingGallery\OpenMetrics\DerivativeBytesMetric</exporter>
+	</openmetrics>
+	<background-jobs>
+		<job>OCA\ProofingGallery\BackgroundJob\PurgeGuestsJob</job>
+		<job>OCA\ProofingGallery\BackgroundJob\CleanupGalleryDataJob</job>
+		<job>OCA\ProofingGallery\BackgroundJob\SendNotificationDigestsJob</job>
+		<job>OCA\ProofingGallery\BackgroundJob\RevalidateCustomDomainsJob</job>
+		<job>OCA\ProofingGallery\BackgroundJob\DispatchIntegrationOutboxJob</job>
+		<job>OCA\ProofingGallery\BackgroundJob\ProcessPurgeRequestsJob</job>
+	</background-jobs>
+	<repair-steps>
+		<install>
+			<step>OCA\ProofingGallery\RepairStep\InitFilesMetadata</step>
+			<step>OCA\ProofingGallery\RepairStep\NormalizeBackgroundJobs</step>
+			<step>OCA\ProofingGallery\RepairStep\ScheduleProjectionBackfills</step>
+		</install>
+		<post-migration>
+			<step>OCA\ProofingGallery\RepairStep\InitFilesMetadata</step>
+			<step>OCA\ProofingGallery\RepairStep\NormalizeBackgroundJobs</step>
+			<step>OCA\ProofingGallery\RepairStep\ScheduleProjectionBackfills</step>
+		</post-migration>
+	</repair-steps>
 	<settings>
 		<admin-section>OCA\ProofingGallery\Settings\AdminSection</admin-section>
 		<admin>OCA\ProofingGallery\Settings\Admin</admin>

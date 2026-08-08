@@ -8,6 +8,8 @@ use InvalidArgumentException;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\GalleryMapper;
 use OCA\ProofingGallery\Db\PresetMapper;
+use OCA\ProofingGallery\Db\MediaSummaryRepository;
+use OCA\ProofingGallery\Db\CollectionRepository;
 use OCA\ProofingGallery\Domain\GalleryStatus;
 use OCA\ProofingGallery\Domain\GalleryPurpose;
 use OCA\ProofingGallery\Dto\GallerySettings;
@@ -30,6 +32,12 @@ final class GalleryService {
 		private PresetMapper $presets,
 		private NotificationService $notifications,
 		private IJobList $jobs,
+		private LifecycleScheduleService $lifecycleSchedule,
+		private GalleryListProjectionService $listProjection,
+		private GalleryCursorCodec $galleryCursors,
+		private MediaSummaryRepository $summaryRows,
+		private CollectionRepository $collectionRows,
+		private RetentionHandoffService $retention,
 	) {
 	}
 
@@ -102,6 +110,8 @@ final class GalleryService {
 		$gallery->setSettings(json_encode($gallerySettings, JSON_THROW_ON_ERROR));
 		$gallery->setCreatedAt($now);
 		$gallery->setUpdatedAt($now);
+		$this->lifecycleSchedule->project($gallery, $now);
+		$this->listProjection->project($gallery);
 
 		try {
 			$gallery = $this->mapper->insert($gallery);
@@ -258,6 +268,77 @@ final class GalleryService {
 		];
 	}
 
+	/** @return array{items: list<array<string, mixed>>, total: int, nextCursor: ?string} */
+	public function listV2(
+		string $userUid,
+		int $limit,
+		?string $cursor,
+		bool $archived,
+		string $search,
+		?string $sourceType,
+		?string $status,
+		?string $mode,
+		?string $purpose,
+		bool $ownedOnly,
+		string $sort,
+	): array {
+		$limit = max(1, min(100, $limit));
+		$search = mb_substr(trim($search), 0, 120);
+		if ($sourceType !== null && !in_array($sourceType, ['folder', 'collection'], true)) throw new InvalidArgumentException('Unknown gallery source type');
+		if ($status !== null && !in_array($status, ['draft', 'published', 'archived'], true)) throw new InvalidArgumentException('Unknown gallery status');
+		if ($mode !== null && !in_array($mode, ['presentation', 'collaboration'], true)) throw new InvalidArgumentException('Unknown gallery mode');
+		if ($purpose !== null && GalleryPurpose::tryFrom($purpose) === null) throw new InvalidArgumentException('Unknown gallery purpose');
+		if (!in_array($sort, ['updated', 'created', 'title'], true)) throw new InvalidArgumentException('Unknown gallery sort');
+		if ($archived && $status !== null && $status !== 'archived') throw new InvalidArgumentException('Status does not match archive view');
+		$scope = compact('archived', 'search', 'sourceType', 'status', 'mode', 'purpose', 'ownedOnly');
+		$decoded = $this->galleryCursors->decode($cursor, $sort, $scope);
+		$page = $this->access->page($userUid, $archived, $search, $sourceType, $status, $mode, $purpose, $ownedOnly, $sort, $decoded, $limit + 1);
+		$hasMore = count($page['items']) > $limit;
+		$galleries = array_slice($page['items'], 0, $limit);
+		$ids = array_map(static fn (Gallery $gallery): int => (int)$gallery->getId(), $galleries);
+		$summaries = $this->summaryRows->findMany($ids);
+		$collectionIds = [];
+		foreach ($galleries as $gallery) if ($gallery->getSourceType() === 'collection') $collectionIds[] = (int)$gallery->getId();
+		$collectionCounts = $this->collectionRows->counts($collectionIds);
+		$items = array_map(function (Gallery $gallery) use ($userUid, $page, $summaries, $collectionCounts): array {
+			$id = (int)$gallery->getId();
+			$role = $gallery->getOwnerUid() === $userUid ? 'owner' : ($page['roles'][$id] ?? 'viewer');
+			$summary = $summaries[$id] ?? null;
+			return [
+				'id' => $id,
+				'title' => $gallery->getTitle(),
+				'status' => $gallery->getStatus(),
+				'mode' => $gallery->getMode(),
+				'sourceType' => $gallery->getSourceType(),
+				'purpose' => $gallery->getPurpose(),
+				'workflowState' => $gallery->getWorkflowState(),
+				'createdAt' => $gallery->getCreatedAt(),
+				'updatedAt' => $gallery->getUpdatedAt(),
+				'heroFileId' => GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR))->presentation->heroFileId,
+				'lifecycleNextAt' => $gallery->getLifecycleNextAt(),
+				'mediaSummary' => [
+					'total' => $gallery->getSourceType() === 'collection' ? ($collectionCounts[$id] ?? 0) : (int)($summary['media_total'] ?? 0),
+					'coverFileId' => isset($summary['cover_file_id']) ? (int)$summary['cover_file_id'] : null,
+					'coverMimeType' => $summary['cover_mime_type'] ?? null,
+				],
+				'permissions' => [
+					'role' => $role,
+					'canEdit' => $role === 'owner' || $role === 'editor',
+					'canManageAccess' => $role === 'owner',
+					'canArchive' => $role === 'owner',
+				],
+			];
+		}, $galleries);
+		$last = $galleries === [] ? null : $galleries[array_key_last($galleries)];
+		$nextCursor = $hasMore && $last !== null ? $this->galleryCursors->encode(
+			$sort,
+			$sort === 'title' ? $last->getTitleSort() : ($sort === 'created' ? $last->getCreatedAt() : $last->getUpdatedAt()),
+			(int)$last->getId(),
+			$scope,
+		) : null;
+		return ['items' => $items, 'total' => $page['total'], 'nextCursor' => $nextCursor];
+	}
+
 	public function get(string $ownerUid, int $id): Gallery {
 		return $this->access->owner($ownerUid, $id);
 	}
@@ -278,6 +359,7 @@ final class GalleryService {
 				'mediaSummary' => $this->collections->summary($gallery),
 				'permissions' => $permissions,
 				'effectiveCapabilities' => $effectiveCapabilities,
+				'retention' => $this->retention->status($gallery),
 			];
 		}
 		try {
@@ -314,6 +396,7 @@ final class GalleryService {
 			'mediaSummary' => $mediaSummary,
 			'permissions' => $permissions,
 			'effectiveCapabilities' => $effectiveCapabilities,
+			'retention' => $this->retention->status($gallery),
 		];
 	}
 
@@ -343,6 +426,8 @@ final class GalleryService {
 			$gallery->setSettings(json_encode($merged, JSON_THROW_ON_ERROR));
 		}
 		$gallery->setUpdatedAt($this->clock->getTime());
+		$this->lifecycleSchedule->project($gallery, $this->clock->getTime());
+		$this->listProjection->project($gallery);
 
 		$updated = $this->mapper->updateDocument($gallery, $revision);
 		$this->shares->synchronizePrimaryNavigation($updated);
@@ -351,7 +436,9 @@ final class GalleryService {
 
 	public function archive(string $ownerUid, int $id): Gallery {
 		$gallery = $this->get($ownerUid, $id);
-		return $this->shares->archive($gallery);
+		$archived = $this->shares->archive($gallery);
+		$this->retention->assignOnArchive($archived, $ownerUid);
+		return $archived;
 	}
 
 	public function restore(string $ownerUid, int $id): Gallery {
@@ -359,6 +446,7 @@ final class GalleryService {
 		if ($gallery->getStatus() !== GalleryStatus::Archived->value) {
 			throw new InvalidArgumentException('Only archived galleries can be restored');
 		}
+		$this->retention->remove($gallery, $ownerUid);
 		return $this->shares->restore($gallery);
 	}
 
@@ -369,6 +457,7 @@ final class GalleryService {
 		$gallery->setCompletedAt($now);
 		$gallery->setUpdatedAt($now);
 		$gallery->setRevision($gallery->getRevision() + 1);
+		$this->lifecycleSchedule->project($gallery, $now);
 		return $this->mapper->update($gallery);
 	}
 

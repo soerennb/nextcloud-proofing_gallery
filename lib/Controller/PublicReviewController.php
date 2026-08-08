@@ -1,0 +1,60 @@
+<?php
+
+declare(strict_types=1);
+
+namespace OCA\ProofingGallery\Controller;
+
+use OCA\ProofingGallery\Exception\ReviewConflictException;
+use OCA\ProofingGallery\Service\GuestService;
+use OCA\ProofingGallery\Service\PublicShareContextResolver;
+use OCA\ProofingGallery\Service\ReviewWorkflowService;
+use OCP\AppFramework\Db\DoesNotExistException;
+use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\AnonRateLimit;
+use OCP\AppFramework\Http\Attribute\FrontpageRoute;
+use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
+use OCP\AppFramework\Http\Attribute\PublicPage;
+use OCP\AppFramework\Http\JSONResponse;
+use OCP\IRequest;
+use OCP\ISession;
+
+final class PublicReviewController extends ResolvedPublicShareController {
+	public function __construct(
+		IRequest $request,
+		ISession $session,
+		PublicShareContextResolver $contextResolver,
+		private ReviewWorkflowService $reviews,
+		private GuestService $guests,
+	) {
+		parent::__construct($request, $session, $contextResolver);
+	}
+
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/review')]
+	public function state(): JSONResponse {
+		return new JSONResponse($this->reviews->publicState($this->publicContext()->link));
+	}
+
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[AnonRateLimit(limit: 30, period: 3600)]
+	#[FrontpageRoute(verb: 'POST', url: '/public/{token}/review/submit')]
+	public function submit(): JSONResponse {
+		try {
+			$context = $this->publicContext();
+			$guest = $this->guests->authenticate(
+				$context->gallery,
+				$this->request->getCookie(GuestService::COOKIE_NAME),
+				$this->request->getHeader('X-Proofing-Nonce'),
+			);
+			return new JSONResponse($this->reviews->submit($context->gallery, $context->link, $guest));
+		} catch (DoesNotExistException) {
+			return new JSONResponse(['message' => 'Guest session required'], Http::STATUS_UNAUTHORIZED);
+		} catch (ReviewConflictException $exception) {
+			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_CONFLICT);
+		} catch (\InvalidArgumentException $exception) {
+			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+	}
+}

@@ -4,11 +4,15 @@ import { generateUrl } from '@nextcloud/router'
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { calculateMediaLayout } from './domain/mediaGridLayout.ts'
+import { mergeCollaborationState } from './domain/collaboration.ts'
 import type { CollaborationState, GuestIdentity, MediaItem, PublicGallery, PublicGalleryPage } from './publicTypes.ts'
-import PublicGalleryHeader from './components/PublicGalleryHeader.vue'
 
 const PublicLightbox = defineAsyncComponent(() => import('./components/PublicLightbox.vue'))
-const PublicUploadAction = defineAsyncComponent(() => import('./components/PublicUploadAction.vue'))
+const PublicGalleryHeader = defineAsyncComponent(() => import('./components/PublicGalleryHeader.vue'))
+const PublicCompareLightTable = defineAsyncComponent(() => import('./components/PublicCompareLightTable.vue'))
+const PublicStoryGallery = defineAsyncComponent(() => import('./components/PublicStoryGallery.vue'))
+const PublicGuestIdentity = defineAsyncComponent(() => import('./components/PublicGuestIdentity.vue'))
+const PublicReviewBar = defineAsyncComponent(() => import('./components/PublicReviewBar.vue'))
 const ProgressiveImage = defineAsyncComponent(() => import('./components/ProgressiveImage.vue'))
 const virtualGridResolved = ref(false)
 const VirtualMediaGrid = defineAsyncComponent(() => import('./components/VirtualMediaGrid.vue').then(module => {
@@ -48,18 +52,21 @@ const headerLogoUrl = computed(() => settings.value.presentation.logoFileId || s
 const activeIndex = ref<number | null>(null)
 const activeOpener = ref<HTMLElement | null>(null)
 const selectedIds = ref<number[]>([])
+const compareIds = ref<number[]>(loadCompareIds())
+const compareOpen = ref(false)
+const compareItems = computed(() => compareIds.value.map(id => mediaItems.value.find(item => item.id === id)).filter((item): item is MediaItem => Boolean(item)))
 let collaborationTimer: number | undefined
 const guest = ref<GuestIdentity | null>(null)
-const guestName = ref('')
-const guestEmail = ref('')
+const [guestName, guestEmail] = [ref(''), ref('')]
 const joining = ref(false)
 const collaboration = ref<CollaborationState | null>(null)
+const collaborationHydratedIds = new Set<number>()
 const collaborationError = ref('')
-const selectionName = ref('')
-const selectionMessage = ref('')
+const [selectionName, selectionMessage] = [ref(''), ref('')]
 const savingSelection = ref(false)
 const guestDialogOpen = ref(false)
 const pendingMutation = ref<{ path: string; method: 'POST' | 'PUT' | 'DELETE'; body?: unknown } | null>(null)
+const review = ref(props.gallery.review ?? { enabled: false, dueDate: null, current: null })
 const savedView = loadSavedView()
 const search = ref(savedView?.search ?? '')
 const sortBy = ref(savedView?.sortBy ?? settings.value.navigation?.sortBy ?? 'name')
@@ -68,10 +75,10 @@ const groupBy = ref(savedView?.groupBy === 'folder' && !settings.value.navigatio
 	? settings.value.navigation?.groupBy ?? 'none'
 	: savedView?.groupBy ?? settings.value.navigation?.groupBy ?? 'none')
 const savedLayout = localStorage.getItem(`proofing-gallery-layout:${props.gallery.token}`)
-const layout = ref<'grid' | 'masonry' | 'list'>(
-	savedView?.layout === 'grid' || savedView?.layout === 'masonry' || savedView?.layout === 'list'
+const layout = ref<'grid' | 'masonry' | 'list' | 'story'>(
+	savedView?.layout === 'grid' || savedView?.layout === 'masonry' || savedView?.layout === 'list' || savedView?.layout === 'story'
 		? savedView.layout
-		: savedLayout === 'grid' || savedLayout === 'masonry' || savedLayout === 'list'
+		: savedLayout === 'grid' || savedLayout === 'masonry' || savedLayout === 'list' || savedLayout === 'story'
 			? savedLayout
 			: settings.value.presentation?.layout ?? settings.value.appearance.layout ?? 'grid',
 )
@@ -83,6 +90,8 @@ const viewportWidth = ref(window.innerWidth)
 const nonce = ref(sessionStorage.getItem(`proofing-gallery-nonce:${props.gallery.token}`) ?? '')
 let searchTimer: number | undefined
 let scrollTimer: number | undefined
+const continuation = ref(loadContinuation())
+const continueVisible = ref(Boolean(continuation.value && continuation.value.scrollY > 240))
 let pageController: AbortController | undefined
 const activeFilterCount = computed(() => Number(groupBy.value !== 'none') + Number(layout.value !== 'grid'))
 const tileGap = computed(() => settings.value.presentation?.tileGap === 'tight' ? 2 : settings.value.presentation?.tileGap === 'wide' ? 16 : 8)
@@ -95,7 +104,7 @@ const gridPlaceholderStyle = computed(() => {
 	const grid = calculateMediaLayout({
 		containerWidth: available,
 		aspectRatios: items.value.map(itemRatio),
-		mode: layout.value,
+		mode: layout.value === 'story' ? 'grid' : layout.value,
 		minItemWidth: tileMinWidth.value,
 		gap: tileGap.value,
 		targetRowHeight: targetRowHeight.value,
@@ -125,7 +134,6 @@ onMounted(() => {
 	mobileViewportQuery.addEventListener('change', onMobileViewportChange)
 	window.addEventListener('resize', onViewportResize, { passive: true })
 	window.addEventListener('scroll', rememberScroll, { passive: true })
-	restoreScroll()
 })
 onBeforeUnmount(() => {
 	document.removeEventListener('visibilitychange', onVisibilityChange)
@@ -148,7 +156,7 @@ function onViewportResize() {
 }
 
 function loadSavedView(): {
-	layout: 'grid' | 'masonry' | 'list'
+	layout: 'grid' | 'masonry' | 'list' | 'story'
 	sortBy: 'name' | 'modified' | 'size'
 	sortDirection: 'asc' | 'desc'
 	groupBy: 'none' | 'type' | 'folder'
@@ -157,12 +165,12 @@ function loadSavedView(): {
 	try {
 		const value = JSON.parse(localStorage.getItem(`proofing-gallery-view:${props.gallery.token}`) ?? 'null') as Record<string, unknown> | null
 		if (!value
-			|| !['grid', 'masonry', 'list'].includes(String(value.layout))
+			|| !['grid', 'masonry', 'list', 'story'].includes(String(value.layout))
 			|| !['name', 'modified', 'size'].includes(String(value.sortBy))
 			|| !['asc', 'desc'].includes(String(value.sortDirection))
 			|| !['none', 'type', 'folder'].includes(String(value.groupBy))) return null
 		return {
-			layout: value.layout as 'grid' | 'masonry' | 'list',
+			layout: value.layout as 'grid' | 'masonry' | 'list' | 'story',
 			sortBy: value.sortBy as 'name' | 'modified' | 'size',
 			sortDirection: value.sortDirection as 'asc' | 'desc',
 			groupBy: value.groupBy as 'none' | 'type' | 'folder',
@@ -204,7 +212,7 @@ async function loadPage(offset: number) {
 		}
 		const payload = await response.json() as PublicGalleryPage
 		applyGalleryPage(payload, offset > 0)
-		if (offset === 0) await nextTick(restoreScroll)
+		if (offset === 0) await nextTick()
 	} catch (exception) {
 		if (exception instanceof DOMException && exception.name === 'AbortError') return
 		error.value = true
@@ -228,18 +236,49 @@ function applyGalleryPage(payload: PublicGalleryPage, append: boolean) {
 	scope.value = payload.scope
 }
 
-function scrollStorageKey(): string {
-	return `proofing-gallery-scroll:${props.gallery.token}:${currentPath.value}`
-}
-
 function rememberScroll() {
 	window.clearTimeout(scrollTimer)
-	scrollTimer = window.setTimeout(() => sessionStorage.setItem(scrollStorageKey(), String(window.scrollY)), 80)
+	scrollTimer = window.setTimeout(() => {
+		const value = { scrollY: window.scrollY, fileId: activeIndex.value === null ? continuation.value?.fileId ?? null : mediaItems.value[activeIndex.value]?.id ?? null, path: currentPath.value }
+		continuation.value = value
+		localStorage.setItem(continuationStorageKey(), JSON.stringify(value))
+	}, 80)
 }
 
-function restoreScroll() {
-	const saved = Number(sessionStorage.getItem(scrollStorageKey()) ?? 0)
-	if (Number.isFinite(saved) && saved > 0) requestAnimationFrame(() => window.scrollTo({ top: saved }))
+function continuationStorageKey(): string { return `proofing-gallery-continuation:${props.gallery.token}` }
+function loadContinuation(): { scrollY: number; fileId: number | null; path: string } | null {
+	try {
+		const saved = JSON.parse(localStorage.getItem(`proofing-gallery-continuation:${props.gallery.token}`) ?? 'null') as Record<string, unknown> | null
+		return saved && Number.isFinite(saved.scrollY) ? { scrollY: Number(saved.scrollY), fileId: Number.isInteger(saved.fileId) ? Number(saved.fileId) : null, path: typeof saved.path === 'string' ? saved.path : '' } : null
+	} catch { return null }
+}
+async function continueViewing() {
+	const saved = continuation.value
+	if (!saved) return
+	continueVisible.value = false
+	if (saved.path !== currentPath.value) {
+		currentPath.value = saved.path
+		await loadPage(0)
+		await nextTick()
+	}
+	requestAnimationFrame(() => window.scrollTo({ top: saved.scrollY, behavior: 'smooth' }))
+	if (saved.fileId) {
+		const index = mediaItems.value.findIndex(item => item.id === saved.fileId)
+		if (index >= 0) {
+			await nextTick()
+			activeIndex.value = index
+		}
+	}
+}
+async function shareGallery() {
+	const data = { title: title.value, text: title.value, url: window.location.href }
+	try {
+		if (navigator.share) await navigator.share(data)
+		else await navigator.clipboard.writeText(data.url)
+	} catch (error) {
+		if (error instanceof DOMException && error.name === 'AbortError') return
+		await navigator.clipboard?.writeText(data.url)
+	}
 }
 
 async function initializeCollaboration() {
@@ -310,14 +349,22 @@ async function joinCollaboration() {
 async function loadCollaboration() {
 	if (settings.value.mode !== 'collaboration') return
 	try {
-		const cursor = collaboration.value?.cursor ?? 0
-		const response = await fetch(publicEndpoint(`collaboration?cursor=${cursor}`), {
-			credentials: 'same-origin',
+		const visibleIds = mediaItems.value.slice(0, 200).map(item => item.id)
+		const unhydratedIds = visibleIds.filter(id => !collaborationHydratedIds.has(id))
+		const hydration = unhydratedIds.length > 0
+		const query = new URLSearchParams({
+			cursor: String(hydration ? 0 : collaboration.value?.cursor ?? 0),
+			fileIds: (hydration ? unhydratedIds : visibleIds).join(','),
+		})
+		const response = await fetch(publicEndpoint(`collaboration?${query}`), {
 			headers: { Accept: 'application/json' },
 		})
-		if (!response.ok) throw new Error('Collaboration request failed')
+		if (!response.ok) throw response
 		const payload = await response.json() as CollaborationState | { unchanged: true; cursor: number }
-		if (!('unchanged' in payload)) collaboration.value = payload
+		if (!('unchanged' in payload)) {
+			collaboration.value = collaboration.value === null ? payload : mergeCollaborationState(collaboration.value, payload, hydration ? unhydratedIds : [])
+			for (const id of unhydratedIds) collaborationHydratedIds.add(id)
+		}
 		collaborationError.value = ''
 	} catch {
 		collaborationError.value = t('proofing_gallery', 'Review updates are temporarily unavailable.')
@@ -467,6 +514,25 @@ function toggleSelection(item: MediaItem) {
 		: [...selectedIds.value, item.id]
 }
 
+function loadCompareIds(): number[] {
+	try {
+		const stored = JSON.parse(localStorage.getItem(`proofing-gallery-compare:${props.gallery.token}`) ?? '[]')
+		return Array.isArray(stored) ? stored.filter(Number.isInteger).slice(0, 4) : []
+	} catch { return [] }
+}
+
+function toggleCompare(item: MediaItem) {
+	compareIds.value = compareIds.value.includes(item.id)
+		? compareIds.value.filter(id => id !== item.id)
+		: compareIds.value.length < 4 ? [...compareIds.value, item.id] : compareIds.value
+	localStorage.setItem(`proofing-gallery-compare:${props.gallery.token}`, JSON.stringify(compareIds.value))
+}
+
+function clearCompare() {
+	compareIds.value = []
+	localStorage.removeItem(`proofing-gallery-compare:${props.gallery.token}`)
+}
+
 function publicEndpoint(path: string): string {
 	return generateUrl(`/apps/proofing_gallery/public/${props.gallery.token}/${path}`)
 }
@@ -476,6 +542,8 @@ function openItem(item: MediaItem, event?: MouseEvent) {
 	if (!item.folder) {
 		activeOpener.value = event?.currentTarget instanceof HTMLElement ? event.currentTarget : null
 		activeIndex.value = mediaItems.value.findIndex(media => media.id === item.id)
+		continuation.value = { scrollY: window.scrollY, fileId: item.id, path: currentPath.value }
+		localStorage.setItem(continuationStorageKey(), JSON.stringify(continuation.value))
 		return
 	}
 	currentPath.value = [currentPath.value, item.name].filter(Boolean).join('/')
@@ -529,23 +597,25 @@ function upOneLevel() {
 			:settings="settings"
 			:logo-url="headerLogoUrl"
 			:hero-url="headerHeroUrl" />
+		<div v-if="continueVisible" class="continuation-banner" role="status">
+			<span>{{ t('proofing_gallery', 'Continue where you left off?') }}</span>
+			<button type="button" @click="continueViewing">
+				{{ t('proofing_gallery', 'Continue viewing') }}
+			</button>
+			<button type="button" :aria-label="t('proofing_gallery', 'Dismiss')" @click="continueVisible = false">
+				×
+			</button>
+		</div>
 
 		<section class="public-gallery__content" :aria-busy="loading">
-			<div v-if="settings.mode === 'collaboration' && guest" class="guest-identity">
-				<div>
-					<span>{{ t('proofing_gallery', 'Reviewing as {name}', { name: guest.displayName }) }}</span>
-					<small>
-						{{ collaboration?.policy.visibility === 'private'
-							? t('proofing_gallery', 'Your feedback is private')
-							: t('proofing_gallery', 'Feedback is shared with reviewers') }}
-					</small>
-				</div>
-				<PublicUploadAction
-					v-if="settings.allowGuestUploads"
-					:token="gallery.token"
-					:nonce="nonce"
-					@error="collaborationError = $event" />
-			</div>
+			<PublicGuestIdentity v-if="settings.mode === 'collaboration' && guest"
+				:guest="guest"
+				:token="gallery.token"
+				:nonce="nonce"
+				:private-feedback="collaboration?.policy.visibility === 'private'"
+				:allow-uploads="settings.allowGuestUploads"
+				@deleted="guest = null; nonce = ''; collaboration = null"
+				@error="collaborationError = $event" />
 			<p v-if="collaborationError" class="collaboration-error" role="status">
 				{{ collaborationError }}
 			</p>
@@ -588,6 +658,9 @@ function upOneLevel() {
 					aria-controls="proofing-gallery-view-tools"
 					@click="mobileToolsOpen = !mobileToolsOpen">
 					{{ t('proofing_gallery', 'Filter & view') }}<span v-if="activeFilterCount">{{ activeFilterCount }}</span>
+				</button>
+				<button class="gallery-toolbar__share" type="button" @click="shareGallery">
+					{{ t('proofing_gallery', 'Share') }}
 				</button>
 				<div v-if="mobileToolsOpen" class="gallery-toolbar__backdrop" aria-hidden="true" />
 				<div id="proofing-gallery-view-tools"
@@ -638,6 +711,7 @@ function upOneLevel() {
 							<option value="grid">{{ t('proofing_gallery', 'Grid') }}</option>
 							<option value="masonry">{{ t('proofing_gallery', 'Masonry') }}</option>
 							<option value="list">{{ t('proofing_gallery', 'List') }}</option>
+							<option v-if="settings.presentation.story.sections.length" value="story">{{ t('proofing_gallery', 'Story') }}</option>
 						</select>
 					</label>
 					<button v-if="settings.mode === 'collaboration' && !guest" type="button" @click="guestDialogOpen = true; mobileToolsOpen = false">
@@ -656,7 +730,7 @@ function upOneLevel() {
 					{{ groupBy === 'folder' ? t('proofing_gallery', 'Folder') : t('proofing_gallery', 'File type') }} ×
 				</button>
 				<button v-if="layout !== 'grid'" type="button" @click="layout = 'grid'">
-					{{ layout === 'masonry' ? t('proofing_gallery', 'Masonry') : t('proofing_gallery', 'List') }} ×
+					{{ layout === 'masonry' ? t('proofing_gallery', 'Masonry') : layout === 'story' ? t('proofing_gallery', 'Story') : t('proofing_gallery', 'List') }} ×
 				</button>
 			</div>
 			<div v-if="!mobileViewport || currentPath" class="public-gallery__summary">
@@ -720,6 +794,23 @@ function upOneLevel() {
 					</button>
 				</div>
 			</Transition>
+			<Transition name="proof-rail">
+				<div v-if="compareItems.length" class="compare-rail">
+					<div>
+						<img v-for="item in compareItems"
+							:key="item.id"
+							:src="previewUrl(item, 80, 64, 'fit')"
+							alt="">
+					</div>
+					<span>{{ n('proofing_gallery', '%n photo to compare', '%n photos to compare', compareItems.length) }}</span>
+					<button type="button" :disabled="compareItems.length < 2" @click="compareOpen = true">
+						{{ t('proofing_gallery', 'Open light table') }}
+					</button>
+					<button type="button" @click="clearCompare">
+						{{ t('proofing_gallery', 'Clear') }}
+					</button>
+				</div>
+			</Transition>
 
 			<div v-if="loading" class="public-gallery__skeleton" aria-label="Loading gallery">
 				<span v-for="index in 12" :key="index" />
@@ -736,6 +827,15 @@ function upOneLevel() {
 				<h2>{{ t('proofing_gallery', 'This gallery is empty') }}</h2>
 				<p>{{ t('proofing_gallery', 'New photographs will appear here automatically.') }}</p>
 			</div>
+
+			<PublicStoryGallery
+				v-else-if="layout === 'story'"
+				:sections="settings.presentation.story.sections"
+				:show-all-media="settings.presentation.story.showAllMedia"
+				:items="mediaItems"
+				:preview-url="previewUrl"
+				@open="openItem"
+				@compare="toggleCompare" />
 
 			<div v-else class="media-grid-shell" :style="gridPlaceholderStyle">
 				<VirtualMediaGrid
@@ -787,6 +887,14 @@ function upOneLevel() {
 									♥ {{ collaboration.likes[item.id].count }}
 								</span>
 							</button>
+							<button v-if="!item.folder"
+								class="media-tile__compare"
+								type="button"
+								:aria-pressed="compareIds.includes(item.id)"
+								:aria-label="t('proofing_gallery', 'Add {name} to compare', { name: item.name })"
+								@click="toggleCompare(item)">
+								{{ compareIds.includes(item.id) ? 'A/B ✓' : 'A/B' }}
+							</button>
 							<button
 								v-if="(canDownloadSelection || (settings.mode === 'collaboration' && settings.review?.selections !== false)) && !item.folder"
 								class="media-tile__select"
@@ -807,6 +915,16 @@ function upOneLevel() {
 				{{ t('proofing_gallery', 'Loading…') }}
 			</div>
 		</section>
+
+		<PublicReviewBar v-if="review.enabled"
+			:review="review"
+			:guest="Boolean(guest)"
+			:nonce="nonce"
+			:token="gallery.token"
+			:dialog-open="guestDialogOpen"
+			@identify="guestDialogOpen = true"
+			@updated="review = $event"
+			@error="collaborationError = $event" />
 
 		<div class="public-gallery__footer">
 			<span>{{ title }}</span>
@@ -865,7 +983,14 @@ function upOneLevel() {
 			:stream-url="streamUrl"
 			:download-url="downloadUrl"
 			:selection-export-url="selectionExportUrl"
+			:compare-ids="compareIds"
+			@toggle-compare="toggleCompare"
 			@close="activeIndex = null; activeOpener = null" />
+		<PublicCompareLightTable v-if="compareOpen"
+			:items="compareItems"
+			:preview-url="previewUrl"
+			@remove="itemId => { const item = mediaItems.find(value => value.id === itemId); if (item) toggleCompare(item); if (compareItems.length < 2) compareOpen = false }"
+			@close="compareOpen = false" />
 	</main>
 </template>
 

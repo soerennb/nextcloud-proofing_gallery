@@ -37,12 +37,14 @@ final class GallerySettingsTest extends TestCase {
 		self::assertTrue($settings['appearance']['showMediaCount']);
 		self::assertSame('medium', $settings['appearance']['titleSize']);
 		self::assertSame('auto', $settings['publicLocale']);
-		self::assertSame(7, $settings['schemaVersion']);
+		self::assertSame(9, $settings['schemaVersion']);
+		self::assertSame(['sections' => [], 'showAllMedia' => true], $settings['presentation']['story']);
 		self::assertSame('expressive', $settings['presentation']['motionPreset']);
 		self::assertSame('auto', $settings['presentation']['lightboxFilmstripPlacement']);
 		self::assertSame('autoHide', $settings['presentation']['lightboxChromeBehavior']);
 		self::assertNull($settings['presentation']['instanceLogoAssetId']);
 		self::assertFalse($settings['lifecycle']['enabled']);
+		self::assertFalse($settings['lifecycle']['retentionHandoff']);
 		self::assertSame([], $settings['metadata']['publicFields']);
 		self::assertSame('dark', $settings['presentation']['theme']);
 		self::assertSame('none', $settings['delivery']['downloadScope']);
@@ -178,5 +180,31 @@ final class GallerySettingsTest extends TestCase {
 	public function testRejectsUnknownPublicMetadataFields(): void {
 		$this->expectException(InvalidArgumentException::class);
 		GallerySettings::fromArray(['metadata' => ['publicFields' => ['gps']]]);
+	}
+
+	public function testAcceptsBoundedEditorialStory(): void {
+		$settings = GallerySettings::fromArray(['presentation' => [
+			'layout' => 'story',
+			'story' => ['showAllMedia' => false, 'sections' => [[
+				'id' => 'arrival', 'title' => 'Arrival', 'body' => 'A quiet beginning.', 'style' => 'split', 'mediaIds' => [42, 43, 42],
+			]]],
+		]])->jsonSerialize();
+
+		self::assertSame('story', $settings['presentation']['layout']);
+		self::assertFalse($settings['presentation']['story']['showAllMedia']);
+		self::assertSame([42, 43], $settings['presentation']['story']['sections'][0]['mediaIds']);
+	}
+
+	public function testRejectsDuplicateStorySectionIds(): void {
+		$this->expectException(InvalidArgumentException::class);
+		$section = ['id' => 'same', 'title' => '', 'body' => '', 'style' => 'full', 'mediaIds' => []];
+		GallerySettings::fromArray(['presentation' => ['story' => ['sections' => [$section, $section]]]]);
+	}
+
+	public function testRejectsOversizedStorySection(): void {
+		$this->expectException(InvalidArgumentException::class);
+		GallerySettings::fromArray(['presentation' => ['story' => ['sections' => [[
+			'id' => 'too_many', 'title' => '', 'body' => '', 'style' => 'sequence', 'mediaIds' => range(1, 13),
+		]]]]]);
 	}
 }

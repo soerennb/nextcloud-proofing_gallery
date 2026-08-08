@@ -45,6 +45,8 @@ final class PolicyService {
 		'maxIndexedMedia' => ['default' => 25000, 'min' => 100, 'max' => 100000],
 		'maxPublicLinks' => ['default' => 10, 'min' => 1, 'max' => 100],
 		'shareAuditRetentionDays' => ['default' => 90, 'min' => 7, 'max' => 3650],
+		'notificationQueueRetentionDays' => ['default' => 30, 'min' => 1, 'max' => 3650],
+		'deadLetterRetentionDays' => ['default' => 30, 'min' => 1, 'max' => 3650],
 		'maxVideoInputBytes' => ['default' => 10737418240, 'min' => 1048576, 'max' => 53687091200],
 		'maxVideoDurationSeconds' => ['default' => 7200, 'min' => 10, 'max' => 43200],
 		'videoMaxHeight' => ['default' => 1080, 'min' => 360, 'max' => 2160],
@@ -121,6 +123,7 @@ final class PolicyService {
 			'semantic' => ['provider' => 'disabled', 'endpoint' => '', 'model' => 'metadata-v1', 'scope' => 'images', 'externalTransfer' => false],
 			'livePush' => ['enabled' => false],
 			'customDomains' => ['enabled' => false],
+			'retention' => ['enabled' => false, 'systemTagId' => ''],
 		];
 		$raw = $this->config->getAppValue(Application::APP_ID, self::SETTINGS_KEY, '');
 		if ($raw === '') return $defaults;
@@ -137,6 +140,7 @@ final class PolicyService {
 				'semantic' => array_replace($defaults['semantic'], is_array($stored['semantic'] ?? null) ? $stored['semantic'] : []),
 				'livePush' => ['enabled' => (bool)($stored['livePush']['enabled'] ?? false)],
 				'customDomains' => array_replace($defaults['customDomains'], is_array($stored['customDomains'] ?? null) ? $stored['customDomains'] : []),
+				'retention' => array_replace($defaults['retention'], is_array($stored['retention'] ?? null) ? $stored['retention'] : []),
 			];
 		} catch (\Throwable) {
 			return $defaults;
@@ -148,7 +152,7 @@ final class PolicyService {
 	 * @return array<string, mixed>
 	 */
 	public function saveInstanceSettings(array $patch): array {
-		$allowedSections = ['access', 'features', 'workflow', 'branding', 'media', 'semantic', 'livePush', 'customDomains'];
+		$allowedSections = ['access', 'features', 'workflow', 'branding', 'media', 'semantic', 'livePush', 'customDomains', 'retention'];
 		$unknownSections = array_diff(array_keys($patch), $allowedSections);
 		if ($unknownSections !== []) throw new \InvalidArgumentException('Unknown instance setting: ' . reset($unknownSections));
 		$current = $this->instanceSettings();
@@ -207,6 +211,10 @@ final class PolicyService {
 		if (!is_bool($current['livePush']['enabled'])) throw new \InvalidArgumentException('livePush enabled must be a boolean');
 		$current['livePush'] = ['enabled' => $current['livePush']['enabled']];
 		if (!is_bool($current['customDomains']['enabled'])) throw new \InvalidArgumentException('customDomains enabled must be a boolean');
+		if (!is_bool($current['retention']['enabled'])) throw new \InvalidArgumentException('retention enabled must be a boolean');
+		$current['retention']['systemTagId'] = trim((string)$current['retention']['systemTagId']);
+		if ($current['retention']['systemTagId'] !== '' && preg_match('/^\d{1,20}$/', $current['retention']['systemTagId']) !== 1) throw new \InvalidArgumentException('Invalid retention system tag ID');
+		if ($current['retention']['enabled'] && $current['retention']['systemTagId'] === '') throw new \InvalidArgumentException('A retention system tag is required');
 		$current['schemaVersion'] = 2;
 		$this->config->setAppValue(Application::APP_ID, self::SETTINGS_KEY, json_encode($current, JSON_THROW_ON_ERROR));
 		return $current;
@@ -243,5 +251,11 @@ final class PolicyService {
 
 	public function customDomainsEnabled(): bool {
 		return (bool)$this->instanceSettings()['customDomains']['enabled'];
+	}
+
+	/** @return array{enabled:bool,systemTagId:string} */
+	public function retentionSettings(): array {
+		$settings = $this->instanceSettings()['retention'];
+		return ['enabled' => (bool)$settings['enabled'], 'systemTagId' => (string)$settings['systemTagId']];
 	}
 }

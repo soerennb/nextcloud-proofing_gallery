@@ -24,6 +24,7 @@ final class NotificationService {
 	public const EVENT_TYPES = [
 		'comment.created', 'comment.updated', 'selection.created',
 		'like.changed', 'color.changed', 'upload.received', 'upload.accepted', 'upload.rejected',
+		'review.submitted', 'review.changes_requested', 'review.approved', 'review.reopened',
 	];
 
 	public function __construct(
@@ -248,6 +249,10 @@ final class NotificationService {
 				'upload.received' => $l10n->t('New uploads'),
 				'upload.accepted' => $l10n->t('Accepted uploads'),
 				'upload.rejected' => $l10n->t('Rejected uploads'),
+				'review.submitted' => $l10n->t('Reviews submitted for decision'),
+				'review.changes_requested' => $l10n->t('Review changes requested'),
+				'review.approved' => $l10n->t('Approved reviews'),
+				'review.reopened' => $l10n->t('Reopened reviews'),
 				default => $l10n->t('Gallery activity'),
 			};
 			$labels[] = sprintf('%d × %s', $count, $label);

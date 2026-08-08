@@ -21,6 +21,20 @@ final class MediaSummaryRepository {
 		return $row === false ? null : $row;
 	}
 
+	/** @param list<int> $galleryIds
+	 * @return array<int, array<string, mixed>>
+	 */
+	public function findMany(array $galleryIds): array {
+		if ($galleryIds === []) return [];
+		$qb = $this->db->getQueryBuilder();
+		$rows = QueryResult::rows($qb->select('*')->from('proofing_summaries')
+			->where($qb->expr()->in('gallery_id', $qb->createNamedParameter($galleryIds, IQueryBuilder::PARAM_INT_ARRAY)))
+			->executeQuery());
+		$result = [];
+		foreach ($rows as $row) $result[(int)$row['gallery_id']] = $row;
+		return $result;
+	}
+
 	public function delete(int $galleryId): void {
 		$qb = $this->db->getQueryBuilder();
 		$qb->delete('proofing_summaries')

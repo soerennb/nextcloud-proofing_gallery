@@ -41,9 +41,23 @@ final class GalleryWorkflowController extends Controller {
 		private VersionService $versions,
 		private CollaborationService $collaboration,
 		private MediaMetadataService $metadata,
+		private \OCA\ProofingGallery\Service\ScopedCursorCodec $cursors,
 		private IUserSession $userSession,
 	) {
 		parent::__construct(Application::APP_ID, $request);
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/v2/galleries/{id}/selections')]
+	public function selectionPage(int $id, int $limit = 50, ?string $cursor = null): DataResponse {
+		try {
+			$gallery = $this->galleries->get($this->userId(), $id);
+			return new DataResponse($this->collaboration->ownerSelectionPage($gallery, $limit, $cursor, $this->cursors));
+		} catch (DoesNotExistException|AuthorizationException) {
+			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		} catch (InvalidArgumentException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
 	}
 
 	#[NoAdminRequired]

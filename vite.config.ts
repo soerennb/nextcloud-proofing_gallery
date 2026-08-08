@@ -60,6 +60,8 @@ export default createAppConfig(
 		public: resolve(join('src', 'public.ts')),
 		admin: resolve(join('src', 'admin.ts')),
 		personal: resolve(join('src', 'personal.ts')),
+		'files-legacy': resolve(join('src', 'files-legacy.ts')),
+		'files-modern': resolve(join('src', 'files-modern.ts')),
 	},
 	{
 		createEmptyCSSEntryPoints: true,

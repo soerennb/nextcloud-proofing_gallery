@@ -52,7 +52,7 @@ final class MediaIndexQuery {
 	}
 
 	public function cursorScope(): string {
-		return hash('sha256', implode("\0", [$this->pathPrefix, $this->search, (string)$this->minOwnerRating]));
+		return hash('sha256', implode("\0", [(string)$this->galleryId, $this->ownerUid, $this->pathPrefix, $this->search, (string)$this->minOwnerRating]));
 	}
 
 	public function withLimit(int $limit): self {

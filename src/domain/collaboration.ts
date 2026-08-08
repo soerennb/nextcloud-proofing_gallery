@@ -50,3 +50,25 @@ export function feedbackVisible(
 ): boolean {
 	return visibility === 'collaborative' || actorId === viewerId
 }
+
+export function mergeCollaborationState(current: CollaborationState, incoming: CollaborationState, hydratedIds: number[]): CollaborationState {
+	const affected = new Set<number>(hydratedIds)
+	for (const event of incoming.events ?? []) if (event.payload.fileId) affected.add(event.payload.fileId)
+	for (const comment of incoming.comments) affected.add(comment.fileId)
+	for (const rating of incoming.ratings) affected.add(rating.fileId)
+	const replaceRecord = <T>(existing: Record<number, T>, values: Record<number, T>): Record<number, T> => {
+		const result = { ...existing }
+		for (const id of affected) delete result[id]
+		return { ...result, ...values }
+	}
+	return {
+		...incoming,
+		likes: replaceRecord(current.likes, incoming.likes),
+		colors: replaceRecord(current.colors, incoming.colors),
+		colorStates: replaceRecord(current.colorStates, incoming.colorStates),
+		comments: [...current.comments.filter(comment => !hydratedIds.includes(comment.fileId) && !incoming.comments.some(value => value.id === comment.id)), ...incoming.comments],
+		selections: [...current.selections.filter(selection => !incoming.selections.some(value => value.id === selection.id)), ...incoming.selections],
+		ratings: [...current.ratings.filter(rating => !affected.has(rating.fileId)), ...incoming.ratings],
+	}
+}
+import type { CollaborationState } from '../publicTypes.ts'

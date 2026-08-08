@@ -14,6 +14,36 @@ async function state(): Promise<{ galleryId: number, token: string, folderId: nu
 	return JSON.parse(await readFile(path.join(process.cwd(), 'test-results-e2e-state.json'), 'utf8'))
 }
 
+test('installed Nextcloud collaboration apps are discovered @ecosystem', async ({ request, baseURL }) => {
+	test.skip(process.env.E2E_ECOSYSTEM !== '1', 'Set E2E_ECOSYSTEM=1 with Calendar, Deck, and Talk installed')
+	const stable = await state()
+	const response = await request.get(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries/${stable.galleryId}/review-integrations?format=json`, { headers: apiHeaders })
+	expect(response.status()).toBe(200)
+	const integrations = await response.json() as { calendar: { available: boolean }; deck: { available: boolean }; talk: { available: boolean } }
+	expect(integrations.calendar.available).toBe(true)
+	expect(integrations.deck.available).toBe(true)
+	expect(integrations.talk.available).toBe(true)
+})
+
+test('application boot does not reset periodic background-job timestamps', async ({ request, baseURL }) => {
+	const listJobs = async () => {
+		const result = await execFileAsync('docker', [
+			'compose', 'exec', '-T', '--user', 'www-data', 'nextcloud', 'php', 'occ', 'background-job:list', '--output=json',
+		], { cwd: process.cwd() })
+		return JSON.parse(result.stdout) as Array<{ id: number; class: string; last_run: number }>
+	}
+	const jobClass = 'OCA\\ProofingGallery\\BackgroundJob\\CleanupGalleryDataJob'
+	const before = (await listJobs()).find(item => item.class === jobClass)
+	expect(before).toBeDefined()
+	for (let index = 0; index < 5; index++) {
+		expect((await request.get(`${baseURL}/apps/proofing_gallery/`)).status()).toBeLessThan(500)
+	}
+	const after = (await listJobs()).find(item => item.class === jobClass)
+	expect(after).toBeDefined()
+	expect(after!.id).toBe(before!.id)
+	expect(after!.last_run).toBe(before!.last_run)
+})
+
 test('archiving suspends native and app access and restore keeps the token', async ({ request, baseURL }) => {
 	const stable = await state()
 	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
@@ -39,6 +69,19 @@ test('archiving suspends native and app access and restore keeps the token', asy
 	const archived = await request.delete(`${galleries}/${galleryId}?format=json`, { headers: apiHeaders })
 	expect(archived.status()).toBe(200)
 	expect((await archived.json() as { status: string }).status).toBe('archived')
+	const privacyUrl = `${galleries}/${galleryId}/privacy`
+	const privacy = await request.get(`${privacyUrl}?format=json`, { headers: apiHeaders })
+	expect(privacy.status()).toBe(200)
+	expect(await privacy.json()).toEqual(expect.objectContaining({ graceDays: 30, originalFilesAffected: false, activeRequest: null }))
+	const exported = await request.get(`${privacyUrl}/export?format=json`, { headers: apiHeaders })
+	expect(exported.status()).toBe(200)
+	expect(exported.headers()['content-type']).toContain('application/x-ndjson')
+	expect(await exported.text()).not.toContain(token)
+	const scheduled = await request.post(`${privacyUrl}/purge?format=json`, { headers: apiHeaders })
+	expect(scheduled.status()).toBe(201)
+	const requestId = (await scheduled.json() as { id: number }).id
+	expect(requestId).toBeGreaterThan(0)
+	expect((await request.delete(`${privacyUrl}/purge/${requestId}?format=json`, { headers: apiHeaders })).status()).toBe(204)
 	const archivedPage = await request.get(`${baseURL}/s/${token}`)
 	expect(archivedPage.status()).toBe(404)
 	expect(await archivedPage.text()).toContain('Gallery unavailable')
@@ -55,6 +98,40 @@ test('archiving suspends native and app access and restore keeps the token', asy
 
 	await request.delete(`${galleries}/${galleryId}/publish?format=json`, { headers: apiHeaders })
 	await request.delete(`${galleries}/${galleryId}?format=json`, { headers: apiHeaders })
+})
+
+test('scheduled privacy purge removes app data but preserves original files', async ({ request, baseURL }) => {
+	test.setTimeout(120_000)
+	const stable = await state()
+	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
+	const created = await request.post(`${galleries}?format=json`, {
+		headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+		data: { folderId: stable.folderId, title: `E2E Purge ${Date.now()}` },
+	})
+	expect(created.status()).toBe(201)
+	const galleryId = (await created.json() as { id: number }).id
+	await request.post(`${galleries}/${galleryId}/publish?format=json`, { headers: apiHeaders })
+	expect((await request.delete(`${galleries}/${galleryId}?format=json`, { headers: apiHeaders })).status()).toBe(200)
+	const scheduled = await request.post(`${galleries}/${galleryId}/privacy/purge?format=json`, { headers: apiHeaders })
+	expect(scheduled.status()).toBe(201)
+	const requestId = (await scheduled.json() as { id: number }).id
+
+	const php = 'require "/var/www/html/lib/base.php"; $db=\\OC::$server->get(\\OCP\\IDBConnection::class); $q=$db->getQueryBuilder(); $q->update("proofing_purge_requests")->set("execute_after", $q->createNamedParameter(0, \\OCP\\DB\\QueryBuilder\\IQueryBuilder::PARAM_INT))->where($q->expr()->eq("id", $q->createNamedParameter((int)$argv[1], \\OCP\\DB\\QueryBuilder\\IQueryBuilder::PARAM_INT)))->executeStatement();'
+	await execFileAsync('docker', ['compose', 'exec', '-T', '--user', 'www-data', 'nextcloud', 'php', '-r', php, String(requestId)], { cwd: process.cwd() })
+
+	for (let iteration = 0; iteration < 50; iteration++) {
+		const list = await execFileAsync('docker', ['compose', 'exec', '-T', '--user', 'www-data', 'nextcloud', 'php', 'occ', 'background-job:list', '--output=json'], { cwd: process.cwd() })
+		const jobs = JSON.parse(list.stdout) as Array<{ id: number; class: string }>
+		const job = jobs.find(item => item.class.endsWith(iteration === 0 ? 'ProcessPurgeRequestsJob' : 'ContinuePurgeRequestsJob'))
+		if (!job) {
+			if (iteration === 0) throw new Error('Purge worker is not registered')
+			break
+		}
+		await execFileAsync('docker', ['compose', 'exec', '-T', '--user', 'www-data', 'nextcloud', 'php', 'occ', 'background-job:execute', '--force-execute', String(job.id)], { cwd: process.cwd() })
+	}
+
+	expect((await request.get(`${galleries}/${galleryId}?format=json`, { headers: apiHeaders })).status()).toBe(404)
+	expect((await request.get(`${baseURL}/remote.php/dav/files/admin/ProofingGalleryE2E/proof.png`, { headers: apiHeaders })).status()).toBe(200)
 })
 
 test('source cache refreshes and a missing published source recovers without changing its token', async ({ request, baseURL }) => {
@@ -229,6 +306,7 @@ test('Live Push credentials are upload-only, independently rotated and revoked',
 test('custom domains require administrator DNS and HTTPS verification and revoke safely', async ({ request, baseURL }) => {
 	const stable = await state()
 	const adminSettings = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/admin/settings?format=json`
+	const adminDomains = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/admin/domains?format=json`
 	const domains = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries/${stable.galleryId}/domains?format=json`
 	const links = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries/${stable.galleryId}/public-links?format=json`
 	const original = await request.get(adminSettings, { headers: apiHeaders }).then(response => response.json()) as {
@@ -246,13 +324,23 @@ test('custom domains require administrator DNS and HTTPS verification and revoke
 		expect((await request.post(domains, {
 			headers: { ...apiHeaders, 'Content-Type': 'application/json' }, data: { publicLinkId: link!.id, domain: 'gallery.invalid' },
 		})).status()).toBe(422)
+		const requestedDomain = `gallery-${Date.now()}.example.com`
 		const requested = await request.post(domains, {
-			headers: { ...apiHeaders, 'Content-Type': 'application/json' }, data: { publicLinkId: link!.id, domain: `gallery-${Date.now()}.example.com` },
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' }, data: { publicLinkId: link!.id, domain: requestedDomain },
 		})
 		expect(requested.status()).toBe(201)
 		const mapping = await requested.json() as { id: number; status: string; verificationName: string; verificationValue: string }
 		domainId = mapping.id
 		expect(mapping).toEqual(expect.objectContaining({ status: 'pending', verificationName: expect.stringMatching(/^_proofing-gallery\./), verificationValue: expect.stringMatching(/^proofing-gallery-verification=/) }))
+		const pendingPage = await request.get(`${adminDomains}&status=pending&search=${encodeURIComponent(requestedDomain)}&limit=1`, { headers: apiHeaders })
+		expect(pendingPage.status()).toBe(200)
+		expect(await pendingPage.json()).toEqual(expect.objectContaining({
+			items: [expect.objectContaining({ id: domainId, domain: requestedDomain, status: 'pending' })],
+			total: 1,
+			nextCursor: null,
+		}))
+		expect((await request.get(`${adminDomains}&status=unknown`, { headers: apiHeaders })).status()).toBe(422)
+		expect((await request.get(`${adminDomains}&cursor=not-a-cursor`, { headers: apiHeaders })).status()).toBe(422)
 		expect((await request.post(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/admin/domains/${domainId}/verify?format=json`, { headers: apiHeaders })).status()).toBe(422)
 		const anonymousRequest = await requestFactory.newContext()
 		expect((await anonymousRequest.post(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/admin/domains/${domainId}/verify?format=json`, {
@@ -260,6 +348,11 @@ test('custom domains require administrator DNS and HTTPS verification and revoke
 		})).status()).toBe(401)
 		await anonymousRequest.dispose()
 		expect((await request.delete(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/admin/domains/${domainId}?format=json`, { headers: apiHeaders })).status()).toBe(204)
+		const revokedPage = await request.get(`${adminDomains}&status=revoked&search=${encodeURIComponent(requestedDomain)}`, { headers: apiHeaders })
+		expect(revokedPage.status()).toBe(200)
+		expect(await revokedPage.json()).toEqual(expect.objectContaining({
+			items: expect.arrayContaining([expect.objectContaining({ id: domainId, status: 'revoked' })]),
+		}))
 		domainId = null
 		expect((await request.get(`${baseURL}/apps/proofing_gallery/domain`)).status()).toBe(404)
 	} finally {
@@ -335,24 +428,25 @@ test('administrator policies reject out-of-range API values and health remains a
 	await page.getByRole('textbox', { name: 'Password' }).fill('admin')
 	await page.getByRole('button', { name: 'Log in', exact: true }).click()
 	await expect(page.getByRole('heading', { level: 2, name: 'Proofing Gallery' })).toBeVisible()
-	await expect(page.getByText('Cleanup status')).toBeVisible()
-	await expect(page.getByRole('heading', { level: 3, name: 'Video delivery' })).toBeVisible()
+	await expect(page.getByRole('heading', { name: 'Access and features' })).toBeVisible()
+	await page.getByRole('button', { name: /^Media/ }).click()
+	await expect(page.getByRole('heading', { name: 'Video delivery' })).toBeVisible()
 	await expect(page.getByLabel('FFmpeg executable')).toHaveValue('ffmpeg')
-	await expect(page.getByRole('heading', { level: 3, name: 'Media search' })).toBeVisible()
-	await expect(page.locator('select[name="semanticProvider"]')).toHaveValue('disabled')
-	await expect(page.getByRole('heading', { level: 3, name: 'HTTPS Live Push' })).toBeVisible()
-	await expect(page.getByRole('heading', { level: 3, name: 'Custom gallery domains' })).toBeVisible()
-	await expect(page.getByText('Video derivatives', { exact: true })).toBeVisible()
-	await expect(page.getByText(/Not run yet|Healthy|Overdue|Failed/).first()).toBeVisible()
-	await expect(page.getByRole('heading', { level: 3, name: 'Administrator documentation' })).toBeVisible()
-	await expect(page.getByRole('heading', { name: 'Requirements and installation' })).toBeVisible()
-	await page.getByRole('button', { name: 'Deutsch' }).last().click()
-	await expect(page.getByRole('heading', { name: 'Voraussetzungen und Installation' })).toBeVisible()
+	await expect(page.getByRole('heading', { name: 'Media search' })).toBeVisible()
+	await expect(page.getByLabel('Provider')).toHaveValue('disabled')
+	await page.getByRole('button', { name: /^Operations/ }).click()
+	await expect(page).toHaveURL(/#proofing-gallery\/operations$/)
+	await expect(page.getByRole('heading', { name: 'System status' })).toBeVisible()
+	const refreshResponse = page.waitForResponse(response => response.request().method() === 'GET' && response.url().includes('/api/v1/admin/settings'))
+	await page.getByRole('button', { name: 'Refresh status' }).click()
+	expect((await refreshResponse).status()).toBe(200)
+	await expect(page.getByText('Background cleanup')).toBeVisible()
+	await expect(page.getByRole('heading', { name: 'Custom gallery domains' })).toBeVisible()
+	await page.getByRole('button', { name: /^Security/ }).click()
+	await page.goBack()
+	await expect(page.getByRole('heading', { name: 'System status' })).toBeVisible()
 	const adminStyles = page.locator('link[rel="stylesheet"][href*="proofing_gallery-admin"]')
 	await expect(adminStyles).toHaveCount(1)
-	const healthRow = page.locator('.proofing-settings__health dl > div').first()
-	await expect(healthRow).toHaveCSS('display', 'flex')
-	expect(await healthRow.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
 	let violations = await new AxeBuilder({ page }).include('#proofing-gallery-admin').analyze()
 	expect(violations.violations).toEqual([])
 	await page.setViewportSize({ width: 390, height: 844 })
@@ -388,6 +482,12 @@ test('photographer preferences persist through the personal settings API and pag
 		await page.getByRole('button', { name: 'Log in', exact: true }).click()
 		await expect(page.locator('#proofing-gallery-personal').getByRole('heading', { name: 'Proofing Gallery' })).toBeVisible()
 		await expect(page.getByLabel('Preferred purpose')).toHaveValue('selection')
+		await page.getByLabel('Preferred purpose').selectOption('delivery')
+		await expect(page.locator('.settings-save-bar')).toBeVisible()
+		await page.setViewportSize({ width: 390, height: 844 })
+		expect(await page.locator('#proofing-gallery-personal').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+		await page.getByRole('button', { name: 'Discard' }).click()
+		await expect(page.locator('.settings-save-bar')).toHaveCount(0)
 		await context.close()
 	} finally {
 		await request.put(endpoint, {
@@ -762,7 +862,9 @@ test('notification and invitation controls stay understandable and responsive', 
 	await page.getByRole('textbox', { name: 'Password' }).fill('admin')
 	await page.getByRole('button', { name: 'Log in', exact: true }).click()
 	await page.getByRole('button', { name: /^E2E Gallery (?:Presentation|Proofing)/ }).click()
-	await page.getByRole('button', { name: 'Deliver', exact: true }).click()
+	const settingsNavigation = page.getByRole('navigation', { name: 'Gallery settings' })
+	await settingsNavigation.locator('summary').click()
+	await settingsNavigation.getByRole('button', { name: 'Team', exact: true }).click()
 	await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible()
 	await expect(page.getByRole('checkbox', { name: 'Nextcloud notification center' })).toBeChecked()
 	await page.getByText('Email digest', { exact: true }).click()
@@ -782,7 +884,7 @@ test('notification and invitation controls stay understandable and responsive', 
 	await expect(page.getByText('Notification subscription removed.')).toBeVisible()
 
 	await page.setViewportSize({ width: 1280, height: 900 })
-	await page.getByRole('button', { name: 'Share', exact: true }).click()
+	await page.locator('.settings-header__actions').getByRole('button', { name: 'Share', exact: true }).click()
 	await expect(page.getByRole('heading', { name: 'Email invitation' })).toBeVisible()
 	await page.getByRole('textbox', { name: 'Template name' }).fill(templateName)
 	await page.getByRole('textbox', { name: 'Personal message (optional)' }).fill('<b>Hello {gallery}</b> — {owner}\n{url}')

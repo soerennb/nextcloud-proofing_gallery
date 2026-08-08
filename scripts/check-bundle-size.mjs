@@ -34,9 +34,12 @@ async function eagerGzipSize(entry) {
 }
 const initialGzipSize = await eagerGzipSize(main)
 const publicGzipSize = await eagerGzipSize(publicEntry)
-// The shared, customizable gallery header adds a small eager component while
-// keeping the cover visible without an asynchronous above-the-fold render.
-const publicGzipBudget = 57 * 1024
+// The shared gallery header and lazy review-workflow entry point add small
+// eager loader metadata and scoped collaboration-delta merging while keeping
+// lightbox and workflow interaction code outside first paint.
+// Owner-facing localization additions are shared with the public bootstrap.
+// Keep a fixed 58 KiB ceiling so incremental growth remains visible in CI.
+const publicGzipBudget = 58 * 1024
 
 if (rawSize > rawBudget) {
 	throw new Error(`Owner entry ${rawSize} bytes exceeds ${rawBudget}-byte raw budget`)

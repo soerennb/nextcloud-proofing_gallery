@@ -32,6 +32,10 @@ use OCP\DB\Types;
  * @method void setMinOwnerRating(int $minOwnerRating)
  * @method ?string getPublicLocale()
  * @method void setPublicLocale(?string $publicLocale)
+ * @method bool getReviewEnabled()
+ * @method void setReviewEnabled(bool $reviewEnabled)
+ * @method ?string getReviewDueDate()
+ * @method void setReviewDueDate(?string $reviewDueDate)
  * @method int getCreatedAt()
  * @method void setCreatedAt(int $createdAt)
  * @method int getUpdatedAt()
@@ -52,6 +56,8 @@ final class PublicLink extends Entity implements \JsonSerializable {
 	protected int $groupDepth = 0;
 	protected int $minOwnerRating = 0;
 	protected ?string $publicLocale = null;
+	protected bool $reviewEnabled = false;
+	protected ?string $reviewDueDate = null;
 	protected int $createdAt = 0;
 	protected int $updatedAt = 0;
 	protected ?int $revokedAt = null;
@@ -60,6 +66,7 @@ final class PublicLink extends Entity implements \JsonSerializable {
 		foreach (['galleryId', 'coreShareId', 'createdAt', 'updatedAt', 'revokedAt'] as $field) $this->addType($field, Types::BIGINT);
 		foreach (['groupDepth', 'minOwnerRating'] as $field) $this->addType($field, Types::INTEGER);
 		$this->addType('isPrimary', Types::BOOLEAN);
+		$this->addType('reviewEnabled', Types::BOOLEAN);
 	}
 
 	/**
@@ -85,6 +92,8 @@ final class PublicLink extends Entity implements \JsonSerializable {
 			'groupDepth' => $this->getGroupDepth(),
 			'minOwnerRating' => $this->getMinOwnerRating(),
 			'publicLocale' => $this->getPublicLocale(),
+			'reviewEnabled' => $this->getReviewEnabled(),
+			'reviewDueDate' => $this->getReviewDueDate(),
 			'createdAt' => $this->getCreatedAt(),
 			'updatedAt' => $this->getUpdatedAt(),
 			'revokedAt' => $this->getRevokedAt(),

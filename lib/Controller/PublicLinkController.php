@@ -31,9 +31,25 @@ final class PublicLinkController extends Controller {
 		private PublicLinkManagerService $publicLinks,
 		private ShareAuditService $shareAudit,
 		private GuestRatingService $guestRatings,
+		private \OCA\ProofingGallery\Service\ScopedCursorCodec $cursors,
 		private IUserSession $userSession,
 	) {
 		parent::__construct(Application::APP_ID, $request);
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/v2/galleries/{id}/guest-ratings')]
+	public function guestRatingPage(int $id, int $limit = 50, ?string $cursor = null): DataResponse {
+		try {
+			$gallery = $this->galleries->get($this->userId(), $id);
+			return new DataResponse($this->guestRatings->aggregatePage($gallery, $limit, $cursor, $this->cursors));
+		} catch (DoesNotExistException|AuthorizationException) {
+			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		} catch (PolicyViolationException $exception) {
+			return new DataResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
+		} catch (InvalidArgumentException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
 	}
 
 	#[NoAdminRequired]
@@ -103,13 +119,15 @@ final class PublicLinkController extends Controller {
 		?string $publicLocale = null,
 		?string $password = null,
 		?string $expiresAt = null,
+		bool $reviewEnabled = false,
+		?string $reviewDueDate = null,
 	): DataResponse {
 		try {
 			return new DataResponse($this->publicLinks->create(
 				$this->galleries->get($this->userId(), $id),
 				PublicLinkConfiguration::fromArray(compact(
 					'name', 'policy', 'startPath', 'viewMode', 'groupDepth', 'minOwnerRating',
-					'publicLocale', 'password', 'expiresAt',
+					'publicLocale', 'password', 'expiresAt', 'reviewEnabled', 'reviewDueDate',
 				)),
 			), Http::STATUS_CREATED);
 		} catch (DoesNotExistException|AuthorizationException) {
@@ -138,6 +156,8 @@ final class PublicLinkController extends Controller {
 		?string $publicLocale = null,
 		?string $password = null,
 		?string $expiresAt = null,
+		bool $reviewEnabled = false,
+		?string $reviewDueDate = null,
 	): DataResponse {
 		try {
 			return new DataResponse($this->publicLinks->update(
@@ -145,7 +165,7 @@ final class PublicLinkController extends Controller {
 				$linkId,
 				PublicLinkConfiguration::fromArray(compact(
 					'name', 'policy', 'startPath', 'viewMode', 'groupDepth', 'minOwnerRating',
-					'publicLocale', 'password', 'expiresAt',
+					'publicLocale', 'password', 'expiresAt', 'reviewEnabled', 'reviewDueDate',
 				)),
 			));
 		} catch (DoesNotExistException|AuthorizationException) {
@@ -193,6 +213,19 @@ final class PublicLinkController extends Controller {
 			return new DataResponse(['items' => $this->shareAudit->forGallery($gallery->getId(), $limit, $offset)]);
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		}
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/v2/galleries/{id}/share-audit')]
+	public function shareAuditPage(int $id, int $limit = 50, ?string $cursor = null): DataResponse {
+		try {
+			$gallery = $this->galleries->get($this->userId(), $id);
+			return new DataResponse($this->shareAudit->pageForGallery($gallery->getId(), $limit, $cursor, $this->cursors));
+		} catch (DoesNotExistException|AuthorizationException) {
+			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		} catch (InvalidArgumentException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
 	}
 

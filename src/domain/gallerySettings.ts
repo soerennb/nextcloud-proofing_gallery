@@ -1,6 +1,14 @@
 export type FeedbackVisibility = 'collaborative' | 'private'
 export type GalleryMode = 'presentation' | 'collaboration'
 
+export interface GalleryStorySection {
+	id: string
+	title: string
+	body: string
+	style: 'full' | 'split' | 'sequence'
+	mediaIds: number[]
+}
+
 export interface GalleryAppearance {
 	accentColor: string
 	welcomeMessage: string
@@ -17,7 +25,7 @@ export interface GalleryAppearance {
 
 export interface GalleryPresentation extends GalleryAppearance {
 	theme: 'auto' | 'light' | 'dark'
-	layout: 'grid' | 'masonry' | 'list'
+	layout: 'grid' | 'masonry' | 'list' | 'story'
 	tileSize: 'small' | 'medium' | 'large'
 	tileGap: 'tight' | 'normal' | 'wide'
 	tileRadius: 'square' | 'soft'
@@ -30,10 +38,11 @@ export interface GalleryPresentation extends GalleryAppearance {
 	motionPreset: 'off' | 'subtle' | 'expressive'
 	lightboxFilmstripPlacement: 'auto' | 'side' | 'bottom' | 'hidden'
 	lightboxChromeBehavior: 'persistent' | 'autoHide'
+	story: { sections: GalleryStorySection[]; showAllMedia: boolean }
 }
 
 export interface GallerySettings {
-	schemaVersion?: 7
+	schemaVersion?: 9
 	mode: GalleryMode
 	feedbackVisibility: FeedbackVisibility
 	allowDownloads: boolean
@@ -81,6 +90,7 @@ export interface GallerySettings {
 		revokeAfterDays: number
 		archiveAfterDays: number
 		reminderDays: number[]
+		retentionHandoff: boolean
 	}
 	presentation: GalleryPresentation
 	/** Version 1 response alias. New writes use presentation. */
@@ -92,7 +102,7 @@ export type CanonicalGallerySettings = Pick<GallerySettings,
 
 export function canonicalGallerySettings(settings: GallerySettings): CanonicalGallerySettings {
 	return {
-		schemaVersion: 7,
+		schemaVersion: 9,
 		mode: settings.mode,
 		publicLocale: settings.publicLocale,
 		review: structuredClone(settings.review),
@@ -139,9 +149,10 @@ export function createDefaultGallerySettings(): GallerySettings {
 		motionPreset: 'expressive',
 		lightboxFilmstripPlacement: 'auto',
 		lightboxChromeBehavior: 'autoHide',
+		story: { sections: [], showAllMedia: true },
 	}
 	return {
-		schemaVersion: 7,
+		schemaVersion: 9,
 		mode: 'presentation',
 		feedbackVisibility: 'collaborative',
 		allowDownloads: false,
@@ -166,7 +177,7 @@ export function createDefaultGallerySettings(): GallerySettings {
 		navigation: { folders: true, recursive: false, groupDepth: 1, sortBy: 'name', sortDirection: 'asc', groupBy: 'none' },
 		security: { allowModeSwitch: false, hideRejectedInPresentation: false },
 		metadata: { publicFields: [] },
-		lifecycle: { enabled: false, trigger: 'after_completion', revokeAt: '', revokeAfterDays: 30, archiveAfterDays: 30, reminderDays: [7, 1] },
+		lifecycle: { enabled: false, trigger: 'after_completion', revokeAt: '', revokeAfterDays: 30, archiveAfterDays: 30, reminderDays: [7, 1], retentionHandoff: false },
 		presentation,
 		appearance: presentation,
 	}

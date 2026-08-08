@@ -6,12 +6,14 @@ import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { cullingShortcut } from '../domain/cullingShortcuts.ts'
+import { defaultCullState, effectiveCullingFilmstripPlacement } from '../domain/cullingWorkspace.ts'
 import { fetchGuestRatings, fetchIndexedMedia, fetchMediaCulling, fetchSemanticStatus, fetchUserPreferences, ownerPreviewUrl, previewGuestRatingPromotion, promoteGuestRatings, rebuildGalleryMediaIndex, rebuildSemanticIndex, searchSemanticMedia, synchronizeCullingXmp, updateMediaCulling, updateUserPreferences } from '../services/galleryApi.ts'
 import type { CullColor, CullingXmpReport, CullPick, Gallery, GuestRatingAggregate, GuestRatingPromotion, IndexedMediaItem, MediaCull, UserPreferences } from '../types.ts'
 import CullingFilmstrip from './CullingFilmstrip.vue'
-import ProgressiveImage from './ProgressiveImage.vue'
+import CullingLoupe from './CullingLoupe.vue'
 
 const props = defineProps<{ gallery: Gallery }>()
+const emit = defineEmits<{ exit: [] }>()
 
 const colors: Array<{ value: CullColor; label: string }> = [
 	{ value: 'none', label: t('proofing_gallery', 'No color') },
@@ -49,6 +51,8 @@ const xmpChoices = ref<Record<'rating' | 'color' | 'pick', 'app' | 'xmp'>>({ rat
 const guestOpen = ref(false)
 const guestWorking = ref(false)
 const guestRatings = ref<GuestRatingAggregate[]>([])
+const guestRatingsTotal = ref(0)
+const guestRatingsCursor = ref<string | null>(null)
 const guestPlan = ref<GuestRatingPromotion[]>([])
 const undoStack = ref<Array<Record<number, MediaCull>>>([])
 const semanticQuery = ref('')
@@ -59,23 +63,13 @@ const semanticProvider = ref<'disabled' | 'local' | 'https'>('disabled')
 const filmstripPlacement = ref<UserPreferences['cullingFilmstripPlacement']>('auto')
 const filmstripSize = ref(112)
 const focusMode = ref(false)
+const chromeVisible = ref(true)
+const secondaryToolsOpen = ref(false)
+const browserFullscreen = ref(false)
 const viewportWidth = ref(typeof window === 'undefined' ? 1280 : window.innerWidth)
 let controller: AbortController | undefined
 
-function defaultState(fileId: number): MediaCull {
-	return {
-		fileId,
-		rating: 0,
-		color: 'none',
-		pick: 'none',
-		source: 'app',
-		revision: 0,
-		sourceEtag: null,
-		sidecarEtag: null,
-		updatedAt: 0,
-	}
-}
-const stateFor = (fileId: number) => states.value[fileId] ?? defaultState(fileId)
+const stateFor = (fileId: number) => states.value[fileId] ?? defaultCullState(fileId)
 const filteredItems = computed(() => items.value.filter(item => {
 	const state = stateFor(item.id)
 	return (ratingFilter.value < 0 || state.rating === ratingFilter.value)
@@ -85,11 +79,7 @@ const filteredItems = computed(() => items.value.filter(item => {
 }))
 const activeIndex = computed(() => filteredItems.value.findIndex(item => item.id === activeId.value))
 const activeItem = computed(() => activeIndex.value < 0 ? null : filteredItems.value[activeIndex.value])
-const effectiveFilmstripPlacement = computed<'side' | 'bottom'>(() => {
-	if (filmstripPlacement.value === 'bottom') return 'bottom'
-	if (filmstripPlacement.value === 'side') return viewportWidth.value >= 900 ? 'side' : 'bottom'
-	return viewportWidth.value >= 1180 ? 'side' : 'bottom'
-})
+const effectiveFilmstripPlacement = computed(() => effectiveCullingFilmstripPlacement(filmstripPlacement.value, viewportWidth.value))
 const targetIds = computed(() => selectedIds.value.length ? selectedIds.value : activeId.value === null ? [] : [activeId.value])
 const progress = computed(() => {
 	const reviewed = items.value.filter(item => {
@@ -279,7 +269,7 @@ async function mutate(changes: Partial<Pick<MediaCull, 'rating' | 'color' | 'pic
 async function reloadStates(ids: number[]) {
 	try {
 		const fresh = await fetchMediaCulling(props.gallery.id, ids)
-		const replacements = Object.fromEntries(ids.map(id => [id, defaultState(id)]))
+		const replacements = Object.fromEntries(ids.map(id => [id, defaultCullState(id)]))
 		states.value = { ...states.value, ...replacements, ...Object.fromEntries(fresh.map(state => [state.fileId, state])) }
 	} catch { /* The optimistic rollback remains visible and retryable. */ }
 }
@@ -344,13 +334,27 @@ async function openGuestSignals(force = false) {
 	if (!guestOpen.value || (guestRatings.value.length && !force)) return
 	guestWorking.value = true
 	try {
-		guestRatings.value = await fetchGuestRatings(props.gallery.id)
+		const page = await fetchGuestRatings(props.gallery.id)
+		guestRatings.value = page.items
+		guestRatingsTotal.value = page.total
+		guestRatingsCursor.value = page.nextCursor
 		guestPlan.value = []
 		await nextTick()
 		document.getElementById('guest-signal-title')?.closest('section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 	} catch {
 		showError(t('proofing_gallery', 'Client ratings could not be loaded.'))
 	} finally { guestWorking.value = false }
+}
+
+async function loadMoreGuestSignals() {
+	if (!guestRatingsCursor.value || guestWorking.value) return
+	guestWorking.value = true
+	try {
+		const page = await fetchGuestRatings(props.gallery.id, guestRatingsCursor.value)
+		guestRatings.value.push(...page.items)
+		guestRatingsTotal.value = page.total
+		guestRatingsCursor.value = page.nextCursor
+	} catch { showError(t('proofing_gallery', 'Client ratings could not be loaded.')) } finally { guestWorking.value = false }
 }
 
 async function buildGuestPlan() {
@@ -384,14 +388,21 @@ function moveActive(delta: number) {
 	activeId.value = filteredItems.value[next].id
 }
 
-function updateViewportWidth() {
-	viewportWidth.value = window.innerWidth
+function updateViewportWidth() { viewportWidth.value = window.innerWidth }
+
+async function toggleBrowserFullscreen() {
+	if (document.fullscreenElement) await document.exitFullscreen()
+	else await document.querySelector<HTMLElement>('.culling-workspace')?.requestFullscreen()
+}
+
+function updateFullscreenState() {
+	browserFullscreen.value = document.fullscreenElement !== null
 }
 
 function onKeydown(event: KeyboardEvent) {
+	if (event.key === 'Escape' && focusMode.value) { event.preventDefault(); focusMode.value = false; return }
 	const target = event.target as HTMLElement
 	if (target.matches('input, textarea, select, button, [contenteditable="true"]')) return
-	if (event.key === 'Escape' && focusMode.value) { event.preventDefault(); focusMode.value = false; return }
 	if (event.key.toLowerCase() === 'f') { event.preventDefault(); focusMode.value = !focusMode.value; return }
 	const action = cullingShortcut(event)
 	if (action === null) return
@@ -413,6 +424,7 @@ function applyShortcut(action: NonNullable<ReturnType<typeof cullingShortcut>>) 
 onMounted(() => {
 	window.addEventListener('keydown', onKeydown)
 	window.addEventListener('resize', updateViewportWidth, { passive: true })
+	document.addEventListener('fullscreenchange', updateFullscreenState)
 	loadSavedViews()
 	loadSemanticStatus()
 	loadPage(true)
@@ -421,20 +433,27 @@ onBeforeUnmount(() => {
 	controller?.abort()
 	window.removeEventListener('keydown', onKeydown)
 	window.removeEventListener('resize', updateViewportWidth)
+	document.removeEventListener('fullscreenchange', updateFullscreenState)
 })
 </script>
 
 <template>
-	<section class="culling-workspace" :class="{ 'culling-workspace--focus': focusMode }" aria-labelledby="culling-title">
+	<section class="culling-workspace" :class="{ 'culling-workspace--focus': focusMode, 'culling-workspace--chrome-hidden': !chromeVisible }" aria-labelledby="culling-title">
 		<header class="culling-header">
-			<div>
-				<p class="culling-header__eyebrow">
-					{{ t('proofing_gallery', 'Professional review') }}
-				</p>
-				<h2 id="culling-title">
-					{{ t('proofing_gallery', 'Cull and rate') }}
-				</h2>
-				<p>{{ t('proofing_gallery', 'Make intrinsic decisions here without changing XMP metadata until you explicitly export it.') }}</p>
+			<div class="culling-header__identity">
+				<button type="button"
+					class="culling-back"
+					:aria-label="t('proofing_gallery', 'Back to project')"
+					@click="emit('exit')">
+					←
+				</button>
+				<div>
+					<p class="culling-header__eyebrow">
+						{{ t('proofing_gallery', 'Darkroom') }}
+					</p><h2 id="culling-title">
+						{{ gallery.title }}
+					</h2>
+				</div>
 			</div>
 			<div class="culling-progress" :aria-label="t('proofing_gallery', '{percent}% reviewed', { percent: progress.percent })">
 				<strong>{{ progress.percent }}%</strong><span>{{ progress.reviewed }} / {{ items.length }}</span>
@@ -443,69 +462,79 @@ onBeforeUnmount(() => {
 		</header>
 
 		<div class="culling-toolbar" aria-label="Culling tools">
-			<form v-if="semanticEnabled"
-				class="semantic-search"
-				role="search"
-				@submit.prevent="runSemanticSearch">
-				<label><span>{{ semanticProvider === 'https' ? t('proofing_gallery', 'Describe a scene') : t('proofing_gallery', 'Search filenames and metadata') }}</span><input v-model="semanticQuery" type="search" :placeholder="semanticProvider === 'https' ? t('proofing_gallery', 'e.g. family at sunset') : t('proofing_gallery', 'e.g. ceremony or IMG_2048')"></label>
-				<NcButton type="submit" variant="tertiary" :disabled="semanticQuery.trim().length < 2 || semanticWorking">
-					{{ t('proofing_gallery', 'Find') }}
+			<div class="culling-toolbar__primary">
+				<NcButton variant="tertiary" :disabled="!undoStack.length || saving" @click="undo">
+					{{ t('proofing_gallery', 'Undo') }}
 				</NcButton>
-				<NcButton v-if="semanticMatches !== null"
-					type="button"
+				<NcButton variant="tertiary" :aria-expanded="secondaryToolsOpen" @click="secondaryToolsOpen = !secondaryToolsOpen">
+					{{ t('proofing_gallery', 'Tools') }}
+				</NcButton>
+				<NcButton variant="tertiary" :aria-pressed="focusMode" @click="focusMode = !focusMode">
+					{{ focusMode ? t('proofing_gallery', 'Exit focus') : t('proofing_gallery', 'Focus') }}
+				</NcButton>
+				<NcButton variant="tertiary" :aria-pressed="browserFullscreen" @click="toggleBrowserFullscreen">
+					{{ browserFullscreen ? t('proofing_gallery', 'Exit fullscreen') : t('proofing_gallery', 'Fullscreen') }}
+				</NcButton>
+				<span class="culling-save" role="status">{{ saving ? t('proofing_gallery', 'Saving…') : failure ? t('proofing_gallery', 'Needs attention') : t('proofing_gallery', 'Saved') }}</span>
+			</div>
+			<div v-show="secondaryToolsOpen" class="culling-toolbar__secondary">
+				<form v-if="semanticEnabled"
+					class="semantic-search"
+					role="search"
+					@submit.prevent="runSemanticSearch">
+					<label><span>{{ semanticProvider === 'https' ? t('proofing_gallery', 'Describe a scene') : t('proofing_gallery', 'Search filenames and metadata') }}</span><input v-model="semanticQuery" type="search" :placeholder="semanticProvider === 'https' ? t('proofing_gallery', 'e.g. family at sunset') : t('proofing_gallery', 'e.g. ceremony or IMG_2048')"></label>
+					<NcButton type="submit" variant="tertiary" :disabled="semanticQuery.trim().length < 2 || semanticWorking">
+						{{ t('proofing_gallery', 'Find') }}
+					</NcButton>
+					<NcButton v-if="semanticMatches !== null"
+						type="button"
+						variant="tertiary"
+						@click="semanticMatches = null; semanticQuery = ''">
+						{{ t('proofing_gallery', 'Clear') }}
+					</NcButton>
+					<NcButton type="button"
+						variant="tertiary"
+						:disabled="semanticWorking"
+						@click="queueSemanticIndex">
+						{{ t('proofing_gallery', 'Build search index') }}
+					</NcButton>
+				</form>
+				<label><span>{{ t('proofing_gallery', 'Rating') }}</span><select v-model.number="ratingFilter" name="cullingRating"><option :value="-1">{{ t('proofing_gallery', 'All') }}</option><option v-for="rating in 6" :key="rating - 1" :value="rating - 1">{{ rating - 1 }} ★</option></select></label>
+				<label><span>{{ t('proofing_gallery', 'Decision') }}</span><select v-model="pickFilter" name="cullingDecision"><option value="all">{{ t('proofing_gallery', 'All') }}</option><option value="pick">{{ t('proofing_gallery', 'Picks') }}</option><option value="reject">{{ t('proofing_gallery', 'Rejects') }}</option><option value="none">{{ t('proofing_gallery', 'Undecided') }}</option></select></label>
+				<label><span>{{ t('proofing_gallery', 'Color') }}</span><select v-model="colorFilter" name="cullingColor"><option value="all">{{ t('proofing_gallery', 'All') }}</option><option v-for="color in colors" :key="color.value" :value="color.value">{{ color.label }}</option></select></label>
+				<label><span>{{ t('proofing_gallery', 'Sort') }}</span><select v-model="sortBy" name="cullingSort" @change="loadPage(true)"><option value="name">{{ t('proofing_gallery', 'Filename') }}</option><option value="modified">{{ t('proofing_gallery', 'Last modified') }}</option><option value="size">{{ t('proofing_gallery', 'File size') }}</option></select></label>
+				<NcButton variant="tertiary" :aria-label="t('proofing_gallery', 'Reverse sort direction')" @click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'; loadPage(true)">
+					{{ sortDirection === 'asc' ? '↑' : '↓' }}
+				</NcButton>
+				<label class="saved-view"><span>{{ t('proofing_gallery', 'Saved view') }}</span><select v-model="activeViewId" name="savedView" @change="applySavedView"><option value="">{{ t('proofing_gallery', 'Choose…') }}</option><option v-for="view in savedViews" :key="view.id" :value="view.id">{{ view.name }}</option></select></label>
+				<NcButton variant="tertiary" :disabled="viewWorking" @click="saveCurrentView">
+					{{ t('proofing_gallery', 'Save view') }}
+				</NcButton>
+				<NcButton v-if="activeViewId"
 					variant="tertiary"
-					@click="semanticMatches = null; semanticQuery = ''">
-					{{ t('proofing_gallery', 'Clear') }}
+					:disabled="viewWorking"
+					:aria-label="t('proofing_gallery', 'Delete saved view')"
+					@click="deleteSavedView">
+					×
 				</NcButton>
-				<NcButton type="button"
-					variant="tertiary"
-					:disabled="semanticWorking"
-					@click="queueSemanticIndex">
-					{{ t('proofing_gallery', 'Build search index') }}
+				<NcButton variant="tertiary" :aria-expanded="showShortcuts" @click="showShortcuts = !showShortcuts">
+					{{ t('proofing_gallery', 'Shortcuts') }}
 				</NcButton>
-			</form>
-			<label><span>{{ t('proofing_gallery', 'Rating') }}</span><select v-model.number="ratingFilter" name="cullingRating"><option :value="-1">{{ t('proofing_gallery', 'All') }}</option><option v-for="rating in 6" :key="rating - 1" :value="rating - 1">{{ rating - 1 }} ★</option></select></label>
-			<label><span>{{ t('proofing_gallery', 'Decision') }}</span><select v-model="pickFilter" name="cullingDecision"><option value="all">{{ t('proofing_gallery', 'All') }}</option><option value="pick">{{ t('proofing_gallery', 'Picks') }}</option><option value="reject">{{ t('proofing_gallery', 'Rejects') }}</option><option value="none">{{ t('proofing_gallery', 'Undecided') }}</option></select></label>
-			<label><span>{{ t('proofing_gallery', 'Color') }}</span><select v-model="colorFilter" name="cullingColor"><option value="all">{{ t('proofing_gallery', 'All') }}</option><option v-for="color in colors" :key="color.value" :value="color.value">{{ color.label }}</option></select></label>
-			<label><span>{{ t('proofing_gallery', 'Sort') }}</span><select v-model="sortBy" name="cullingSort" @change="loadPage(true)"><option value="name">{{ t('proofing_gallery', 'Filename') }}</option><option value="modified">{{ t('proofing_gallery', 'Last modified') }}</option><option value="size">{{ t('proofing_gallery', 'File size') }}</option></select></label>
-			<NcButton variant="tertiary" :aria-label="t('proofing_gallery', 'Reverse sort direction')" @click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'; loadPage(true)">
-				{{ sortDirection === 'asc' ? '↑' : '↓' }}
-			</NcButton>
-			<label class="saved-view"><span>{{ t('proofing_gallery', 'Saved view') }}</span><select v-model="activeViewId" name="savedView" @change="applySavedView"><option value="">{{ t('proofing_gallery', 'Choose…') }}</option><option v-for="view in savedViews" :key="view.id" :value="view.id">{{ view.name }}</option></select></label>
-			<NcButton variant="tertiary" :disabled="viewWorking" @click="saveCurrentView">
-				{{ t('proofing_gallery', 'Save view') }}
-			</NcButton>
-			<NcButton v-if="activeViewId"
-				variant="tertiary"
-				:disabled="viewWorking"
-				:aria-label="t('proofing_gallery', 'Delete saved view')"
-				@click="deleteSavedView">
-				×
-			</NcButton>
-			<NcButton variant="tertiary" :disabled="!undoStack.length || saving" @click="undo">
-				{{ t('proofing_gallery', 'Undo') }}
-			</NcButton>
-			<NcButton variant="tertiary" :aria-expanded="showShortcuts" @click="showShortcuts = !showShortcuts">
-				{{ t('proofing_gallery', 'Shortcuts') }}
-			</NcButton>
-			<NcButton variant="tertiary" :aria-expanded="xmpOpen" @click="openXmp">
-				{{ t('proofing_gallery', 'XMP sync') }}
-			</NcButton>
-			<NcButton variant="tertiary" :aria-expanded="guestOpen" @click="openGuestSignals()">
-				{{ t('proofing_gallery', 'Client signal') }}
-			</NcButton>
-			<label class="filmstrip-layout"><span>{{ t('proofing_gallery', 'Filmstrip') }}</span><select v-model="filmstripPlacement" name="filmstripPlacement" @change="saveFilmstripPlacement"><option value="auto">{{ t('proofing_gallery', 'Automatic') }}</option><option value="side">{{ t('proofing_gallery', 'Right side') }}</option><option value="bottom">{{ t('proofing_gallery', 'Below') }}</option></select></label>
-			<label class="filmstrip-size"><span>{{ t('proofing_gallery', 'Filmstrip size') }}</span><input v-model.number="filmstripSize"
-				name="filmstripSize"
-				type="range"
-				min="88"
-				max="220"
-				step="8"
-				@change="saveFilmstripPlacement"></label>
-			<NcButton variant="tertiary" :aria-pressed="focusMode" @click="focusMode = !focusMode">
-				{{ focusMode ? t('proofing_gallery', 'Exit focus') : t('proofing_gallery', 'Focus') }}
-			</NcButton>
-			<span class="culling-save" role="status">{{ saving ? t('proofing_gallery', 'Saving…') : failure ? t('proofing_gallery', 'Needs attention') : t('proofing_gallery', 'Saved') }}</span>
+				<NcButton variant="tertiary" :aria-expanded="xmpOpen" @click="openXmp">
+					{{ t('proofing_gallery', 'XMP sync') }}
+				</NcButton>
+				<NcButton variant="tertiary" :aria-expanded="guestOpen" @click="openGuestSignals()">
+					{{ t('proofing_gallery', 'Client signal') }}
+				</NcButton>
+				<label class="filmstrip-layout"><span>{{ t('proofing_gallery', 'Filmstrip') }}</span><select v-model="filmstripPlacement" name="filmstripPlacement" @change="saveFilmstripPlacement"><option value="auto">{{ t('proofing_gallery', 'Automatic') }}</option><option value="side">{{ t('proofing_gallery', 'Right side') }}</option><option value="bottom">{{ t('proofing_gallery', 'Below') }}</option></select></label>
+				<label class="filmstrip-size"><span>{{ t('proofing_gallery', 'Filmstrip size') }}</span><input v-model.number="filmstripSize"
+					name="filmstripSize"
+					type="range"
+					min="88"
+					max="220"
+					step="8"
+					@change="saveFilmstripPlacement"></label>
+			</div>
 		</div>
 		<div v-if="showShortcuts" class="shortcut-sheet">
 			<span><kbd>←</kbd><kbd>→</kbd> {{ t('proofing_gallery', 'Navigate') }}</span><span><kbd>0–5</kbd> {{ t('proofing_gallery', 'Rate') }}</span><span><kbd>P</kbd> {{ t('proofing_gallery', 'Pick') }}</span><span><kbd>X</kbd> {{ t('proofing_gallery', 'Reject') }}</span><span><kbd>F</kbd> {{ t('proofing_gallery', 'Focus') }}</span><span><kbd>Space</kbd> {{ t('proofing_gallery', 'Select') }}</span><span><kbd>Ctrl/⌘ Z</kbd> {{ t('proofing_gallery', 'Undo') }}</span>
@@ -569,7 +598,7 @@ onBeforeUnmount(() => {
 			</div>
 			<template v-else>
 				<div class="guest-signal__summary">
-					<strong>{{ guestRatings.length }}</strong><span>{{ t('proofing_gallery', 'rated photographs') }}</span><strong>{{ guestRatings.reduce((sum, item) => sum + item.count, 0) }}</strong><span>{{ t('proofing_gallery', 'private ratings') }}</span>
+					<strong>{{ guestRatingsTotal }}</strong><span>{{ t('proofing_gallery', 'rated photographs') }}</span><strong>{{ guestRatings.reduce((sum, item) => sum + item.count, 0) }}</strong><span>{{ t('proofing_gallery', 'private ratings on this page') }}</span>
 				</div>
 				<ul class="guest-signal__items">
 					<li v-for="aggregate in guestRatings" :key="aggregate.fileId" :class="{ selected: selectedIds.includes(aggregate.fileId) }">
@@ -579,6 +608,12 @@ onBeforeUnmount(() => {
 						<details><summary>{{ t('proofing_gallery', 'Show individual ratings') }}</summary><span v-for="individual in aggregate.individuals" :key="individual.guestId">{{ individual.name }} · {{ individual.rating }}★ · {{ individual.pick }}</span></details>
 					</li>
 				</ul>
+				<NcButton v-if="guestRatingsCursor"
+					variant="tertiary"
+					:disabled="guestWorking"
+					@click="loadMoreGuestSignals">
+					{{ t('proofing_gallery', 'Load more ratings') }}
+				</NcButton>
 				<div class="guest-signal__actions">
 					<NcButton :disabled="guestWorking" @click="buildGuestPlan">
 						{{ selectedIds.length ? t('proofing_gallery', 'Preview selected') : t('proofing_gallery', 'Preview all') }}
@@ -613,61 +648,17 @@ onBeforeUnmount(() => {
 		</div>
 		<template v-else>
 			<div class="culling-stage" :class="`culling-stage--${effectiveFilmstripPlacement}`" :style="{ '--filmstrip-size': `${filmstripSize}px` }">
-				<section v-if="activeItem" class="culling-loupe" :aria-label="t('proofing_gallery', 'Focused photo')">
-					<div class="culling-loupe__image">
-						<ProgressiveImage :src="ownerPreviewUrl(gallery.id, activeItem.id, 1600, 1100)" :alt="activeItem.name" priority />
-						<span v-if="stateFor(activeItem.id).pick !== 'none'" class="decision-badge" :class="`decision-badge--${stateFor(activeItem.id).pick}`">{{ stateFor(activeItem.id).pick === 'pick' ? 'PICK' : 'REJECT' }}</span>
-					</div>
-					<div class="culling-loupe__controls">
-						<div><strong>{{ activeItem.name }}</strong><small>{{ activeItem.relativePath }}</small></div>
-						<div class="culling-navigation" :aria-label="t('proofing_gallery', 'Photo navigation')">
-							<button type="button"
-								:disabled="activeIndex <= 0"
-								:aria-label="t('proofing_gallery', 'Previous photo')"
-								@click="moveActive(-1)">
-								←
-							</button>
-							<span>{{ activeIndex + 1 }} / {{ filteredItems.length }}</span>
-							<button type="button"
-								:disabled="activeIndex >= filteredItems.length - 1"
-								:aria-label="t('proofing_gallery', 'Next photo')"
-								@click="moveActive(1)">
-								→
-							</button>
-						</div>
-						<div class="rating-buttons" :aria-label="t('proofing_gallery', 'Set rating')">
-							<button v-for="rating in 6"
-								:key="rating - 1"
-								type="button"
-								:class="{ active: stateFor(activeItem.id).rating === rating - 1 }"
-								:aria-label="t('proofing_gallery', '{rating} stars', { rating: rating - 1 })"
-								@click="mutate({ rating: rating - 1 })">
-								{{ rating - 1 || '–' }}<span v-if="rating > 1">★</span>
-							</button>
-						</div>
-						<div class="decision-buttons">
-							<button type="button"
-								:class="{ active: stateFor(activeItem.id).pick === 'pick' }"
-								:aria-label="t('proofing_gallery', 'Pick')"
-								@click="mutate({ pick: stateFor(activeItem.id).pick === 'pick' ? 'none' : 'pick' })">
-								✓ {{ t('proofing_gallery', 'Pick') }}
-							</button><button type="button"
-								:class="{ active: stateFor(activeItem.id).pick === 'reject' }"
-								:aria-label="t('proofing_gallery', 'Reject')"
-								@click="mutate({ pick: stateFor(activeItem.id).pick === 'reject' ? 'none' : 'reject' })">
-								× {{ t('proofing_gallery', 'Reject') }}
-							</button>
-						</div>
-						<div class="color-buttons" :aria-label="t('proofing_gallery', 'Set color label')">
-							<button v-for="color in colors"
-								:key="color.value"
-								type="button"
-								:class="[`color-${color.value}`, { active: stateFor(activeItem.id).color === color.value }]"
-								:aria-label="color.label"
-								@click="mutate({ color: color.value })" />
-						</div>
-					</div>
-				</section>
+				<CullingLoupe
+					v-if="activeItem"
+					:item="activeItem"
+					:state="stateFor(activeItem.id)"
+					:index="activeIndex"
+					:count="filteredItems.length"
+					:preview-url="ownerPreviewUrl(gallery.id, activeItem.id, 1600, 1100)"
+					:colors="colors"
+					@navigate="moveActive"
+					@mutate="mutate"
+					@toggle-chrome="chromeVisible = !chromeVisible" />
 				<CullingFilmstrip
 					:items="filteredItems"
 					:states="states"
@@ -682,7 +673,6 @@ onBeforeUnmount(() => {
 					@select="toggleSelected"
 					@load-more="loadPage(false)" />
 			</div>
-
 			<div class="culling-selection">
 				<span>{{ t('proofing_gallery', '{visible} visible · {loaded} of {total} loaded', { visible: filteredItems.length, loaded: items.length, total }) }}</span><span v-if="selectedIds.length">{{ t('proofing_gallery', '{count} selected', { count: selectedIds.length }) }} <button type="button" @click="selectedIds = []">{{ t('proofing_gallery', 'Clear') }}</button></span>
 			</div>
@@ -693,4 +683,4 @@ onBeforeUnmount(() => {
 	</section>
 </template>
 
-<style scoped src="./styles/CullingWorkspace.css"></style>
+<style src="./styles/CullingWorkspace.css"></style>

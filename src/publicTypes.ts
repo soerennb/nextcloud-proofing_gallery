@@ -21,6 +21,25 @@ export interface PublicGallery {
 	token: string
 	settings: GallerySettings
 	initialPage?: PublicGalleryPage
+	review?: PublicReviewState
+}
+
+export type ReviewStatus = 'awaiting_feedback' | 'submitted' | 'changes_requested' | 'approved'
+
+export interface ReviewRound {
+	round: number
+	status: ReviewStatus
+	dueDate: string | null
+	submittedAt: number | null
+	decidedAt: number | null
+	updatedAt: number
+	submittedBy?: string | null
+}
+
+export interface PublicReviewState {
+	enabled: boolean
+	dueDate: string | null
+	current: ReviewRound | null
 }
 
 export interface GuestIdentity {
@@ -30,6 +49,7 @@ export interface GuestIdentity {
 }
 
 export interface CollaborationState {
+	delta?: boolean
 	policy: {
 		enabled: boolean
 		visibility: 'private' | 'collaborative'
@@ -59,5 +79,6 @@ export interface CollaborationState {
 	}>
 	selections: Array<{ id: string; name: string; message: string; fileIds: number[]; author: string; mine: boolean }>
 	ratings: Array<{ fileId: number; rating: number; pick: 'none' | 'pick' | 'reject'; updatedAt: number }>
+	events?: Array<{ id: number; type: string; payload: { fileId?: number; commentId?: number; selectionId?: string }; createdAt: number }>
 	cursor: number
 }

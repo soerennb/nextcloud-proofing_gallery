@@ -8,8 +8,8 @@ import { computed, onMounted, ref } from 'vue'
 
 import {
 	acceptUpload,
-	fetchActivity,
-	fetchInbox,
+	fetchActivityPage,
+	fetchInboxPage,
 	rejectUpload} from '../services/galleryApi.ts'
 import type {GalleryActivity, InboxUpload} from '../services/galleryApi.ts'
 
@@ -20,6 +20,11 @@ const props = withDefaults(defineProps<{
 const uploads = ref<InboxUpload[]>([])
 const events = ref<GalleryActivity[]>([])
 const loading = ref(true)
+const loadingMore = ref(false)
+const uploadCursor = ref<string | null>(null)
+const eventCursor = ref<string | null>(null)
+const uploadTotal = ref(0)
+const eventTotal = ref(0)
 const filter = ref('')
 const busyUpload = ref('')
 const pending = computed(() => uploads.value.filter(upload => upload.status === 'awaiting_review'))
@@ -28,16 +33,36 @@ async function load() {
 	loading.value = true
 	try {
 		const result = await Promise.all([
-			fetchInbox(props.galleryId),
-			fetchActivity(props.galleryId, filter.value),
+			fetchInboxPage(props.galleryId),
+			fetchActivityPage(props.galleryId, filter.value),
 		])
-		uploads.value = result[0]
-		events.value = result[1]
+		uploads.value = result[0].items
+		events.value = result[1].items
+		uploadCursor.value = result[0].nextCursor
+		eventCursor.value = result[1].nextCursor
+		uploadTotal.value = result[0].total
+		eventTotal.value = result[1].total
 	} catch {
 		showError(t('proofing_gallery', 'Gallery activity could not be loaded.'))
 	} finally {
 		loading.value = false
 	}
+}
+
+async function loadMore(kind: 'uploads' | 'events') {
+	if (loadingMore.value) return
+	const cursor = kind === 'uploads' ? uploadCursor.value : eventCursor.value
+	if (!cursor) return
+	loadingMore.value = true
+	try {
+		if (kind === 'uploads') {
+			const page = await fetchInboxPage(props.galleryId, cursor)
+			uploads.value.push(...page.items); uploadCursor.value = page.nextCursor; uploadTotal.value = page.total
+		} else {
+			const page = await fetchActivityPage(props.galleryId, filter.value, cursor)
+			events.value.push(...page.items); eventCursor.value = page.nextCursor; eventTotal.value = page.total
+		}
+	} catch { showError(t('proofing_gallery', 'Gallery activity could not be loaded.')) } finally { loadingMore.value = false }
 }
 
 async function accept(upload: InboxUpload) {
@@ -153,6 +178,12 @@ onMounted(load)
 					</NcButton>
 				</article>
 			</div>
+			<NcButton v-if="mode !== 'activity' && uploadCursor"
+				variant="tertiary"
+				:disabled="loadingMore"
+				@click="loadMore('uploads')">
+				{{ t('proofing_gallery', 'Load older uploads') }} ({{ uploads.length }}/{{ uploadTotal }})
+			</NcButton>
 			<NcEmptyContent
 				v-else-if="mode !== 'activity'"
 				:name="t('proofing_gallery', 'Inbox clear')"
@@ -167,6 +198,12 @@ onMounted(load)
 					</div>
 				</li>
 			</ol>
+			<NcButton v-if="mode !== 'inbox' && eventCursor"
+				variant="tertiary"
+				:disabled="loadingMore"
+				@click="loadMore('events')">
+				{{ t('proofing_gallery', 'Load older activity') }} ({{ events.length }}/{{ eventTotal }})
+			</NcButton>
 		</template>
 	</section>
 </template>

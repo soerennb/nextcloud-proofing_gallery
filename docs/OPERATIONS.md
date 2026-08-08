@@ -51,6 +51,41 @@ failed Nextcloud background jobs. Cleanup is eventual, so allow headroom for int
 uploads. Native Nextcloud retention, backup, encryption, and object-storage
 policies still apply to gallery source folders.
 
+### Capacity and backlog monitoring
+
+The Administration settings system-status section reads indexed counters for
+scheduled, running, and due gallery purges, due lifecycle actions, expired guest
+sessions, queued media-index folders, failed retention handoffs, and integration
+outbox work. These counters do not enumerate gallery media or open source
+folders. Investigate when due work grows over multiple cron cycles, a media scan
+stays unchanged for more than 15 minutes, or the oldest purge remains due after
+a full daily cleanup.
+
+Pull requests run a bounded scale smoke with 20 galleries and 100 media rows.
+The scheduled `Scaling` workflow exercises 250 galleries and 1,000 media rows.
+Tune these fixtures with `E2E_SCALE_GALLERIES` and `E2E_SCALE_IMAGES`; never use
+client material for a load fixture.
+
+### Controlled deletion and Nextcloud retention
+
+An owner can export app data for a gallery, archive it, and schedule permanent
+removal after a 30-day grace period. Cancellation is possible until processing
+starts. Processing is resumable and deletes at most 1,000 rows from one table
+per step. It removes Proofing Gallery database rows and private appdata chunks;
+the source folder and original Nextcloud files are outside its scope.
+
+Identified guests can export their own review data or erase it immediately.
+User and group deletion events remove scoped assignments and personal app
+records; galleries owned by a deleted user are revoked, archived, and scheduled
+with the same grace period.
+
+The optional Files Retention handoff is disabled by default. An administrator
+selects one existing Nextcloud system tag, and each folder-gallery owner opts in
+separately. Proofing Gallery assigns that tag on archive and removes the same tag
+on restore. The app never invokes file or folder deletion for this integration.
+Any later deletion is performed solely by the independently configured
+Nextcloud Files Retention rule. Test it on disposable data first.
+
 ## HTTPS Live Push ingress
 
 Live Push is disabled by default. An administrator enables the HTTPS ingress
@@ -198,5 +233,7 @@ leaked token.
 ## Verification
 
 Run `make test-compat` to exercise the full supported server/database matrix.
+Run `UPGRADE_DATABASE=sqlite|mariadb|postgres make test-upgrade` for an explicit
+schema-and-sentinel-data upgrade on each database family.
 Run `make verify-package` to build the release archive and install it on a fresh
 Nextcloud 34 SQLite instance.

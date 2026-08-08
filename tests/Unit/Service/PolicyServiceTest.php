@@ -31,6 +31,8 @@ final class PolicyServiceTest extends TestCase {
 		self::assertSame(25000, $policies->get('maxIndexedMedia'));
 		self::assertSame(10, $policies->get('maxPublicLinks'));
 		self::assertSame(90, $policies->get('shareAuditRetentionDays'));
+		self::assertSame(30, $policies->get('notificationQueueRetentionDays'));
+		self::assertSame(30, $policies->get('deadLetterRetentionDays'));
 		self::assertSame(10737418240, $policies->get('maxVideoInputBytes'));
 		self::assertSame(1080, $policies->get('videoMaxHeight'));
 		self::assertSame(10000, $policies->get('maxSemanticMedia'));
@@ -102,6 +104,7 @@ final class PolicyServiceTest extends TestCase {
 		self::assertSame('disabled', $saved['semantic']['provider']);
 		self::assertFalse($saved['livePush']['enabled']);
 		self::assertFalse($saved['customDomains']['enabled']);
+		self::assertSame(['enabled' => false, 'systemTagId' => ''], $saved['retention']);
 	}
 
 	public function testExternalSemanticProviderRequiresExplicitHttpsTransfer(): void {
@@ -139,5 +142,11 @@ final class PolicyServiceTest extends TestCase {
 		$policies = new PolicyService($this->createMock(IConfig::class));
 		$this->expectException(\InvalidArgumentException::class);
 		$policies->saveInstanceSettings(['branding' => ['trackingPixel' => 'https://invalid.test']]);
+	}
+
+	public function testRetentionRequiresAnExplicitSystemTag(): void {
+		$policies = new PolicyService($this->createMock(IConfig::class));
+		$this->expectException(\InvalidArgumentException::class);
+		$policies->saveInstanceSettings(['retention' => ['enabled' => true]]);
 	}
 }

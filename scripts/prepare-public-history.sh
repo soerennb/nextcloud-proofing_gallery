@@ -69,11 +69,7 @@ if [[ "${private_content_found}" == "1" ]]; then
 	exit 1
 fi
 
-if command -v gitleaks >/dev/null 2>&1; then
-	gitleaks git --redact --no-banner .
-else
-	echo "WARNING: gitleaks is not installed. Run a full gitleaks history scan before pushing." >&2
-fi
+"${repo_dir}/scripts/scan-git-history.sh" .
 
 git remote add origin "${public_remote}"
 echo "Sanitized public clone prepared at ${destination}"

@@ -20,6 +20,8 @@ final class PublicLinkConfigurationTest extends TestCase {
 			'minOwnerRating' => 4,
 			'publicLocale' => 'de',
 			'expiresAt' => '2026-12-31',
+			'reviewEnabled' => true,
+			'reviewDueDate' => '2026-11-30',
 		]);
 
 		self::assertSame('Client review', $config->name);
@@ -27,6 +29,13 @@ final class PublicLinkConfigurationTest extends TestCase {
 		self::assertTrue($config->policy->allows(PublicLinkCapability::Comments));
 		self::assertSame(DownloadScope::Selection, $config->policy->downloadScope);
 		self::assertSame('2026-12-31', $config->expiresAt?->format('Y-m-d'));
+		self::assertTrue($config->reviewEnabled);
+		self::assertSame('2026-11-30', $config->reviewDueDate);
+	}
+
+	public function testRejectsInvalidReviewConfiguration(): void {
+		$this->expectException(\InvalidArgumentException::class);
+		PublicLinkConfiguration::fromArray(['name' => 'Review', 'reviewEnabled' => true, 'reviewDueDate' => '30.11.2026']);
 	}
 
 	public function testRejectsLinksThatDisableViewing(): void {

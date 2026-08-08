@@ -6,9 +6,11 @@ namespace OCA\ProofingGallery\BackgroundJob;
 
 use OCA\ProofingGallery\Service\VideoTranscodeService;
 use OCP\BackgroundJob\QueuedJob;
+use OCP\AppFramework\Utility\ITimeFactory;
 
 final class TranscodeVideoJob extends QueuedJob {
-	public function __construct(private VideoTranscodeService $transcodes) {
+	public function __construct(ITimeFactory $time, private VideoTranscodeService $transcodes) {
+		parent::__construct($time);
 	}
 
 	/** @param mixed $argument */

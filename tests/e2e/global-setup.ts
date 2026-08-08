@@ -104,15 +104,20 @@ export default async function globalSetup(config: FullConfig) {
 	const localFixtureNames = await readdir(localFixtureDirectory).catch(() => [])
 	const localFixtures = localFixtureNames.filter(name => name.endsWith('.webp')).sort()
 	const useLocalFixtures = localFixtures.length === 23
-	const largeImages = useLocalFixtures
+	const requestedImageCount = Math.max(1, Math.min(2000, Number(process.env.E2E_SCALE_IMAGES ?? 23)))
+	const sourceImages = useLocalFixtures
 		? await Promise.all(localFixtures.map(name => readFile(path.join(localFixtureDirectory, name))))
 		: Array.from({ length: 23 }, () => png)
+	const largeImages = Array.from({ length: requestedImageCount }, (_, index) => sourceImages[index % sourceImages.length])
 	const largeExtension = useLocalFixtures ? 'webp' : 'png'
-	await Promise.all(largeImages.map((body, index) => fetch(`${largeDav}/mobile-${String(index + 1).padStart(2, '0')}.${largeExtension}`, {
-		method: 'PUT',
-		headers: { ...headers, 'Content-Type': useLocalFixtures ? 'image/webp' : 'image/png' },
-		body,
-	})))
+	const largeNameWidth = requestedImageCount > 99 ? 4 : 2
+	for (let offset = 0; offset < largeImages.length; offset += 25) {
+		await Promise.all(largeImages.slice(offset, offset + 25).map((body, index) => fetch(`${largeDav}/mobile-${String(offset + index + 1).padStart(largeNameWidth, '0')}.${largeExtension}`, {
+			method: 'PUT',
+			headers: { ...headers, 'Content-Type': useLocalFixtures ? 'image/webp' : 'image/png' },
+			body,
+		})))
+	}
 	const largePropfind = await fetch(largeDav, {
 		method: 'PROPFIND',
 		headers: { ...headers, Depth: '0', 'Content-Type': 'application/xml' },
@@ -143,6 +148,7 @@ export default async function globalSetup(config: FullConfig) {
 			folderId,
 			largeFolderId,
 			largeExtension,
+			largeImageCount: requestedImageCount,
 		}),
 	)
 }

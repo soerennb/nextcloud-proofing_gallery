@@ -228,19 +228,6 @@
 	color: var(--gallery-text);
 }
 
-.guest-identity {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	margin: 0 4px 24px;
-	padding: 14px;
-	border: 1px solid var(--gallery-border);
-	background: var(--gallery-surface);
-}
-
-.guest-identity small {
-	color: var(--gallery-muted);
-}
 
 .delivery-bar input {
 	min-height: 38px;
@@ -261,13 +248,6 @@
 	cursor: pointer;
 }
 
-.guest-identity {
-	justify-content: space-between;
-}
-
-.guest-identity > div {
-	display: grid;
-}
 
 .collaboration-error {
 	margin: 0 4px 18px;
@@ -612,6 +592,22 @@
 	box-shadow: 0 0 0 4px rgb(0 0 0 / 48%);
 }
 
+.media-tile__compare { position: absolute; z-index: 4; inset-inline-end: 10px; bottom: 10px; min-height: 30px; padding: 4px 8px; border: 1px solid rgb(255 255 255 / 28%); border-radius: 2px; background: rgb(10 10 12 / 68%); color: #fff; font-size: 11px; opacity: 0; cursor: pointer; transition: opacity 140ms ease; }
+
+.media-tile:hover .media-tile__compare, .media-tile__compare:focus-visible, .media-tile__compare[aria-pressed="true"] { opacity: 1; }
+
+.compare-rail { position: sticky; z-index: 15; bottom: 12px; display: flex; width: fit-content; max-width: calc(100vw - 24px); min-height: 54px; align-items: center; gap: 10px; margin: 12px auto; padding: 7px 9px; border: 1px solid var(--gallery-border); background: var(--gallery-surface); box-shadow: 0 10px 28px rgb(0 0 0 / 20%); }
+
+.compare-rail > div { display: flex; gap: 3px; }
+
+.compare-rail img { width: 42px; height: 36px; object-fit: cover; }
+
+.compare-rail button { min-height: 36px; border: 1px solid var(--gallery-border); border-radius: 2px; background: transparent; color: var(--gallery-text); cursor: pointer; }
+
+.continuation-banner { position: fixed; z-index: 18; inset-inline-end: 18px; bottom: max(18px, env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 24px); padding: 10px 12px; border: 1px solid var(--gallery-border); background: var(--gallery-surface); color: var(--gallery-text); box-shadow: 0 12px 34px rgb(0 0 0 / 24%); }
+
+.continuation-banner button { min-height: 34px; border: 1px solid var(--gallery-border); border-radius: 2px; background: transparent; color: inherit; cursor: pointer; }
+
 .public-gallery__message {
 	padding: 100px 20px;
 	text-align: center;
@@ -836,10 +832,6 @@
 		display: none;
 	}
 
-	.guest-identity {
-		align-items: stretch;
-		flex-direction: column;
-	}
 
 	.delivery-bar {
 		flex-wrap: wrap;

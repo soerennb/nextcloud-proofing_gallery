@@ -29,6 +29,7 @@ product demos, and App Store screenshots, use the separate persistent studio:
 
 ```bash
 make studio-up
+make studio-doctor
 make studio-library-check
 make studio-seed
 make studio-browser-check
@@ -40,6 +41,14 @@ It uses an isolated Compose project and named volumes, serves only on
 Defaults are `studio` / `studio-demo`; local overrides belong in the ignored
 `.env.studio`. `studio-reset` removes only studio volumes and requires
 `CONFIRM_STUDIO_RESET=yes`.
+
+The disposable development stack intentionally follows current image tags;
+use `make dev-pull` to refresh it. The persistent Studio reads reviewed
+linux/amd64 digests from `.env.studio.images`. `make studio-refresh` pulls and
+recreates those containers while preserving volumes. It never applies pending
+app migrations: inspect them with `make studio-migration-status`, apply them
+explicitly with `make studio-migrate`, then use `make studio-doctor` to inspect
+image provenance, versions, schema state, projection progress, and cron jobs.
 
 Generated demo images live in the ignored `.local/demo-library/` directory.
 Their prompts, dimensions, provenance, and checksums are versioned in
@@ -103,6 +112,27 @@ The compatibility harness uses isolated Compose project names and deletes only
 containers, networks, and volumes it created. Restrict a local run with, for
 example, `NEXTCLOUD_VERSIONS=34 DATABASES=sqlite`.
 
+### Nextcloud integration compatibility
+
+The optional ecosystem adapters must remain load-safe on every supported
+Nextcloud release. Run the compatibility harness across Nextcloud 31–34 before
+changing registration code, and cover the current server with Docker-backed
+tests for Files actions/sidebar, capabilities, OCS response envelopes, Search,
+Dashboard, Projects, Flow, and optional Context Chat registration. The
+Nextcloud 33 boundary selects the modern Files client API; older supported
+servers use the legacy adapter.
+
+The curated agent contract lives under `/api/v1/agent` in the app's OCS route
+table. New mutations must be current-user scoped, idempotent, revision-safe,
+auditable, and reversible. Do not add password reads, guest PII, arbitrary file
+access, permanent deletion, or administrative impersonation. Update the PHP
+contract tests and `integrations/context_agent/proofing_gallery.py` together.
+
+Context Agent integrations are distributed as upstream Python modules, not as
+an independently privileged MCP daemon. Compile-check the module with
+`python3 -m py_compile integrations/context_agent/proofing_gallery.py`; never
+commit its generated `__pycache__` directory.
+
 ## Database changes
 
 Add a new monotonically increasing migration; do not modify released
@@ -110,13 +140,21 @@ migrations. Use Nextcloud's schema abstraction exclusively and rerun all three
 database engines. Keep controllers thin and put authorization and domain rules
 in services or dedicated domain objects.
 
+The persistent screenshot studio never applies pending app migrations
+implicitly. Inspect it with `./scripts/studio-stack.sh migration-status` and,
+after reviewing the result, apply them explicitly with `./scripts/studio-stack.sh
+migrate`. `studio-stack.sh up` stops when bind-mounted code is newer than the
+persistent database schema.
+
 ## Release
 
 Set the same semantic version in `appinfo/info.xml`, `package.json`, and
 `package-lock.json`, update the changelog, then run `make verify-package`.
-Run `make test-upgrade` as well when a release adds database migrations; it
-verifies the previous 0.2 Beta.3 schema and a preserved gallery against the
-current App Store artifact in an isolated Nextcloud 34 instance.
+Run `make test-upgrade` as well when a release adds database migrations. The
+release gate downloads the published 0.7.0 package and `SHA256SUMS`, verifies
+the checksum, and tests preserved galleries against the current package in an
+isolated Nextcloud 34 instance without importing the sanitized public Git
+history into the internal repository.
 Signing is performed afterward with the maintainer's Nextcloud certificate and
 private key outside this repository. `make appstore` remains the credential-free
 unsigned build. Once the official certificate is available, use

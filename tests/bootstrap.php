@@ -18,3 +18,8 @@ spl_autoload_register(static function (string $class): void {
 		require_once $path;
 	}
 });
+
+require_once __DIR__ . '/compat/FilesLoadAdditionalScriptsEvent.php';
+require_once __DIR__ . '/compat/ContextChat.php';
+require_once __DIR__ . '/compat/OpenMetrics.php';
+require_once __DIR__ . '/compat/SymfonyConsole.php';

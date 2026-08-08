@@ -21,6 +21,7 @@ final class PublicShareTemplateProvider implements IPublicShareTemplateProvider 
 		private PublicGalleryDataService $galleryData,
 		private IURLGenerator $urlGenerator,
 		private \OCA\ProofingGallery\Service\PublicShareContextResolver $contexts,
+		private \OCA\ProofingGallery\Service\ReviewWorkflowService $reviews,
 	) {
 	}
 
@@ -69,6 +70,7 @@ final class PublicShareTemplateProvider implements IPublicShareTemplateProvider 
 			'token' => $token,
 			'path' => $path,
 			'initialPage' => $initialPage,
+			'review' => $this->reviews->publicState($context->link),
 		]);
 		Util::addScript(Application::APP_ID, 'proofing_gallery-public');
 		Util::addStyle(Application::APP_ID, 'proofing_gallery-public');

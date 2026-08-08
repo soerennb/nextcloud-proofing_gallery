@@ -17,6 +17,8 @@ final class SettingsRolloutService {
 		private PolicyService $policies,
 		private ITimeFactory $clock,
 		private PublicShareService $shares,
+		private LifecycleScheduleService $lifecycleSchedule,
+		private GalleryListProjectionService $listProjection,
 	) {
 	}
 
@@ -63,6 +65,8 @@ final class SettingsRolloutService {
 			$current = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
 			$gallery->setSettings(json_encode(GallerySettings::merge($current, $patch), JSON_THROW_ON_ERROR));
 			$gallery->setUpdatedAt($this->clock->getTime());
+			$this->lifecycleSchedule->project($gallery, $this->clock->getTime());
+			$this->listProjection->project($gallery);
 			try {
 				$updated = $this->galleries->updateDocument($gallery, $expected);
 				$applied[] = ['id' => $updated->getId(), 'revision' => $updated->getRevision()];

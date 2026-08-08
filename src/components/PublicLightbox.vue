@@ -25,8 +25,9 @@ const props = defineProps<{
 	streamUrl(item: MediaItem): string
 	downloadUrl(item: MediaItem): string
 	selectionExportUrl(selectionId: string, format: 'csv' | 'plain' | 'search', fields?: string[]): string
+	compareIds: number[]
 }>()
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: []; 'toggle-compare': [item: MediaItem] }>()
 
 const activeIndex = ref(props.initialIndex)
 const activeItem = computed(() => props.mediaItems[activeIndex.value] ?? null)
@@ -51,6 +52,7 @@ const slideshow = ref(false)
 const shortcutsOpen = ref(false)
 const touchHint = ref(false)
 const chromeVisible = ref(true)
+const fullscreen = ref(Boolean(document.fullscreenElement))
 const filmstripSessionKey = `proofing-gallery-filmstrip:${window.location.pathname}`
 const guestFilmstripHidden = ref(sessionStorage.getItem(filmstripSessionKey) === 'hidden')
 const viewportWidth = ref(window.innerWidth)
@@ -95,6 +97,7 @@ let lastChromeToggleAt = 0
 let previousBodyOverflow = ''
 let previouslyFocused: HTMLElement | null = null
 let unmounting = false
+let wakeLock: { release(): Promise<void> } | null = null
 
 onMounted(async () => {
 	previouslyFocused = document.activeElement as HTMLElement | null
@@ -102,6 +105,7 @@ onMounted(async () => {
 	document.body.style.overflow = 'hidden'
 	window.addEventListener('keydown', onKeydown, true)
 	document.addEventListener('visibilitychange', onSlideshowVisibility)
+	document.addEventListener('fullscreenchange', onFullscreenChange)
 	window.addEventListener('resize', updateViewport, { passive: true })
 
 	const { default: PhotoSwipeConstructor } = await import('photoswipe')
@@ -195,10 +199,12 @@ onBeforeUnmount(() => {
 	unmounting = true
 	window.removeEventListener('keydown', onKeydown, true)
 	document.removeEventListener('visibilitychange', onSlideshowVisibility)
+	document.removeEventListener('fullscreenchange', onFullscreenChange)
 	window.removeEventListener('resize', updateViewport)
 	window.clearInterval(slideshowTimer)
 	window.clearTimeout(hintTimer)
 	window.clearTimeout(chromeTimer)
+	releaseWakeLock()
 	pswp?.destroy()
 	pswp = null
 	document.body.style.overflow = previousBodyOverflow
@@ -336,6 +342,8 @@ function zoom(direction: number) {
 
 function setSlideshow(enabled: boolean) {
 	slideshow.value = enabled
+	if (enabled) requestWakeLock()
+	else releaseWakeLock()
 	scheduleSlideshow()
 }
 
@@ -348,6 +356,27 @@ function scheduleSlideshow() {
 
 function onSlideshowVisibility() {
 	scheduleSlideshow()
+	if (slideshow.value && !document.hidden) requestWakeLock()
+	else releaseWakeLock()
+}
+
+function onFullscreenChange() { fullscreen.value = Boolean(document.fullscreenElement) }
+async function toggleFullscreen() {
+	try {
+		if (document.fullscreenElement) await document.exitFullscreen()
+		else await shell.value?.requestFullscreen()
+	} catch { /* Fullscreen is optional and may be denied by the browser. */ }
+}
+async function requestWakeLock() {
+	try {
+		const manager = (navigator as Navigator & { wakeLock?: { request(type: 'screen'): Promise<{ release(): Promise<void> }> } }).wakeLock
+		if (manager && !wakeLock) wakeLock = await manager.request('screen')
+	} catch { wakeLock = null }
+}
+async function releaseWakeLock() {
+	const lock = wakeLock
+	wakeLock = null
+	try { await lock?.release() } catch { /* The browser may already have released it. */ }
 }
 
 function onKeydown(event: KeyboardEvent) {
@@ -482,6 +511,12 @@ async function saveEditedComment(commentId: number) {
 					:aria-pressed="slideshow"
 					@click="setSlideshow(!slideshow)">
 					{{ slideshow ? t('proofing_gallery', 'Pause') : t('proofing_gallery', 'Slideshow') }}
+				</button>
+				<button type="button" :aria-pressed="fullscreen" @click="toggleFullscreen">
+					{{ fullscreen ? t('proofing_gallery', 'Exit full screen') : t('proofing_gallery', 'Full screen') }}
+				</button>
+				<button type="button" :aria-pressed="compareIds.includes(activeItem.id)" @click="emit('toggle-compare', activeItem)">
+					{{ compareIds.includes(activeItem.id) ? t('proofing_gallery', 'In compare') : t('proofing_gallery', 'Compare') }}
 				</button>
 				<button class="lightbox-bar__shortcuts"
 					type="button"

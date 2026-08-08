@@ -80,8 +80,8 @@ final class GuestService {
 		$this->guests->delete($guest);
 	}
 
-	public function purgeExpired(): int {
-		return $this->guests->deleteExpired($this->clock->getTime());
+	public function purgeExpired(int $limit = 1000): int {
+		return $this->guests->deleteExpired($this->clock->getTime(), $limit);
 	}
 
 	public static function hashSecret(string $secret): string {

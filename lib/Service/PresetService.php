@@ -54,14 +54,14 @@ final class PresetService {
 		$this->presets->delete($this->presets->findOwned($id, $ownerUid));
 	}
 
-	public function apply(string $ownerUid, int $id, int $galleryId): Gallery {
+	public function apply(string $ownerUid, int $id, int $galleryId, ?int $expectedRevision = null): Gallery {
 		$preset = $this->presets->findOwned($id, $ownerUid);
 		$settings = json_decode($preset->getSettings(), true, flags: JSON_THROW_ON_ERROR);
 		$gallery = $this->galleries->get($ownerUid, $galleryId);
 		if ($gallery->getSourceType() === 'collection') {
 			$settings['allowGuestUploads'] = false;
 		}
-		return $this->galleries->update($ownerUid, $galleryId, null, $settings);
+		return $this->galleries->update($ownerUid, $galleryId, null, $settings, $expectedRevision);
 	}
 
 	private function validateName(string $ownerUid, string $name, ?int $exceptId = null): string {

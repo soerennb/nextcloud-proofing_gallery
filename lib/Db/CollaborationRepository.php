@@ -24,15 +24,37 @@ final class CollaborationRepository {
 	 *     selections: list<array<string, mixed>>,
 	 *     events: list<array<string, mixed>>
 	 * }
+	 * @param list<int> $visibleFileIds
 	 */
-	public function state(int $galleryId, ?int $guestId, int $cursor): array {
+	public function state(int $galleryId, ?int $guestId, int $cursor, array $visibleFileIds = []): array {
 		$events = $this->events($galleryId, $guestId, $cursor);
 		if ($cursor > 0 && $events === []) {
 			return ['feedback' => [], 'comments' => [], 'selections' => [], 'events' => [], 'unchanged' => true];
 		}
-		$feedback = $this->rows('proofing_feedback', $galleryId, $guestId, 'updated_at');
-		$comments = $this->rows('proofing_comments', $galleryId, $guestId, 'created_at');
-		$selections = $this->selections($galleryId, $guestId);
+		$delta = $cursor > 0;
+		$eventFileIds = [];
+		$commentIds = [];
+		$selectionIds = [];
+		if ($delta) {
+			foreach ($events as $event) {
+				$payload = json_decode((string)$event['payload'], true);
+				if (!is_array($payload)) continue;
+				if ((int)($payload['fileId'] ?? 0) > 0) $eventFileIds[] = (int)$payload['fileId'];
+				if ((int)($payload['commentId'] ?? 0) > 0) $commentIds[] = (int)$payload['commentId'];
+				if (is_string($payload['selectionId'] ?? null)) $selectionIds[] = $payload['selectionId'];
+			}
+		}
+		$fileIds = array_values(array_unique($delta ? $eventFileIds : array_map('intval', $visibleFileIds)));
+		$feedback = $fileIds === [] && !$delta
+			? $this->rows('proofing_feedback', $galleryId, $guestId, 'updated_at')
+			: $this->rowsForFiles('proofing_feedback', $galleryId, $guestId, $fileIds, 'updated_at');
+		$comments = $fileIds === [] && !$delta
+			? $this->rows('proofing_comments', $galleryId, $guestId, 'created_at')
+			: $this->commentsForDelta($galleryId, $guestId, $fileIds, $commentIds);
+		$selections = $delta
+			? $this->selectionsByPublicIds($galleryId, $guestId, $selectionIds)
+			: $this->selectionPage($galleryId, $guestId, null, 50);
+		$this->decorateSelections($selections);
 		$annotations = $this->annotations(array_map(static fn (array $row): int => (int)$row['id'], $comments));
 		$names = $this->guestNames(array_values(array_unique(array_map(
 			static fn (array $row): int => (int)$row['guest_id'],
@@ -50,12 +72,37 @@ final class CollaborationRepository {
 			'selections' => $selections,
 			'events' => $events,
 			'unchanged' => false,
+			'delta' => $delta,
 		];
 	}
 
 	/** @return list<array<string, mixed>> */
 	public function selections(int $galleryId, ?int $guestId): array {
 		$selections = $this->rows('proofing_selections', $galleryId, $guestId, 'updated_at');
+		$this->decorateSelections($selections);
+		return $selections;
+	}
+
+	/** @return list<array<string, mixed>> */
+	public function selectionPage(int $galleryId, ?int $guestId, ?int $beforeId, int $limit): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')->from('proofing_selections')
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->orderBy('id', 'DESC')->setMaxResults(max(1, min(101, $limit)));
+		if ($guestId !== null) $qb->andWhere($qb->expr()->eq('guest_id', $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT)));
+		if ($beforeId !== null) $qb->andWhere($qb->expr()->lt('id', $qb->createNamedParameter($beforeId, IQueryBuilder::PARAM_INT)));
+		return QueryResult::rows($qb->executeQuery());
+	}
+
+	public function selectionCount(int $galleryId): int {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select($qb->func()->count())->from('proofing_selections')
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
+		return (int)$qb->executeQuery()->fetchOne();
+	}
+
+	/** @param list<array<string, mixed>> $selections */
+	public function decorateSelections(array &$selections): void {
 		$items = $this->selectionItems(array_map(static fn (array $row): int => (int)$row['id'], $selections));
 		$names = $this->guestNames(array_values(array_unique(array_map(
 			static fn (array $row): int => (int)$row['guest_id'],
@@ -66,7 +113,35 @@ final class CollaborationRepository {
 			$selection['fileIds'] = $items[(int)$selection['id']] ?? [];
 		}
 		unset($selection);
-		return $selections;
+	}
+
+	/** @param list<int> $fileIds
+	 * @param list<int> $commentIds
+	 * @return list<array<string, mixed>> */
+	private function commentsForDelta(int $galleryId, ?int $guestId, array $fileIds, array $commentIds): array {
+		if ($fileIds === [] && $commentIds === []) return [];
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')->from('proofing_comments')
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->orX(
+				$fileIds === [] ? $qb->expr()->eq('id', $qb->createNamedParameter(-1, IQueryBuilder::PARAM_INT)) : $qb->expr()->in('file_id', $qb->createNamedParameter($fileIds, IQueryBuilder::PARAM_INT_ARRAY)),
+				$commentIds === [] ? $qb->expr()->eq('id', $qb->createNamedParameter(-1, IQueryBuilder::PARAM_INT)) : $qb->expr()->in('id', $qb->createNamedParameter($commentIds, IQueryBuilder::PARAM_INT_ARRAY)),
+			))->orderBy('id', 'ASC')->setMaxResults(1000);
+		if ($guestId !== null) $qb->andWhere($qb->expr()->eq('guest_id', $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT)));
+		return QueryResult::rows($qb->executeQuery());
+	}
+
+	/** @param list<string> $publicIds
+	 * @return list<array<string, mixed>> */
+	private function selectionsByPublicIds(int $galleryId, ?int $guestId, array $publicIds): array {
+		if ($publicIds === []) return [];
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')->from('proofing_selections')
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->in('public_id', $qb->createNamedParameter($publicIds, IQueryBuilder::PARAM_STR_ARRAY)))
+			->orderBy('id', 'ASC')->setMaxResults(200);
+		if ($guestId !== null) $qb->andWhere($qb->expr()->eq('guest_id', $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT)));
+		return QueryResult::rows($qb->executeQuery());
 	}
 
 	public function feedbackId(int $galleryId, int $guestId, int $fileId, string $kind): ?int {
@@ -101,13 +176,15 @@ final class CollaborationRepository {
 		])->executeStatement();
 	}
 
-	public function countRows(string $table, int $galleryId, ?int $guestId = null): int {
+	public function hasAtLeastRows(string $table, int $galleryId, int $threshold, ?int $guestId = null): bool {
 		if (!array_key_exists($table, self::ROW_LIMITS)) throw new InvalidArgumentException('Unsupported collaboration table');
+		if ($threshold < 1) return true;
 		$qb = $this->db->getQueryBuilder();
-		$qb->select($qb->func()->count())->from($table)
+		$qb->select('id')->from($table)
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
 		if ($guestId !== null) $qb->andWhere($qb->expr()->eq('guest_id', $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT)));
-		return (int)$qb->executeQuery()->fetchOne();
+		$qb->orderBy('id', 'ASC')->setFirstResult($threshold - 1)->setMaxResults(1);
+		return $qb->executeQuery()->fetchOne() !== false;
 	}
 
 	public function updateFeedback(int $id, string $value, int $now): void {
@@ -301,9 +378,22 @@ final class CollaborationRepository {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')->from($table)
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
-			->orderBy($order, 'DESC')->setMaxResults($limit);
+			->orderBy($order, 'DESC')->setMaxResults(min(5000, $limit));
 		if ($guestId !== null) $qb->andWhere($qb->expr()->eq('guest_id', $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT)));
 		return array_reverse(QueryResult::rows($qb->executeQuery()));
+	}
+
+	/** @param list<int> $fileIds
+	 * @return list<array<string, mixed>> */
+	private function rowsForFiles(string $table, int $galleryId, ?int $guestId, array $fileIds, string $order): array {
+		if ($fileIds === []) return [];
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')->from($table)
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->in('file_id', $qb->createNamedParameter($fileIds, IQueryBuilder::PARAM_INT_ARRAY)))
+			->orderBy($order, 'ASC')->setMaxResults(5000);
+		if ($guestId !== null) $qb->andWhere($qb->expr()->eq('guest_id', $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT)));
+		return QueryResult::rows($qb->executeQuery());
 	}
 
 	/** @param list<int> $selectionIds

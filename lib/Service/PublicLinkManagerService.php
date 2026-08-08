@@ -43,6 +43,7 @@ final class PublicLinkManagerService {
 		private CustomDomainRepository $customDomains,
 		private CapabilityPolicyService $capabilities,
 		private GalleryReadinessService $readiness,
+		private ReviewWorkflowService $reviews,
 	) {
 	}
 
@@ -76,10 +77,14 @@ final class PublicLinkManagerService {
 		$link->setGroupDepth($config->groupDepth);
 		$link->setMinOwnerRating($config->minOwnerRating);
 		$link->setPublicLocale($config->publicLocale);
+		$link->setReviewEnabled($config->reviewEnabled);
+		$link->setReviewDueDate($config->reviewEnabled ? $config->reviewDueDate : null);
 		$link->setCreatedAt($now);
 		$link->setUpdatedAt($now);
 		try {
-			return $this->present($this->links->insert($link));
+			$link = $this->links->insert($link);
+			$this->reviews->synchronize($link);
+			return $this->present($link);
 		} catch (\Throwable $exception) {
 			try {
 				$this->shareManager->deleteShare($share);
@@ -108,9 +113,13 @@ final class PublicLinkManagerService {
 		$link->setGroupDepth($config->groupDepth);
 		$link->setMinOwnerRating($config->minOwnerRating);
 		$link->setPublicLocale($config->publicLocale);
+		$link->setReviewEnabled($config->reviewEnabled);
+		$link->setReviewDueDate($config->reviewEnabled ? $config->reviewDueDate : null);
 		$link->setUpdatedAt($this->clock->getTime());
 		try {
-			return $this->present($this->links->update($link));
+			$link = $this->links->update($link);
+			$this->reviews->synchronize($link);
+			return $this->present($link);
 		} catch (\Throwable $exception) {
 			$this->compensateShare($share, $snapshot, $exception);
 			throw $exception;
@@ -168,6 +177,7 @@ final class PublicLinkManagerService {
 				'id' => (int)$domain['id'], 'domain' => (string)$domain['domain'], 'status' => (string)$domain['status'],
 				'verificationName' => '_proofing-gallery.' . $domain['domain'], 'verificationValue' => (string)$domain['verification_token'],
 			],
+			'review' => $this->reviews->publicState($link),
 		];
 	}
 

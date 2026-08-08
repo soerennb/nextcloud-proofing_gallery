@@ -59,6 +59,23 @@ previews, and old internal activity in bounded batches. Owners can revoke the
 public share at any time. Server administrators remain responsible for backups,
 logs, database retention, and legal deletion requests.
 
+An identified guest can download a machine-readable NDJSON copy of their own
+identity and contributions and can erase those records from the gallery. The
+mutation requires both the guest cookie and its independent nonce. Gallery
+exports omit session hashes, nonces, public-link and verification tokens,
+unsubscribe tokens, encrypted email ciphertext, and Live Push password hashes.
+
+After archiving, an owner may schedule deletion of that gallery's app records
+with a 30-day cancellation period. The dry-run reports affected row categories
+and explicitly reports that originals are unaffected. The bounded worker
+removes app database rows and private appdata artifacts only. It never deletes
+the source folder or an original Nextcloud file.
+
+Administrators may separately enable a tag-only handoff to Nextcloud Files
+Retention. Proofing Gallery records every assignment or removal attempt and
+only uses the configured system tag. The external retention rule, not this app,
+determines whether and when tagged originals are deleted.
+
 ## Security model
 
 Every public request first validates a native Nextcloud share token against the

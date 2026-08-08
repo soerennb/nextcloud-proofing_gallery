@@ -1,6 +1,6 @@
 # Administrator guide
 
-This guide covers installation and operation of Proofing Gallery 0.5.0.
+This guide covers installation and operation of Proofing Gallery.
 
 ## Requirements and installation
 
@@ -37,6 +37,61 @@ Review public-link, mail, and group policy before onboarding users. Keep guest
 downloads and uploads disabled unless required. Set limits according to PHP,
 proxy, storage, and worker capacity rather than relying on browser validation.
 
+## Nextcloud ecosystem integrations
+
+Proofing Gallery integrates with the surrounding Nextcloud workspace while
+keeping Files as the authority for file access:
+
+- **Files** adds an “Open or create customer gallery” folder action and a
+  sidebar tab. The app also publishes privacy-minimal Files metadata: whether a
+  folder is a gallery source plus coarse gallery and workflow states. It does
+  not store gallery names, public links, guest details, or internal IDs there.
+- **Unified Search** finds galleries the current user owns or directly manages.
+  **Smart Picker** reference previews use the same authorization boundary.
+- **Dashboard** lists galleries that need attention, such as recent review
+  feedback or an incomplete delivery workflow.
+- **Projects** can link an authorized gallery as a native collaboration
+  resource. Removing a project relation never deletes or unpublishes a gallery.
+- **Flow** exposes reversible gallery operations such as archive, restore,
+  complete, publish, and revoke. Configure them only for narrowly scoped
+  workflows; every operation is authorized as the triggering user.
+- **Context Chat** is enabled automatically when the optional app and a
+  compatible Nextcloud API are present. Only sanitized gallery metadata is
+  indexed. Source files, previews, public tokens, guest identities, comments,
+  passwords, and private links are excluded.
+- **Talk** can create one private review room per client link. The current user
+  is its moderator; rooms are never public and can be removed from the review
+  panel. Only Talk's conversation ID and URL are stored.
+- **Calendar** deadlines and **Deck** cards are user-owned records. A gallery
+  purge removes Proofing Gallery's local references but deliberately retains
+  those records; users delete them in Calendar or Deck. Talk rooms created by
+  the app are removed during a gallery purge before the local reference is
+  deleted.
+
+Context Chat and Projects are optional. Their absence must not affect the core
+gallery application. After enabling or disabling an optional integration,
+restart PHP workers or clear OPcache if your deployment keeps app bootstrap
+state in memory.
+
+### Agent and automation API
+
+An authenticated, current-user OCS API is available below
+`/ocs/v2.php/apps/proofing_gallery/api/v1/agent`. It offers curated reads and
+explicit, reversible mutations. Mutations require an idempotency request ID;
+state changes also require the gallery's expected revision. The API deliberately
+does not expose public-link passwords, raw guest personal data, permanent
+deletion, arbitrary file reads, or administrator impersonation.
+
+The stable OCS agent API is part of the app contract. The repository also
+includes an experimental, upstream-ready Context Agent tool module at
+`integrations/context_agent/proofing_gallery.py`. Install it only through the
+Context Agent deployment mechanism appropriate to your Nextcloud environment;
+it is not loaded by the PHP app itself. Treat returned comments and filenames as
+untrusted user content, retain Nextcloud audit logs, and grant the agent no
+credentials beyond the invoking user's session. A standalone external MCP
+server is intentionally unnecessary: the module calls the same authenticated
+OCS contract and inherits its authorization, revision, and idempotency rules.
+
 ## Background jobs and monitoring
 
 Run Nextcloud cron at least every five minutes. Monitor Nextcloud logs filtered
@@ -44,6 +99,18 @@ for `proofing_gallery`, the failed-jobs list, mail delivery, preview generation,
 and the app's **System status** section. It reports bounded operational counts,
 cleanup health, upload state, video jobs, semantic indices, notifications, and
 preview storage without revealing credentials or user paths.
+
+Periodic jobs are declared in the app manifest and registered by Nextcloud on
+install or update; normal web requests must not re-register them. Projection
+backfills start only after schema migrations, persist their cursor and retry
+state, and resume automatically after a failed batch. The setup check reports
+missing periodic jobs, failed projections, and in-progress projection work.
+
+These checks also appear as native setup checks in Administration settings →
+Overview. On Nextcloud 33 and newer, `/metrics` exports bounded OpenMetrics
+families for lifecycle totals, queues, integration delivery, last cleanup, and
+derivative bytes. They contain no user, gallery, file, path, link, or guest
+identifiers. Restrict access with `openmetrics_allowed_clients`.
 
 Capacity planning includes source files in Files, temporary resumable chunks,
 generated previews, video derivatives, database indices, and accepted uploads.
@@ -113,9 +180,34 @@ those anchors. Cleanup removes only old, empty, unreferenced anchors that match
 the generated naming format. Recursive galleries use a bounded database index
 of file identity and sort metadata, never image bytes.
 
+Archived owners can inspect a categorized dry-run, export app records, and
+schedule their removal with a 30-day grace period. The staged worker removes
+only Proofing Gallery records and private appdata; originals remain in
+Nextcloud. System status exposes due purge, lifecycle, guest-session,
+media-index, integration, and retention backlogs through indexed counters.
+
+For an optional Files Retention handoff, select one existing system tag under
+Security. Owners opt in per folder gallery. The tag is set on archive and
+removed on restore. Proofing Gallery never deletes the tagged folder; test the
+independent Nextcloud Files Retention rule on disposable data.
+
 Disabling the app preserves data and stops app access. Before uninstalling,
 export required selections and feedback and resolve pending uploads. Revoking a
 public link is the fastest first response to a leaked token.
+
+## User migration
+
+Proofing Gallery participates in Nextcloud's User Migration framework. Its
+portable manifest contains folder-backed galleries as unpublished drafts,
+design presets, invitation templates, and personal settings; source folders use
+relative paths. Collection members are exported as user-relative paths and are
+rebuilt after their folder-based source galleries. Unavailable source folders or
+collection members are skipped and reported without publishing a partial gallery.
+
+Imports are additive. Public links, passwords, guests, feedback, managers,
+audit data, branding assets, hero/logo file IDs, and active lifecycle or
+retention rules are not transferred. Missing folders and policy-incompatible
+entries are skipped and reported by the migration frontend.
 
 ## Upgrade and recovery checks
 

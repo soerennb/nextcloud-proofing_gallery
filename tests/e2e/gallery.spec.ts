@@ -5,7 +5,7 @@ import { expect, test } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
-async function state(): Promise<{ galleryId: number, token: string, largeFolderId: number, largeExtension: 'png' | 'webp' }> {
+async function state(): Promise<{ galleryId: number, token: string, folderId: number, largeFolderId: number, largeExtension: 'png' | 'webp' }> {
 	return JSON.parse(await readFile(path.join(process.cwd(), 'test-results-e2e-state.json'), 'utf8'))
 }
 
@@ -81,6 +81,46 @@ test('gallery action menus stay above cards in every overview', async ({ browser
 	await context.close()
 })
 
+test('gallery archive paginates without losing mobile reachability', async ({ browser, baseURL }) => {
+	const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
+	const page = await context.newPage()
+	await login(page, baseURL)
+	const item = (id: number) => ({
+		id,
+		title: `Archived gallery ${String(id).padStart(2, '0')}`,
+		status: 'archived',
+		mode: id % 2 === 0 ? 'collaboration' : 'presentation',
+		sourceType: 'folder',
+		purpose: 'delivery',
+		workflowState: 'completed',
+		createdAt: 1_700_000_000 + id,
+		updatedAt: 1_700_000_000 + id,
+		heroFileId: null,
+		lifecycleNextAt: null,
+		mediaSummary: { total: id, coverFileId: null, coverMimeType: null },
+		permissions: { role: 'owner', canEdit: true, canManageAccess: true, canArchive: true },
+	})
+	await page.route('**/api/v2/galleries**', async (route) => {
+		const cursor = new URL(route.request().url()).searchParams.get('cursor')
+		await route.fulfill({ json: cursor
+			? { items: [item(51)], total: 51, nextCursor: null }
+			: { items: Array.from({ length: 50 }, (_, index) => item(index + 1)), total: 51, nextCursor: 'second' },
+		})
+	})
+
+	await page.getByRole('button', { name: 'Open navigation' }).click()
+	await page.getByRole('button', { name: 'Archive', exact: true }).click()
+	await expect(page.locator('.gallery-row')).toHaveCount(50)
+	await expect(page.getByText('50 of 51 galleries')).toBeVisible()
+	await page.getByRole('button', { name: 'Load more galleries' }).click()
+	await expect(page.locator('.gallery-row')).toHaveCount(51)
+	await expect(page.getByText('51 of 51 galleries')).toBeVisible()
+	const main = page.locator('.gallery-page')
+	expect(await main.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+	await expect(page.locator('.gallery-row__main').filter({ hasText: 'Archived gallery 51' })).toBeVisible()
+	await context.close()
+})
+
 test('bundled user documentation works offline in English and German', async ({ browser, baseURL }) => {
 	const context = await browser.newContext({ viewport: { width: 1100, height: 850 } })
 	const page = await context.newPage()
@@ -105,6 +145,23 @@ test('bundled user documentation works offline in English and German', async ({ 
 	await context.close()
 })
 
+test('owner workspace deep links normalize and follow browser history', async ({ browser, baseURL }) => {
+	const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+	const page = await context.newPage()
+	const { galleryId } = await state()
+	await login(page, baseURL)
+	await page.goto(`${baseURL}/apps/proofing_gallery/#gallery/${galleryId}/access`)
+	await expect(page).toHaveURL(new RegExp(`#gallery/${galleryId}/share$`))
+	await expect(page.getByRole('heading', { level: 2, name: 'Client links' })).toBeVisible()
+	const navigation = page.getByRole('navigation', { name: 'Gallery settings' })
+	await navigation.getByRole('button', { name: 'Design', exact: true }).click()
+	await navigation.getByRole('button', { name: 'Share', exact: true }).click()
+	await page.goBack()
+	await expect(page).toHaveURL(new RegExp(`#gallery/${galleryId}/design$`))
+	await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible()
+	await context.close()
+})
+
 test('owner can move through the focused gallery workspace', async ({ browser, baseURL }) => {
 	const context = await browser.newContext({
 		viewport: { width: 1440, height: 1000 },
@@ -116,6 +173,12 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await expect(page.getByRole('heading', { name: /^E2E Gallery/, level: 1 })).toBeVisible()
 	await expect(page.getByRole('navigation', { name: 'Gallery settings' })).toBeVisible()
 	await expect(page.getByRole('heading', { name: 'Gallery details' })).toBeVisible()
+	await expect(page.locator('.production-status')).toHaveCount(0)
+	const readiness = page.locator('.readiness-popover')
+	await expect(readiness.locator('summary')).toBeVisible()
+	await readiness.locator('summary').click()
+	await expect(readiness.locator('.readiness-popover__panel')).toBeVisible()
+	await readiness.locator('summary').click()
 	const originalTitle = await page.getByLabel('Gallery title').inputValue()
 	await page.getByLabel('Gallery title').fill(`${originalTitle} draft`)
 	await expect(page.locator('.save-indicator[data-state="pending"]')).toBeVisible()
@@ -135,9 +198,14 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await expect(page.getByRole('button', { name: 'Save XMP sidecar' })).toBeVisible()
 	await page.locator('.metadata-panel').getByRole('button', { name: 'Close' }).click()
 	await page.getByRole('button', { name: 'Cull', exact: true }).click()
-	await expect(page.getByRole('heading', { name: 'Cull and rate' })).toBeVisible()
+	await expect(page.getByText('DARKROOM')).toBeVisible()
 	await expect(page.getByLabel('Describe a scene')).toHaveCount(0)
 	await expect(page.getByRole('button', { name: 'Focus proof.png' })).toBeVisible()
+	await page.getByRole('button', { name: 'Focus', exact: true }).click()
+	await expect(page.locator('.culling-workspace--focus')).toBeVisible()
+	await page.keyboard.press('Escape')
+	await expect(page.locator('.culling-workspace--focus')).toHaveCount(0)
+	await page.getByRole('button', { name: 'Tools', exact: true }).click()
 	const filmstripPlacement = page.locator('select[name="filmstripPlacement"]')
 	const setFilmstripPlacement = async (placement: 'auto' | 'bottom') => {
 		const response = page.waitForResponse((candidate) => candidate.request().method() === 'PUT' && candidate.url().includes('/user/preferences'))
@@ -154,6 +222,17 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await expect(page.locator('.culling-stage--bottom')).toBeVisible()
 	await page.setViewportSize({ width: 1440, height: 1000 })
 	await expect(page.locator('.culling-stage--side')).toBeVisible()
+	await page.getByRole('button', { name: 'Tools', exact: true }).click()
+	const cullingImage = page.locator('.culling-loupe__image')
+	await cullingImage.dispatchEvent('pointerdown', { isPrimary: true, pointerType: 'touch', clientX: 500, clientY: 350 })
+	await cullingImage.dispatchEvent('pointerup', { isPrimary: true, pointerType: 'touch', clientX: 504, clientY: 352 })
+	await expect(page.locator('.culling-workspace')).toHaveClass(/culling-workspace--chrome-hidden/)
+	await cullingImage.dispatchEvent('pointerdown', { isPrimary: true, pointerType: 'touch', clientX: 520, clientY: 350 })
+	await cullingImage.dispatchEvent('pointerup', { isPrimary: true, pointerType: 'touch', clientX: 410, clientY: 355 })
+	await expect(page.locator('.culling-workspace')).toHaveClass(/culling-workspace--chrome-hidden/)
+	await cullingImage.dispatchEvent('pointerdown', { isPrimary: true, pointerType: 'touch', clientX: 500, clientY: 350 })
+	await cullingImage.dispatchEvent('pointerup', { isPrimary: true, pointerType: 'touch', clientX: 503, clientY: 352 })
+	await expect(page.locator('.culling-workspace')).not.toHaveClass(/culling-workspace--chrome-hidden/)
 	const cullingSave = page.locator('.culling-save')
 	const saveRating = async () => {
 		const responsePromise = page.waitForResponse((response) => response.request().method() === 'POST' && response.url().includes('/media/cull'))
@@ -177,13 +256,16 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await page.getByRole('button', { name: 'Pick', exact: true }).click()
 	await page.getByRole('button', { name: 'Undo', exact: true }).click()
 	await expect(page.getByText('Last culling change undone.')).toBeVisible()
+	await page.getByRole('button', { name: 'Tools', exact: true }).click()
 	await page.getByRole('button', { name: 'XMP sync', exact: true }).click()
 	await expect(page.getByRole('heading', { name: 'Resolve App and XMP' })).toBeVisible()
 	await expect(page.getByText('scanned recursively')).toBeVisible()
 	const cullingAccessibility = await new AxeBuilder({ page }).include('.culling-workspace').analyze()
 	expect(cullingAccessibility.violations).toEqual([])
 
-	await page.getByRole('button', { name: 'Style', exact: true }).click()
+	await page.getByRole('button', { name: 'Back to project' }).click()
+	const settingsNavigation = page.getByRole('navigation', { name: 'Gallery settings' })
+	await settingsNavigation.getByRole('button', { name: 'Design', exact: true }).click()
 	await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible()
 	await expect(page.getByText('Public image information')).toBeVisible()
 	await page.setViewportSize({ width: 390, height: 844 })
@@ -195,20 +277,24 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await expect(page.locator('.gallery-preview__grid img')).toHaveCount(1)
 	await page.getByRole('button', { name: 'Close preview' }).click()
 	await page.setViewportSize({ width: 1440, height: 1000 })
-	await page.getByRole('button', { name: 'Deliver', exact: true }).click()
-	await expect(page.getByRole('heading', { name: 'Public access' })).toBeVisible()
-	await expect(page.getByRole('heading', { name: 'HTTPS Live Push' })).toBeVisible()
-	await expect(page.getByText(/^(Ready|Disabled by administrator)$/)).toBeVisible()
-	await page.getByRole('button', { name: 'Share', exact: true }).click()
-	await expect(page.getByRole('heading', { name: 'Client links' })).toBeVisible()
+	await settingsNavigation.getByRole('button', { name: 'Share', exact: true }).click()
+	await expect(page.getByRole('heading', { level: 2, name: 'Client links' })).toBeVisible()
 	await page.getByRole('button', { name: 'New client link' }).click()
 	await expect(page.getByRole('heading', { name: 'Create client link' })).toBeVisible()
 	await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+	await page.locator('.settings-header').getByRole('button', { name: 'Share', exact: true }).click()
 	await page.getByRole('dialog', { name: 'Share gallery' }).getByRole('button', { name: 'Close' }).click()
-	await page.getByRole('button', { name: 'Advanced', exact: true }).click()
-	await page.getByRole('button', { name: 'Results', exact: true }).click()
+	await settingsNavigation.getByText('More', { exact: true }).click()
+	await settingsNavigation.getByRole('button', { name: 'Automation', exact: true }).click()
+	await expect(page.getByRole('heading', { name: 'HTTPS Live Push' })).toBeVisible()
+	await expect(page.getByText(/^(Ready|Disabled by administrator)$/)).toBeVisible()
+	await page.route('**/api/v1/galleries/*/review-integrations', (route) => route.fulfill({ status: 503, json: { message: 'Optional integration unavailable' } }))
+	await settingsNavigation.getByRole('button', { name: 'Review', exact: true }).click()
+	await expect(page.getByRole('heading', { name: 'Client decisions' })).toBeVisible()
+	await expect(page.getByText('Review rounds could not be loaded.')).toHaveCount(0)
+	await page.getByText('Configure review', { exact: true }).click()
 	await expect(page.getByText('Allow guest uploads')).toBeVisible()
-	await page.getByRole('button', { name: 'History', exact: true }).click()
+	await settingsNavigation.getByRole('button', { name: 'History', exact: true }).click()
 	await expect(page.getByRole('heading', { name: 'Activity' })).toBeVisible()
 	await expect(page).toHaveScreenshot('owner-settings.png', {
 		animations: 'disabled',
@@ -232,6 +318,11 @@ test('guest completes an accessible proofing flow', async ({ page, baseURL }) =>
 	await page.getByRole('button', { name: 'Comment', exact: true }).click()
 	await expect(page.getByText('Approved in automated review')).toBeVisible()
 	await page.getByRole('button', { name: 'Close', exact: true }).click()
+	const unchangedPoll = await page.evaluate(async () => {
+		const response = await fetch(`${location.pathname.replace(/^\/s\//, '/apps/proofing_gallery/public/')}/collaboration?cursor=999999`, { headers: { Accept: 'application/json' } })
+		return { status: response.status, body: await response.json() }
+	})
+	expect(unchangedPoll).toMatchObject({ status: 200, body: { unchanged: true, cursor: 999999 } })
 
 	const accessibility = await new AxeBuilder({ page }).include('.public-gallery').analyze()
 	expect(accessibility.violations).toEqual([])
@@ -242,6 +333,39 @@ test('guest completes an accessible proofing flow', async ({ page, baseURL }) =>
 		// Font rasterization varies slightly between local and hosted Linux runners.
 		maxDiffPixelRatio: 0.03,
 	})
+})
+
+test('guest and owner complete a link-scoped review round', async ({ page, request, baseURL }) => {
+	const fixture = await state()
+	const apiHeaders = { Authorization: `Basic ${Buffer.from('admin:admin').toString('base64')}`, 'OCS-APIRequest': 'true' }
+	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries?format=json`
+	const created = await request.post(galleries, { headers: apiHeaders, data: { folderId: fixture.folderId, title: 'E2E Review rounds', settings: { mode: 'collaboration', publicLocale: 'en' } } })
+	const gallery = await created.json() as { id: number }
+	try {
+		const published = await request.post(`${galleries.replace('?format=json', '')}/${gallery.id}/publish?format=json`, { headers: apiHeaders, data: { allowDownloads: false } })
+		const token = (await published.json() as { gallery: { shareToken: string } }).gallery.shareToken
+		const linksEndpoint = `${galleries.replace('?format=json', '')}/${gallery.id}/public-links?format=json`
+		const links = await request.get(linksEndpoint, { headers: apiHeaders }).then(response => response.json()) as { items: Array<{ id: number; name: string; policy: Record<string, unknown> }> }
+		const link = links.items[0]
+		const dueDate = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
+		expect((await request.put(`${linksEndpoint.replace('?format=json', '')}/${link.id}?format=json`, { headers: apiHeaders, data: { name: link.name, policy: link.policy, reviewEnabled: true, reviewDueDate: dueDate } })).ok()).toBe(true)
+
+		await page.setViewportSize({ width: 390, height: 844 })
+		await page.goto(`${baseURL}/s/${token}`)
+		await expect(page.getByText('Review open')).toBeVisible()
+		await page.getByRole('button', { name: 'Submit review' }).click()
+		await page.getByRole('textbox', { name: 'Your name' }).fill('Round Reviewer')
+		await page.getByRole('button', { name: 'Continue' }).click()
+		await expect(page.getByText('Submitted for approval')).toBeVisible()
+		expect(await page.locator('#proofing_gallery_public').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+
+		const approved = await request.post(`${galleries.replace('?format=json', '')}/${gallery.id}/public-links/${link.id}/review/approve?format=json`, { headers: apiHeaders })
+		expect(approved.ok()).toBe(true)
+		await page.reload()
+		await expect(page.getByText('Approved', { exact: true })).toBeVisible()
+	} finally {
+		await request.delete(`${galleries.replace('?format=json', '')}/${gallery.id}?format=json`, { headers: apiHeaders })
+	}
 })
 
 test('public gallery remains usable on a narrow viewport', async ({ page, baseURL }) => {
@@ -317,6 +441,7 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 	const desktopContext = await browser.newContext({ viewport: { width: 1440, height: 900 } })
 	const desktopPage = await desktopContext.newPage()
 	await desktopPage.goto(`${baseURL}/s/${publish.gallery.shareToken}`)
+	await waitForGalleryImages(desktopPage)
 	await desktopPage.getByRole('button', { name: `Open ${firstName}` }).click()
 	await expect(desktopPage.getByRole('button', { name: 'Previous' })).toBeVisible()
 	await expect(desktopPage.getByRole('button', { name: 'Next' })).toBeVisible()
@@ -370,12 +495,12 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 	await page.getByLabel('Gallery view').selectOption('grid')
 	await page.getByRole('button', { name: 'Close view options' }).click()
 	await waitForGalleryImages(page)
-	const gridRatios = await page.locator('.media-tile').evaluateAll((tiles) => tiles.slice(0, 6).map((tile) => {
+	await expect.poll(() => page.locator('.media-tile').evaluateAll((tiles) => tiles.slice(0, 6).every((tile) => {
 		const image = tile.querySelector('img')
 		const rect = tile.getBoundingClientRect()
-		return { tile: rect.width / rect.height, image: image ? image.naturalWidth / image.naturalHeight : 0 }
-	}))
-	expect(gridRatios.every((value) => value.image > 0 && Math.abs(value.tile - value.image) < 0.02)).toBe(true)
+		const imageRatio = image ? image.naturalWidth / image.naturalHeight : 0
+		return imageRatio > 0 && Math.abs(rect.width / rect.height - imageRatio) < 0.02
+	}))).toBe(true)
 	await page.getByRole('button', { name: /Filter & view/ }).click()
 	await page.getByLabel('Gallery view').selectOption('list')
 	await page.getByRole('button', { name: 'Close view options' }).click()
@@ -474,4 +599,65 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 	await expect(page.getByRole('navigation', { name: 'Photo filmstrip' })
 		.getByRole('button', { name: `Open ${lastName}` })).toHaveAttribute('aria-current', 'true')
 	await context.close()
+})
+
+test('editorial story and local light table work on desktop and mobile', async ({ browser, baseURL, request }) => {
+	const { largeFolderId, largeExtension } = await state()
+	const headers = {
+		Authorization: `Basic ${Buffer.from('admin:admin').toString('base64')}`,
+		'Content-Type': 'application/json',
+		'OCS-APIRequest': 'true',
+	}
+	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
+	const createdResponse = await request.post(`${galleries}?format=json`, {
+		headers,
+		data: { folderId: largeFolderId, title: 'E2E Editorial Story', purpose: 'showcase', settings: { publicLocale: 'en', presentation: { openerStyle: 'compact' } } },
+	})
+	expect(createdResponse.ok()).toBe(true)
+	const created = await createdResponse.json() as { id: number, revision: number }
+	const mediaResponse = await request.get(`${galleries}/${created.id}/media?format=json&limit=4`, { headers })
+	expect(mediaResponse.ok()).toBe(true)
+	const media = await mediaResponse.json() as { items: Array<{ id: number, name: string }> }
+	expect(media.items.length).toBeGreaterThanOrEqual(2)
+	const updated = await request.put(`${galleries}/${created.id}?format=json`, {
+		headers,
+		data: { expectedRevision: created.revision, settings: { presentation: { layout: 'story', story: { showAllMedia: true, sections: [{
+			id: 'opening', title: 'A quiet visual story', body: 'Portrait and landscape photographs share one deliberate sequence.', style: 'split', mediaIds: media.items.slice(0, 2).map(item => item.id),
+		}] } } } },
+	})
+	expect(updated.ok()).toBe(true)
+	const published = await request.post(`${galleries}/${created.id}/publish?format=json`, { headers, data: {} })
+	expect(published.ok()).toBe(true)
+	const token = (await published.json() as { gallery: { shareToken: string } }).gallery.shareToken
+
+	const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+	const page = await context.newPage()
+	await page.goto(`${baseURL}/s/${token}`)
+	await expect(page.getByText('A quiet visual story')).toBeVisible()
+	await page.getByRole('button', { name: `Add ${media.items[0]!.name} to compare` }).click()
+	await page.getByRole('button', { name: `Add ${media.items[1]!.name} to compare` }).click()
+	await page.getByRole('button', { name: 'Open light table' }).click()
+	await expect(page.getByRole('dialog', { name: 'Compare photos' })).toBeVisible()
+	await expect(page.locator('.compare-table__grid figure')).toHaveCount(2)
+	await page.getByRole('button', { name: 'Close' }).click()
+
+	await page.setViewportSize({ width: 390, height: 844 })
+	expect(await page.locator('.public-gallery').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+	await page.getByRole('button', { name: 'Open light table' }).click()
+	await expect(page.getByLabel('Move comparison divider')).toBeVisible()
+	expect(await page.getByRole('dialog', { name: 'Compare photos' }).evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+	await page.getByRole('button', { name: 'Close' }).click()
+	await page.evaluate(() => window.scrollTo(0, 500))
+	// Let the app persist the scroll event before injecting the saved photo;
+	// otherwise its debounced handler can overwrite this test fixture.
+	await page.waitForTimeout(150)
+	await page.evaluate(({ token, fileId }) => {
+		localStorage.setItem(`proofing-gallery-continuation:${token}`, JSON.stringify({ scrollY: 500, fileId, path: '' }))
+	}, { token, fileId: media.items[0]!.id })
+	await page.reload()
+	await page.getByRole('button', { name: 'Continue viewing' }).click()
+	await expect(page.getByRole('dialog', { name: media.items[0]!.name })).toBeVisible()
+	await context.close()
+
+	await request.delete(`${galleries}/${created.id}?format=json`, { headers })
 })

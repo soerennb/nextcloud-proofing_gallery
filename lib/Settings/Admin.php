@@ -17,7 +17,7 @@ final class Admin implements ISettings {
 		private PolicyService $policies,
 		private HealthService $health,
 		private CoreSharingPolicyService $coreSharing,
-		private \OCA\ProofingGallery\Service\CustomDomainService $customDomains,
+		private \OCA\ProofingGallery\Service\RetentionHandoffService $retention,
 	) {
 	}
 
@@ -30,7 +30,7 @@ final class Admin implements ISettings {
 			'health' => $this->health->status(),
 			'instanceSettings' => $this->policies->instanceSettings(),
 			'coreSharing' => $this->coreSharing->status(),
-			'customDomains' => $this->customDomains->adminList(),
+			'retentionConfiguration' => $this->retention->configuration(),
 		]);
 	}
 

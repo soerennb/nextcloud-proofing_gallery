@@ -86,6 +86,23 @@ final class GalleryAccessService {
 		return $items;
 	}
 
+	/**
+	 * @param array{value: int|string, id: int}|null $cursor
+	 * @return array{items: list<Gallery>, total: int, roles: array<int, string>}
+	 */
+	public function page(string $userId, bool $archived, string $search, ?string $sourceType, ?string $status, ?string $mode, ?string $purpose, bool $ownedOnly, string $sort, ?array $cursor, int $limit): array {
+		$memberships = $this->memberships($userId);
+		$user = $this->users->get($userId);
+		$groupIds = $user === null ? [] : $this->groups->getUserGroupIds($user);
+		$page = $this->galleries->findAccessiblePage($userId, $groupIds, $archived, $search, $sourceType, $status, $mode, $purpose, $ownedOnly, $sort, $cursor, $limit);
+		$roles = [];
+		foreach ($memberships as $membership) {
+			$id = $membership->getGalleryId();
+			if (($roles[$id] ?? null) !== 'editor') $roles[$id] = $membership->getRole();
+		}
+		return [...$page, 'roles' => $roles];
+	}
+
 	private function effectiveRole(string $userId, int $galleryId): ?string {
 		$role = null;
 		foreach ($this->memberships($userId) as $membership) {

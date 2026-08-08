@@ -48,4 +48,24 @@ final class ActivityRepository {
 		}
 		return QueryResult::rows($qb->executeQuery());
 	}
+
+	/** @return list<array<string, mixed>> */
+	public function page(int $galleryId, ?int $beforeId, string $type, int $limit): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('e.*', 'g.display_name')->from('proofing_events', 'e')
+			->leftJoin('e', 'proofing_guests', 'g', $qb->expr()->eq('e.guest_id', 'g.id'))
+			->where($qb->expr()->eq('e.gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->orderBy('e.id', 'DESC')->setMaxResults(max(1, min(101, $limit)));
+		if ($beforeId !== null) $qb->andWhere($qb->expr()->lt('e.id', $qb->createNamedParameter($beforeId, IQueryBuilder::PARAM_INT)));
+		if ($type !== '') $qb->andWhere($qb->expr()->like('e.event_type', $qb->createNamedParameter($this->db->escapeLikeParameter($type) . '%')));
+		return QueryResult::rows($qb->executeQuery());
+	}
+
+	public function countGallery(int $galleryId, string $type): int {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select($qb->func()->count())->from('proofing_events')
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
+		if ($type !== '') $qb->andWhere($qb->expr()->like('event_type', $qb->createNamedParameter($this->db->escapeLikeParameter($type) . '%')));
+		return (int)$qb->executeQuery()->fetchOne();
+	}
 }

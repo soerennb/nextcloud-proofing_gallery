@@ -226,6 +226,14 @@ final class PublicGalleryDataService {
 		$settings = $context->settings->withPublicPolicy($context->policy);
 		$effective = $this->capabilities->effective($settings);
 		$serialized = $settings->jsonSerialize();
+		foreach ($serialized['presentation']['story']['sections'] ?? [] as &$section) {
+			$section['mediaIds'] = array_values(array_filter(
+				$section['mediaIds'] ?? [],
+				fn (mixed $fileId): bool => is_int($fileId) && $this->publicMedia->allows($context, $fileId),
+			));
+		}
+		unset($section);
+		$serialized['appearance'] = $serialized['presentation'];
 		if (!$effective['downloads']['allowed']) {
 			$serialized['delivery']['downloadScope'] = 'none';
 			$serialized['allowDownloads'] = false;

@@ -64,4 +64,30 @@ final class ShareAuditService {
 			'createdAt' => (int)$row['created_at'],
 		], QueryResult::rows($qb->executeQuery()));
 	}
+
+	/** @return array{items:list<array<string,mixed>>,total:int,nextCursor:?string} */
+	public function pageForGallery(int $galleryId, int $limit, ?string $cursor, ScopedCursorCodec $cursors): array {
+		$limit = max(1, min(100, $limit));
+		$scope = 'share-audit:' . $galleryId;
+		$beforeId = $cursors->decode($cursor, $scope);
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('id', 'public_link_id', 'guest_id', 'actor_uid', 'file_id', 'event_type', 'outcome', 'reason_code', 'created_at')
+			->from('proofing_share_audit')
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->orderBy('id', 'DESC')->setMaxResults($limit + 1);
+		if ($beforeId !== null) $qb->andWhere($qb->expr()->lt('id', $qb->createNamedParameter($beforeId, IQueryBuilder::PARAM_INT)));
+		$rows = QueryResult::rows($qb->executeQuery());
+		$hasMore = count($rows) > $limit;
+		if ($hasMore) array_pop($rows);
+		$items = array_map(static fn (array $row): array => [
+			'publicLinkId' => (int)$row['public_link_id'], 'guestId' => $row['guest_id'] === null ? null : (int)$row['guest_id'],
+			'actorUid' => $row['actor_uid'], 'fileId' => $row['file_id'] === null ? null : (int)$row['file_id'],
+			'event' => $row['event_type'], 'outcome' => $row['outcome'], 'reasonCode' => $row['reason_code'], 'createdAt' => (int)$row['created_at'],
+		], $rows);
+		$count = $this->db->getQueryBuilder();
+		$count->select($count->func()->count())->from('proofing_share_audit')
+			->where($count->expr()->eq('gallery_id', $count->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
+		$last = $rows === [] ? null : $rows[array_key_last($rows)];
+		return ['items' => $items, 'total' => (int)$count->executeQuery()->fetchOne(), 'nextCursor' => $hasMore && $last !== null ? $cursors->encode($scope, (int)$last['id']) : null];
+	}
 }

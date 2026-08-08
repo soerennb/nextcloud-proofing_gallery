@@ -132,7 +132,7 @@ final class UserPreferenceService {
 				throw new \InvalidArgumentException('Invalid notification preferences');
 			}
 		}
-		$allowedEvents = ['upload.received', 'comment.created', 'selection.created'];
+		$allowedEvents = ['upload.received', 'comment.created', 'selection.created', 'review.submitted'];
 		foreach (['nextcloud', 'email'] as $channel) {
 			$current['notifications'][$channel]['events'] = array_values(array_intersect($allowedEvents, array_map('strval', $current['notifications'][$channel]['events'])));
 		}

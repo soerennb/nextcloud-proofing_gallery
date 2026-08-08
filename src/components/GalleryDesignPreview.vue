@@ -23,6 +23,7 @@ const logoUrl = computed(() => props.settings.presentation.logoFileId
 const heroUrl = computed(() => props.settings.presentation.heroFileId
 	? previewUrl(props.settings.presentation.heroFileId, 1200, 800)
 	: null)
+const previewById = computed(() => new Map(props.media.map(item => [item.id, item])))
 
 function previewItemStyle(item: MediaItem) {
 	const width = item.width ?? item.metadata?.width ?? 4
@@ -62,7 +63,19 @@ function previewItemStyle(item: MediaItem) {
 				:settings="settings"
 				:logo-url="logoUrl"
 				:hero-url="heroUrl" />
-			<div class="gallery-preview__grid" :class="`gallery-preview__grid--${settings.presentation.layout}`">
+			<div v-if="settings.presentation.layout === 'story'" class="gallery-preview__story">
+				<section v-for="section in settings.presentation.story.sections" :key="section.id" :class="`gallery-preview__story--${section.style}`">
+					<header><strong>{{ section.title || t('proofing_gallery', 'Untitled section') }}</strong><p>{{ section.body }}</p></header>
+					<div>
+						<img v-for="fileId in section.mediaIds"
+							v-show="previewById.has(fileId)"
+							:key="fileId"
+							:src="previewUrl(fileId, 420, 320)"
+							alt="">
+					</div>
+				</section>
+			</div>
+			<div v-else class="gallery-preview__grid" :class="`gallery-preview__grid--${settings.presentation.layout}`">
 				<div v-for="item in media" :key="item.id" :style="previewItemStyle(item)">
 					<img :src="previewUrl(item.id, 300, 220)" alt="">
 					<span v-if="settings.presentation.watermarkText">{{ settings.presentation.watermarkText }}</span>

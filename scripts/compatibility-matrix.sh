@@ -50,6 +50,11 @@ for version in ${versions}; do
 		COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION="${version}" \
 			"${compose[@]}" exec -T --user www-data "${service}" php -r \
 			'require "/var/www/html/lib/base.php"; $database=\OC::$server->get(\OCP\IDBConnection::class); $query=$database->getQueryBuilder(); $query->select("id")->from("proofing_galleries")->setMaxResults(1)->executeQuery();'
+		COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION="${version}" \
+			"${compose[@]}" exec -T --user www-data "${service}" php -r \
+			'require "/var/www/html/lib/base.php"; foreach ([\OCA\Files\Event\LoadAdditionalScriptsEvent::class, \OCP\FilesMetadata\Event\MetadataLiveEvent::class] as $class) { if (!class_exists($class)) { fwrite(STDERR, "Missing integration API: {$class}\n"); exit(1); } } $capabilities=\OC::$server->get(\OCA\ProofingGallery\Capabilities::class)->getCapabilities(); if (($capabilities["proofing_gallery"]["agent_api_version"] ?? null) !== 2) { exit(1); }'
+		test -f "${app_source}/js/proofing_gallery-files-legacy.mjs"
+		test -f "${app_source}/js/proofing_gallery-files-modern.mjs"
 
 		cleanup
 		project_name=""
