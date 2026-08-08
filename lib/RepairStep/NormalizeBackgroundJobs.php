@@ -20,7 +20,8 @@ final class NormalizeBackgroundJobs implements IRepairStep {
 
 	public function run(IOutput $output): void {
 		foreach (BackgroundMaintenanceHealthService::PERIODIC_JOBS as $class) {
-			$registered = iterator_to_array($this->jobs->getJobsIterator($class, null, 0), false);
+			$results = $this->jobs->getJobsIterator($class, null, 0);
+			$registered = is_array($results) ? array_values($results) : iterator_to_array($results, false);
 			if ($registered === []) {
 				$this->jobs->add($class);
 				continue;

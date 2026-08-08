@@ -22,7 +22,9 @@ final class NormalizeBackgroundJobsTest extends TestCase {
 		$jobs = $this->createMock(IJobList::class);
 		$first = BackgroundMaintenanceHealthService::PERIODIC_JOBS[0];
 		$jobs->method('getJobsIterator')->willReturnCallback(
-			static fn (string $class): iterable => $class === $first ? [$older, $newer] : [$newer],
+			static fn (string $class): iterable => $class === $first
+				? [$older, $newer]
+				: new \ArrayIterator([$newer]),
 		);
 		$jobs->expects(self::once())->method('removeById')->with(10);
 		$jobs->expects(self::never())->method('add');
