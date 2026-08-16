@@ -1,0 +1,60 @@
+name: Dependabot auto-merge
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  queue-eligible-update:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      # Do not check out the pull request: pull_request_target has write access.
+      - name: Fetch verified Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # v2.5.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check auto-merge policy
+        id: policy
+        env:
+          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+          DEPENDENCY_TYPE: ${{ steps.metadata.outputs.dependency-type }}
+          PACKAGE_ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+        run: |
+          set -euo pipefail
+
+          case "${UPDATE_TYPE}" in
+            version-update:semver-patch|version-update:semver-minor) ;;
+            *) exit 0 ;;
+          esac
+
+          eligible=false
+          case "${PACKAGE_ECOSYSTEM}:${DEPENDENCY_TYPE}" in
+            github-actions:*)
+              eligible=true
+              ;;
+            npm:direct:development|composer:direct:development)
+              eligible=true
+              ;;
+            npm:direct:production)
+              if [ "${DEPENDENCY_NAMES}" = "vue" ]; then
+                eligible=true
+              fi
+              ;;
+          esac
+
+          echo "eligible=${eligible}" >> "${GITHUB_OUTPUT}"
+
+      - name: Queue squash auto-merge
+        if: steps.policy.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --squash "${PR_URL}"
