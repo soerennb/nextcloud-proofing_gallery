@@ -54,7 +54,7 @@
     "vue": "^3.5.41"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.12.1",
+    "@axe-core/playwright": "^4.13.0",
     "@nextcloud/browserslist-config": "^3.1.2",
     "@nextcloud/eslint-config": "^9.0.1",
     "@nextcloud/stylelint-config": "^3.1.1",
@@ -66,9 +66,9 @@
     "@vitest/coverage-v8": "^4.1.10",
     "@vue/test-utils": "^2.4.6",
     "@vue/tsconfig": "^0.9.1",
-    "eslint": "^10.0.0",
+    "eslint": "^10.8.1",
     "jsdom": "^26.0.0",
-    "magic-string": "^1.1.0",
+    "magic-string": "^1.2.0",
     "markdown-it": "^15.0.0",
     "markdown-it-anchor": "^9.2.0",
     "stylelint": "^17.9.1",
