@@ -1,7 +1,6 @@
 # Proofing Gallery
 
-[![Quality](https://github.com/soerennb/nextcloud-proofing_gallery/actions/workflows/quality.yml/badge.svg)](https://github.com/soerennb/nextcloud-proofing_gallery/actions/workflows/quality.yml)
-[![Security](https://github.com/soerennb/nextcloud-proofing_gallery/actions/workflows/security.yml/badge.svg)](https://github.com/soerennb/nextcloud-proofing_gallery/actions/workflows/security.yml)
+[![CI](https://github.com/soerennb/nextcloud-proofing_gallery/actions/workflows/ci.yml/badge.svg)](https://github.com/soerennb/nextcloud-proofing_gallery/actions/workflows/ci.yml)
 [![Documentation](https://github.com/soerennb/nextcloud-proofing_gallery/actions/workflows/docs.yml/badge.svg)](https://soerennb.github.io/nextcloud-proofing_gallery/)
 
 Proofing Gallery is a native Nextcloud app for branded client delivery and

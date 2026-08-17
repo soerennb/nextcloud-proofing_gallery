@@ -2,7 +2,7 @@ name: Scaling
 
 on:
   schedule:
-    - cron: '23 2 * * 1'
+    - cron: '23 2 * * 3'
   workflow_dispatch:
 
 permissions:

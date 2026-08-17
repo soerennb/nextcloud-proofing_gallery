@@ -49,6 +49,7 @@ updates:
       time: "05:40"
       timezone: Europe/Berlin
     groups:
-      github-actions:
+      github-actions-safe:
         patterns: ["*"]
+        update-types: [minor, patch]
     open-pull-requests-limit: 3
