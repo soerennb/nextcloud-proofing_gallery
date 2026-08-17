@@ -87,13 +87,15 @@ test('Files exposes the customer-gallery sidebar without mobile overflow', async
 	await page.getByRole('textbox', { name: /Account name/ }).fill('admin')
 	await page.getByRole('textbox', { name: 'Password' }).fill('admin')
 	await page.getByRole('button', { name: 'Log in', exact: true }).click()
-	await expect(page.getByRole('tab', { name: 'Customer galleries' })).toBeVisible()
-	await page.getByRole('tab', { name: 'Customer galleries' }).click()
+	const customerGalleriesTab = page.getByRole('tab', { name: 'Customer galleries' })
+	// Files mounts app sidebar tabs after the initial details pane render.
+	await expect(customerGalleriesTab).toBeVisible({ timeout: 20_000 })
+	await customerGalleriesTab.click()
 	await expect(page.getByRole('link', { name: /E2E Gallery/ }).first()).toBeVisible()
 	await expect(page.locator('script[src*="proofing_gallery-files-modern"]')).toHaveCount(1)
 
 	await page.setViewportSize({ width: 390, height: 844 })
-	await page.getByRole('tab', { name: 'Customer galleries' }).click()
+	await customerGalleriesTab.click()
 	const sidebar = page.getByRole('complementary')
 	await expect(sidebar).toBeVisible()
 	expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0)

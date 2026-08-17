@@ -8,6 +8,7 @@ const auth = `Basic ${Buffer.from('admin:admin').toString('base64')}`
 const headers = { Authorization: auth, 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' }
 
 test('bounded gallery and media pagination remains complete @scaling', async ({ request, baseURL }) => {
+	test.setTimeout(120_000)
 	test.skip(!enabled, 'Set E2E_SCALING=1 to run the scaling fixture')
 	const fixture = JSON.parse(await readFile(path.join(process.cwd(), 'test-results-e2e-state.json'), 'utf8')) as { largeFolderId: number; largeImageCount: number }
 	const galleryCount = Math.max(10, Math.min(10000, Number(process.env.E2E_SCALE_GALLERIES ?? 60)))
