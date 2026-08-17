@@ -172,21 +172,21 @@ compose exec -T -e PG_BASELINE_HAS_LEGACY_REPAIR="${baseline_has_legacy_repair}"
 
 tar -xzf "${archive}" -C "${upgrade_root}"
 run_upgrade() {
-	local output status
-	if output="$(compose exec -T --user www-data "${service}" php occ upgrade 2>&1)"; then
-		printf '%s\n' "${output}"
-		return 0
-	else
-		status=$?
-	fi
-	printf '%s\n' "${output}" >&2
-	if [[ "${database}" == "sqlite" ]] && grep -Fqi 'database is locked' <<<"${output}"; then
-		echo "SQLite upgrade met transient lock contention; retrying once." >&2
-		sleep 2
-		compose exec -T --user www-data "${service}" php occ upgrade
-		return
-	fi
-	return "${status}"
+	local output status attempt
+	for attempt in 1 2 3 4; do
+		if output="$(compose exec -T --user www-data "${service}" php occ upgrade 2>&1)"; then
+			printf '%s\n' "${output}"
+			return 0
+		else
+			status=$?
+		fi
+		printf '%s\n' "${output}" >&2
+		if [[ "${database}" != "sqlite" ]] || ! grep -Fqi 'database is locked' <<<"${output}" || (( attempt == 4 )); then
+			return "${status}"
+		fi
+		echo "SQLite upgrade met transient lock contention; retrying in $(( attempt * 2 )) seconds (attempt ${attempt}/4)." >&2
+		sleep "$(( attempt * 2 ))"
+	done
 }
 
 run_upgrade
