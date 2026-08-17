@@ -1,0 +1,271 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "47 1 * * 4"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  classify:
+    runs-on: ubuntu-latest
+    outputs:
+      web: ${{ steps.classify.outputs.web }}
+      php: ${{ steps.classify.outputs.php }}
+      workflow: ${{ steps.classify.outputs.workflow }}
+      docs: ${{ steps.classify.outputs.docs }}
+      dependencies: ${{ steps.classify.outputs.dependencies }}
+      integration: ${{ steps.classify.outputs.integration }}
+      compatibility: ${{ steps.classify.outputs.compatibility }}
+      upgrade: ${{ steps.classify.outputs.upgrade }}
+      codeql: ${{ steps.classify.outputs.codeql }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: classify
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "${EVENT_NAME}" = "schedule" ] || [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            git ls-files | node scripts/classify-ci-changes.mjs --
+          else
+            git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" | node scripts/classify-ci-changes.mjs --
+          fi
+
+  workflow:
+    needs: classify
+    if: needs.classify.outputs.workflow == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Parse every workflow as YAML
+        run: node scripts/check-workflows.mjs
+
+  web:
+    needs: classify
+    if: needs.classify.outputs.web == 'true' || needs.classify.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - run: npm run build:docs
+      - if: needs.classify.outputs.dependencies == 'true'
+        run: npm audit --audit-level=high
+
+  php:
+    needs: classify
+    if: needs.classify.outputs.php == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        php: ["8.1", "8.6"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist
+      - run: composer lint
+      - run: composer test
+      - run: composer analyse
+      - if: needs.classify.outputs.dependencies == 'true'
+        run: composer audit --locked --no-interaction
+
+  dependency-review:
+    needs: classify
+    if: github.event_name == 'pull_request' && needs.classify.outputs.dependencies == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+
+  secret-scan:
+    needs: classify
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Scan only commits introduced by this pull request
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          docker run --rm
+          -v "${{ github.workspace }}:/repo:ro"
+          ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+          git --redact --no-banner --log-opts="${BASE_SHA}..${HEAD_SHA}" /repo
+
+  secret-history:
+    needs: classify
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Scan complete public history
+        run: >-
+          docker run --rm
+          -v "${{ github.workspace }}:/repo:ro"
+          ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+          git --redact --no-banner /repo
+
+  codeql:
+    needs: classify
+    if: needs.classify.outputs.codeql == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        with:
+          languages: javascript-typescript,actions
+      - uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+
+  e2e:
+    needs: [classify, web, php]
+    if: needs.classify.outputs.integration == 'true' && needs.web.result == 'success' && needs.php.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: make dev-up
+      - run: make occ CMD="app:list --enabled --output=json" | grep -q '"proofing_gallery"'
+      - run: npm run test:e2e
+      - name: Verify Context Agent and user-migration contracts
+        run: |
+          ./scripts/test-context-agent.sh
+          ./scripts/test-user-migration.sh
+      - name: Verify protected public routes
+        env:
+          E2E_SECURITY_PROTECTIONS: "1"
+        run: npm run test:e2e -- --grep "public routes reject|Live Push credentials"
+      - if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-diagnostics-${{ github.run_attempt }}
+          path: |
+            test-results
+            playwright-report
+          if-no-files-found: warn
+          retention-days: 7
+      - if: always()
+        run: docker compose down --volumes --remove-orphans
+
+  compatibility:
+    needs: [classify, web, php]
+    if: needs.classify.outputs.compatibility == 'true' && needs.web.result == 'success' && needs.php.result == 'success'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        nextcloud: ["31", "32", "33", "34"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - env:
+          NEXTCLOUD_VERSIONS: ${{ matrix.nextcloud }}
+          DATABASES: sqlite
+        run: ./scripts/compatibility-matrix.sh
+
+  upgrade:
+    needs: [classify, web, php]
+    if: needs.classify.outputs.upgrade == 'true' && needs.web.result == 'success' && needs.php.result == 'success'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        database: [sqlite, mariadb, postgres]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: "8.4"
+          coverage: none
+      - run: npm ci
+      - run: composer install --no-interaction --prefer-dist
+      - run: make appstore
+      - run: make verify-package
+      - id: release-baseline
+        run: |
+          version="$(php -r '$xml=simplexml_load_file("appinfo/info.xml"); echo (string)$xml->version;')"
+          if test "${version}" != "0.7.0"; then echo "use=true" >> "${GITHUB_OUTPUT}"; else echo "use=false" >> "${GITHUB_OUTPUT}"; fi
+      - run: make test-upgrade
+        env:
+          UPGRADE_DATABASE: ${{ matrix.database }}
+          UPGRADE_FROM_ARCHIVE_URL: ${{ steps.release-baseline.outputs.use == 'true' && 'https://github.com/soerennb/nextcloud-proofing_gallery/releases/download/v0.7.0/proofing_gallery.tar.gz' || '' }}
+          UPGRADE_FROM_CHECKSUMS_URL: ${{ steps.release-baseline.outputs.use == 'true' && 'https://github.com/soerennb/nextcloud-proofing_gallery/releases/download/v0.7.0/SHA256SUMS' || '' }}
+
+  ci-gate:
+    name: CI Gate
+    if: always()
+    needs: [classify, workflow, web, php, dependency-review, secret-scan, secret-history, codeql, e2e, compatibility, upgrade]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          set -euo pipefail
+          for result in ${RESULTS}; do
+            case "${result}" in
+              success|skipped) ;;
+              *) echo "A selected CI job did not succeed: ${result}" >&2; exit 1 ;;
+            esac
+          done
+          echo "All selected CI checks passed."
