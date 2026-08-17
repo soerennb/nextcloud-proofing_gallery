@@ -25,6 +25,7 @@ jobs:
         env:
           DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
           DEPENDENCY_GROUP: ${{ steps.metadata.outputs.dependency-group }}
+          DEPENDABOT_BRANCH: ${{ github.event.pull_request.head.ref }}
           PACKAGE_ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
           UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
         run: |
@@ -34,10 +35,10 @@ jobs:
           reason="update type is not patch or minor"
           case "${UPDATE_TYPE}" in
             version-update:semver-patch|version-update:semver-minor)
-              case "${DEPENDENCY_GROUP}" in
-                npm-development|composer-development|github-actions)
+              case "${DEPENDABOT_BRANCH}" in
+                dependabot/npm_and_yarn/npm-development-*|dependabot/composer/composer-development-*|dependabot/github_actions/github-actions-*)
                   eligible=true
-                  reason="approved Dependabot group"
+                  reason="approved Dependabot branch group"
                   ;;
                 *)
                   if [ "${PACKAGE_ECOSYSTEM}" = "npm" ] && [ "${DEPENDENCY_NAMES}" = "vue" ]; then
@@ -60,6 +61,7 @@ jobs:
             echo
             echo "- Ecosystem: \`${PACKAGE_ECOSYSTEM}\`"
             echo "- Group: \`${DEPENDENCY_GROUP:-none}\`"
+            echo "- Branch: \`${DEPENDABOT_BRANCH}\`"
             echo "- Update type: \`${UPDATE_TYPE}\`"
             echo "- Dependencies: \`${DEPENDENCY_NAMES}\`"
             echo "- Decision: \`${eligible}\` (${reason})"
