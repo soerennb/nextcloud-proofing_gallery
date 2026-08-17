@@ -24,33 +24,48 @@ jobs:
         id: policy
         env:
           DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
-          DEPENDENCY_TYPE: ${{ steps.metadata.outputs.dependency-type }}
+          DEPENDENCY_GROUP: ${{ steps.metadata.outputs.dependency-group }}
+          DEPENDABOT_BRANCH: ${{ github.event.pull_request.head.ref }}
           PACKAGE_ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
           UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
         run: |
           set -euo pipefail
 
-          case "${UPDATE_TYPE}" in
-            version-update:semver-patch|version-update:semver-minor) ;;
-            *) exit 0 ;;
-          esac
-
           eligible=false
-          case "${PACKAGE_ECOSYSTEM}:${DEPENDENCY_TYPE}" in
-            github-actions:*)
-              eligible=true
-              ;;
-            npm:direct:development|composer:direct:development)
-              eligible=true
-              ;;
-            npm:direct:production)
-              if [ "${DEPENDENCY_NAMES}" = "vue" ]; then
-                eligible=true
-              fi
+          reason="update type is not patch or minor"
+          case "${UPDATE_TYPE}" in
+            version-update:semver-patch|version-update:semver-minor)
+              case "${DEPENDABOT_BRANCH}" in
+                dependabot/npm_and_yarn/npm-development-*|dependabot/composer/composer-development-*|dependabot/github_actions/github-actions-*)
+                  eligible=true
+                  reason="approved Dependabot branch group"
+                  ;;
+                *)
+                  if [ "${PACKAGE_ECOSYSTEM}" = "npm" ] && [ "${DEPENDENCY_NAMES}" = "vue" ]; then
+                    eligible=true
+                    reason="explicit Vue exception"
+                  else
+                    reason="dependency group is outside the auto-merge policy"
+                  fi
+                  ;;
+              esac
               ;;
           esac
 
-          echo "eligible=${eligible}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "eligible=${eligible}"
+          } >> "${GITHUB_OUTPUT}"
+
+          {
+            echo "### Dependabot auto-merge policy"
+            echo
+            echo "- Ecosystem: \`${PACKAGE_ECOSYSTEM}\`"
+            echo "- Group: \`${DEPENDENCY_GROUP:-none}\`"
+            echo "- Branch: \`${DEPENDABOT_BRANCH}\`"
+            echo "- Update type: \`${UPDATE_TYPE}\`"
+            echo "- Dependencies: \`${DEPENDENCY_NAMES}\`"
+            echo "- Decision: \`${eligible}\` (${reason})"
+          } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Queue squash auto-merge
         if: steps.policy.outputs.eligible == 'true'
