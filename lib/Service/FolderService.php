@@ -17,6 +17,7 @@ final class FolderService {
 		private IRootFolder $rootFolder,
 		private MediaMetadataService $metadata,
 		private MediaTypePolicy $mediaTypes,
+		private UploadLockService $uploadLocks,
 	) {
 	}
 
@@ -54,50 +55,66 @@ final class FolderService {
 	}
 
 	public function uploadMedia(string $userId, int $folderId, string $path, string $filename, string $temporaryPath, string $conflict = 'fail', ?string $declaredMimeType = null): ?MediaItem {
+		$path = trim($path, '/');
+		$lockScope = hash('sha256', $userId . "\0" . $folderId . "\0" . $path);
+		return $this->uploadLocks->wait(
+			'proofing-gallery/media-upload-destination/' . $lockScope,
+			'Proofing Gallery media upload destination',
+			fn (): ?MediaItem => $this->uploadMediaLocked($userId, $folderId, $path, $filename, $temporaryPath, $conflict, $declaredMimeType),
+		);
+	}
+
+	private function uploadMediaLocked(string $userId, int $folderId, string $path, string $filename, string $temporaryPath, string $conflict, ?string $declaredMimeType): ?MediaItem {
 		$root = $this->resolveFolder($userId, $folderId);
-		$target = $this->folderAt($root, trim($path, '/'));
+		$target = $this->folderAt($root, $path);
 		$filename = $this->safeName($filename);
 		if (!$target->isUpdateable()) throw new FolderAccessException('The destination is not writable');
-		$existing = null;
-		if ($target->nodeExists($filename)) {
-			if ($conflict === 'skip') return null;
-			if ($conflict === 'overwrite') $existing = $target->get($filename);
-			elseif ($conflict === 'rename') $filename = $this->conflictFreeName($target, $filename);
-			else throw new FolderAccessException('The filename already exists');
-		}
+		if (!in_array($conflict, ['fail', 'rename', 'overwrite', 'skip'], true)) throw new \InvalidArgumentException('Unknown conflict strategy');
 		$extension = pathinfo($filename, PATHINFO_EXTENSION);
 		$stem = pathinfo($filename, PATHINFO_FILENAME);
 		$temporaryName = '.' . $stem . '.upload-' . bin2hex(random_bytes(8)) . ($extension === '' ? '' : '.' . $extension);
 		$stream = fopen($temporaryPath, 'rb');
-		if ($stream === false) {
-			throw new FolderAccessException('The uploaded file could not be read');
-		}
+		if ($stream === false) throw new FolderAccessException('The uploaded file could not be read');
 		try {
 			$file = $target->newFile($temporaryName, $stream);
 		} finally {
 			if (is_resource($stream)) fclose($stream);
 		}
-		if (!$this->isSupported($file) || ($declaredMimeType !== null && !$this->mediaTypes->matches($declaredMimeType, $file))) {
-			$file->delete();
-			throw new \InvalidArgumentException($declaredMimeType === null
-				? 'The uploaded media type is not supported'
-				: 'Uploaded content does not match the declared media type');
-		}
-		$backup = null;
 		try {
-			if ($existing !== null) {
-				$backupName = '.' . $filename . '.replaced-' . bin2hex(random_bytes(8));
-				$existing->move($target->getPath() . '/' . $backupName);
-				$backup = $existing;
+			if (!$this->isSupported($file) || ($declaredMimeType !== null && !$this->mediaTypes->matches($declaredMimeType, $file))) {
+				throw new \InvalidArgumentException($declaredMimeType === null
+					? 'The uploaded media type is not supported'
+					: 'Uploaded content does not match the declared media type');
 			}
-			$file->move($target->getPath() . '/' . $filename);
-			$backup?->delete();
+			$committedName = $filename;
+			$existing = null;
+			if ($target->nodeExists($committedName)) {
+				if ($conflict === 'skip') {
+					$file->delete();
+					return null;
+				}
+				if ($conflict === 'overwrite') $existing = $target->get($committedName);
+				elseif ($conflict === 'rename') $committedName = $this->conflictFreeName($target, $committedName);
+				else throw new FolderAccessException('The filename already exists');
+			}
+			$backup = null;
+			try {
+				if ($existing !== null) {
+					$backupName = '.' . $committedName . '.replaced-' . bin2hex(random_bytes(8));
+					$existing->move($target->getPath() . '/' . $backupName);
+					$backup = $existing;
+				}
+				$file->move($target->getPath() . '/' . $committedName);
+				$backup?->delete();
+			} catch (\Throwable $exception) {
+				try { $backup?->move($target->getPath() . '/' . $committedName); } catch (\Throwable) {}
+				throw new FolderAccessException('The uploaded file could not be committed safely', previous: $exception);
+			}
+			return $this->mediaItem($file);
 		} catch (\Throwable $exception) {
 			try { if ($file->getName() === $temporaryName) $file->delete(); } catch (\Throwable) {}
-			try { if ($backup !== null) $backup->move($target->getPath() . '/' . $filename); } catch (\Throwable) {}
-			throw new FolderAccessException('The uploaded file could not be committed safely', previous: $exception);
+			throw $exception;
 		}
-		return $this->mediaItem($file);
 	}
 
 	private function conflictFreeName(Folder $folder, string $filename): string {

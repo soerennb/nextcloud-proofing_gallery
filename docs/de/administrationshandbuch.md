@@ -84,11 +84,23 @@ Die OCS-Agenten-API ist ein stabiler App-Vertrag. Das Repository enthält unter
 `integrations/context_agent/proofing_gallery.py` zusätzlich ein experimentelles,
 für Upstream vorbereitetes Context-Agent-Modul. Es wird nicht automatisch
 von der PHP-App geladen, sondern über den für die jeweilige Context-Agent-
-Installation vorgesehenen Mechanismus installiert. Dateinamen und Kommentare
-sind als nicht vertrauenswürdige Benutzerinhalte zu behandeln. Ein separater
-externer MCP-Server ist bewusst nicht nötig: Das Modul verwendet denselben
-authentifizierten OCS-Vertrag und übernimmt dessen Rechte-, Revisions- und
-Idempotenzregeln.
+Installation vorgesehenen Mechanismus installiert. Die erste Integration ist
+bewusst rein lesend: Sie kann Galerien auflisten, Details und
+Veröffentlichungsreife abrufen sowie nach Dateinamen suchen. Gastfeedback und
+sämtliche Erstellungs-, Veröffentlichungs-, Workflow-, Zugriffs- und
+Review-Änderungen werden nicht angeboten. Titel, Pfade und Dateinamen sind als
+nicht vertrauenswürdige Benutzerinhalte zu behandeln. Ein separater externer
+MCP-Server ist bewusst nicht nötig: Das Modul verwendet denselben
+authentifizierten OCS-Vertrag und übernimmt dessen Rechtebegrenzung.
+
+Geeignete Beispielanfragen sind:
+
+- „Welche Proofing-Galerien sind derzeit veröffentlicht?“
+- „Ist Editorial Edit veröffentlichungsbereit? Ändere nichts.“
+- „Finde Dateien mit ‚coast‘ in der Proofing-Galerie Coastal Vows.“
+
+Die Werkzeugnamen enthalten bewusst `proofing_gallery`, damit das Modell sie
+nicht mit allgemeinen Suchen in Files oder Photos verwechselt.
 
 ## Hintergrundaufträge und Überwachung
 

@@ -51,6 +51,20 @@ failed Nextcloud background jobs. Cleanup is eventual, so allow headroom for int
 uploads. Native Nextcloud retention, backup, encryption, and object-storage
 policies still apply to gallery source folders.
 
+Chunk assembly for different uploads runs concurrently. The final write is
+serialized only per destination folder so filename conflict handling and the
+Nextcloud file hooks remain consistent. Temporary lock contention is returned
+as HTTP 423 with `code: upload_busy` and a `Retry-After` header; clients should
+retry only the finalization request and must not resend completed chunks.
+
+Nextcloud's optional dirty-database-query detector can report read-after-write
+paths triggered by Activity, encryption, metadata, or other file hooks during
+an otherwise successful upload. Correlate these entries by request ID and HTTP
+status before treating them as an upload failure. Keep
+`loglevel_dirty_database_queries` at its normal debug level in production and
+raise it temporarily only while diagnosing replica-consistency paths; do not
+disable required file hooks merely to suppress these diagnostics.
+
 ### Capacity and backlog monitoring
 
 The Administration settings system-status section reads indexed counters for

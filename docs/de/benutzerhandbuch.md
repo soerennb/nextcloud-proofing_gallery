@@ -88,8 +88,10 @@ Rundenverlauf. Sind die jeweiligen Apps verfügbar, lässt sich die Frist in
 einen beschreibbaren Nextcloud-Kalender übernehmen und die Prüfung als
 Deck-Karte anlegen. Die Ressourcen verwenden die Rechte des aktuellen
 Benutzers; Proofing Gallery speichert weder Zugangsdaten noch den öffentlichen
-Link-Token. Context Agent kann den Status lesen und Eigentümerentscheidungen
-nur als bestätigte, idempotente Aktionen anbieten.
+Link-Token. Context Agent bietet experimentell ausschließlich lesende
+Werkzeuge zum Auflisten von Galerien, für Details und Veröffentlichungsreife
+sowie zur Suche nach Dateinamen. Veröffentlichung und Eigentümerentscheidungen
+bleiben in der Oberfläche von Proofing Gallery.
 
 ## Downloads und Gast-Uploads
 

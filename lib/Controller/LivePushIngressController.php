@@ -6,6 +6,7 @@ namespace OCA\ProofingGallery\Controller;
 
 use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Exception\FolderAccessException;
+use OCA\ProofingGallery\Exception\UploadBusyException;
 use OCA\ProofingGallery\Service\LivePushService;
 use OCA\ProofingGallery\Service\PolicyService;
 use OCP\AppFramework\Controller;
@@ -42,6 +43,8 @@ final class LivePushIngressController extends Controller {
 			}
 		} catch (\UnexpectedValueException|DoesNotExistException) {
 			return new JSONResponse(['message' => 'Invalid Live Push credentials'], Http::STATUS_UNAUTHORIZED, ['WWW-Authenticate' => 'Basic realm="Proofing Gallery Live Push"']);
+		} catch (UploadBusyException|\OCP\Lock\LockedException $exception) {
+			return new JSONResponse(['code' => 'upload_busy', 'message' => $exception->getMessage()], Http::STATUS_LOCKED, ['Retry-After' => '1']);
 		} catch (\InvalidArgumentException|FolderAccessException $exception) {
 			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}

@@ -11,6 +11,7 @@ use OCA\ProofingGallery\Service\GuestService;
 use OCA\ProofingGallery\Service\PublicShareContextResolver;
 use OCA\ProofingGallery\Service\UploadService;
 use OCA\ProofingGallery\Exception\PolicyViolationException;
+use OCA\ProofingGallery\Exception\UploadBusyException;
 use OCA\ProofingGallery\Domain\PublicLinkCapability;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
@@ -21,6 +22,7 @@ use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 use OCP\ISession;
+use OCP\Lock\LockedException;
 
 final class UploadController extends ResolvedPublicShareController {
 	public function __construct(
@@ -115,6 +117,8 @@ final class UploadController extends ResolvedPublicShareController {
 			return new JSONResponse($callback($guest), $status);
 		} catch (PolicyViolationException $exception) {
 			return new JSONResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
+		} catch (UploadBusyException|LockedException $exception) {
+			return new JSONResponse(['code' => 'upload_busy', 'message' => $exception->getMessage()], Http::STATUS_LOCKED, ['Retry-After' => '1']);
 		} catch (InvalidArgumentException $exception) {
 			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}

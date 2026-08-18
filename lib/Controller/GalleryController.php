@@ -7,6 +7,7 @@ namespace OCA\ProofingGallery\Controller;
 use InvalidArgumentException;
 use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Exception\FolderAccessException;
+use OCA\ProofingGallery\Exception\UploadBusyException;
 use OCA\ProofingGallery\Exception\AuthorizationException;
 use OCA\ProofingGallery\Service\FolderService;
 use OCA\ProofingGallery\Service\GalleryService;
@@ -387,6 +388,8 @@ final class GalleryController extends Controller {
 			return new DataResponse($item, Http::STATUS_CREATED);
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		} catch (UploadBusyException|\OCP\Lock\LockedException $exception) {
+			return new DataResponse(['code' => 'upload_busy', 'message' => $exception->getMessage()], Http::STATUS_LOCKED, ['Retry-After' => '1']);
 		} catch (InvalidArgumentException|FolderAccessException $exception) {
 			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}

@@ -133,6 +133,44 @@ an independently privileged MCP daemon. Compile-check the module with
 `python3 -m py_compile integrations/context_agent/proofing_gallery.py`; never
 commit its generated `__pycache__` directory.
 
+### Context Agent manual gate
+
+The deterministic contract suite is dependency-light and should run on every
+change to the upstream module:
+
+```bash
+./scripts/test-context-agent.sh
+```
+
+Before updating the upstream Context Agent pull request, also run the isolated
+live gate against the loopback studio:
+
+```bash
+make context-agent-eval-up
+make context-agent-eval
+make context-agent-eval-down
+```
+
+The first setup downloads a 4.6 GiB quantized Llama model into the ignored
+`.local/context-agent-eval/` cache. Context Agent 2.8.0 and LLM2 2.8.0 are
+digest-pinned, the model URL is commit-pinned and SHA-256 checked, and only the
+studio Docker network is used. The gate verifies the real MCP `tools/list`
+schemas, English and German tool selection, the distinction from unified
+Nextcloud search, complete gallery lists, media search, injected-text handling,
+an explicit read-only response to publish requests, and an unchanged gallery
+snapshot. Synthetic traces are written to the ignored
+`.local/context-agent-eval/latest-results.json`; inspect them before treating
+the manual gate as passed.
+
+The evaluator limits active Context Agent categories to Proofing Gallery and
+Nextcloud unified search so routing remains competitive without spending most
+of the local model context on unrelated tools. Teardown unregisters only the
+two evaluator ExApps and daemon entries and removes their containers; it never
+removes studio volumes or the model cache. LLM2 2.8.0 currently declares
+Python 3.10 support while using `asyncio.TaskGroup`; the stack script records
+and applies a local runtime compatibility shim so the published image can be
+used for this gate without modifying its application code.
+
 ## Database changes
 
 Add a new monotonically increasing migration; do not modify released
