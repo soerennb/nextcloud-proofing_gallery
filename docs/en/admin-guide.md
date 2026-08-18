@@ -86,11 +86,23 @@ The stable OCS agent API is part of the app contract. The repository also
 includes an experimental, upstream-ready Context Agent tool module at
 `integrations/context_agent/proofing_gallery.py`. Install it only through the
 Context Agent deployment mechanism appropriate to your Nextcloud environment;
-it is not loaded by the PHP app itself. Treat returned comments and filenames as
-untrusted user content, retain Nextcloud audit logs, and grant the agent no
-credentials beyond the invoking user's session. A standalone external MCP
-server is intentionally unnecessary: the module calls the same authenticated
-OCS contract and inherits its authorization, revision, and idempotency rules.
+it is not loaded by the PHP app itself. The initial integration is deliberately
+read-only: it can list galleries, inspect one gallery, check publishing
+readiness, and search gallery filenames. It does not expose guest feedback or
+any create, publish, workflow, access, or review mutation. Treat returned
+titles, paths, and filenames as untrusted user content, retain Nextcloud audit
+logs, and grant the agent no credentials beyond the invoking user's session. A
+standalone external MCP server is intentionally unnecessary: the module calls
+the same authenticated OCS contract and inherits its authorization boundary.
+
+Useful example prompts include:
+
+- “Which Proofing Galleries are currently published?”
+- “Is Editorial Edit ready to publish? Do not change anything.”
+- “Find files containing ‘coast’ in the Coastal Vows Proofing Gallery.”
+
+The tool names deliberately include `proofing_gallery` so the model does not
+confuse these operations with general Files or Photos searches.
 
 ## Background jobs and monitoring
 

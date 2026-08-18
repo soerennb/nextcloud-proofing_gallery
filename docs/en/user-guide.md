@@ -87,7 +87,9 @@ When the corresponding apps are available, a due date can be added to a
 writable Nextcloud Calendar and the review can be created as a Deck card. These
 resources run with the current user's permissions; Proofing Gallery stores no
 credentials or public link token. Context Agent can read this status and offers
-owner decisions only as confirmed, idempotent actions.
+an experimental read-only integration for listing galleries, inspecting their
+details and readiness, and searching gallery filenames. Publishing and owner
+decisions remain in the Proofing Gallery interface.
 
 ## Downloads and guest uploads
 

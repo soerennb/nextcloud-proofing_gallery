@@ -9,6 +9,12 @@ async function state(): Promise<{ galleryId: number, folderId: number }> {
 	return JSON.parse(await readFile(path.join(process.cwd(), 'test-results-e2e-state.json'), 'utf8'))
 }
 
+function fieldNames(value: unknown): string[] {
+	if (Array.isArray(value)) return value.flatMap(fieldNames)
+	if (value === null || typeof value !== 'object') return []
+	return Object.entries(value).flatMap(([key, nested]) => [key, ...fieldNames(nested)])
+}
+
 test('agent reads conceal galleries from unauthorized users', async ({ request, playwright, baseURL }) => {
 	const fixture = await state()
 	const userId = 'e2e-agent-outsider'
@@ -35,6 +41,43 @@ test('agent reads conceal galleries from unauthorized users', async ({ request, 
 	} finally {
 		await request.delete(`${baseURL}/ocs/v2.php/cloud/users/${userId}?format=json`, { headers })
 	}
+})
+
+test('read-only agent contract filters galleries and omits sensitive fields', async ({ request, baseURL }) => {
+	const fixture = await state()
+	const endpoint = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/agent`
+	const anonymous = await request.get(`${endpoint}/galleries?format=json`)
+	expect(anonymous.status()).toBe(401)
+
+	const list = await request.get(`${endpoint}/galleries?format=json&query=E2E%20Gallery&status=published&purpose=custom&limit=1`, { headers })
+	expect(list.ok()).toBe(true)
+	const listData = (await list.json()).ocs.data as { items: Array<{ id: number, title: string, revision: number }>, nextCursor: string | null }
+	expect(listData.items).toHaveLength(1)
+	expect(listData.items[0]).toMatchObject({ id: fixture.galleryId, title: 'E2E Gallery' })
+	expect(listData.items[0].revision).toBeGreaterThan(0)
+
+	const detail = await request.get(`${endpoint}/galleries/${fixture.galleryId}?format=json`, { headers })
+	expect(detail.ok()).toBe(true)
+	const detailData = (await detail.json()).ocs.data
+	expect(detailData).toMatchObject({ id: fixture.galleryId, title: 'E2E Gallery', status: 'published', sourceType: 'folder' })
+	const sensitive = new Set(['shareToken', 'token', 'password', 'email', 'guestEmail'])
+	expect(fieldNames(detailData).filter(field => sensitive.has(field))).toEqual([])
+
+	const readiness = await request.get(`${endpoint}/galleries/${fixture.galleryId}/readiness?format=json`, { headers })
+	expect(readiness.ok()).toBe(true)
+	const readinessData = (await readiness.json()).ocs.data as { ready: boolean, revision: number, checks: Array<{ code: string, state: string, action: string }> }
+	expect(readinessData.ready).toBe(true)
+	expect(readinessData.revision).toBeGreaterThan(0)
+	expect(readinessData.checks.map(check => check.code)).toEqual(expect.arrayContaining(['source_readable', 'media_available', 'publishing_allowed', 'artwork_scoped']))
+	expect(readinessData.checks.every(check => ['ready', 'warning', 'blocked'].includes(check.state) && check.action.length > 0)).toBe(true)
+
+	const rebuild = await request.post(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries/${fixture.galleryId}/media/index?format=json`, { headers, data: {} })
+	expect(rebuild.ok()).toBe(true)
+	const media = await request.get(`${endpoint}/galleries/${fixture.galleryId}/media?format=json&query=proof&minRating=0&limit=10`, { headers })
+	expect(media.ok()).toBe(true)
+	const mediaData = (await media.json()).ocs.data as { items: Array<{ id: number, name: string }>, total: number, nextCursor: string | null }
+	expect(mediaData.items.some(item => item.name === 'proof.png')).toBe(true)
+	expect(mediaData.total).toBeGreaterThanOrEqual(1)
 })
 
 test('capabilities, Files resolution, and agent idempotency form one current-user contract', async ({ request, baseURL }) => {

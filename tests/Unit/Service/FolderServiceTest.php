@@ -9,12 +9,14 @@ use OCA\ProofingGallery\Service\MediaMetadataService;
 use OCA\ProofingGallery\Service\EmbeddedMetadataExtractor;
 use OCA\ProofingGallery\Service\PolicyService;
 use OCA\ProofingGallery\Service\MediaTypePolicy;
+use OCA\ProofingGallery\Service\UploadLockService;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\Files\Node;
 use OCP\FilesMetadata\IFilesMetadataManager;
 use OCP\IConfig;
+use OCP\Lock\ILockingProvider;
 use PHPUnit\Framework\TestCase;
 
 final class FolderServiceTest extends TestCase {
@@ -89,7 +91,8 @@ final class FolderServiceTest extends TestCase {
 			new EmbeddedMetadataExtractor($policies),
 		);
 
-		return new FolderService($root, $metadata, new MediaTypePolicy());
+		$provider = $this->createMock(ILockingProvider::class);
+		return new FolderService($root, $metadata, new MediaTypePolicy(), new UploadLockService($provider));
 	}
 
 	private function file(int $id, string $name, string $mime, int $modifiedAt = 1_700_000_000): File {

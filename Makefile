@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: build docs appstore appstore-signed verify-package verify-signed-package test-upgrade watch install lint test test-e2e test-compat dev-up dev-pull dev-down dev-logs dev-install dev-reset dev-migration-status dev-migrate occ studio-up studio-down studio-restart studio-refresh studio-doctor studio-status studio-logs studio-reset studio-occ studio-migration-status studio-migrate studio-library-check studio-seed studio-screenshots studio-browser-check
+.PHONY: build docs appstore appstore-signed verify-package verify-signed-package test-upgrade watch install lint test test-e2e test-compat dev-up dev-pull dev-down dev-logs dev-install dev-reset dev-migration-status dev-migrate occ studio-up studio-down studio-restart studio-refresh studio-doctor studio-status studio-logs studio-reset studio-occ studio-migration-status studio-migrate studio-library-check studio-seed studio-screenshots studio-browser-check context-agent-eval-up context-agent-eval context-agent-eval-down
 
 install:
 	npm ci
@@ -122,3 +122,12 @@ studio-screenshots: studio-seed
 
 studio-browser-check: studio-seed
 	node ./scripts/verify-studio-browsers.mjs
+
+context-agent-eval-up: studio-seed
+	./scripts/context-agent-eval-stack.sh up
+
+context-agent-eval:
+	./scripts/context-agent-eval.py
+
+context-agent-eval-down:
+	./scripts/context-agent-eval-stack.sh down

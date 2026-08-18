@@ -13,7 +13,6 @@ use OCP\Files\IAppData;
 use OCP\Files\NotFoundException;
 use OCP\Files\SimpleFS\ISimpleFolder;
 use OCP\Security\ISecureRandom;
-use OCP\Lock\ILockingProvider;
 
 final class OwnerUploadService {
 	public const CHUNK_SIZE = 5 * 1024 * 1024;
@@ -26,7 +25,7 @@ final class OwnerUploadService {
 		private FolderService $folders,
 		private PolicyService $policies,
 		private MediaTypePolicy $mediaTypes,
-		private ILockingProvider $locks,
+		private UploadLockService $locks,
 	) {
 	}
 
@@ -94,13 +93,11 @@ final class OwnerUploadService {
 
 	/** @return array{status: string, item?: MediaItem} */
 	public function finalize(Gallery $gallery, string $ownerUid, string $uploadId): array {
-		$lock = 'proofing-gallery/owner-upload-gallery/' . $gallery->getId();
-		$this->locks->acquireLock($lock, ILockingProvider::LOCK_EXCLUSIVE, 'Proofing Gallery owner upload');
-		try {
-			return $this->finalizeLocked($gallery, $ownerUid, $uploadId);
-		} finally {
-			$this->locks->releaseLock($lock, ILockingProvider::LOCK_EXCLUSIVE);
-		}
+		return $this->locks->immediately(
+			'proofing-gallery/owner-upload/' . $uploadId,
+			'Proofing Gallery owner upload session',
+			fn (): array => $this->finalizeLocked($gallery, $ownerUid, $uploadId),
+		);
 	}
 
 	/** @return array{status: string, item?: MediaItem} */

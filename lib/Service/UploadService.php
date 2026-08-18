@@ -14,7 +14,6 @@ use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IAppData;
 use OCP\Security\ISecureRandom;
-use OCP\Lock\ILockingProvider;
 
 final class UploadService {
 	public const CHUNK_SIZE = 5 * 1024 * 1024;
@@ -30,7 +29,7 @@ final class UploadService {
 		private PolicyService $policies,
 		private CapabilityPolicyService $capabilities,
 		private MediaTypePolicy $mediaTypes,
-		private ILockingProvider $locks,
+		private UploadLockService $locks,
 	) {
 	}
 
@@ -99,13 +98,11 @@ final class UploadService {
 
 	/** @return array<string, mixed> */
 	public function finalize(Gallery $gallery, Guest $guest, string $uploadId): array {
-		$lock = 'proofing-gallery/guest-upload-gallery/' . $gallery->getId();
-		$this->locks->acquireLock($lock, ILockingProvider::LOCK_EXCLUSIVE, 'Proofing Gallery guest upload');
-		try {
-			return $this->finalizeLocked($gallery, $guest, $uploadId);
-		} finally {
-			$this->locks->releaseLock($lock, ILockingProvider::LOCK_EXCLUSIVE);
-		}
+		return $this->locks->immediately(
+			'proofing-gallery/guest-upload/' . $uploadId,
+			'Proofing Gallery guest upload session',
+			fn (): array => $this->finalizeLocked($gallery, $guest, $uploadId),
+		);
 	}
 
 	/** @return array<string, mixed> */
@@ -136,15 +133,30 @@ final class UploadService {
 			throw new InvalidArgumentException('Uploaded byte count does not match');
 		}
 		rewind($stream);
-		$inbox = $this->inbox($gallery);
-		$filename = $this->conflictFreeName($inbox, (string)$row['filename']);
-		$file = $inbox->newFile($filename, $stream);
-		if (is_resource($stream)) {
-			fclose($stream);
-		}
-		if (!$file instanceof File || !$this->mediaTypes->matches((string)$row['mime_type'], $file)) {
-			$file->delete();
-			throw new InvalidArgumentException('Uploaded content does not match the declared media type');
+		$extension = pathinfo((string)$row['filename'], PATHINFO_EXTENSION);
+		$temporaryName = '.upload-' . $uploadId . ($extension === '' ? '' : '.' . $extension);
+		try {
+			[$file, $filename] = $this->locks->wait(
+				'proofing-gallery/guest-upload-inbox/' . $gallery->getId(),
+				'Proofing Gallery guest upload inbox',
+				function () use ($gallery, $stream, $temporaryName, $row): array {
+					$inbox = $this->inbox($gallery);
+					$file = $inbox->newFile($temporaryName, $stream);
+					try {
+						if (!$file instanceof File || !$this->mediaTypes->matches((string)$row['mime_type'], $file)) {
+							throw new InvalidArgumentException('Uploaded content does not match the declared media type');
+						}
+						$filename = $this->conflictFreeName($inbox, (string)$row['filename']);
+						$file->move($inbox->getPath() . '/' . $filename);
+					} catch (\Throwable $exception) {
+						try { if ($file->getName() === $temporaryName) $file->delete(); } catch (\Throwable) {}
+						throw $exception;
+					}
+					return [$file, $filename];
+				},
+			);
+		} finally {
+			if (is_resource($stream)) fclose($stream);
 		}
 		try {
 			$this->repository->finalize($uploadId, $file->getId(), $filename, $file->getMimeType(), $this->clock->getTime());

@@ -81,8 +81,13 @@ final class IntegrationContractTest extends TestCase {
 		self::assertStringNotContainsString('password:', $source);
 		self::assertStringNotContainsString('delete_customer_gallery', $source);
 		self::assertStringContainsString('@safe_tool', $source);
-		self::assertStringContainsString('@dangerous_tool', $source);
-		self::assertStringContainsString('decide_gallery_review', $source);
+		self::assertStringNotContainsString('@dangerous_tool', $source);
+		self::assertStringContainsString('list_proofing_galleries', $source);
+		self::assertStringContainsString('get_proofing_gallery', $source);
+		self::assertStringContainsString('check_proofing_gallery_readiness', $source);
+		self::assertStringContainsString('search_proofing_gallery_media', $source);
+		self::assertStringNotContainsString('publish_customer_gallery', $source);
+		self::assertStringNotContainsString('summarize_gallery_feedback', $source);
 	}
 
 	public function testFilesMetadataAndContextChatKeepPrivacyBoundary(): void {

@@ -256,6 +256,101 @@ test('owner chunk uploads expose resumable state and finalize into the gallery',
 	}
 })
 
+test('parallel owner uploads commit with conflict-free names', async ({ request, baseURL }) => {
+	const stable = await state()
+	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
+	const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+	let galleryId: number | null = null
+	const fileIds: number[] = []
+
+	try {
+		const created = await request.post(`${galleries}?format=json`, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+			data: { folderId: stable.folderId, title: `Parallel owner upload ${Date.now()}` },
+		})
+		galleryId = (await created.json() as { id: number }).id
+		const uploads = `${galleries}/${galleryId}/owner-uploads`
+		const sessions = await Promise.all(Array.from({ length: 3 }, async () => {
+			const initiated = await request.post(`${uploads}?format=json`, {
+				headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+				data: { filename: 'parallel-proof.png', mimeType: 'image/png', size: image.length, conflict: 'rename' },
+			})
+			expect(initiated.status()).toBe(201)
+			const session = await initiated.json() as { id: string }
+			expect((await request.put(`${uploads}/${session.id}/chunks/0?format=json`, {
+				headers: { ...apiHeaders, 'Content-Type': 'application/octet-stream' },
+				data: image,
+			})).status()).toBe(200)
+			return session
+		}))
+
+		const finalized = await Promise.all(sessions.map(session => request.post(`${uploads}/${session.id}/finalize?format=json`, { headers: apiHeaders })))
+		expect(finalized.map(response => response.status())).toEqual([200, 200, 200])
+		const items = await Promise.all(finalized.map(response => response.json() as Promise<{ item: { id: number; name: string } }>))
+		fileIds.push(...items.map(result => result.item.id))
+		expect(new Set(items.map(result => result.item.name)).size).toBe(3)
+	} finally {
+		if (galleryId !== null) {
+			for (const fileId of fileIds) await request.delete(`${galleries}/${galleryId}/media/${fileId}?format=json`, { headers: apiHeaders })
+			await request.delete(`${galleries}/${galleryId}?format=json`, { headers: apiHeaders })
+		}
+	}
+})
+
+test('parallel guest uploads finalize into the inbox with conflict-free names', async ({ request, baseURL }) => {
+	const stable = await state()
+	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
+	const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+	let galleryId: number | null = null
+	const uploadIds: string[] = []
+
+	try {
+		const created = await request.post(`${galleries}?format=json`, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+			data: { folderId: stable.folderId, title: `Parallel guest upload ${Date.now()}`, settings: { allowGuestUploads: true } },
+		})
+		galleryId = (await created.json() as { id: number }).id
+		const published = await request.post(`${galleries}/${galleryId}/publish?format=json`, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+			data: { allowDownloads: false },
+		})
+		expect(published.status()).toBe(200)
+		const token = (await published.json() as { gallery: { shareToken: string } }).gallery.shareToken
+		const publicEndpoint = `${baseURL}/index.php/apps/proofing_gallery/public/${token}`
+		const session = await request.post(`${publicEndpoint}/session`, { data: { displayName: 'Parallel uploader' } })
+		expect(session.status()).toBe(201)
+		const nonce = (await session.json() as { nonce: string }).nonce
+		const headers = { 'Content-Type': 'application/json', 'X-Proofing-Nonce': nonce }
+		const uploads = await Promise.all(Array.from({ length: 3 }, async () => {
+			const initiated = await request.post(`${publicEndpoint}/uploads`, {
+				headers,
+				data: { filename: 'guest-proof.png', mimeType: 'image/png', size: image.length },
+			})
+			expect(initiated.status()).toBe(201)
+			const upload = await initiated.json() as { id: string }
+			uploadIds.push(upload.id)
+			expect((await request.put(`${publicEndpoint}/uploads/${upload.id}/chunks/0`, {
+				headers: { 'Content-Type': 'application/octet-stream', 'X-Proofing-Nonce': nonce },
+				data: image,
+			})).status()).toBe(200)
+			return upload
+		}))
+
+		const finalized = await Promise.all(uploads.map(upload => request.post(`${publicEndpoint}/uploads/${upload.id}/finalize`, { headers })))
+		expect(finalized.map(response => response.status())).toEqual([200, 200, 200])
+		const inbox = await request.get(`${galleries}/${galleryId}/inbox?format=json`, { headers: apiHeaders }).then(response => response.json()) as Array<{ upload_id: string; filename: string }>
+		const rows = inbox.filter(row => uploadIds.includes(row.upload_id))
+		expect(rows).toHaveLength(3)
+		expect(new Set(rows.map(row => row.filename)).size).toBe(3)
+	} finally {
+		if (galleryId !== null) {
+			for (const uploadId of uploadIds) await request.delete(`${galleries}/${galleryId}/inbox/${uploadId}?format=json`, { headers: apiHeaders })
+			await request.delete(`${galleries}/${galleryId}/publish?format=json`, { headers: apiHeaders })
+			await request.delete(`${galleries}/${galleryId}?format=json`, { headers: apiHeaders })
+		}
+	}
+})
+
 test('Live Push credentials are upload-only, independently rotated and revoked', async ({ request, baseURL }) => {
 	const stable = await state()
 	const adminSettings = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/admin/settings?format=json`

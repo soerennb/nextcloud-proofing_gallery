@@ -10,6 +10,12 @@ interface OwnerUploadSession {
 	uploadedChunks: number[]
 }
 
+interface UploadBusyResponse {
+	status?: number
+	data?: { code?: string }
+	headers?: Record<string, string | undefined>
+}
+
 const galleriesUrl = generateOcsUrl('/apps/proofing_gallery/api/v1/galleries')
 
 export async function uploadGalleryMedia(
@@ -50,12 +56,26 @@ export async function uploadGalleryMedia(
 		onProgress?.(completedBytes, file.size)
 	}
 
-	const { data } = await axios.post<{ status: 'completed' | 'skipped'; item?: MediaItem }>(
-		`${galleriesUrl}/${galleryId}/owner-uploads/${session.id}/finalize`,
-	)
+	const data = await finalizeUpload(galleryId, session.id)
 	window.localStorage.removeItem(storageKey)
 	if (!data.item) throw new Error('Upload was skipped')
 	return data.item
+}
+
+async function finalizeUpload(galleryId: number, uploadId: string): Promise<{ status: 'completed' | 'skipped'; item?: MediaItem }> {
+	const url = `${galleriesUrl}/${galleryId}/owner-uploads/${uploadId}/finalize`
+	for (let attempt = 0; attempt < 3; attempt++) {
+		try {
+			return (await axios.post<{ status: 'completed' | 'skipped'; item?: MediaItem }>(url)).data
+		} catch (error) {
+			const response = (error as { response?: UploadBusyResponse }).response
+			if (response?.status !== 423 || response.data?.code !== 'upload_busy' || attempt === 2) throw error
+			const retryAfter = Number(response.headers?.['retry-after'])
+			const delay = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 250 * 2 ** attempt
+			await new Promise(resolve => setTimeout(resolve, delay))
+		}
+	}
+	throw new Error('Upload finalization failed')
 }
 
 async function resumeSession(galleryId: number, storageKey: string): Promise<OwnerUploadSession | null> {

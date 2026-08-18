@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.1 — 2026-08-18
+
+- allow owner, guest, direct, and Live Push uploads to finalize concurrently by
+  coordinating individual sessions and serializing only the shared destination
+  commit, including conflict-safe names for simultaneous matching files
+- return deterministic HTTP 423 `upload_busy` responses with bounded lock waits
+  and retry only owner finalize requests without retransmitting uploaded chunks
+- harden the experimental Context Agent integration with four explicit
+  read-only tools, privacy-minimized results, deterministic schemas, and a
+  reproducible live evaluation workflow
+- consolidate risk-aware CI gates, stabilize scheduled scaling and SQLite
+  upgrade coverage, and refresh reviewed frontend, PHP, and Actions dependencies
+
 ## 0.8.0 — 2026-08-08
 
 - keep large custom-domain histories bounded with status-scoped cursor pages,

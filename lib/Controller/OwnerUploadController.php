@@ -10,6 +10,7 @@ use OCA\ProofingGallery\BackgroundJob\IndexMediaMetadataJob;
 use OCA\ProofingGallery\BackgroundJob\RebuildMediaIndexJob;
 use OCA\ProofingGallery\Exception\AuthorizationException;
 use OCA\ProofingGallery\Exception\FolderAccessException;
+use OCA\ProofingGallery\Exception\UploadBusyException;
 use OCA\ProofingGallery\Service\GalleryService;
 use OCA\ProofingGallery\Service\MediaSummaryService;
 use OCA\ProofingGallery\Service\OwnerUploadService;
@@ -22,6 +23,7 @@ use OCP\AppFramework\Http\DataResponse;
 use OCP\BackgroundJob\IJobList;
 use OCP\IRequest;
 use OCP\IUserSession;
+use OCP\Lock\LockedException;
 
 final class OwnerUploadController extends Controller {
 	public function __construct(
@@ -79,6 +81,8 @@ final class OwnerUploadController extends Controller {
 			return new DataResponse($callback(), $status);
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		} catch (UploadBusyException|LockedException $exception) {
+			return new DataResponse(['code' => 'upload_busy', 'message' => $exception->getMessage()], Http::STATUS_LOCKED, ['Retry-After' => '1']);
 		} catch (InvalidArgumentException|FolderAccessException $exception) {
 			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
