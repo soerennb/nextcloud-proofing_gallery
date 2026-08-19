@@ -38,8 +38,10 @@ final class PublicGalleryDataService {
 		$sortDirection = $query->sortDirection;
 		$groupBy = $query->groupBy;
 		$cursor = $query->cursor;
+		$pageNumber = $query->page;
+		$focusId = $query->focusId;
 		$limit = max(1, min(200, $limit));
-		$offset = max(0, $offset);
+		$offset = $pageNumber === null ? max(0, $offset) : (max(1, $pageNumber) - 1) * $limit;
 		$path = trim($path, '/');
 		$search = mb_substr(trim($search), 0, 120);
 		$settings = $context->settings->withPublicPolicy($context->policy);
@@ -69,6 +71,9 @@ final class PublicGalleryDataService {
 				}
 				return $item;
 			}, $nodes);
+			$focusIndex = $focusId === null ? null : $this->arrayItemPosition($nodes, $focusId);
+			if ($focusId !== null && $focusIndex === null) throw new \OCP\Files\NotFoundException('Gallery media not found');
+			$offset = $this->pageOffset(count($nodes), $limit, $offset, $focusIndex);
 			return $this->response(
 				$context,
 				array_slice($nodes, $offset, $limit),
@@ -81,9 +86,11 @@ final class PublicGalleryDataService {
 				'asc',
 				'none',
 				null,
+				null,
 				[],
 				['indexed' => count($nodes), 'limit' => count($nodes), 'limitReached' => false, 'complete' => true],
 				['startPath' => '', 'viewMode' => 'collection', 'groupDepth' => 1],
+				$focusIndex,
 			);
 		}
 		if (!$settings->navigation->folders && $path !== '') {
@@ -97,7 +104,14 @@ final class PublicGalleryDataService {
 			$relativePath = $this->linkScopes->normalize($path);
 			$indexPath = $this->linkScopes->indexPath($link, $relativePath);
 			$minOwnerRating = $link->getMinOwnerRating();
-			$page = $this->mediaIndex->page($gallery, $limit, $cursor, $indexPath, $search, $sortBy, $sortDirection, $minOwnerRating);
+			$focusIndex = null;
+			if ($focusId !== null) {
+				$this->publicMedia->resolve($context, $focusId);
+				$focusIndex = $this->mediaIndex->positionOf($gallery, $focusId, $indexPath, $search, $sortBy, $sortDirection, $minOwnerRating);
+				if ($focusIndex === null) throw new \OCP\Files\NotFoundException('Gallery media not found');
+				$offset = $this->pageOffset(PHP_INT_MAX, $limit, $offset, $focusIndex);
+			}
+			$page = $this->mediaIndex->page($gallery, $limit, $cursor, $indexPath, $search, $sortBy, $sortDirection, $minOwnerRating, $offset);
 			$items = [];
 			foreach ($page['items'] as $item) {
 				try {
@@ -118,16 +132,18 @@ final class PublicGalleryDataService {
 				$items,
 				$page['total'],
 				$limit,
-				0,
+				$offset,
 				$relativePath,
 				$search,
 				$sortBy,
 				$sortDirection,
 				$groupBy,
 				$page['nextCursor'],
+				$page['previousCursor'],
 				$summary['groups'],
 				array_diff_key($summary, ['groups' => true]),
 				['startPath' => $startPath, 'viewMode' => 'recursive', 'groupDepth' => $groupDepth],
+				$focusIndex,
 			);
 		}
 		$currentFolder = $this->folderAt($scopedRoot, $path);
@@ -158,6 +174,9 @@ final class PublicGalleryDataService {
 			if ($result === 0) $result = strnatcasecmp($left->getName(), $right->getName());
 			return $sortDirection === 'desc' ? -$result : $result;
 		});
+		$focusIndex = $focusId === null ? null : $this->nodePosition($nodes, $focusId);
+		if ($focusId !== null && $focusIndex === null) throw new \OCP\Files\NotFoundException('Gallery media not found');
+		$offset = $this->pageOffset(count($nodes), $limit, $offset, $focusIndex);
 
 		$items = array_map(function (Node $node) use ($settings): array {
 			$item = [
@@ -193,9 +212,11 @@ final class PublicGalleryDataService {
 			$sortDirection,
 			$groupBy,
 			null,
+			null,
 			$groups,
 			['indexed' => count($nodes), 'limit' => $this->policies->get('maxIndexedMedia'), 'limitReached' => false, 'complete' => true],
 			['startPath' => $startPath, 'viewMode' => 'folder', 'groupDepth' => $groupDepth],
+			$focusIndex,
 		);
 	}
 
@@ -218,9 +239,11 @@ final class PublicGalleryDataService {
 		string $sortDirection,
 		string $groupBy,
 		?string $nextCursor = null,
+		?string $previousCursor = null,
 		array $groups = [],
 		array $indexState = [],
 		array $scope = [],
+		?int $focusIndex = null,
 	): array {
 		$gallery = $context->gallery;
 		$settings = $context->settings->withPublicPolicy($context->policy);
@@ -271,6 +294,11 @@ final class PublicGalleryDataService {
 			'total' => $total,
 			'limit' => $limit,
 			'offset' => $offset,
+			'page' => intdiv($offset, $limit) + 1,
+			'pageSize' => $limit,
+			'pageCount' => max(1, (int)ceil($total / $limit)),
+			'focusIndex' => $focusIndex,
+			'previousCursor' => $previousCursor,
 			'nextCursor' => $nextCursor,
 			'path' => $path,
 			'groups' => $groups,
@@ -278,6 +306,25 @@ final class PublicGalleryDataService {
 			'scope' => $scope,
 			'view' => compact('search', 'sortBy', 'sortDirection', 'groupBy'),
 		];
+	}
+
+	/** @param list<array<string, mixed>> $items */
+	private function arrayItemPosition(array $items, int $fileId): ?int {
+		foreach ($items as $index => $item) if ((int)($item['id'] ?? 0) === $fileId) return $index;
+		return null;
+	}
+
+	/** @param list<Node> $nodes */
+	private function nodePosition(array $nodes, int $fileId): ?int {
+		foreach ($nodes as $index => $node) if ($node->getId() === $fileId) return $index;
+		return null;
+	}
+
+	private function pageOffset(int $total, int $limit, int $requestedOffset, ?int $focusIndex): int {
+		if ($focusIndex !== null) return intdiv($focusIndex, $limit) * $limit;
+		if ($total === PHP_INT_MAX) return max(0, $requestedOffset);
+		$lastOffset = max(0, (intdiv(max(0, $total - 1), $limit)) * $limit);
+		return min(max(0, $requestedOffset), $lastOffset);
 	}
 
 	private static function group(Node $node): string {

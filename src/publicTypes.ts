@@ -8,11 +8,16 @@ export interface PublicGalleryPage {
 	total: number
 	limit: number
 	offset: number
+	page: number
+	pageSize: number
+	pageCount: number
+	focusIndex: number | null
+	previousCursor: string | null
 	nextCursor: string | null
 	path: string
 	groups: Record<string, number>
 	indexState: { indexed: number; limit: number; limitReached: boolean; complete: boolean; state?: 'unindexed' | 'limit_reached' | 'ready'; lastIndexedAt?: number | null }
-	scope: { startPath: string; viewMode: 'folder' | 'recursive'; groupDepth: number }
+	scope: { startPath: string; viewMode: 'folder' | 'recursive' | 'collection'; groupDepth: number }
 }
 
 export interface PublicGallery {

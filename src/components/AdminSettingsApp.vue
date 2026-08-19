@@ -70,6 +70,7 @@ const workflowFeatures = [
 const limitFields = [
 	['maxUploadBytes', t('proofing_gallery', 'Maximum guest upload (MiB)'), 1048576, 1, 20480],
 	['maxSelectionFiles', t('proofing_gallery', 'Maximum files per delivery'), 1, 1, 1000],
+	['maxGalleryDownloadFiles', t('proofing_gallery', 'Maximum files per gallery download'), 1, 1, 1000],
 	['maxSelectionBytes', t('proofing_gallery', 'Maximum delivery size (MiB)'), 1048576, 1, 20480],
 	['eventRetentionDays', t('proofing_gallery', 'Activity history (days)'), 1, 7, 3650],
 	['previewRetentionDays', t('proofing_gallery', 'Watermarked previews (days)'), 1, 1, 365],

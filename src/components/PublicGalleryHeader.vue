@@ -1,78 +1,131 @@
 <script setup lang="ts">
+/* eslint-disable vue/no-deprecated-slot-attribute -- Ionic Vue maps Web Component slots through the slot attribute. */
+import {
+	IonButton,
+	IonButtons,
+	IonHeader,
+	IonIcon,
+	IonSearchbar,
+	IonTitle,
+	IonToolbar,
+} from '@ionic/vue'
 import { n, t } from '@nextcloud/l10n'
-import { computed } from 'vue'
+import {
+	chevronBackOutline,
+	chevronForwardOutline,
+	closeOutline,
+	downloadOutline,
+	ellipsisHorizontal,
+	gitCompareOutline,
+	personCircleOutline,
+	searchOutline,
+	shareOutline,
+} from 'ionicons/icons'
 
-import type { GallerySettings } from '../domain/gallerySettings.ts'
-
-const props = defineProps<{
+defineProps<{
 	title: string
-	total: number
-	settings: GallerySettings
+	page: number
+	pageCount: number
+	searching: boolean
+	selectionMode: boolean
+	selectedCount: number
+	canDownload: boolean
+	canCompare: boolean
+	collaboration: boolean
 	logoUrl?: string | null
-	heroUrl?: string | null
 }>()
 
-const hasCompactContent = computed(() => Boolean(
-	props.logoUrl
-	|| props.settings.presentation.showTitle
-	|| props.settings.presentation.showMediaCount
-	|| props.settings.presentation.welcomeMessage,
-))
-const effectiveStyle = computed<'minimal' | 'compact' | 'cinematic'>(() => {
-	if (props.settings.presentation.openerStyle === 'cinematic' && props.heroUrl) return 'cinematic'
-	if (props.settings.presentation.openerStyle === 'minimal' || !hasCompactContent.value) return 'minimal'
-	return 'compact'
-})
+const search = defineModel<string>('search', { required: true })
+const emit = defineEmits<{
+	search: []
+	'toggle-search': []
+	share: []
+	download: []
+	compare: []
+	more: []
+	navigate: [page: number]
+	pages: []
+	collaboration: []
+	'cancel-selection': []
+}>()
 </script>
 
 <template>
-	<header class="public-gallery__header" :class="`public-gallery__header--${effectiveStyle}`">
-		<section v-if="effectiveStyle === 'cinematic'"
-			class="public-gallery__hero public-gallery__hero--cinematic public-gallery__hero--image"
-			:style="{ backgroundImage: `url(${heroUrl})` }">
-			<div v-if="logoUrl" class="public-gallery__brand">
-				<img class="public-gallery__logo" :src="logoUrl" :alt="t('proofing_gallery', 'Gallery logo')">
-			</div>
-			<div class="public-gallery__hero-copy" :class="`public-gallery__hero-copy--${settings.presentation.titleAlignment}`">
-				<span v-if="settings.presentation.showMediaCount" class="public-gallery__hero-count" aria-hidden="true">
-					{{ n('proofing_gallery', '%n photo', '%n photos', total) }}
-				</span>
-				<h1 class="public-gallery__title"
-					:class="[
-						`public-gallery__title--${settings.presentation.titleSize}`,
-						`public-gallery__title--font-${settings.presentation.fontPreset}`,
-						{ 'visually-hidden': !settings.presentation.showTitle },
-					]">
-					{{ title }}
-				</h1>
-				<p v-if="settings.presentation.welcomeMessage" class="public-gallery__welcome">
-					{{ settings.presentation.welcomeMessage }}
-				</p>
-			</div>
-		</section>
+	<IonHeader class="gallery-app-header" translucent>
+		<IonToolbar v-if="selectionMode">
+			<IonButtons slot="start">
+				<IonButton :aria-label="t('proofing_gallery', 'Cancel selection')" @click="emit('cancel-selection')">
+					<IonIcon slot="icon-only" :icon="closeOutline" />
+				</IonButton>
+			</IonButtons>
+			<IonTitle>{{ n('proofing_gallery', '%n item selected', '%n items selected', selectedCount) }}</IonTitle>
+			<IonButtons slot="end">
+				<IonButton v-if="canCompare" :aria-label="t('proofing_gallery', 'Compare')" @click="emit('compare')">
+					<IonIcon slot="icon-only" :icon="gitCompareOutline" />
+				</IonButton>
+				<IonButton v-if="canDownload"
+					:aria-label="t('proofing_gallery', 'Download')"
+					:disabled="selectedCount === 0"
+					@click="emit('download')">
+					<IonIcon slot="icon-only" :icon="downloadOutline" />
+				</IonButton>
+				<IonButton :aria-label="t('proofing_gallery', 'More options')" @click="emit('more')">
+					<IonIcon slot="icon-only" :icon="ellipsisHorizontal" />
+				</IonButton>
+			</IonButtons>
+		</IonToolbar>
 
-		<section v-else-if="effectiveStyle === 'compact'" class="public-gallery__compact">
-			<img v-if="logoUrl"
-				class="public-gallery__logo"
-				:src="logoUrl"
-				:alt="t('proofing_gallery', 'Gallery logo')">
-			<div class="public-gallery__compact-copy">
-				<h1 class="public-gallery__compact-title" :class="{ 'visually-hidden': !settings.presentation.showTitle }">
-					{{ title }}
-				</h1>
-				<p v-if="settings.presentation.welcomeMessage" class="public-gallery__compact-message">
-					{{ settings.presentation.welcomeMessage }}
-				</p>
-			</div>
-			<span v-if="settings.presentation.showMediaCount" class="public-gallery__compact-count">
-				{{ n('proofing_gallery', '%n photo', '%n photos', total) }}
-			</span>
-		</section>
+		<template v-else>
+			<IonToolbar v-if="searching" class="gallery-app-header__search">
+				<IonSearchbar v-model="search"
+					:placeholder="t('proofing_gallery', 'Search photos')"
+					show-cancel-button="always"
+					@ion-input="emit('search')"
+					@ion-cancel="emit('toggle-search')" />
+			</IonToolbar>
+			<IonToolbar v-else>
+				<IonButtons v-if="logoUrl" slot="start" class="gallery-app-header__brand">
+					<img :src="logoUrl" :alt="t('proofing_gallery', 'Gallery logo')">
+				</IonButtons>
+				<IonTitle>{{ title }}</IonTitle>
+				<IonButtons slot="end">
+					<IonButton :aria-label="t('proofing_gallery', 'Search photos')" @click="emit('toggle-search')">
+						<IonIcon slot="icon-only" :icon="searchOutline" />
+					</IonButton>
+					<IonButton v-if="canDownload" :aria-label="t('proofing_gallery', 'Download')" @click="emit('download')">
+						<IonIcon slot="icon-only" :icon="downloadOutline" />
+					</IonButton>
+					<IonButton :aria-label="t('proofing_gallery', 'Share')" @click="emit('share')">
+						<IonIcon slot="icon-only" :icon="shareOutline" />
+					</IonButton>
+					<IonButton v-if="collaboration" :aria-label="t('proofing_gallery', 'Review details')" @click="emit('collaboration')">
+						<IonIcon slot="icon-only" :icon="personCircleOutline" />
+					</IonButton>
+					<IonButton :aria-label="t('proofing_gallery', 'More options')" @click="emit('more')">
+						<IonIcon slot="icon-only" :icon="ellipsisHorizontal" />
+					</IonButton>
+				</IonButtons>
+			</IonToolbar>
 
-		<h1 v-else class="visually-hidden">
-			{{ title }}
-		</h1>
-	</header>
+			<IonToolbar v-if="pageCount > 1" class="gallery-app-header__pager">
+				<IonButtons slot="start">
+					<IonButton :disabled="page <= 1" :aria-label="t('proofing_gallery', 'Previous page')" @click="emit('navigate', page - 1)">
+						<IonIcon slot="icon-only" :icon="chevronBackOutline" />
+					</IonButton>
+				</IonButtons>
+				<IonTitle>
+					<IonButton fill="clear" @click="emit('pages')">
+						{{ t('proofing_gallery', 'Page {page} of {pages}', { page, pages: pageCount }) }}
+					</IonButton>
+				</IonTitle>
+				<IonButtons slot="end">
+					<IonButton :disabled="page >= pageCount" :aria-label="t('proofing_gallery', 'Next page')" @click="emit('navigate', page + 1)">
+						<IonIcon slot="icon-only" :icon="chevronForwardOutline" />
+					</IonButton>
+				</IonButtons>
+			</IonToolbar>
+		</template>
+	</IonHeader>
 </template>
 
 <style scoped src="./styles/PublicGalleryHeader.css"></style>

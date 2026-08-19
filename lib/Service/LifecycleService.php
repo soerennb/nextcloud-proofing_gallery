@@ -29,6 +29,7 @@ final class LifecycleService {
 		private VideoDerivativeRepository $videoDerivatives,
 		private LifecycleScheduleService $lifecycleSchedule,
 		private RetentionHandoffService $retention,
+		private FolderService $folders,
 	) {
 	}
 
@@ -165,7 +166,15 @@ final class LifecycleService {
 		foreach ($root->getDirectoryListing() as $session) {
 			if ($deleted >= self::BATCH_SIZE || !$session instanceof \OCP\Files\SimpleFS\ISimpleFolder) continue;
 			try {
-				if ($session->getFile('manifest.json')->getMTime() >= $before) continue;
+				$manifestFile = $session->getFile('manifest.json');
+				if ($manifestFile->getMTime() >= $before) continue;
+				$manifest = json_decode($manifestFile->getContent(), true);
+				if (is_array($manifest) && is_string($manifest['ownerUid'] ?? null) && is_string($manifest['stagingName'] ?? null)) {
+					$this->folders->discardStagedMedia(
+						$manifest['ownerUid'], (int)($manifest['folderId'] ?? 0), (string)($manifest['path'] ?? ''),
+						$manifest['stagingName'], isset($manifest['stagingFileId']) ? (int)$manifest['stagingFileId'] : null,
+					);
+				}
 				$session->delete();
 				$deleted++;
 			} catch (\OCP\Files\NotFoundException) {

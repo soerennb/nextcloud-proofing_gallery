@@ -170,7 +170,12 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - name: Install Chromium and runner dependencies
+        run: |
+          if ! timeout --kill-after=30s 5m npx playwright install --with-deps chromium; then
+            echo "::warning::System dependency installation stalled; using runner-provided browser libraries."
+            npx playwright install chromium
+          fi
       - run: npm run build
       - run: make dev-up
       - run: make occ CMD="app:list --enabled --output=json" | grep -q '"proofing_gallery"'

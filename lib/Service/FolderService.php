@@ -18,6 +18,7 @@ final class FolderService {
 		private MediaMetadataService $metadata,
 		private MediaTypePolicy $mediaTypes,
 		private UploadLockService $uploadLocks,
+		private MediaCleanupService $cleanup,
 	) {
 	}
 
@@ -54,67 +55,173 @@ final class FolderService {
 		throw new FolderAccessException('Media file was not found in the gallery');
 	}
 
-	public function uploadMedia(string $userId, int $folderId, string $path, string $filename, string $temporaryPath, string $conflict = 'fail', ?string $declaredMimeType = null): ?MediaItem {
-		$path = trim($path, '/');
-		$lockScope = hash('sha256', $userId . "\0" . $folderId . "\0" . $path);
-		return $this->uploadLocks->wait(
-			'proofing-gallery/media-upload-destination/' . $lockScope,
-			'Proofing Gallery media upload destination',
-			fn (): ?MediaItem => $this->uploadMediaLocked($userId, $folderId, $path, $filename, $temporaryPath, $conflict, $declaredMimeType),
-		);
-	}
-
-	private function uploadMediaLocked(string $userId, int $folderId, string $path, string $filename, string $temporaryPath, string $conflict, ?string $declaredMimeType): ?MediaItem {
-		$root = $this->resolveFolder($userId, $folderId);
-		$target = $this->folderAt($root, $path);
-		$filename = $this->safeName($filename);
-		if (!$target->isUpdateable()) throw new FolderAccessException('The destination is not writable');
-		if (!in_array($conflict, ['fail', 'rename', 'overwrite', 'skip'], true)) throw new \InvalidArgumentException('Unknown conflict strategy');
-		$extension = pathinfo($filename, PATHINFO_EXTENSION);
-		$stem = pathinfo($filename, PATHINFO_FILENAME);
-		$temporaryName = '.' . $stem . '.upload-' . bin2hex(random_bytes(8)) . ($extension === '' ? '' : '.' . $extension);
+	public function uploadMedia(string $userId, int $folderId, string $path, string $filename, string $temporaryPath, string $conflict = 'fail', ?string $declaredMimeType = null, ?int $expectedFileId = null, ?string $expectedEtag = null): ?MediaItem {
 		$stream = fopen($temporaryPath, 'rb');
 		if ($stream === false) throw new FolderAccessException('The uploaded file could not be read');
 		try {
-			$file = $target->newFile($temporaryName, $stream);
+			$staged = $this->stageMedia($userId, $folderId, $path, $filename, $stream, $declaredMimeType);
 		} finally {
 			if (is_resource($stream)) fclose($stream);
 		}
+		try {
+			return $this->commitStagedMedia(
+				$userId, $folderId, $path, $filename, (int)$staged->getId(), $staged->getName(),
+				$conflict, $expectedFileId, $expectedEtag,
+			);
+		} catch (\Throwable $exception) {
+			try { if (str_contains($staged->getName(), '.upload-')) $staged->delete(); } catch (\Throwable) {}
+			throw $exception;
+		}
+	}
+
+	/** @param resource $stream */
+	public function stageMedia(string $userId, int $folderId, string $path, string $filename, mixed $stream, ?string $declaredMimeType = null, ?string $uploadId = null): File {
+		if (!is_resource($stream)) throw new FolderAccessException('The uploaded file could not be read');
+		$root = $this->resolveFolder($userId, $folderId);
+		$target = $this->folderAt($root, trim($path, '/'));
+		$filename = $this->safeName($filename);
+		if (!$target->isUpdateable()) throw new FolderAccessException('The destination is not writable');
+		$uploadId ??= bin2hex(random_bytes(8));
+		$temporaryName = $this->stagingName($filename, $uploadId);
+		if ($target->nodeExists($temporaryName)) $target->get($temporaryName)->delete();
+		$file = $target->newFile($temporaryName, $stream);
 		try {
 			if (!$this->isSupported($file) || ($declaredMimeType !== null && !$this->mediaTypes->matches($declaredMimeType, $file))) {
 				throw new \InvalidArgumentException($declaredMimeType === null
 					? 'The uploaded media type is not supported'
 					: 'Uploaded content does not match the declared media type');
 			}
-			$committedName = $filename;
-			$existing = null;
-			if ($target->nodeExists($committedName)) {
-				if ($conflict === 'skip') {
-					$file->delete();
-					return null;
-				}
-				if ($conflict === 'overwrite') $existing = $target->get($committedName);
-				elseif ($conflict === 'rename') $committedName = $this->conflictFreeName($target, $committedName);
-				else throw new FolderAccessException('The filename already exists');
-			}
-			$backup = null;
-			try {
-				if ($existing !== null) {
-					$backupName = '.' . $committedName . '.replaced-' . bin2hex(random_bytes(8));
-					$existing->move($target->getPath() . '/' . $backupName);
-					$backup = $existing;
-				}
-				$file->move($target->getPath() . '/' . $committedName);
-				$backup?->delete();
-			} catch (\Throwable $exception) {
-				try { $backup?->move($target->getPath() . '/' . $committedName); } catch (\Throwable) {}
-				throw new FolderAccessException('The uploaded file could not be committed safely', previous: $exception);
-			}
-			return $this->mediaItem($file);
+			return $file;
 		} catch (\Throwable $exception) {
-			try { if ($file->getName() === $temporaryName) $file->delete(); } catch (\Throwable) {}
+			try { $file->delete(); } catch (\Throwable) {}
 			throw $exception;
 		}
+	}
+
+	public function stagingName(string $filename, string $uploadId): string {
+		$filename = $this->safeName($filename);
+		if (preg_match('/^[A-Za-z0-9]{16,64}$/', $uploadId) !== 1) throw new \InvalidArgumentException('Invalid upload identifier');
+		$extension = pathinfo($filename, PATHINFO_EXTENSION);
+		$stem = pathinfo($filename, PATHINFO_FILENAME);
+		return '.' . $stem . '.upload-' . $uploadId . ($extension === '' ? '' : '.' . $extension);
+	}
+
+	public function commitStagedMedia(
+		string $userId,
+		int $folderId,
+		string $path,
+		string $filename,
+		int $stagingFileId,
+		string $stagingName,
+		string $conflict = 'fail',
+		?int $expectedFileId = null,
+		?string $expectedEtag = null,
+	): ?MediaItem {
+		$path = trim($path, '/');
+		$lockScope = hash('sha256', $userId . "\0" . $folderId . "\0" . $path);
+		return $this->uploadLocks->wait(
+			'proofing-gallery/media-upload-destination/' . $lockScope,
+			'Proofing Gallery media upload destination',
+			fn (): ?MediaItem => $this->commitStagedMediaLocked(
+				$userId, $folderId, $path, $filename, $stagingFileId, $stagingName,
+				$conflict, $expectedFileId, $expectedEtag,
+			),
+		);
+	}
+
+	private function commitStagedMediaLocked(
+		string $userId,
+		int $folderId,
+		string $path,
+		string $filename,
+		int $stagingFileId,
+		string $stagingName,
+		string $conflict,
+		?int $expectedFileId,
+		?string $expectedEtag,
+	): ?MediaItem {
+		$root = $this->resolveFolder($userId, $folderId);
+		$target = $this->folderAt($root, $path);
+		$filename = $this->safeName($filename);
+		if (!$target->isUpdateable()) throw new FolderAccessException('The destination is not writable');
+		if (!in_array($conflict, ['fail', 'rename', 'overwrite', 'skip'], true)) throw new \InvalidArgumentException('Unknown conflict strategy');
+		if (!str_starts_with($stagingName, '.') || !str_contains($stagingName, '.upload-') || !$target->nodeExists($stagingName)) {
+			throw new FolderAccessException('The staged upload is unavailable');
+		}
+		$file = $target->get($stagingName);
+		if (!$file instanceof File || (int)$file->getId() !== $stagingFileId) throw new FolderAccessException('The staged upload changed');
+		$committedName = $filename;
+		$existing = null;
+		if (!$target->nodeExists($committedName) && $conflict === 'overwrite' && $expectedFileId !== null) {
+			throw new \OCA\ProofingGallery\Exception\UploadConflictException('The existing file changed after conflict resolution');
+		}
+		if ($target->nodeExists($committedName)) {
+			if ($conflict === 'skip') {
+				$file->delete();
+				return null;
+			}
+			if ($conflict === 'overwrite') {
+				$existing = $target->get($committedName);
+				if (!$existing instanceof File) throw new FolderAccessException('A folder with this name cannot be replaced');
+				if (($expectedFileId !== null && (int)$existing->getId() !== $expectedFileId)
+					|| ($expectedEtag !== null && $existing->getEtag() !== $expectedEtag)) {
+					throw new \OCA\ProofingGallery\Exception\UploadConflictException('The existing file changed after conflict resolution');
+				}
+			}
+			elseif ($conflict === 'rename') $committedName = $this->conflictFreeName($target, $committedName);
+			else throw new FolderAccessException('The filename already exists');
+		}
+		$backup = null;
+		$sidecar = $existing instanceof File ? $this->sidecarFor($existing) : null;
+		$sidecarBackup = null;
+		try {
+			if ($existing !== null) {
+				$backupName = '.' . $committedName . '.replaced-' . bin2hex(random_bytes(8));
+				$existing->move($target->getPath() . '/' . $backupName);
+				$backup = $existing;
+				if ($sidecar !== null) {
+					$sidecar->move($target->getPath() . '/.' . $sidecar->getName() . '.replaced-' . bin2hex(random_bytes(8)));
+					$sidecarBackup = $sidecar;
+				}
+			}
+			$file->move($target->getPath() . '/' . $committedName);
+			if ($backup !== null) $this->cleanup->purge((int)$backup->getId());
+			$backup?->delete();
+			$sidecarBackup?->delete();
+		} catch (\Throwable $exception) {
+			try { if ($file->getName() === $committedName) $file->move($target->getPath() . '/' . $stagingName); } catch (\Throwable) {}
+			try { $backup?->move($target->getPath() . '/' . $committedName); } catch (\Throwable) {}
+			try { $sidecarBackup?->move($target->getPath() . '/' . pathinfo($committedName, PATHINFO_FILENAME) . '.xmp'); } catch (\Throwable) {}
+			if ($exception instanceof \OCA\ProofingGallery\Exception\UploadConflictException) throw $exception;
+			throw new FolderAccessException('The uploaded file could not be committed safely', previous: $exception);
+		}
+		return $this->mediaItem($file);
+	}
+
+	public function discardStagedMedia(string $userId, int $folderId, string $path, string $stagingName, ?int $stagingFileId = null): void {
+		if (!str_starts_with($stagingName, '.') || !str_contains($stagingName, '.upload-')) return;
+		try {
+			$target = $this->folderAt($this->resolveFolder($userId, $folderId), trim($path, '/'));
+			if (!$target->nodeExists($stagingName)) return;
+			$node = $target->get($stagingName);
+			if ($node instanceof File && ($stagingFileId === null || (int)$node->getId() === $stagingFileId)) $node->delete();
+		} catch (\Throwable) {
+		}
+	}
+
+	/** @param list<string> $filenames
+	 * @return array<string, MediaItem>
+	 */
+	public function uploadConflicts(string $userId, int $folderId, string $path, array $filenames): array {
+		$root = $this->resolveFolder($userId, $folderId);
+		$target = $this->folderAt($root, trim($path, '/'));
+		$result = [];
+		foreach (array_slice(array_values(array_unique($filenames)), 0, 1000) as $filename) {
+			if (!is_string($filename)) throw new \InvalidArgumentException('Invalid upload filename');
+			$name = $this->safeName($filename);
+			if ($target->nodeExists($name)) $result[$name] = $this->mediaItem($target->get($name));
+		}
+		return $result;
 	}
 
 	private function conflictFreeName(Folder $folder, string $filename): string {
@@ -160,8 +267,10 @@ final class FolderService {
 		if (!$node->isDeletable() || ($sidecar !== null && !$sidecar->isDeletable())) {
 			throw new FolderAccessException('The item cannot be deleted');
 		}
+		$fileIds = $this->fileIdsForCleanup($node);
 		$node->delete();
 		$sidecar?->delete();
+		foreach ($fileIds as $fileId) $this->cleanup->purge($fileId);
 	}
 
 	/** @param list<int> $nodeIds */
@@ -176,8 +285,10 @@ final class FolderService {
 		}
 		foreach ($nodes as $node) {
 			$sidecar = $this->sidecarFor($node);
+			$fileIds = $this->fileIdsForCleanup($node);
 			$node->delete();
 			$sidecar?->delete();
+			foreach ($fileIds as $fileId) $this->cleanup->purge($fileId);
 		}
 		return count($nodes);
 	}
@@ -216,6 +327,15 @@ final class FolderService {
 		}
 
 		throw new FolderAccessException('Image file was not found or is not readable');
+	}
+
+	/** @return list<int> */
+	private function fileIdsForCleanup(Node $node): array {
+		if ($node instanceof File) return $this->isSupported($node) ? [(int)$node->getId()] : [];
+		if (!$node instanceof Folder) return [];
+		$ids = [];
+		foreach ($node->getDirectoryListing() as $child) array_push($ids, ...$this->fileIdsForCleanup($child));
+		return $ids;
 	}
 
 	public function listMedia(

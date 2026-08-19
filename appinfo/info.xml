@@ -16,7 +16,7 @@ Veröffentliche vorhandene Nextcloud-Ordner als individuell gestaltbare
 Kundengalerien. Sammle Favoriten, Bearbeitungsstände, Kommentare, Anmerkungen
 und benannte Auswahlen, ohne Originaldateien zu kopieren oder zu verändern.
 	]]></description>
-	<version>0.8.1</version>
+	<version>0.8.2</version>
 	<licence>AGPL-3.0-or-later</licence>
 	<author>soerennb</author>
 	<namespace>ProofingGallery</namespace>

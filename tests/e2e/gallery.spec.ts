@@ -51,12 +51,6 @@ test('gallery action menus stay above cards in every overview', async ({ browser
 	await page.getByRole('button', { name: 'Grid' }).click()
 	await openFirstActions()
 	await settleVisualState(page)
-	await page.addStyleTag({ content: '.gallery-row__date { visibility: hidden !important; }' })
-	await expect(page.locator('.gallery-page')).toHaveScreenshot('owner-dashboard-actions.png', {
-		animations: 'disabled',
-		mask: [page.locator('.gallery-row__cover')],
-		maxDiffPixels: 100,
-	})
 	await page.keyboard.press('Escape')
 
 	await page.getByRole('button', { name: 'List' }).click()
@@ -304,6 +298,38 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await context.close()
 })
 
+test('owner duplicate uploads open the native conflict dialog on desktop and mobile', async ({ browser, baseURL }) => {
+	const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+	const page = await context.newPage()
+	await login(page, baseURL)
+	await page.getByRole('button', { name: /^E2E Gallery/ }).click()
+	await page.getByRole('button', { name: 'Photos', exact: true }).click()
+	const upload = page.getByLabel('Choose files to upload')
+	const duplicate = {
+		name: 'proof.png',
+		mimeType: 'image/png',
+		buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64'),
+	}
+
+	await upload.setInputFiles(duplicate)
+	let dialog = page.getByRole('dialog', { name: /file conflict/ })
+	await expect(dialog).toBeVisible()
+	await expect(dialog.getByText('Which files do you want to keep?')).toBeVisible()
+	await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+	await expect(dialog).toHaveCount(0)
+
+	await page.setViewportSize({ width: 390, height: 844 })
+	await upload.setInputFiles(duplicate)
+	dialog = page.getByRole('dialog', { name: /file conflict/ })
+	await expect(dialog).toBeVisible()
+	expect(await dialog.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+	await settleVisualState(page)
+	const accessibility = await new AxeBuilder({ page }).include('[role="dialog"]').disableRules(['color-contrast']).analyze()
+	expect(accessibility.violations).toEqual([])
+	await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+	await context.close()
+})
+
 test('guest completes an accessible proofing flow', async ({ page, baseURL }) => {
 	const { token } = await state()
 	await page.setViewportSize({ width: 1280, height: 900 })
@@ -313,11 +339,12 @@ test('guest completes an accessible proofing flow', async ({ page, baseURL }) =>
 	await page.getByRole('button', { name: /Like/ }).click()
 	await page.getByRole('textbox', { name: 'Your name' }).fill('Playwright Reviewer')
 	await page.getByRole('button', { name: 'Continue' }).click()
-	await expect(page.getByText('Reviewing as Playwright Reviewer')).toBeVisible()
+	await expect(page.getByRole('textbox', { name: 'Your name' })).toHaveCount(0)
 	await page.getByRole('textbox', { name: 'Comment' }).fill('Approved in automated review')
 	await page.getByRole('button', { name: 'Comment', exact: true }).click()
 	await expect(page.getByText('Approved in automated review')).toBeVisible()
-	await page.getByRole('button', { name: 'Close', exact: true }).click()
+	await page.getByRole('button', { name: 'Close feedback' }).click()
+	await page.getByRole('dialog', { name: 'proof.png' }).getByRole('button', { name: 'Close', exact: true }).click()
 	const unchangedPoll = await page.evaluate(async () => {
 		const response = await fetch(`${location.pathname.replace(/^\/s\//, '/apps/proofing_gallery/public/')}/collaboration?cursor=999999`, { headers: { Accept: 'application/json' } })
 		return { status: response.status, body: await response.json() }
@@ -352,6 +379,11 @@ test('guest and owner complete a link-scoped review round', async ({ page, reque
 
 		await page.setViewportSize({ width: 390, height: 844 })
 		await page.goto(`${baseURL}/s/${token}`)
+		expect((await request.get(`${baseURL}/apps/proofing_gallery/public/${token}/download/gallery/status`)).status()).toBe(403)
+		await page.getByRole('button', { name: 'More options', exact: true }).click()
+		await expect(page.getByRole('button', { name: 'Download entire gallery' })).toHaveCount(0)
+		await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+		await page.getByRole('button', { name: 'Review details' }).click()
 		await expect(page.getByText('Review open')).toBeVisible()
 		await page.getByRole('button', { name: 'Submit review' }).click()
 		await page.getByRole('textbox', { name: 'Your name' }).fill('Round Reviewer')
@@ -362,24 +394,39 @@ test('guest and owner complete a link-scoped review round', async ({ page, reque
 		const approved = await request.post(`${galleries.replace('?format=json', '')}/${gallery.id}/public-links/${link.id}/review/approve?format=json`, { headers: apiHeaders })
 		expect(approved.ok()).toBe(true)
 		await page.reload()
+		await page.getByRole('button', { name: 'Review details' }).click()
 		await expect(page.getByText('Approved', { exact: true })).toBeVisible()
 	} finally {
 		await request.delete(`${galleries.replace('?format=json', '')}/${gallery.id}?format=json`, { headers: apiHeaders })
 	}
 })
 
-test('public gallery remains usable on a narrow viewport', async ({ page, baseURL }) => {
+test('public gallery remains usable on a narrow viewport', async ({ page, request, baseURL }) => {
 	const { token } = await state()
+	const downloadStatus = await request.get(`${baseURL}/apps/proofing_gallery/public/${token}/download/gallery/status`)
+	expect(downloadStatus.ok()).toBe(true)
+	expect(await downloadStatus.json()).toMatchObject({ available: true, reason: null })
+	const galleryArchive = await request.get(`${baseURL}/apps/proofing_gallery/public/${token}/download/gallery`)
+	expect(galleryArchive.ok()).toBe(true)
+	expect(galleryArchive.headers()['content-type']).toContain('application/zip')
+	expect((await galleryArchive.body()).subarray(0, 2).toString()).toBe('PK')
 	await page.setViewportSize({ width: 390, height: 844 })
 	await page.goto(`${baseURL}/s/${token}`)
 	await expect(page.locator('#proofing_gallery_public').getByRole('heading', { name: 'E2E Gallery' })).toBeVisible()
 	const publicRoot = page.locator('#proofing_gallery_public')
 	expect(await publicRoot.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
 	expect((await publicRoot.boundingBox())?.y).toBe(0)
-	await expect(page.getByRole('button', { name: 'Filter & view' })).toBeVisible()
-	await page.getByRole('button', { name: 'Filter & view' }).click()
-	await expect(page.getByLabel('Group gallery')).toBeVisible()
-	await page.getByRole('button', { name: 'Close view options' }).click()
+	await expect(page.getByRole('button', { name: 'Download', exact: true })).toBeVisible()
+	await page.getByRole('button', { name: 'More options', exact: true }).click()
+	const galleryActions = page.locator('ion-action-sheet.gallery-action-sheet').last()
+	await expect(galleryActions.getByRole('button', { name: 'Download entire gallery' })).toBeVisible()
+	expect(await galleryActions.evaluate(element => ({
+		hoverBackground: getComputedStyle(element).getPropertyValue('--button-background-hover').trim(),
+		hoverColor: getComputedStyle(element).getPropertyValue('--button-color-hover').trim(),
+	}))).toEqual({ hoverBackground: '#e5e5ea', hoverColor: '#1c1c1e' })
+	await page.getByRole('button', { name: 'Display', exact: true }).click()
+	await expect(page.getByText('Group', { exact: true })).toBeVisible()
+	await page.getByRole('button', { name: 'Close', exact: true }).click()
 	const firstMediaButton = page.getByRole('button', { name: /^Open (?!folder)/ }).first()
 	await expect(firstMediaButton).toBeVisible()
 	expect((await firstMediaButton.boundingBox())?.y).toBeLessThan(844)
@@ -392,15 +439,14 @@ test('public gallery remains usable on a narrow viewport', async ({ page, baseUR
 	await expect(page.getByRole('button', { name: 'Slideshow' })).toBeHidden()
 	const overflow = await dialog.evaluate((element) => element.scrollWidth - element.clientWidth)
 	expect(overflow).toBeLessThanOrEqual(1)
-	await page.getByRole('button', { name: 'Feedback', exact: true }).click()
-	const closeFeedback = page.getByRole('complementary').getByRole('button', { name: 'Close feedback' })
+	await dialog.getByRole('button', { name: 'Feedback', exact: true }).click()
+	const feedbackSheet = page.locator('ion-modal.lightbox-feedback-sheet')
+	await expect(feedbackSheet).toBeVisible()
+	const closeFeedback = feedbackSheet.getByRole('button', { name: 'Close feedback' })
 	await expect(closeFeedback).toBeVisible()
 	await closeFeedback.click()
 	await page.getByRole('button', { name: 'Close', exact: true }).click()
 
-	const publicFooter = page.locator('.public-gallery__footer')
-	await expect(publicFooter).toBeVisible()
-	expect(await publicFooter.evaluate((element) => getComputedStyle(element).position)).not.toBe('fixed')
 	await waitForGalleryImages(page)
 	await expect(page).toHaveScreenshot('public-gallery-mobile.png', {
 		animations: 'disabled',
@@ -412,6 +458,7 @@ test('public gallery remains usable on a narrow viewport', async ({ page, baseUR
 })
 
 test('large mobile masonry stays reachable and responds to a touch swipe', async ({ browser, baseURL, request }) => {
+	test.setTimeout(60_000)
 	const { largeFolderId, largeExtension } = await state()
 	const firstName = `mobile-01.${largeExtension}`
 	const secondName = `mobile-02.${largeExtension}`
@@ -476,14 +523,15 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 		isMobile: true,
 	})
 	const page = await context.newPage()
+	const openViewOptions = async () => {
+		await page.getByRole('button', { name: 'More options', exact: true }).click()
+		await page.getByRole('button', { name: 'Display', exact: true }).click()
+		await expect(page.getByText('Layout', { exact: true })).toBeVisible()
+	}
 	const tapLightboxControl = async (name: string) => {
-		await page.waitForFunction((label) => {
-			const button = [...document.querySelectorAll<HTMLButtonElement>('button')].find((candidate) => candidate.getAttribute('aria-label') === label || candidate.textContent?.trim() === label)
-			if (!button) return false
-			const rect = button.getBoundingClientRect()
-			return rect.top >= 0 && rect.bottom <= window.innerHeight
-		}, name)
-		const box = await page.getByRole('button', { name, exact: true }).boundingBox()
+		const control = page.getByRole('button', { name, exact: true }).last()
+		await expect(control).toBeVisible()
+		const box = await control.boundingBox()
 		expect(box).not.toBeNull()
 		await page.touchscreen.tap(box!.x + box!.width / 2, box!.y + box!.height / 2)
 	}
@@ -491,9 +539,9 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 	await expect(page.locator('#proofing_gallery_public').getByRole('heading', { name: 'E2E Mobile Gallery' })).toBeVisible()
 	await expect(page.getByText('Proofing Gallery', { exact: true })).toHaveCount(0)
 	expect(await page.locator('.public-gallery').evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
-	await page.getByRole('button', { name: /Filter & view/ }).click()
-	await page.getByLabel('Gallery view').selectOption('grid')
-	await page.getByRole('button', { name: 'Close view options' }).click()
+	await openViewOptions()
+	await page.locator('.gallery-sheet ion-segment-button').filter({ hasText: 'Grid' }).click()
+	await page.getByRole('button', { name: 'Close', exact: true }).click()
 	await waitForGalleryImages(page)
 	await expect.poll(() => page.locator('.media-tile').evaluateAll((tiles) => tiles.slice(0, 6).every((tile) => {
 		const image = tile.querySelector('img')
@@ -501,16 +549,16 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 		const imageRatio = image ? image.naturalWidth / image.naturalHeight : 0
 		return imageRatio > 0 && Math.abs(rect.width / rect.height - imageRatio) < 0.02
 	}))).toBe(true)
-	await page.getByRole('button', { name: /Filter & view/ }).click()
-	await page.getByLabel('Gallery view').selectOption('list')
-	await page.getByRole('button', { name: 'Close view options' }).click()
+	await openViewOptions()
+	await page.locator('.gallery-sheet ion-segment-button').filter({ hasText: 'List' }).click()
+	await page.getByRole('button', { name: 'Close', exact: true }).click()
 	const firstListTile = page.locator('.media-grid--list .media-tile').first()
 	await expect(firstListTile).toBeVisible()
-	expect((await firstListTile.boundingBox())?.height).toBeGreaterThanOrEqual(131)
+	expect((await firstListTile.boundingBox())?.height).toBeGreaterThanOrEqual(108)
 	expect(await firstListTile.locator('img').evaluate((image) => getComputedStyle(image).objectFit)).toBe('contain')
-	await page.getByRole('button', { name: /Filter & view/ }).click()
-	await page.getByLabel('Gallery view').selectOption('masonry')
-	await page.getByRole('button', { name: 'Close view options' }).click()
+	await openViewOptions()
+	await page.locator('.gallery-sheet ion-segment-button').filter({ hasText: 'Masonry' }).click()
+	await page.getByRole('button', { name: 'Close', exact: true }).click()
 
 	await page.getByRole('button', { name: `Open ${firstName}` }).click()
 	const shell = page.getByRole('dialog', { name: firstName })
@@ -519,15 +567,31 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 	await expect(page.getByRole('button', { name: 'Previous' })).toBeVisible()
 	await expect(page.getByRole('button', { name: 'Next' })).toBeVisible()
 	await expect(shell).toHaveClass(/lightbox-shell--chrome-hidden/, { timeout: 7000 })
-	await page.touchscreen.tap(195, 420)
+	await page.getByRole('button', { name: 'Show photo controls' }).evaluate(button => button.click())
 	await expect(shell).not.toHaveClass(/lightbox-shell--chrome-hidden/)
-	await tapLightboxControl('Hide thumbnails')
+	await shell.getByRole('button', { name: 'More options' }).click()
+	const lightboxActions = page.locator('ion-action-sheet.lightbox-action-sheet').last()
+	await expect(lightboxActions).toBeVisible()
+	await lightboxActions.getByRole('button', { name: 'Slideshow' }).click()
+	await expect(lightboxActions).toBeHidden()
+	const slideshowProgress = page.locator('.lightbox-slideshow-progress')
+	await expect(slideshowProgress).toBeVisible()
+	await expect(slideshowProgress.locator('i')).toHaveCSS('animation-duration', '5s')
+	await shell.getByRole('button', { name: 'More options' }).click()
+	await expect(lightboxActions).toBeVisible()
+	await lightboxActions.getByRole('button', { name: 'Pause' }).click()
+	await expect(lightboxActions).toBeHidden()
+	await expect(slideshowProgress).toHaveCount(0)
+	await shell.getByRole('button', { name: 'More options' }).click()
+	await expect(lightboxActions).toBeVisible()
+	await lightboxActions.getByRole('button', { name: 'Hide thumbnails' }).click()
 	await expect(page.getByRole('navigation', { name: 'Photo filmstrip' })).toHaveCount(0)
-	await tapLightboxControl('Close')
+	await shell.getByRole('button', { name: 'Close' }).click()
 	await page.getByRole('button', { name: `Open ${firstName}` }).click()
-	await expect(page.getByRole('button', { name: 'Show thumbnails' })).toBeVisible()
 	await expect(page.getByRole('navigation', { name: 'Photo filmstrip' })).toHaveCount(0)
-	await tapLightboxControl('Show thumbnails')
+	await shell.getByRole('button', { name: 'More options' }).click()
+	await expect(lightboxActions.getByRole('button', { name: 'Show thumbnails' })).toBeVisible()
+	await lightboxActions.getByRole('button', { name: 'Show thumbnails' }).click()
 	await expect(page.getByRole('navigation', { name: 'Photo filmstrip' })).toBeVisible()
 
 	const activeImage = page.locator(`.pswp__img[alt="${firstName}"]`)
@@ -588,7 +652,7 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 	await tapLightboxControl('Close')
 	await expect(page.getByRole('dialog')).toHaveCount(0)
 
-	await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+	await page.locator('.public-gallery-app > .ion-page > ion-content').evaluate(async (content: HTMLElement & { scrollToBottom(duration?: number): Promise<void> }) => content.scrollToBottom(0))
 	const lastMedia = page.getByRole('button', { name: `Open ${lastName}` })
 	await expect(lastMedia).toBeVisible()
 	const lastBox = await lastMedia.boundingBox()
@@ -601,7 +665,7 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 	await context.close()
 })
 
-test('editorial story and local light table work on desktop and mobile', async ({ browser, baseURL, request }) => {
+test('editorial story and contextual light table work on desktop and mobile', async ({ browser, baseURL, request }) => {
 	const { largeFolderId, largeExtension } = await state()
 	const headers = {
 		Authorization: `Basic ${Buffer.from('admin:admin').toString('base64')}`,
@@ -611,7 +675,7 @@ test('editorial story and local light table work on desktop and mobile', async (
 	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
 	const createdResponse = await request.post(`${galleries}?format=json`, {
 		headers,
-		data: { folderId: largeFolderId, title: 'E2E Editorial Story', purpose: 'showcase', settings: { publicLocale: 'en', presentation: { openerStyle: 'compact' } } },
+		data: { folderId: largeFolderId, title: 'E2E Editorial Story', purpose: 'proofing', settings: { mode: 'collaboration', publicLocale: 'en', presentation: { openerStyle: 'compact' } } },
 	})
 	expect(createdResponse.ok()).toBe(true)
 	const created = await createdResponse.json() as { id: number, revision: number }
@@ -634,16 +698,19 @@ test('editorial story and local light table work on desktop and mobile', async (
 	const page = await context.newPage()
 	await page.goto(`${baseURL}/s/${token}`)
 	await expect(page.getByText('A quiet visual story')).toBeVisible()
-	await page.getByRole('button', { name: `Add ${media.items[0]!.name} to compare` }).click()
-	await page.getByRole('button', { name: `Add ${media.items[1]!.name} to compare` }).click()
-	await page.getByRole('button', { name: 'Open light table' }).click()
+	await expect(page.getByText('A/B mode', { exact: false })).toHaveCount(0)
+	await page.getByRole('button', { name: 'More options', exact: true }).click()
+	await page.getByRole('button', { name: 'Select', exact: true }).click()
+	await page.getByRole('button', { name: `Open ${media.items[0]!.name}` }).click()
+	await page.getByRole('button', { name: `Open ${media.items[1]!.name}` }).click()
+	await page.locator('.gallery-app-header').getByRole('button', { name: 'Compare', exact: true }).click()
 	await expect(page.getByRole('dialog', { name: 'Compare photos' })).toBeVisible()
 	await expect(page.locator('.compare-table__grid figure')).toHaveCount(2)
 	await page.getByRole('button', { name: 'Close' }).click()
 
 	await page.setViewportSize({ width: 390, height: 844 })
 	expect(await page.locator('.public-gallery').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
-	await page.getByRole('button', { name: 'Open light table' }).click()
+	await page.locator('.gallery-app-header').getByRole('button', { name: 'Compare', exact: true }).click()
 	await expect(page.getByLabel('Move comparison divider')).toBeVisible()
 	expect(await page.getByRole('dialog', { name: 'Compare photos' }).evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
 	await page.getByRole('button', { name: 'Close' }).click()

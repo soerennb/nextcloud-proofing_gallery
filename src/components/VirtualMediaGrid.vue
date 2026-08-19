@@ -23,6 +23,7 @@ const props = withDefaults(defineProps<{
 	listRowHeight?: number
 	list?: boolean
 	contained?: boolean
+	scrollElement?: HTMLElement | null
 	hasMore?: boolean
 	loadingMore?: boolean
 	ariaLabel?: string
@@ -41,6 +42,7 @@ const props = withDefaults(defineProps<{
 	listRowHeight: 172,
 	list: false,
 	contained: false,
+	scrollElement: null,
 	hasMore: false,
 	loadingMore: false,
 	ariaLabel: undefined,
@@ -94,7 +96,7 @@ const positions = computed<Position[]>(() => {
 			minItemWidth: props.minItemWidth,
 			targetRowHeight: props.targetRowHeight,
 			listRowHeight: viewportWidth.value <= 640 ? 132 : props.listRowHeight,
-			singleColumn: viewportWidth.value <= 640,
+			singleColumn: false,
 		}).positions
 	}
 	const { columns, itemWidth, rowHeight } = baseLayout.value
@@ -144,6 +146,12 @@ function updateViewport() {
 		if (props.contained) {
 			visibleTop.value = root.value.scrollTop
 			visibleHeight.value = root.value.clientHeight || window.innerHeight
+		} else if (props.scrollElement) {
+			const rootRect = root.value.getBoundingClientRect()
+			const scrollRect = props.scrollElement.getBoundingClientRect()
+			const rootTop = rootRect.top - scrollRect.top + props.scrollElement.scrollTop
+			visibleTop.value = Math.max(0, props.scrollElement.scrollTop - rootTop)
+			visibleHeight.value = props.scrollElement.clientHeight || window.innerHeight
 		} else {
 			const rootTop = root.value.getBoundingClientRect().top + window.scrollY
 			visibleTop.value = Math.max(0, window.scrollY - rootTop)
@@ -163,7 +171,12 @@ function scrollToIndex(index: number, behavior: ScrollBehavior = 'auto') {
 	const position = positions.value[Math.max(0, Math.min(index, positions.value.length - 1))]
 	if (!position || !root.value) return
 	if (props.contained) root.value.scrollTo({ top: position.y, behavior })
-	else {
+	else if (props.scrollElement) {
+		const rootRect = root.value.getBoundingClientRect()
+		const scrollRect = props.scrollElement.getBoundingClientRect()
+		const rootTop = rootRect.top - scrollRect.top + props.scrollElement.scrollTop
+		props.scrollElement.scrollTo({ top: rootTop + position.y, behavior })
+	} else {
 		const rootTop = root.value.getBoundingClientRect().top + window.scrollY
 		window.scrollTo({ top: rootTop + position.y, behavior })
 	}
@@ -186,6 +199,12 @@ watch([
 	() => props.listRowHeight,
 ], () => nextTick(measure), { deep: true })
 
+watch(() => props.scrollElement, (next, previous) => {
+	previous?.removeEventListener('scroll', updateViewport)
+	next?.addEventListener('scroll', updateViewport, { passive: true })
+	nextTick(measure)
+})
+
 onMounted(() => {
 	measure()
 	resizeObserver = new ResizeObserver(measure)
@@ -194,10 +213,11 @@ onMounted(() => {
 		if (root.value.parentElement) resizeObserver.observe(root.value.parentElement)
 		if (props.contained) root.value.addEventListener('scroll', updateViewport, { passive: true })
 	}
+	props.scrollElement?.addEventListener('scroll', updateViewport, { passive: true })
 	if (typeof IntersectionObserver !== 'undefined') {
 		loadObserver = new IntersectionObserver(entries => {
 			if (entries.some(entry => entry.isIntersecting) && props.hasMore && !props.loadingMore) emit('load-more')
-		}, { root: props.contained ? root.value : null, rootMargin: '600px' })
+		}, { root: props.contained ? root.value : props.scrollElement, rootMargin: '600px' })
 		if (loadSentinel.value) loadObserver.observe(loadSentinel.value)
 	}
 	window.addEventListener('scroll', updateViewport, { passive: true })
@@ -209,6 +229,7 @@ onBeforeUnmount(() => {
 	resizeObserver?.disconnect()
 	loadObserver?.disconnect()
 	root.value?.removeEventListener('scroll', updateViewport)
+	props.scrollElement?.removeEventListener('scroll', updateViewport)
 	window.removeEventListener('scroll', updateViewport)
 	window.removeEventListener('resize', measure)
 	window.visualViewport?.removeEventListener('resize', measure)

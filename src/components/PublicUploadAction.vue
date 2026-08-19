@@ -115,11 +115,16 @@ function endpoint(path: string) {
 }
 
 .upload-action {
-	padding: 9px 14px;
-	border: 1px solid #555;
-	border-radius: 4px;
-	background: #222;
-	color: #fff;
+	display: inline-grid;
+	min-height: 38px;
+	place-items: center;
+	padding: 7px 13px;
+	border: 0;
+	border-radius: 11px;
+	background: var(--gallery-surface-raised);
+	color: var(--gallery-text);
+	font-size: 14px;
+	font-weight: 600;
 	cursor: pointer;
 }
 
@@ -135,7 +140,8 @@ function endpoint(path: string) {
 	gap: 8px;
 	margin: 0;
 	padding: 8px;
-	background: #191919;
+	border-radius: 12px;
+	background: var(--gallery-surface-raised);
 	list-style: none;
 }
 

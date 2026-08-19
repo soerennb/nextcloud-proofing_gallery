@@ -36,6 +36,13 @@ Der Arbeitsbereich ist nach Aufgaben gegliedert:
 Änderungen verwenden Revisionsprüfungen. Hat ein anderes Browserfenster die
 Galerie verändert, lade den aktuellen Stand, statt ihn unbemerkt zu überschreiben.
 
+Lädt ein Eigentümer Dateien hoch, deren Namen bereits vorhanden sind, öffnet
+Proofing Gallery vor der Übertragung den üblichen Nextcloud-Konfliktdialog. Jede
+eingehende Datei kann die vorhandene ersetzen, unter nummeriertem Namen erhalten
+bleiben oder übersprungen werden. Ersetzen legt eine neue Datei an und entfernt
+die Galeriedaten der alten Datei; **Neue Version hochladen** erhält dagegen
+Kommentare und Auswahlen.
+
 ## Fotos sichten
 
 Die Sichtung ist per Tastatur bedienbar. Pfeiltasten wechseln das Bild, 0–5

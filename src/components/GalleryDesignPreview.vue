@@ -5,7 +5,7 @@ import { computed, ref } from 'vue'
 
 import { ownerPreviewUrl } from '../services/galleryApi.ts'
 import type { Gallery, MediaItem } from '../types.ts'
-import PublicGalleryHeader from './PublicGalleryHeader.vue'
+import PublicGalleryOpener from './PublicGalleryOpener.vue'
 
 const props = defineProps<{ gallery: Gallery; title: string; settings: Gallery['settings']; media: MediaItem[]; expanded: boolean }>()
 const emit = defineEmits<{ close: [] }>()
@@ -17,9 +17,6 @@ const style = computed(() => ({
 }))
 const previewUrl = (fileId: number, width: number, height: number) => ownerPreviewUrl(props.gallery.id, fileId, width, height)
 const viewport = ref<'desktop' | 'phone'>('desktop')
-const logoUrl = computed(() => props.settings.presentation.logoFileId
-	? previewUrl(props.settings.presentation.logoFileId, 240, 80)
-	: null)
 const heroUrl = computed(() => props.settings.presentation.heroFileId
 	? previewUrl(props.settings.presentation.heroFileId, 1200, 800)
 	: null)
@@ -57,11 +54,10 @@ function previewItemStyle(item: MediaItem) {
 			</button>
 		</div>
 		<div class="gallery-preview__viewport" :class="`gallery-preview__viewport--${viewport}`">
-			<PublicGalleryHeader
+			<PublicGalleryOpener
 				:title="title || t('proofing_gallery', 'Untitled gallery')"
 				:total="gallery.mediaSummary.total"
 				:settings="settings"
-				:logo-url="logoUrl"
 				:hero-url="heroUrl" />
 			<div v-if="settings.presentation.layout === 'story'" class="gallery-preview__story">
 				<section v-for="section in settings.presentation.story.sections" :key="section.id" :class="`gallery-preview__story--${section.style}`">

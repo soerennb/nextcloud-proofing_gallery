@@ -12,3 +12,84 @@
 	height: 100%;
 	object-fit: cover;
 }
+
+body.proofing-gallery-public-page ion-button {
+	box-sizing: border-box;
+	--color: var(--ion-color-primary);
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: transparent !important;
+	color: var(--ion-color-primary) !important;
+}
+
+ion-action-sheet.gallery-action-sheet,
+ion-action-sheet.lightbox-action-sheet {
+	--background: #fff;
+	--button-color: #1c1c1e;
+	--button-color-hover: #1c1c1e;
+	--button-color-focused: #1c1c1e;
+	--button-color-activated: #1c1c1e;
+	--button-background-hover: #e5e5ea;
+	--button-background-hover-opacity: 1;
+	--button-background-focused: #d1d1d6;
+	--button-background-focused-opacity: 1;
+	--button-background-activated: #d1d1d6;
+	--button-background-activated-opacity: 1;
+	--ion-font-family: "Geist Variable", sans-serif;
+}
+
+ion-action-sheet.gallery-action-sheet .action-sheet-button:focus-visible,
+ion-action-sheet.lightbox-action-sheet .action-sheet-button:focus-visible {
+	outline: 2px solid #e85d4a;
+	outline-offset: -3px;
+}
+
+ion-action-sheet.proofing-action-sheet--dark {
+	--background: #1c1c1e;
+	--button-color: #f2f2f7;
+	--button-color-hover: #fff;
+	--button-color-focused: #fff;
+	--button-color-activated: #fff;
+	--button-background-hover: #3a3a3c;
+	--button-background-focused: #48484a;
+	--button-background-activated: #48484a;
+}
+
+@media (prefers-color-scheme: dark) {
+	ion-action-sheet.proofing-action-sheet--auto {
+		--background: #1c1c1e;
+		--button-color: #f2f2f7;
+		--button-color-hover: #fff;
+		--button-color-focused: #fff;
+		--button-color-activated: #fff;
+		--button-background-hover: #3a3a3c;
+		--button-background-focused: #48484a;
+		--button-background-activated: #48484a;
+	}
+}
+
+.public-gallery-app {
+	--ion-font-family: "Geist Variable", sans-serif;
+	--gallery-bg: var(--ion-background-color);
+	--gallery-surface: var(--ion-item-background, var(--ion-background-color));
+	--gallery-surface-raised: var(--ion-color-step-100, #f2f2f2);
+	--gallery-border: var(--ion-border-color, rgb(0 0 0 / 13%));
+	--gallery-text: var(--ion-text-color);
+	--gallery-muted: var(--ion-color-medium);
+}
+
+.public-gallery-app--theme-light {
+	--ion-background-color: #ffffff;
+	--ion-background-color-rgb: 255, 255, 255;
+	--ion-text-color: #1c1c1e;
+	--ion-text-color-rgb: 28, 28, 30;
+	--ion-item-background: #ffffff;
+	--ion-toolbar-background: #ffffff;
+	--gallery-bg: #f2f2f7;
+	--gallery-surface: #fff;
+	--gallery-surface-raised: #e5e5ea;
+	--gallery-border: rgb(60 60 67 / 20%);
+	--gallery-text: #1c1c1e;
+	--gallery-muted: #636366;
+}

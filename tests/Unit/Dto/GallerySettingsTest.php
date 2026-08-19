@@ -32,21 +32,22 @@ final class GallerySettingsTest extends TestCase {
 		self::assertCount(4, $settings['colorLabels']);
 		self::assertSame(50, $settings['appearance']['heroFocusX']);
 		self::assertSame('modern', $settings['appearance']['fontPreset']);
-		self::assertSame('cinematic', $settings['appearance']['openerStyle']);
+		self::assertSame('minimal', $settings['appearance']['openerStyle']);
 		self::assertTrue($settings['appearance']['showTitle']);
 		self::assertTrue($settings['appearance']['showMediaCount']);
 		self::assertSame('medium', $settings['appearance']['titleSize']);
 		self::assertSame('auto', $settings['publicLocale']);
 		self::assertSame(9, $settings['schemaVersion']);
 		self::assertSame(['sections' => [], 'showAllMedia' => true], $settings['presentation']['story']);
-		self::assertSame('expressive', $settings['presentation']['motionPreset']);
+		self::assertSame('subtle', $settings['presentation']['motionPreset']);
 		self::assertSame('auto', $settings['presentation']['lightboxFilmstripPlacement']);
 		self::assertSame('autoHide', $settings['presentation']['lightboxChromeBehavior']);
 		self::assertNull($settings['presentation']['instanceLogoAssetId']);
 		self::assertFalse($settings['lifecycle']['enabled']);
 		self::assertFalse($settings['lifecycle']['retentionHandoff']);
 		self::assertSame([], $settings['metadata']['publicFields']);
-		self::assertSame('dark', $settings['presentation']['theme']);
+		self::assertSame('auto', $settings['presentation']['theme']);
+		self::assertFalse($settings['presentation']['showFilenames']);
 		self::assertSame('none', $settings['delivery']['downloadScope']);
 		self::assertTrue($settings['review']['likes']);
 	}
@@ -128,7 +129,7 @@ final class GallerySettingsTest extends TestCase {
 		])->jsonSerialize();
 
 		self::assertSame('light', $settings['presentation']['theme']);
-		self::assertSame('#1f6f8b', $settings['presentation']['accentColor']);
+		self::assertSame('#E85D4A', $settings['presentation']['accentColor']);
 	}
 
 	public function testAcceptsValidInstanceLogoAsset(): void {
