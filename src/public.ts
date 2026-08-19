@@ -1,13 +1,21 @@
 import { loadState } from '@nextcloud/initial-state'
 import { register, setLanguage, setLocale, unregister } from '@nextcloud/l10n'
+import { IonicVue } from '@ionic/vue'
 import { createApp } from 'vue'
+import '@ionic/vue/css/core.css'
+import '@ionic/vue/css/normalize.css'
+import '@ionic/vue/css/structure.css'
+import '@ionic/vue/css/typography.css'
+import '@ionic/vue/css/palettes/dark.system.css'
+import '@ionic/vue/css/palettes/dark.class.css'
+import '@fontsource-variable/geist/wght.css'
 import '@fontsource-variable/manrope/wght.css'
 import '@fontsource-variable/newsreader/wght.css'
 import './public-shell.css'
 
 import PublicApp from './PublicApp.vue'
 import type { GallerySettings } from './domain/gallerySettings'
-import type { PublicReviewState } from './publicTypes.ts'
+import type { PublicGalleryPage, PublicReviewState } from './publicTypes.ts'
 
 interface PublicGalleryState {
 	id: number
@@ -15,14 +23,7 @@ interface PublicGalleryState {
 	token: string
 	path: string
 	settings: GallerySettings
-	initialPage: {
-		gallery: { id: number; title: string; settings: GallerySettings }
-		items: Array<{ id: number; name: string; mimeType: string; size: number; modifiedAt: number; etag: string; folder: boolean }>
-		total: number
-		limit: number
-		offset: number
-		path: string
-	}
+	initialPage: PublicGalleryPage
 	review?: PublicReviewState
 }
 
@@ -46,7 +47,10 @@ async function mount() {
 	}
 	document.body.classList.add('proofing-gallery-public-page')
 	document.documentElement.classList.add('proofing-gallery-public-page')
-	createApp(PublicApp, { gallery: state }).mount('#proofing_gallery_public')
+	document.title = state.title
+	const app = createApp(PublicApp, { gallery: state })
+	app.use(IonicVue)
+	app.mount('#proofing_gallery_public')
 	const serverPreview = document.querySelector<HTMLElement>('#proofing-gallery-server-preview')
 	serverPreview?.remove()
 }

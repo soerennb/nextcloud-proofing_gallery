@@ -33,6 +33,12 @@ The gallery workspace separates the common tasks:
 Changes to gallery settings use revision checks. If another browser changed the
 same gallery, reload the current state instead of overwriting it blindly.
 
+When an owner uploads files whose names already exist, Proofing Gallery opens
+the standard Nextcloud conflict dialog before transferring them. Each incoming
+file can replace the existing file, be kept under a numbered name, or be
+skipped. Replacing creates a new file and clears the old file's gallery review
+data; use **Upload new version** when comments and selections must stay attached.
+
 ## Cull and organize photographs
 
 The culling view is keyboard friendly. Arrow keys move between images, number

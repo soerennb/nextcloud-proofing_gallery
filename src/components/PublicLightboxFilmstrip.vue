@@ -74,9 +74,11 @@ onMounted(() => requestAnimationFrame(() => centerActive()))
 	height: 82px;
 	overflow-x: auto;
 	overflow-y: hidden;
-	border: 1px solid rgb(255 255 255 / 13%);
-	border-radius: 8px;
-	background: rgb(14 16 20 / 90%);
+	padding: 4px;
+	border: 1px solid rgb(255 255 255 / 10%);
+	border-radius: 14px;
+	background: rgb(28 28 30 / 94%);
+	box-shadow: 0 10px 32px rgb(0 0 0 / 34%);
 	scrollbar-width: none;
 	overscroll-behavior-x: contain;
 	pointer-events: auto;
@@ -90,10 +92,6 @@ onMounted(() => requestAnimationFrame(() => centerActive()))
 	overflow-y: auto;
 }
 
-@supports (backdrop-filter: blur(18px)) {
-	.public-filmstrip { background: rgb(14 16 20 / 68%); backdrop-filter: blur(18px) saturate(1.08); }
-}
-
 .public-filmstrip::-webkit-scrollbar { display: none; }
 
 .public-filmstrip__track { position: relative; min-width: 100%; min-height: 100%; }
@@ -103,7 +101,7 @@ onMounted(() => requestAnimationFrame(() => centerActive()))
 	inset: 0 auto 0 0;
 	height: 100%;
 	overflow: hidden;
-	padding: 5px;
+	padding: 4px;
 	border: 0;
 	background: transparent;
 	cursor: pointer;
@@ -113,19 +111,19 @@ onMounted(() => requestAnimationFrame(() => centerActive()))
 
 .public-filmstrip__item :deep(.progressive-image) {
 	overflow: hidden;
-	border: 2px solid transparent;
-	border-radius: 5px;
+	border: 3px solid transparent;
+	border-radius: 10px;
 }
 
 .public-filmstrip__item :deep(img) { object-fit: cover; }
 
-.public-filmstrip__item--active :deep(.progressive-image) { border-color: #fff; }
+.public-filmstrip__item--active :deep(.progressive-image) { border-color: var(--gallery-accent); }
 
 .public-filmstrip__item:focus-visible { outline: 3px solid var(--gallery-accent-readable); outline-offset: -4px; }
 
 @media (max-width: 760px) {
 	.public-filmstrip {
-		inset: auto 8px max(8px, env(safe-area-inset-bottom));
+		inset: auto 8px calc(10px + env(safe-area-inset-bottom));
 		height: 76px;
 	}
 }

@@ -22,6 +22,7 @@ final class MediaIndexMapper extends QBMapper {
 		string|int|null $afterValue = null,
 		?int $afterFileId = null,
 		bool $before = false,
+		int $offset = 0,
 	): array {
 		$sortColumn = match ($query->sortBy) {
 			'modified' => 'm.mtime',
@@ -32,6 +33,7 @@ final class MediaIndexMapper extends QBMapper {
 		$direction = $before ? ($naturalDirection === 'ASC' ? 'DESC' : 'ASC') : $naturalDirection;
 		$qb = $this->filteredQuery($query);
 		$qb->select('m.*')->orderBy($sortColumn, $direction)->addOrderBy('m.file_id', $direction)->setMaxResults($query->limit);
+		if ($afterValue === null && $afterFileId === null && !$before) $qb->setFirstResult(max(0, $offset));
 		if ($afterValue !== null && $afterFileId !== null) {
 			$comparison = $before
 				? ($naturalDirection === 'ASC' ? 'lt' : 'gt')
@@ -47,6 +49,28 @@ final class MediaIndexMapper extends QBMapper {
 		}
 		$entities = $this->findEntities($qb);
 		return $before ? array_reverse($entities) : $entities;
+	}
+
+	public function positionOf(MediaIndexQuery $query, int $fileId): ?int {
+		$sortColumn = match ($query->sortBy) {
+			'modified' => 'm.mtime',
+			'size' => 'm.size',
+			default => 'm.sort_key',
+		};
+		$direction = $query->sortDirection === 'desc' ? 'DESC' : 'ASC';
+		$qb = $this->filteredQuery($query);
+		$qb->select('m.file_id')->orderBy($sortColumn, $direction)->addOrderBy('m.file_id', $direction);
+		$position = 0;
+		$result = $qb->executeQuery();
+		while (($value = $result->fetchOne()) !== false) {
+			if ((int)$value === $fileId) {
+				$result->closeCursor();
+				return $position;
+			}
+			$position++;
+		}
+		$result->closeCursor();
+		return null;
 	}
 
 	public function countFiltered(MediaIndexQuery $query): int {

@@ -119,6 +119,8 @@ compose exec -T --user www-data "${service}" php occ app:enable proofing_gallery
 compose exec -T -e PG_BASELINE_HAS_LEGACY_REPAIR="${baseline_has_legacy_repair}" --user www-data "${service}" php -r '
 	require "/var/www/html/lib/base.php";
 	$db = \OC::$server->get(\OCP\IDBConnection::class);
+	$config = \OC::$server->get(\OCP\IConfig::class);
+	$config->setAppValue("proofing_gallery", "instanceSettingsV2", json_encode(["branding" => ["accentColor" => "#1f6f8b"]], JSON_THROW_ON_ERROR));
 	$now = time();
 	$insertGallery = static function (string $slug, string $token, string $status, ?int $archivedAt) use ($db, $now): int {
 		$q = $db->getQueryBuilder();
@@ -129,7 +131,7 @@ compose exec -T -e PG_BASELINE_HAS_LEGACY_REPAIR="${baseline_has_legacy_repair}"
 			"title" => $q->createNamedParameter("Upgrade sentinel"),
 			"slug" => $q->createNamedParameter($slug),
 			"status" => $q->createNamedParameter($status),
-			"settings" => $q->createNamedParameter("{}"),
+			"settings" => $q->createNamedParameter(json_encode(["presentation" => ["accentColor" => "#1f6f8b"]], JSON_THROW_ON_ERROR)),
 			"share_token" => $q->createNamedParameter($token),
 			"created_at" => $q->createNamedParameter($now, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
 			"updated_at" => $q->createNamedParameter($now, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT),
@@ -202,10 +204,14 @@ compose exec -T --user www-data "${service}" php -r '
 	$q->select("generation")->from("proofing_semantic_idx")->setMaxResults(1)->executeQuery();
 	$assertGallery = static function (string $slug) use ($db): void {
 		$q = $db->getQueryBuilder();
-		$count = (int)$q->select($q->func()->count())->from("proofing_galleries")
+		$result = $q->select("settings")->from("proofing_galleries")
 			->where($q->expr()->eq("slug", $q->createNamedParameter($slug)))
-			->executeQuery()->fetchOne();
-		if ($count !== 1) throw new \RuntimeException("Upgrade scenario {$slug}: expected one gallery, found {$count}");
+			->executeQuery();
+		$rows = $result->fetchAllAssociative();
+		$result->closeCursor();
+		if (count($rows) !== 1) throw new \RuntimeException("Upgrade scenario {$slug}: expected one gallery, found " . count($rows));
+		$settings = json_decode((string)$rows[0]["settings"], true, flags: JSON_THROW_ON_ERROR);
+		if (($settings["presentation"]["accentColor"] ?? null) !== "#E85D4A") throw new \RuntimeException("Upgrade scenario {$slug}: legacy default accent was not migrated");
 	};
 	$assertLink = static function (string $token, string $status, string $name) use ($db): void {
 		$q = $db->getQueryBuilder();
@@ -227,6 +233,9 @@ compose exec -T --user www-data "${service}" php -r '
 	$assertLink("upgrade-active-token", "active", "Primary link");
 	$assertLink("upgrade-archived-token", "suspended", "Primary link");
 	$assertLink("upgrade-existing-token", "active", "Existing link");
+	$config = \OC::$server->get(\OCP\IConfig::class);
+	$instanceSettings = json_decode($config->getAppValue("proofing_gallery", "instanceSettingsV2", "{}"), true, flags: JSON_THROW_ON_ERROR);
+	if (($instanceSettings["branding"]["accentColor"] ?? null) !== "#E85D4A") throw new \RuntimeException("Legacy instance accent default was not migrated");
 	$health = \OC::$server->get(\OCA\ProofingGallery\Service\HealthService::class)->status();
 	if (!isset($health["backlogs"]["purges"], $health["retention"]["assigned"], $health["maintenance"]["periodicJobs"], $health["maintenance"]["backfills"])) {
 		throw new \RuntimeException("Operational health diagnostics are incomplete after the upgrade");

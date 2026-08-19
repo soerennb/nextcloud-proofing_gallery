@@ -1,6 +1,30 @@
 <script setup lang="ts">
+/* eslint-disable vue/no-deprecated-slot-attribute -- Ionic Vue maps Web Component slots through the slot attribute. */
+import {
+	IonActionSheet,
+	IonButton,
+	IonButtons,
+	IonContent,
+	IonHeader,
+	IonIcon,
+	IonModal,
+	IonTitle,
+	IonToolbar,
+} from '@ionic/vue'
 import { n, t } from '@nextcloud/l10n'
-import { AnimatePresence, motion, useReducedMotion } from 'motion-v'
+import {
+	chevronBackOutline,
+	chevronForwardOutline,
+	closeOutline,
+	contractOutline,
+	downloadOutline,
+	expandOutline,
+	gridOutline,
+	helpCircleOutline,
+	pauseOutline,
+	playOutline,
+} from 'ionicons/icons'
+import { useReducedMotion } from 'motion-v'
 import type PhotoSwipe from 'photoswipe'
 import type { SlideData } from 'photoswipe'
 import 'photoswipe/style.css'
@@ -10,6 +34,7 @@ import { normalizeAnnotationPoint } from '../domain/collaboration.ts'
 import type { GallerySettings } from '../domain/gallerySettings.ts'
 import type { CollaborationState, MediaItem } from '../publicTypes.ts'
 import PublicLightboxFilmstrip from './PublicLightboxFilmstrip.vue'
+import PublicLightboxHeader from './PublicLightboxHeader.vue'
 
 type MediaDimensions = Record<number, { width: number; height: number }>
 
@@ -25,34 +50,21 @@ const props = defineProps<{
 	streamUrl(item: MediaItem): string
 	downloadUrl(item: MediaItem): string
 	selectionExportUrl(selectionId: string, format: 'csv' | 'plain' | 'search', fields?: string[]): string
-	compareIds: number[]
 }>()
-const emit = defineEmits<{ close: []; 'toggle-compare': [item: MediaItem] }>()
+const emit = defineEmits<{ close: []; 'active-change': [item: MediaItem] }>()
 
 const activeIndex = ref(props.initialIndex)
 const activeItem = computed(() => props.mediaItems[activeIndex.value] ?? null)
-const activeComments = computed(() => props.collaboration?.comments.filter(
-	comment => comment.fileId === activeItem.value?.id && comment.deletedAt === null,
-) ?? [])
-const canDownloadIndividual = computed(() => !props.settings.delivery
-	? props.settings.allowDownloads
-	: ['individual', 'all'].includes(props.settings.delivery.downloadScope))
-const enabledColorLabels = computed(() => props.settings.review
-	? props.settings.review.colorLabels.filter((_, index) => props.settings.review.colorEnabled[index])
-	: props.settings.colorLabels)
+const activeComments = computed(() => props.collaboration?.comments.filter(comment => comment.fileId === activeItem.value?.id && comment.deletedAt === null) ?? [])
+const canDownloadIndividual = computed(() => !props.settings.delivery ? props.settings.allowDownloads : ['individual', 'all'].includes(props.settings.delivery.downloadScope))
+const enabledColorLabels = computed(() => props.settings.review ? props.settings.review.colorLabels.filter((_, index) => props.settings.review.colorEnabled[index]) : props.settings.colorLabels)
 const activeGuestRating = computed(() => props.collaboration?.ratings?.find(value => value.fileId === activeItem.value?.id)
 	?? { rating: 0, pick: 'none' as const })
 
-const shell = ref<HTMLElement | null>(null)
-const closeButton = ref<HTMLButtonElement | null>(null)
-const annotationHost = ref<HTMLElement | null>(null)
-const feedbackOpen = ref(false)
-const metadataOpen = ref(false)
-const slideshow = ref(false)
-const shortcutsOpen = ref(false)
-const touchHint = ref(false)
-const chromeVisible = ref(true)
-const fullscreen = ref(Boolean(document.fullscreenElement))
+const shell = ref<HTMLElement | null>(null), annotationHost = ref<HTMLElement | null>(null)
+const feedbackOpen = ref(false), metadataOpen = ref(false), slideshow = ref(false), shortcutsOpen = ref(false), actionMenuOpen = ref(false)
+const slideshowSuspended = ref(false), slideshowCycle = ref(0)
+const touchHint = ref(false), chromeVisible = ref(true), fullscreen = ref(Boolean(document.fullscreenElement))
 const filmstripSessionKey = `proofing-gallery-filmstrip:${window.location.pathname}`
 const guestFilmstripHidden = ref(sessionStorage.getItem(filmstripSessionKey) === 'hidden')
 const viewportWidth = ref(window.innerWidth)
@@ -80,20 +92,52 @@ const chromeAutoHideDelay = computed(() => viewportWidth.value <= 760 ? 4500 : 2
 const loop = computed(() => props.mediaItems.length > 2)
 const canStepPrevious = computed(() => loop.value || activeIndex.value > 0)
 const canStepNext = computed(() => loop.value || activeIndex.value < props.mediaItems.length - 1)
-const sheetInitial = computed(() => reduceMotion.value ? { opacity: 0 } : { opacity: 0, y: 48 })
-const sheetExit = computed(() => reduceMotion.value ? { opacity: 0 } : { opacity: 0, y: 36 })
+const slideshowDuration = computed(() => Math.max(3, Math.min(15, props.settings.presentation?.slideshowInterval ?? 5)) * 1000)
+const actionSheetClass = computed(() => ['lightbox-action-sheet', `proofing-action-sheet--${props.settings.presentation?.theme ?? 'auto'}`])
 const activeMetadata = computed(() => activeItem.value?.metadata)
 const hasPublicMetadata = computed(() => {
 	const metadata = activeMetadata.value
 	return metadata?.state === 'ready' && Object.keys(metadata).some(key => key !== 'state')
 })
+const actionSheetButtons = computed(() => [
+	...(canDownloadIndividual.value
+		? [{
+				text: t('proofing_gallery', 'Download'),
+				icon: downloadOutline,
+				handler: downloadActive,
+			}]
+		: []),
+	...(filmstripAllowed.value
+		? [{
+				text: guestFilmstripHidden.value ? t('proofing_gallery', 'Show thumbnails') : t('proofing_gallery', 'Hide thumbnails'),
+				icon: gridOutline,
+				handler: toggleFilmstrip,
+			}]
+		: []),
+	{
+		text: slideshow.value ? t('proofing_gallery', 'Pause') : t('proofing_gallery', 'Slideshow'),
+		icon: slideshow.value ? pauseOutline : playOutline,
+		handler: () => setSlideshow(!slideshow.value),
+	},
+	{
+		text: fullscreen.value ? t('proofing_gallery', 'Exit full screen') : t('proofing_gallery', 'Full screen'),
+		icon: fullscreen.value ? contractOutline : expandOutline,
+		handler: toggleFullscreen,
+	},
+	{
+		text: t('proofing_gallery', 'Keyboard shortcuts'),
+		icon: helpCircleOutline,
+		handler: () => { shortcutsOpen.value = true },
+	},
+	{
+		text: t('proofing_gallery', 'Cancel'),
+		role: 'cancel',
+	},
+])
 
 let pswp: PhotoSwipe | null = null
-let slideshowTimer: number | undefined
-let hintTimer: number | undefined
-let chromeTimer: number | undefined
-let lastTouchPointerUpAt = 0
-let lastChromeToggleAt = 0
+let slideshowTimer: number | undefined, hintTimer: number | undefined, chromeTimer: number | undefined
+let lastTouchPointerUpAt = 0, lastChromeToggleAt = 0
 let previousBodyOverflow = ''
 let previouslyFocused: HTMLElement | null = null
 let unmounting = false
@@ -140,7 +184,7 @@ onMounted(async () => {
 		arrowNext: false,
 		paddingFn: () => ({
 			top: 64,
-			bottom: props.mediaItems.length > 1 && filmstripPlacement.value === 'bottom' ? (window.innerWidth <= 640 ? 94 : 108) : 18,
+			bottom: window.innerWidth <= 760 ? (props.mediaItems.length > 1 && filmstripPlacement.value === 'bottom' ? 154 : 70) : props.mediaItems.length > 1 && filmstripPlacement.value === 'bottom' ? 108 : 18,
 			left: window.innerWidth <= 640 ? 8 : 72,
 			right: window.innerWidth > 760 && (feedbackOpen.value || metadataOpen.value) ? 392 : filmstripPlacement.value === 'side' ? 104 : window.innerWidth <= 640 ? 8 : 72,
 		}),
@@ -148,10 +192,12 @@ onMounted(async () => {
 	pswp.on('change', () => {
 		if (!pswp) return
 		activeIndex.value = pswp.currIndex
+		if (activeItem.value) emit('active-change', activeItem.value)
 		feedbackOpen.value = false
 		metadataOpen.value = false
 		marking.value = false
 		annotationDraft.value = null
+		if (slideshow.value) scheduleSlideshow()
 		wakeChrome()
 		nextTick(syncAnnotationHost)
 	})
@@ -192,7 +238,7 @@ onMounted(async () => {
 	})
 	pswp.init()
 	wakeChrome()
-	nextTick(() => closeButton.value?.focus())
+	nextTick(() => shell.value?.focus())
 })
 
 onBeforeUnmount(() => {
@@ -201,7 +247,7 @@ onBeforeUnmount(() => {
 	document.removeEventListener('visibilitychange', onSlideshowVisibility)
 	document.removeEventListener('fullscreenchange', onFullscreenChange)
 	window.removeEventListener('resize', updateViewport)
-	window.clearInterval(slideshowTimer)
+	window.clearTimeout(slideshowTimer)
 	window.clearTimeout(hintTimer)
 	window.clearTimeout(chromeTimer)
 	releaseWakeLock()
@@ -214,6 +260,10 @@ onBeforeUnmount(() => {
 watch(feedbackOpen, () => { wakeChrome(); nextTick(() => pswp?.updateSize(true)) })
 watch(metadataOpen, () => { wakeChrome(); nextTick(() => pswp?.updateSize(true)) })
 watch(shortcutsOpen, wakeChrome)
+watch(actionMenuOpen, wakeChrome)
+watch([actionMenuOpen, feedbackOpen, metadataOpen, shortcutsOpen], () => {
+	if (slideshow.value) scheduleSlideshow()
+})
 watch(filmstripPlacement, () => nextTick(() => pswp?.updateSize(true)))
 watch(activeComments, () => nextTick(syncAnnotationHost), { deep: true })
 watch(marking, value => annotationHost.value?.classList.toggle('proofing-annotation-layer--marking', value))
@@ -281,14 +331,11 @@ function placeAnnotation(event: MouseEvent) {
 	)
 }
 
-function close() {
-	setSlideshow(false)
-	emit('close')
-}
+function close() { setSlideshow(false); emit('close') }
 
-function updateViewport() {
-	viewportWidth.value = window.innerWidth
-}
+function downloadActive() { if (activeItem.value) window.location.assign(props.downloadUrl(activeItem.value)) }
+
+function updateViewport() { viewportWidth.value = window.innerWidth }
 
 function wakeChrome() {
 	chromeVisible.value = true
@@ -348,10 +395,15 @@ function setSlideshow(enabled: boolean) {
 }
 
 function scheduleSlideshow() {
-	window.clearInterval(slideshowTimer)
-	slideshowTimer = slideshow.value && !document.hidden
-		? window.setInterval(() => pswp?.next(), Math.max(3, Math.min(15, props.settings.presentation?.slideshowInterval ?? 5)) * 1000)
-		: undefined
+	window.clearTimeout(slideshowTimer)
+	slideshowTimer = undefined
+	slideshowSuspended.value = document.hidden || actionMenuOpen.value || feedbackOpen.value || metadataOpen.value || shortcutsOpen.value
+	if (!slideshow.value || slideshowSuspended.value) return
+	slideshowCycle.value++
+	slideshowTimer = window.setTimeout(() => {
+		if (canStepNext.value) pswp?.next()
+		else setSlideshow(false)
+	}, slideshowDuration.value)
 }
 
 function onSlideshowVisibility() {
@@ -424,10 +476,7 @@ async function toggleLike() {
 	await props.mutate(`media/${item.id}/like`, 'POST')
 }
 
-async function openFeedbackAndLike() {
-	feedbackOpen.value = true
-	await toggleLike()
-}
+async function openFeedbackAndLike() { feedbackOpen.value = true; await toggleLike() }
 
 async function setColor(value: string) {
 	const item = activeItem.value
@@ -476,103 +525,64 @@ async function saveEditedComment(commentId: number) {
 		role="dialog"
 		aria-modal="true"
 		:aria-label="activeItem.name"
+		tabindex="-1"
 		@focusin="wakeChrome">
-		<header class="lightbox-bar">
-			<div class="lightbox-bar__identity">
-				<strong>{{ activeItem.name }}</strong>
-				<span>{{ activeIndex + 1 }} / {{ mediaItems.length }}</span>
-			</div>
-			<div class="lightbox-bar__tools">
-				<button v-if="filmstripAllowed"
-					class="lightbox-bar__filmstrip"
-					type="button"
-					:aria-label="guestFilmstripHidden ? t('proofing_gallery', 'Show thumbnails') : t('proofing_gallery', 'Hide thumbnails')"
-					:aria-pressed="!guestFilmstripHidden"
-					@click="toggleFilmstrip">
-					<span aria-hidden="true">▦</span>
-					<span class="lightbox-bar__filmstrip-label">{{ guestFilmstripHidden ? t('proofing_gallery', 'Show thumbnails') : t('proofing_gallery', 'Hide thumbnails') }}</span>
-				</button>
-				<button v-if="activeItem.mimeType.startsWith('image/')"
-					class="lightbox-bar__zoom"
-					type="button"
-					:aria-label="t('proofing_gallery', 'Zoom out')"
-					@click="zoom(-1)">
-					−
-				</button>
-				<button v-if="activeItem.mimeType.startsWith('image/')"
-					class="lightbox-bar__zoom"
-					type="button"
-					:aria-label="t('proofing_gallery', 'Zoom in')"
-					@click="zoom(1)">
-					+
-				</button>
-				<button class="lightbox-bar__slideshow"
-					type="button"
-					:aria-pressed="slideshow"
-					@click="setSlideshow(!slideshow)">
-					{{ slideshow ? t('proofing_gallery', 'Pause') : t('proofing_gallery', 'Slideshow') }}
-				</button>
-				<button type="button" :aria-pressed="fullscreen" @click="toggleFullscreen">
-					{{ fullscreen ? t('proofing_gallery', 'Exit full screen') : t('proofing_gallery', 'Full screen') }}
-				</button>
-				<button type="button" :aria-pressed="compareIds.includes(activeItem.id)" @click="emit('toggle-compare', activeItem)">
-					{{ compareIds.includes(activeItem.id) ? t('proofing_gallery', 'In compare') : t('proofing_gallery', 'Compare') }}
-				</button>
-				<button class="lightbox-bar__shortcuts"
-					type="button"
-					:aria-expanded="shortcutsOpen"
-					:aria-label="t('proofing_gallery', 'Keyboard shortcuts')"
-					@click="shortcutsOpen = !shortcutsOpen">
-					?
-				</button>
-				<button v-if="settings.mode === 'collaboration' && settings.review?.likes !== false"
-					class="lightbox-bar__like"
-					type="button"
-					:aria-label="t('proofing_gallery', 'Like')"
-					@click="openFeedbackAndLike">
-					<span class="lightbox-bar__like-icon" aria-hidden="true">{{ collaboration?.likes[activeItem.id]?.mine ? '♥' : '♡' }}</span>
-					<span class="lightbox-bar__like-label">{{ t('proofing_gallery', 'Like') }}</span>
-				</button>
-				<a v-if="canDownloadIndividual" class="lightbox-bar__download" :href="downloadUrl(activeItem)">{{ t('proofing_gallery', 'Download') }}</a>
-				<button v-if="settings.mode === 'collaboration'"
-					type="button"
-					:aria-expanded="feedbackOpen"
-					@click="feedbackOpen = !feedbackOpen; metadataOpen = false">
-					{{ t('proofing_gallery', 'Feedback') }}
-					<span v-if="activeComments.length" class="lightbox-bar__count" aria-hidden="true">{{ activeComments.length }}</span>
-				</button>
-				<button v-if="hasPublicMetadata"
-					type="button"
-					:aria-expanded="metadataOpen"
-					@click="metadataOpen = !metadataOpen; feedbackOpen = false">
-					{{ t('proofing_gallery', 'Info') }}
-				</button>
-				<button ref="closeButton"
-					class="lightbox-bar__close"
-					type="button"
-					:aria-label="t('proofing_gallery', 'Close')"
-					@click="close">
-					×
-				</button>
-			</div>
-		</header>
+		<PublicLightboxHeader
+			:name="activeItem.name"
+			:position="activeIndex + 1"
+			:count="mediaItems.length"
+			:is-image="activeItem.mimeType.startsWith('image/')"
+			:liked="Boolean(collaboration?.likes[activeItem.id]?.mine)"
+			:comment-count="activeComments.length"
+			:can-like="settings.mode === 'collaboration' && settings.review?.likes !== false"
+			:can-feedback="settings.mode === 'collaboration'"
+			:can-download="canDownloadIndividual"
+			:has-metadata="hasPublicMetadata"
+			:download-url="downloadUrl(activeItem)"
+			@close="close"
+			@zoom="zoom"
+			@like="openFeedbackAndLike"
+			@feedback="feedbackOpen = true; metadataOpen = false"
+			@info="metadataOpen = true; feedbackOpen = false"
+			@more="actionMenuOpen = true" />
+		<div v-if="slideshow && !slideshowSuspended"
+			:key="slideshowCycle"
+			class="lightbox-slideshow-progress"
+			:style="{ '--slideshow-duration': `${slideshowDuration}ms` }"
+			aria-hidden="true">
+			<i />
+		</div>
+		<IonActionSheet
+			:is-open="actionMenuOpen"
+			:css-class="actionSheetClass"
+			:header="activeItem.name"
+			:sub-header="`${activeIndex + 1} / ${mediaItems.length}`"
+			:buttons="actionSheetButtons"
+			@did-dismiss="actionMenuOpen = false" />
+		<IonButton v-if="!chromeVisible"
+			class="lightbox-chrome-handle"
+			fill="solid"
+			:aria-label="t('proofing_gallery', 'Show photo controls')"
+			@click="wakeChrome">
+			<IonIcon slot="icon-only" :icon="chevronBackOutline" />
+		</IonButton>
 
-		<button v-if="mediaItems.length > 1"
+		<IonButton v-if="mediaItems.length > 1"
 			class="lightbox-nav lightbox-nav--previous"
-			type="button"
+			fill="solid"
 			:disabled="!canStepPrevious"
 			:aria-label="t('proofing_gallery', 'Previous')"
 			@click="step(-1)">
-			‹
-		</button>
-		<button v-if="mediaItems.length > 1"
+			<IonIcon slot="icon-only" :icon="chevronBackOutline" />
+		</IonButton>
+		<IonButton v-if="mediaItems.length > 1"
 			class="lightbox-nav lightbox-nav--next"
-			type="button"
+			fill="solid"
 			:disabled="!canStepNext"
 			:aria-label="t('proofing_gallery', 'Next')"
 			@click="step(1)">
-			›
-		</button>
+			<IonIcon slot="icon-only" :icon="chevronForwardOutline" />
+		</IonButton>
 
 		<Transition name="touch-hint">
 			<p v-if="touchHint" class="lightbox-touch-hint" role="status">
@@ -600,20 +610,18 @@ async function saveEditedComment(commentId: number) {
 				:style="{ left: `${annotationDraft.x / 100}%`, top: `${annotationDraft.y / 100}%`, width: `${annotationDraft.width / 100}%`, height: `${annotationDraft.height / 100}%` }" />
 		</Teleport>
 
-		<AnimatePresence>
-			<motion.aside v-if="shortcutsOpen"
-				key="shortcut-help"
-				class="lightbox-shortcuts"
-				role="dialog"
-				:aria-label="t('proofing_gallery', 'Keyboard shortcuts')"
-				:initial="sheetInitial"
-				:animate="{ opacity: 1, y: 0 }"
-				:exit="sheetExit">
-				<header>
-					<strong>{{ t('proofing_gallery', 'Keyboard shortcuts') }}</strong><button type="button" :aria-label="t('proofing_gallery', 'Close')" @click="shortcutsOpen = false">
-						×
-					</button>
-				</header>
+		<IonModal :is-open="shortcutsOpen" css-class="lightbox-dialog lightbox-shortcuts-dialog" @did-dismiss="shortcutsOpen = false">
+			<IonHeader>
+				<IonToolbar>
+					<IonTitle>{{ t('proofing_gallery', 'Keyboard shortcuts') }}</IonTitle>
+					<IonButtons slot="end">
+						<IonButton :aria-label="t('proofing_gallery', 'Close')" @click="shortcutsOpen = false">
+							<IonIcon slot="icon-only" :icon="closeOutline" />
+						</IonButton>
+					</IonButtons>
+				</IonToolbar>
+			</IonHeader>
+			<IonContent class="ion-padding lightbox-shortcuts">
 				<dl>
 					<div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>{{ t('proofing_gallery', 'Previous or next photograph') }}</dd></div>
 					<div><dt><kbd>Space</kbd></dt><dd>{{ t('proofing_gallery', 'Start or pause slideshow') }}</dd></div>
@@ -621,76 +629,69 @@ async function saveEditedComment(commentId: number) {
 					<div><dt><kbd>?</kbd></dt><dd>{{ t('proofing_gallery', 'Show this help') }}</dd></div>
 				</dl>
 				<small>{{ t('proofing_gallery', 'Slideshow interval: {seconds} seconds', { seconds: settings.presentation?.slideshowInterval ?? 5 }) }}</small>
-			</motion.aside>
-		</AnimatePresence>
-		<AnimatePresence>
-			<motion.aside v-if="metadataOpen && activeMetadata?.state === 'ready'"
-				key="metadata-sheet"
-				class="lightbox-metadata"
-				:initial="sheetInitial"
-				:animate="{ opacity: 1, x: 0, y: 0 }"
-				:exit="sheetExit"
-				:transition="{ duration: reduceMotion ? 0 : 0.22, ease: [0.2, 0.75, 0.25, 1] }">
-				<header>
-					<div><strong>{{ t('proofing_gallery', 'Image information') }}</strong><span>{{ activeItem.name }}</span></div><button type="button" :aria-label="t('proofing_gallery', 'Close')" @click="metadataOpen = false">
-						×
-					</button>
-				</header>
-				<dl>
-					<div v-if="activeMetadata.capturedAt">
-						<dt>{{ t('proofing_gallery', 'Captured') }}</dt><dd>{{ new Date(activeMetadata.capturedAt * 1000).toLocaleString() }}</dd>
-					</div>
-					<div v-if="activeMetadata.camera">
-						<dt>{{ t('proofing_gallery', 'Camera') }}</dt><dd>{{ activeMetadata.camera }}</dd>
-					</div>
-					<div v-if="activeMetadata.lens">
-						<dt>{{ t('proofing_gallery', 'Lens') }}</dt><dd>{{ activeMetadata.lens }}</dd>
-					</div>
-					<div v-if="activeMetadata.focalLength || activeMetadata.aperture || activeMetadata.exposureTime || activeMetadata.iso">
-						<dt>{{ t('proofing_gallery', 'Exposure') }}</dt><dd>{{ [activeMetadata.focalLength ? `${activeMetadata.focalLength} mm` : '', activeMetadata.aperture ? `ƒ/${activeMetadata.aperture}` : '', activeMetadata.exposureTime, activeMetadata.iso ? `ISO ${activeMetadata.iso}` : ''].filter(Boolean).join(' · ') }}</dd>
-					</div>
-					<div v-if="activeMetadata.title">
-						<dt>{{ t('proofing_gallery', 'Title') }}</dt><dd>{{ activeMetadata.title }}</dd>
-					</div>
-					<div v-if="activeMetadata.description">
-						<dt>{{ t('proofing_gallery', 'Description') }}</dt><dd>{{ activeMetadata.description }}</dd>
-					</div>
-					<div v-if="activeMetadata.creator">
-						<dt>{{ t('proofing_gallery', 'Creator') }}</dt><dd>{{ activeMetadata.creator }}</dd>
-					</div>
-					<div v-if="activeMetadata.copyright">
-						<dt>{{ t('proofing_gallery', 'Copyright') }}</dt><dd>{{ activeMetadata.copyright }}</dd>
-					</div>
-				</dl>
-			</motion.aside>
-		</AnimatePresence>
-		<AnimatePresence>
-			<motion.button v-if="feedbackOpen"
-				key="feedback-backdrop"
-				class="lightbox-feedback-backdrop"
-				type="button"
-				:initial="{ opacity: 0 }"
-				:animate="{ opacity: 1 }"
-				:exit="{ opacity: 0 }"
-				:transition="{ duration: reduceMotion ? 0 : 0.18 }"
-				:aria-label="t('proofing_gallery', 'Close feedback')"
-				@click="feedbackOpen = false" />
-		</AnimatePresence>
-		<AnimatePresence>
-			<motion.aside v-if="settings.mode === 'collaboration' && feedbackOpen"
-				key="feedback-sheet"
-				class="lightbox-feedback"
-				:initial="sheetInitial"
-				:animate="{ opacity: 1, x: 0, y: 0 }"
-				:exit="sheetExit"
-				:transition="{ duration: reduceMotion ? 0 : 0.22, ease: [0.2, 0.75, 0.25, 1] }">
-				<header>
-					<div><strong>{{ t('proofing_gallery', 'Feedback') }}</strong><span>{{ activeItem.name }}</span></div>
-					<button type="button" :aria-label="t('proofing_gallery', 'Close feedback')" @click="feedbackOpen = false">
-						×
-					</button>
-				</header>
-				<div class="lightbox-feedback__body">
+			</IonContent>
+		</IonModal>
+		<IonModal :is-open="metadataOpen && activeMetadata?.state === 'ready'" css-class="lightbox-sheet" @did-dismiss="metadataOpen = false">
+			<IonHeader>
+				<IonToolbar>
+					<IonTitle>{{ t('proofing_gallery', 'Image information') }}</IonTitle>
+					<IonButtons slot="end">
+						<IonButton :aria-label="t('proofing_gallery', 'Close')" @click="metadataOpen = false">
+							<IonIcon slot="icon-only" :icon="closeOutline" />
+						</IonButton>
+					</IonButtons>
+				</IonToolbar>
+			</IonHeader>
+			<IonContent class="ion-padding lightbox-metadata">
+				<template v-if="activeMetadata?.state === 'ready'">
+					<p class="lightbox-sheet__filename">
+						{{ activeItem.name }}
+					</p>
+					<dl>
+						<div v-if="activeMetadata.capturedAt">
+							<dt>{{ t('proofing_gallery', 'Captured') }}</dt><dd>{{ new Date(activeMetadata.capturedAt * 1000).toLocaleString() }}</dd>
+						</div>
+						<div v-if="activeMetadata.camera">
+							<dt>{{ t('proofing_gallery', 'Camera') }}</dt><dd>{{ activeMetadata.camera }}</dd>
+						</div>
+						<div v-if="activeMetadata.lens">
+							<dt>{{ t('proofing_gallery', 'Lens') }}</dt><dd>{{ activeMetadata.lens }}</dd>
+						</div>
+						<div v-if="activeMetadata.focalLength || activeMetadata.aperture || activeMetadata.exposureTime || activeMetadata.iso">
+							<dt>{{ t('proofing_gallery', 'Exposure') }}</dt><dd>{{ [activeMetadata.focalLength ? `${activeMetadata.focalLength} mm` : '', activeMetadata.aperture ? `ƒ/${activeMetadata.aperture}` : '', activeMetadata.exposureTime, activeMetadata.iso ? `ISO ${activeMetadata.iso}` : ''].filter(Boolean).join(' · ') }}</dd>
+						</div>
+						<div v-if="activeMetadata.title">
+							<dt>{{ t('proofing_gallery', 'Title') }}</dt><dd>{{ activeMetadata.title }}</dd>
+						</div>
+						<div v-if="activeMetadata.description">
+							<dt>{{ t('proofing_gallery', 'Description') }}</dt><dd>{{ activeMetadata.description }}</dd>
+						</div>
+						<div v-if="activeMetadata.creator">
+							<dt>{{ t('proofing_gallery', 'Creator') }}</dt><dd>{{ activeMetadata.creator }}</dd>
+						</div>
+						<div v-if="activeMetadata.copyright">
+							<dt>{{ t('proofing_gallery', 'Copyright') }}</dt><dd>{{ activeMetadata.copyright }}</dd>
+						</div>
+					</dl>
+				</template>
+			</IonContent>
+		</IonModal>
+		<IonModal :is-open="settings.mode === 'collaboration' && feedbackOpen" css-class="lightbox-sheet lightbox-feedback-sheet" @did-dismiss="feedbackOpen = false">
+			<IonHeader>
+				<IonToolbar>
+					<IonTitle>{{ t('proofing_gallery', 'Feedback') }}</IonTitle>
+					<IonButtons slot="end">
+						<IonButton :aria-label="t('proofing_gallery', 'Close feedback')" @click="feedbackOpen = false">
+							<IonIcon slot="icon-only" :icon="closeOutline" />
+						</IonButton>
+					</IonButtons>
+				</IonToolbar>
+			</IonHeader>
+			<IonContent class="lightbox-feedback">
+				<div class="lightbox-feedback__body ion-padding">
+					<p class="lightbox-sheet__filename">
+						{{ activeItem.name }}
+					</p>
 					<div class="feedback-actions">
 						<button v-if="settings.review?.likes !== false" type="button" @click="toggleLike">
 							{{ collaboration?.likes[activeItem.id]?.mine ? '♥' : '♡' }} {{ t('proofing_gallery', 'Like') }} {{ collaboration?.likes[activeItem.id]?.count || '' }}
@@ -789,8 +790,8 @@ async function saveEditedComment(commentId: number) {
 						</article>
 					</section>
 				</div>
-			</motion.aside>
-		</AnimatePresence>
+			</IonContent>
+		</IonModal>
 	</div>
 </template>
 

@@ -6,6 +6,7 @@ namespace OCA\ProofingGallery\Tests\Unit\Service;
 
 use OCA\ProofingGallery\Service\FolderService;
 use OCA\ProofingGallery\Service\MediaMetadataService;
+use OCA\ProofingGallery\Service\MediaCleanupService;
 use OCA\ProofingGallery\Service\EmbeddedMetadataExtractor;
 use OCA\ProofingGallery\Service\PolicyService;
 use OCA\ProofingGallery\Service\MediaTypePolicy;
@@ -13,9 +14,11 @@ use OCA\ProofingGallery\Service\UploadLockService;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
+use OCP\Files\IAppData;
 use OCP\Files\Node;
 use OCP\FilesMetadata\IFilesMetadataManager;
 use OCP\IConfig;
+use OCP\IDBConnection;
 use OCP\Lock\ILockingProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -72,11 +75,87 @@ final class FolderServiceTest extends TestCase {
 		$this->service([])->listMedia('owner', 42, sortBy: 'rating');
 	}
 
+	public function testFindsOnlyExactUploadConflictsInDestination(): void {
+		$service = $this->service([
+			$this->file(1, 'proof.jpg', 'image/jpeg'),
+			$this->folder(2, 'proofs'),
+		]);
+
+		$conflicts = $service->uploadConflicts('owner', 42, '', ['missing.jpg', 'proof.jpg', 'proofs']);
+
+		self::assertSame(['proof.jpg', 'proofs'], array_keys($conflicts));
+		self::assertSame(1, $conflicts['proof.jpg']->id);
+		self::assertTrue($conflicts['proofs']->folder);
+	}
+
+	public function testStagesTheCompleteFileBeforeAcquiringTheDestinationLock(): void {
+		$staged = false;
+		$stagingName = '';
+		$currentName = '';
+		$file = $this->createMock(File::class);
+		$file->method('getId')->willReturn(91);
+		$file->method('getName')->willReturnCallback(static function () use (&$currentName): string { return $currentName; });
+		$file->method('getMimeType')->willReturn('image/png');
+		$file->method('getSize')->willReturn(3);
+		$file->method('getMTime')->willReturn(1_700_000_000);
+		$file->method('getEtag')->willReturn('staged-etag');
+		$file->method('move')->willReturnCallback(static function (string $destination) use (&$currentName): void {
+			$currentName = basename($destination);
+		});
+
+		$target = $this->createMock(Folder::class);
+		$target->method('isReadable')->willReturn(true);
+		$target->method('isUpdateable')->willReturn(true);
+		$target->method('getPath')->willReturn('/owner/files/gallery');
+		$target->method('nodeExists')->willReturnCallback(static function (string $name) use (&$staged, &$stagingName): bool {
+			return $staged && $name === $stagingName;
+		});
+		$target->method('newFile')->willReturnCallback(static function (string $name) use (&$staged, &$stagingName, &$currentName, $file): File {
+			$staged = true;
+			$stagingName = $name;
+			$currentName = $name;
+			return $file;
+		});
+		$target->method('get')->willReturn($file);
+
+		$userFolder = $this->createMock(Folder::class);
+		$userFolder->method('getById')->with(42)->willReturn([$target]);
+		$root = $this->createMock(IRootFolder::class);
+		$root->method('getUserFolder')->with('owner')->willReturn($userFolder);
+		$provider = $this->createMock(ILockingProvider::class);
+		$provider->expects(self::once())->method('acquireLock')->willReturnCallback(static function () use (&$staged): void {
+			self::assertTrue($staged, 'The destination lock must be acquired after the full file was staged');
+		});
+		$provider->expects(self::once())->method('releaseLock');
+		$policies = new PolicyService($this->createMock(IConfig::class));
+		$service = new FolderService(
+			$root,
+			new MediaMetadataService($this->createMock(IFilesMetadataManager::class), $policies, new EmbeddedMetadataExtractor($policies)),
+			new MediaTypePolicy(),
+			new UploadLockService($provider),
+			new MediaCleanupService($this->createMock(IDBConnection::class), $this->createMock(IAppData::class)),
+		);
+		$temporaryPath = tempnam(sys_get_temp_dir(), 'proofing-test-');
+		self::assertIsString($temporaryPath);
+		file_put_contents($temporaryPath, 'png');
+		try {
+			$item = $service->uploadMedia('owner', 42, '', 'proof.png', $temporaryPath, 'rename');
+		} finally {
+			unlink($temporaryPath);
+		}
+
+		self::assertSame('proof.png', $item?->name);
+	}
+
 	/** @param list<Node> $nodes */
 	private function service(array $nodes): FolderService {
 		$current = $this->createMock(Folder::class);
 		$current->method('isReadable')->willReturn(true);
 		$current->method('getDirectoryListing')->willReturn($nodes);
+		$byName = [];
+		foreach ($nodes as $node) $byName[$node->getName()] = $node;
+		$current->method('nodeExists')->willReturnCallback(static fn (string $name): bool => isset($byName[$name]));
+		$current->method('get')->willReturnCallback(static fn (string $name): Node => $byName[$name]);
 
 		$userFolder = $this->createMock(Folder::class);
 		$userFolder->method('getById')->with(42)->willReturn([$current]);
@@ -92,7 +171,8 @@ final class FolderServiceTest extends TestCase {
 		);
 
 		$provider = $this->createMock(ILockingProvider::class);
-		return new FolderService($root, $metadata, new MediaTypePolicy(), new UploadLockService($provider));
+		$cleanup = new MediaCleanupService($this->createMock(IDBConnection::class), $this->createMock(IAppData::class));
+		return new FolderService($root, $metadata, new MediaTypePolicy(), new UploadLockService($provider), $cleanup);
 	}
 
 	private function file(int $id, string $name, string $mime, int $modifiedAt = 1_700_000_000): File {

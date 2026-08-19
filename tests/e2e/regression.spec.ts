@@ -270,21 +270,19 @@ test('parallel owner uploads commit with conflict-free names', async ({ request,
 		})
 		galleryId = (await created.json() as { id: number }).id
 		const uploads = `${galleries}/${galleryId}/owner-uploads`
-		const sessions = await Promise.all(Array.from({ length: 3 }, async () => {
-			const initiated = await request.post(`${uploads}?format=json`, {
-				headers: { ...apiHeaders, 'Content-Type': 'application/json' },
-				data: { filename: 'parallel-proof.png', mimeType: 'image/png', size: image.length, conflict: 'rename' },
-			})
-			expect(initiated.status()).toBe(201)
-			const session = await initiated.json() as { id: string }
-			expect((await request.put(`${uploads}/${session.id}/chunks/0?format=json`, {
-				headers: { ...apiHeaders, 'Content-Type': 'application/octet-stream' },
-				data: image,
-			})).status()).toBe(200)
-			return session
-		}))
+		const initiated = await request.post(`${uploads}/batch?format=json`, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+			data: { uploads: Array.from({ length: 3 }, () => ({ filename: 'parallel-proof.png', mimeType: 'image/png', size: image.length, conflict: 'rename' })) },
+		})
+		expect(initiated.status()).toBe(201)
+		const sessions = (await initiated.json() as { uploads: Array<{ id: string; state: string }> }).uploads
+		expect(sessions).toHaveLength(3)
+		expect(sessions.every(session => session.state === 'pending')).toBe(true)
 
-		const finalized = await Promise.all(sessions.map(session => request.post(`${uploads}/${session.id}/finalize?format=json`, { headers: apiHeaders })))
+		const finalized = await Promise.all(sessions.map(session => request.put(`${uploads}/${session.id}/content?format=json`, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/octet-stream' },
+			data: image,
+		})))
 		expect(finalized.map(response => response.status())).toEqual([200, 200, 200])
 		const items = await Promise.all(finalized.map(response => response.json() as Promise<{ item: { id: number; name: string } }>))
 		fileIds.push(...items.map(result => result.item.id))
@@ -294,6 +292,68 @@ test('parallel owner uploads commit with conflict-free names', async ({ request,
 			for (const fileId of fileIds) await request.delete(`${galleries}/${galleryId}/media/${fileId}?format=json`, { headers: apiHeaders })
 			await request.delete(`${galleries}/${galleryId}?format=json`, { headers: apiHeaders })
 		}
+	}
+})
+
+test('owner upload conflicts can replace a file without retransmitting stale chunks', async ({ request, baseURL }) => {
+	const stable = await state()
+	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
+	const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+	const filename = `replace-${Date.now()}.png`
+	let galleryId: number | null = null
+	let currentFileId: number | null = null
+
+	try {
+		const created = await request.post(`${galleries}?format=json`, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+			data: { folderId: stable.folderId, title: `Owner replace ${Date.now()}` },
+		})
+		galleryId = (await created.json() as { id: number }).id
+		const uploads = `${galleries}/${galleryId}/owner-uploads`
+		const upload = async (conflict: 'rename' | 'overwrite', expectedFileId?: number, expectedEtag?: string) => {
+			const initiated = await request.post(`${uploads}?format=json`, {
+				headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+				data: { filename, mimeType: 'image/png', size: image.length, conflict, expectedFileId, expectedEtag },
+			})
+			const session = await initiated.json() as { id: string }
+			expect((await request.put(`${uploads}/${session.id}/chunks/0?format=json`, {
+				headers: { ...apiHeaders, 'Content-Type': 'application/octet-stream' },
+				data: image,
+			})).status()).toBe(200)
+			return session.id
+		}
+
+		const firstSession = await upload('rename')
+		const first = await request.post(`${uploads}/${firstSession}/finalize?format=json`, { headers: apiHeaders })
+		const firstItem = (await first.json() as { item: { id: number; etag: string } }).item
+		currentFileId = firstItem.id
+
+		const preflight = await request.post(`${galleries}/${galleryId}/owner-upload-conflicts?format=json`, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+			data: { filenames: [filename], path: '' },
+		})
+		expect(preflight.status()).toBe(200)
+		const conflict = (await preflight.json() as { conflicts: Record<string, { id: number; etag: string }> }).conflicts[filename]
+		expect(conflict.id).toBe(firstItem.id)
+
+		const replacementSession = await upload('overwrite', conflict.id, 'stale-etag')
+		const stale = await request.post(`${uploads}/${replacementSession}/finalize?format=json`, { headers: apiHeaders })
+		expect(stale.status()).toBe(409)
+		expect((await stale.json() as { code: string }).code).toBe('upload_conflict')
+		expect((await request.put(`${uploads}/${replacementSession}/resolution?format=json`, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+			data: { conflict: 'overwrite', expectedFileId: conflict.id, expectedEtag: conflict.etag },
+		})).status()).toBe(200)
+
+		const replaced = await request.post(`${uploads}/${replacementSession}/finalize?format=json`, { headers: apiHeaders })
+		expect(replaced.status()).toBe(200)
+		const replacedItem = (await replaced.json() as { item: { id: number; name: string } }).item
+		expect(replacedItem.id).not.toBe(firstItem.id)
+		expect(replacedItem.name).toBe(filename)
+		currentFileId = replacedItem.id
+	} finally {
+		if (galleryId !== null && currentFileId !== null) await request.delete(`${galleries}/${galleryId}/media/${currentFileId}?format=json`, { headers: apiHeaders })
+		if (galleryId !== null) await request.delete(`${galleries}/${galleryId}?format=json`, { headers: apiHeaders })
 	}
 })
 
@@ -697,7 +757,7 @@ test('owner presets preserve gallery identity and explicit public language', asy
 
 		await page.goto(`${baseURL}/s/${token}`)
 		await expect(page.locator('html')).toHaveAttribute('lang', 'de')
-		await expect(page.getByText(/^\d+ Datei(?:en)?$/)).toBeVisible()
+		await expect(page.getByText(/^\d+ Foto(?:s)?$/)).toBeVisible()
 
 		const collection = await request.post(`${galleries}?format=json`, {
 			headers: { ...apiHeaders, 'Content-Type': 'application/json' },

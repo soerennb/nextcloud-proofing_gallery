@@ -18,6 +18,10 @@ enum DownloadScope: string {
 		return $this === self::Selection || $this === self::All;
 	}
 
+	public function allowsGallery(): bool {
+		return $this === self::All;
+	}
+
 	public function restrict(self $other): self {
 		$individual = $this->allowsIndividual() && $other->allowsIndividual();
 		$selection = $this->allowsSelection() && $other->allowsSelection();

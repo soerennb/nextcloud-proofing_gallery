@@ -22,4 +22,10 @@ final class DownloadScopeTest extends TestCase {
 		self::assertSame($expected, $left->restrict($right));
 		self::assertSame($expected, $right->restrict($left));
 	}
+
+	public function testOnlyAllAllowsWholeGalleryDownloads(): void {
+		foreach (DownloadScope::cases() as $scope) {
+			self::assertSame($scope === DownloadScope::All, $scope->allowsGallery());
+		}
+	}
 }

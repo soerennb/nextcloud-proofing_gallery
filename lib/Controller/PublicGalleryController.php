@@ -44,6 +44,7 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		private \OCA\ProofingGallery\Service\BrandingAssetService $branding,
 		private \OCA\ProofingGallery\Service\ShareAuditService $shareAudit,
 		private VideoTranscodeService $videoTranscodes,
+		private \OCA\ProofingGallery\Service\PublicGalleryDownloadService $galleryDownloads,
 	) {
 		parent::__construct($request, $session, $contextResolver);
 	}
@@ -52,7 +53,7 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 	#[NoCSRFRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/gallery')]
 	public function gallery(
-		int $limit = 60,
+		int $limit = 48,
 		int $offset = 0,
 		string $path = '',
 		string $search = '',
@@ -60,10 +61,12 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		string $sortDirection = '',
 		string $groupBy = '',
 		?string $cursor = null,
+		?int $page = null,
+		?int $focusId = null,
 	): JSONResponse {
 		try {
 			$result = $this->galleryData->page($this->publicContext(), new PublicGalleryQuery(
-				$limit, $offset, $path, $search, $sortBy, $sortDirection, $groupBy, $cursor,
+				$limit, $offset, $path, $search, $sortBy, $sortDirection, $groupBy, $cursor, $page, $focusId,
 			));
 			$this->shareAudit->record($this->resolvedPublicLink(), 'view');
 			return new JSONResponse($result);
@@ -155,6 +158,41 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 			$stream = $file->fopen('rb');
 			if (!is_resource($stream)) return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
 			$archive->addResource($stream, $name, (int)$file->getSize(), (int)$file->getMTime());
+		}
+		$this->shareAudit->record($this->resolvedPublicLink(), 'export');
+		return $archive;
+	}
+
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[AnonRateLimit(limit: 60, period: 3600)]
+	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/download/gallery/status')]
+	public function galleryDownloadStatus(): JSONResponse {
+		if (!$this->downloadAllowed('gallery')) return new JSONResponse([], Http::STATUS_FORBIDDEN);
+		$status = $this->galleryDownloads->inspect($this->publicContext());
+		unset($status['entries']);
+		return new JSONResponse($status);
+	}
+
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[AnonRateLimit(limit: 12, period: 3600)]
+	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/download/gallery')]
+	public function downloadGallery(): Response {
+		if (!$this->downloadAllowed('gallery')) return new DataDisplayResponse('', Http::STATUS_FORBIDDEN);
+		$result = $this->galleryDownloads->inspect($this->publicContext());
+		if (!$result['available']) {
+			$status = in_array($result['reason'], ['too_many_files', 'too_large'], true)
+				? Http::STATUS_REQUEST_ENTITY_TOO_LARGE
+				: ($result['reason'] === 'index_incomplete' ? Http::STATUS_CONFLICT : Http::STATUS_UNPROCESSABLE_ENTITY);
+			return new DataDisplayResponse('', $status);
+		}
+		$filename = preg_replace('/[^a-z0-9._-]+/i', '-', $this->resolvedGallery()->getTitle()) ?: 'gallery';
+		$archive = new ZipResponse($this->request, trim($filename, '-') . '.zip');
+		foreach ($result['entries'] as $entry) {
+			$stream = $entry['file']->fopen('rb');
+			if (!is_resource($stream)) return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
+			$archive->addResource($stream, $entry['path'], (int)$entry['file']->getSize(), (int)$entry['file']->getMTime());
 		}
 		$this->shareAudit->record($this->resolvedPublicLink(), 'export');
 		return $archive;
@@ -298,6 +336,7 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		return match ($kind) {
 			'individual' => !$this->publicContext()->share->getHideDownload() && $scope->allowsIndividual(),
 			'selection' => $scope->allowsSelection(),
+			'gallery' => !$this->publicContext()->share->getHideDownload() && $scope->allowsGallery(),
 			'contactSheet' => $settings->delivery->contactSheet && $scope->allowsSelection(),
 			default => false,
 		};

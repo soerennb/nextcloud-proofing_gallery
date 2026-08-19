@@ -78,7 +78,7 @@ onBeforeUnmount(() => { document.body.style.overflow = ''; window.removeEventLis
 				min="0"
 				max="100"
 				:aria-label="t('proofing_gallery', 'Move comparison divider')">
-			<span class="compare-table__label compare-table__label--a">A</span><span class="compare-table__label compare-table__label--b">B</span>
+			<span class="compare-table__label compare-table__label--a">{{ items[0]!.name }}</span><span class="compare-table__label compare-table__label--b">{{ items[1]!.name }}</span>
 		</div>
 		<div v-else class="compare-table__grid" :class="`compare-table__grid--${items.length}`">
 			<figure v-for="(item, index) in items"
@@ -93,14 +93,14 @@ onBeforeUnmount(() => { document.body.style.overflow = ''; window.removeEventLis
 					:style="{ transform }"
 					draggable="false">
 				<figcaption>
-					<span>{{ String.fromCharCode(65 + index) }}</span><strong>{{ item.name }}</strong><button type="button" :aria-label="t('proofing_gallery', 'Remove {name} from compare', { name: item.name })" @click.stop="emit('remove', item.id)">
+					<span>{{ index + 1 }}</span><strong>{{ item.name }}</strong><button type="button" :aria-label="t('proofing_gallery', 'Remove {name} from compare', { name: item.name })" @click.stop="emit('remove', item.id)">
 						×
 					</button>
 				</figcaption>
 			</figure>
 		</div>
 		<footer v-if="mobile && items.length > 2">
-			<span>{{ t('proofing_gallery', 'A/B mode shows the first two photos.') }}</span>
+			<span>{{ t('proofing_gallery', 'The first two selected photos are shown on small screens.') }}</span>
 		</footer>
 	</div>
 </template>

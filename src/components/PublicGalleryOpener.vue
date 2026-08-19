@@ -1,0 +1,63 @@
+<script setup lang="ts">
+import { IonNote } from '@ionic/vue'
+import { n } from '@nextcloud/l10n'
+
+import type { GallerySettings } from '../domain/gallerySettings.ts'
+
+defineProps<{
+	title: string
+	total: number
+	settings: GallerySettings
+	heroUrl?: string | null
+}>()
+</script>
+
+<template>
+	<div class="gallery-opener" :class="`gallery-opener--${settings.presentation.openerStyle}`">
+		<h1 class="gallery-opener__large-title" :class="`gallery-opener__title--${settings.presentation.fontPreset}`">
+			{{ title }}
+		</h1>
+		<img v-if="heroUrl && settings.presentation.openerStyle !== 'minimal'"
+			class="gallery-opener__cover"
+			:class="`gallery-opener__cover--${settings.presentation.openerStyle}`"
+			:src="heroUrl"
+			alt=""
+			:style="{ objectPosition: `${settings.presentation.heroFocusX}% ${settings.presentation.heroFocusY}%` }">
+		<div v-if="settings.presentation.showMediaCount || settings.presentation.welcomeMessage" class="gallery-opener__meta ion-padding-horizontal">
+			<IonNote v-if="settings.presentation.showMediaCount">
+				{{ n('proofing_gallery', '%n photo', '%n photos', total) }}
+			</IonNote>
+			<p v-if="settings.presentation.welcomeMessage">
+				{{ settings.presentation.welcomeMessage }}
+			</p>
+		</div>
+	</div>
+</template>
+
+<style scoped>
+.gallery-opener { background: var(--ion-background-color); }
+
+.gallery-opener__large-title { margin: 0; padding: 18px 16px 8px; color: var(--ion-text-color); font-size: clamp(32px, 7vw, 42px); font-weight: 700; letter-spacing: -.035em; line-height: 1.08; }
+
+.gallery-opener__cover { display: block; width: 100%; object-fit: cover; }
+
+.gallery-opener__cover--compact { height: clamp(140px, 24vw, 260px); }
+
+.gallery-opener__cover--cinematic { height: clamp(240px, 42vw, 520px); }
+
+.gallery-opener__meta { display: grid; gap: 6px; padding-block: 10px 14px; }
+
+.gallery-opener__meta p { max-width: 70ch; margin: 0; color: var(--ion-text-color); font-size: 15px; line-height: 1.45; white-space: pre-line; }
+
+.gallery-opener__title--modern { font-family: "Geist Variable", sans-serif; }
+
+.gallery-opener__title--editorial { font-family: NewsreaderVariable, serif; }
+
+.gallery-opener__title--system { font-family: system-ui, sans-serif; }
+
+@media (min-width: 768px) {
+	.gallery-opener__large-title { padding: 28px 24px 10px; }
+
+	.gallery-opener__meta { padding-inline: 24px; }
+}
+</style>

@@ -41,7 +41,9 @@ return to the queue after a bounded delay; claims abandoned for 15 minutes are
 recovered. Each mail contains a random scoped link that disables only its own
 recipient/gallery subscription.
 
-Upload chunks are capped at 5 MiB each. Administrators can configure the
+Owner uploads below the Files app chunk threshold are prepared in one batch
+request and streamed directly into uniquely named hidden files in the gallery
+folder. Larger or resumed uploads retain 5 MiB chunks. Administrators can configure the
 per-file upload limit, selection-delivery limits, and retention periods in
 Administration settings → Additional settings → Proofing Gallery. The same
 section shows pending and unreviewed uploads, preview-cache use, and the last
@@ -51,9 +53,11 @@ failed Nextcloud background jobs. Cleanup is eventual, so allow headroom for int
 uploads. Native Nextcloud retention, backup, encryption, and object-storage
 policies still apply to gallery source folders.
 
-Chunk assembly for different uploads runs concurrently. The final write is
-serialized only per destination folder so filename conflict handling and the
-Nextcloud file hooks remain consistent. Temporary lock contention is returned
+The browser shares the Files app's bounded parallel-request capability, with a
+fallback of five workers. Streaming, MIME validation, and chunk assembly for
+different uploads run concurrently. Only the final conflict check, backup, and
+atomic move are serialized per destination folder; full file writes and their
+Nextcloud hooks do not hold that logical lock. Temporary lock contention is returned
 as HTTP 423 with `code: upload_busy` and a `Retry-After` header; clients should
 retry only the finalization request and must not resend completed chunks.
 
