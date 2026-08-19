@@ -41,12 +41,12 @@ final class PresentationSettings implements JsonSerializable {
 	/** @return array<string, mixed> */
 	public static function defaults(): array {
 		return [
-			'accentColor' => '#1f6f8b', 'welcomeMessage' => '', 'logoFileId' => null, 'instanceLogoAssetId' => null, 'heroFileId' => null,
-			'openerStyle' => 'cinematic', 'heroFocusX' => 50, 'heroFocusY' => 50, 'fontPreset' => 'modern',
-			'watermarkText' => '', 'watermarkOpacity' => 24, 'theme' => 'dark', 'layout' => 'grid',
+			'accentColor' => '#E85D4A', 'welcomeMessage' => '', 'logoFileId' => null, 'instanceLogoAssetId' => null, 'heroFileId' => null,
+			'openerStyle' => 'minimal', 'heroFocusX' => 50, 'heroFocusY' => 50, 'fontPreset' => 'modern',
+			'watermarkText' => '', 'watermarkOpacity' => 24, 'theme' => 'auto', 'layout' => 'grid',
 			'tileSize' => 'medium', 'tileGap' => 'normal', 'tileRadius' => 'soft', 'titleAlignment' => 'left',
 			'showTitle' => true, 'showMediaCount' => true, 'titleSize' => 'medium',
-			'showFilenames' => true, 'slideshowInterval' => 5, 'motionPreset' => 'expressive',
+			'showFilenames' => false, 'slideshowInterval' => 5, 'motionPreset' => 'subtle',
 			'lightboxFilmstripPlacement' => 'auto', 'lightboxChromeBehavior' => 'autoHide',
 			'story' => StorySettings::defaults(),
 		];

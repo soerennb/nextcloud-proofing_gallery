@@ -32,6 +32,7 @@ final class PolicyService {
 	private const DEFINITIONS = [
 		'maxUploadBytes' => ['default' => 2147483648, 'min' => 1048576, 'max' => 21474836480],
 		'maxSelectionFiles' => ['default' => 100, 'min' => 1, 'max' => 1000],
+		'maxGalleryDownloadFiles' => ['default' => 1000, 'min' => 1, 'max' => 1000],
 		'maxSelectionBytes' => ['default' => 1073741824, 'min' => 1048576, 'max' => 21474836480],
 		'eventRetentionDays' => ['default' => 180, 'min' => 7, 'max' => 3650],
 		'previewRetentionDays' => ['default' => 30, 'min' => 1, 'max' => 365],
@@ -118,7 +119,7 @@ final class PolicyService {
 			'access' => ['creatorGroups' => [], 'publisherGroups' => []],
 			'features' => self::FEATURE_DEFAULTS,
 			'workflow' => ['defaultPurpose' => 'delivery'],
-			'branding' => ['studioName' => '', 'accentColor' => '#1f6f8b', 'logoAssetId' => null],
+			'branding' => ['studioName' => '', 'accentColor' => '#E85D4A', 'logoAssetId' => null],
 			'media' => ['videoTranscoding' => true, 'ffmpegPath' => 'ffmpeg', 'transcodeConcurrency' => 1, 'transcodePreset' => 'medium'],
 			'semantic' => ['provider' => 'disabled', 'endpoint' => '', 'model' => 'metadata-v1', 'scope' => 'images', 'externalTransfer' => false],
 			'livePush' => ['enabled' => false],

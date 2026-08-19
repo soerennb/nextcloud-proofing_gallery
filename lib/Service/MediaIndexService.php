@@ -151,12 +151,13 @@ final class MediaIndexService {
 		string $sortBy = 'name',
 		string $sortDirection = 'asc',
 		int $minOwnerRating = 0,
+		int $offset = 0,
 	): array {
 		$query = MediaIndexQuery::fromInput($gallery->getId(), $gallery->getOwnerUid(), $limit, $pathPrefix, $search, $sortBy, $sortDirection, $minOwnerRating);
 		$pageQuery = $query->withLimit($query->limit + 1);
 		[$afterValue, $afterFileId, $cursorDirection] = $this->cursors->decode($cursor, $query);
 		$before = $cursorDirection === 'previous';
-		$entries = $this->index->page($pageQuery, $afterValue, $afterFileId, $before);
+		$entries = $this->index->page($pageQuery, $afterValue, $afterFileId, $before, $cursor === null ? $offset : 0);
 		$hasMore = count($entries) > $query->limit;
 		if ($hasMore) {
 			if ($before) array_shift($entries);
@@ -177,12 +178,44 @@ final class MediaIndexService {
 		$last = $entries === [] ? null : $entries[array_key_last($entries)];
 		return [
 			'items' => $items,
-			'previousCursor' => $first === null || (!$before && $cursor === null) || ($before && !$hasMore)
+			'previousCursor' => $first === null || (!$before && $cursor === null && $offset === 0) || ($before && !$hasMore)
 				? null : $this->cursors->encode($first, $query, 'previous'),
 			'nextCursor' => $last === null || (!$before && !$hasMore)
 				? null : $this->cursors->encode($last, $query, 'next'),
 			'total' => $this->index->countFiltered($query),
 		];
+	}
+
+	/** @return ?list<array{file_id: int, relative_path: string, mime_type: string}> */
+	public function downloadableRows(Gallery $gallery, string $pathPrefix, int $minOwnerRating): ?array {
+		$summary = $this->summary($gallery, $pathPrefix, '', 'none', 1, $minOwnerRating);
+		if (!$summary['complete']) return null;
+		$query = MediaIndexQuery::fromInput(
+			$gallery->getId(), $gallery->getOwnerUid(), 1, $pathPrefix, '', 'name', 'asc', $minOwnerRating,
+		);
+		$rows = [];
+		$afterFileId = 0;
+		do {
+			$batch = $this->index->groupingRows($query, $afterFileId, 1000);
+			foreach ($batch as $row) {
+				$rows[] = $row;
+				$afterFileId = $row['file_id'];
+			}
+		} while (count($batch) === 1000);
+		return $rows;
+	}
+
+	public function positionOf(
+		Gallery $gallery,
+		int $fileId,
+		string $pathPrefix = '',
+		string $search = '',
+		string $sortBy = 'name',
+		string $sortDirection = 'asc',
+		int $minOwnerRating = 0,
+	): ?int {
+		$query = MediaIndexQuery::fromInput($gallery->getId(), $gallery->getOwnerUid(), 1, $pathPrefix, $search, $sortBy, $sortDirection, $minOwnerRating);
+		return $this->index->positionOf($query, $fileId);
 	}
 
 	/** @return array{groups: array<string, int>, indexed: int, limit: int, limitReached: bool, complete: bool, state: string, lastIndexedAt: ?int} */

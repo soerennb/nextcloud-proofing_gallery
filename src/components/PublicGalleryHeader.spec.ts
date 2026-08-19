@@ -2,51 +2,42 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import { createDefaultGallerySettings } from '../domain/gallerySettings.ts'
-import PublicGalleryHeader from './PublicGalleryHeader.vue'
+import PublicGalleryOpener from './PublicGalleryOpener.vue'
 
-describe('PublicGalleryHeader', () => {
-	it('applies title controls without removing the accessible page heading', () => {
+describe('PublicGalleryOpener', () => {
+	it('uses the native large-title opener and Geist preset', () => {
 		const settings = createDefaultGallerySettings()
-		settings.presentation.showTitle = false
-		settings.presentation.showMediaCount = false
-		settings.presentation.fontPreset = 'editorial'
-		settings.presentation.titleSize = 'large'
 
-		const wrapper = mount(PublicGalleryHeader, {
-			props: { title: 'Summer story', total: 84, settings, heroUrl: '/cover.jpg' },
+		const wrapper = mount(PublicGalleryOpener, {
+			props: { title: 'Summer story', total: 84, settings },
 		})
-		const title = wrapper.get('h1')
 
-		expect(title.text()).toBe('Summer story')
-		expect(title.classes()).toContain('visually-hidden')
-		expect(title.classes()).toContain('public-gallery__title--font-editorial')
-		expect(title.classes()).toContain('public-gallery__title--large')
-		expect(wrapper.find('.public-gallery__hero-count').exists()).toBe(false)
+		expect(wrapper.get('.gallery-opener').classes()).toContain('gallery-opener--minimal')
+		expect(wrapper.get('.gallery-opener__title--modern').text()).toBe('Summer story')
+		expect(wrapper.find('.gallery-opener__cover').exists()).toBe(false)
 	})
 
-	it('collapses the minimal opener independently of a hero asset', () => {
+	it('shows a compact cover only when an explicit hero exists', () => {
 		const settings = createDefaultGallerySettings()
-		settings.presentation.openerStyle = 'minimal'
+		settings.presentation.openerStyle = 'compact'
 
-		const wrapper = mount(PublicGalleryHeader, {
+		const wrapper = mount(PublicGalleryOpener, {
 			props: { title: 'A quiet opening', total: 3, settings, heroUrl: '/cover.jpg' },
 		})
 
-		expect(wrapper.get('header').classes()).toContain('public-gallery__header--minimal')
-		expect(wrapper.find('.public-gallery__hero').exists()).toBe(false)
-		expect(wrapper.get('h1').text()).toBe('A quiet opening')
+		expect(wrapper.get('.gallery-opener__cover').attributes('src')).toBe('/cover.jpg')
+		expect(wrapper.get('.gallery-opener__cover').classes()).toContain('gallery-opener__cover--compact')
 	})
 
-	it('falls back to a compact opener when cinematic has no explicit cover', () => {
+	it('does not invent a cover for cinematic galleries without a hero asset', () => {
 		const settings = createDefaultGallerySettings()
 		settings.presentation.openerStyle = 'cinematic'
 
-		const wrapper = mount(PublicGalleryHeader, {
+		const wrapper = mount(PublicGalleryOpener, {
 			props: { title: 'No accidental cover', total: 12, settings },
 		})
 
-		expect(wrapper.get('header').classes()).toContain('public-gallery__header--compact')
-		expect(wrapper.find('.public-gallery__hero').exists()).toBe(false)
-		expect(wrapper.text()).not.toContain('Proofing Gallery')
+		expect(wrapper.find('.gallery-opener__cover').exists()).toBe(false)
+		expect(wrapper.text()).not.toContain('Nextcloud')
 	})
 })

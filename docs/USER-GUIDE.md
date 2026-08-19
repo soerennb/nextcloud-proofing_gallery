@@ -25,6 +25,12 @@
    email invitation. Leaving the password field empty preserves an existing
    password; use **Remove existing password** to remove it deliberately.
 
+Owner uploads use the standard Nextcloud conflict dialog when a filename is
+already present. Choose per file whether to replace it, retain both under a
+numbered name, or skip the incoming file. Replacement creates a new file and
+clears review data attached to the old file ID; use **Upload new version** to
+preserve that context.
+
 Revoking the public link immediately removes guest access. Archiving a gallery
 removes it from the active list without touching its source folder. The archive
 view can restore it; a restored published gallery keeps its link.

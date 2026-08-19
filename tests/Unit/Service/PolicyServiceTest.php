@@ -23,6 +23,7 @@ final class PolicyServiceTest extends TestCase {
 		$policies = new PolicyService($config);
 
 		self::assertSame(100, $policies->get('maxSelectionFiles'));
+		self::assertSame(1000, $policies->get('maxGalleryDownloadFiles'));
 		self::assertSame(30, $policies->get('previewRetentionDays'));
 		self::assertSame(2147483648, $policies->get('maxUploadBytes'));
 		self::assertSame(67108864, $policies->get('metadataMaxBytes'));

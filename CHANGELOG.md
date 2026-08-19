@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.2 — 2026-08-19
+
+- rebuild public galleries as platform-adaptive Ionic apps with Geist typography,
+  coral accents, native headers and sheets, swipe paging, and no fixed bottom bar
+- add policy-gated whole-gallery ZIP downloads, reels-style slideshow progress,
+  and accessible hover and focus contrast across light and dark Ionic sheets
+- speed up multi-file owner uploads with batched session creation, parallel
+  direct streaming for small files, capability-aware browser concurrency, and
+  destination locks limited to the final conflict-safe commit
+
 ## 0.8.1 — 2026-08-18
 
 - allow owner, guest, direct, and Live Push uploads to finalize concurrently by

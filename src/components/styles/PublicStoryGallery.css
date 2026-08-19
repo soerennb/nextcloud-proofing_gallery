@@ -45,3 +45,7 @@
 	.story-gallery__section--sequence figure:nth-child(n) { grid-column: auto; }
 	.story-gallery__compare { opacity: 1; }
 }
+
+.story-gallery__selection { position: absolute; z-index: 3; top: 10px; inset-inline-end: 10px; display: grid; width: 24px; height: 24px; place-items: center; border: 2px solid #fff; border-radius: 50%; background: rgb(0 0 0 / 38%); color: #fff; font-size: 14px; pointer-events: none; }
+
+.story-gallery__selected { outline: 3px solid var(--gallery-accent); outline-offset: -3px; }

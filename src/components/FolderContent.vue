@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { showError, showSuccess } from '@nextcloud/dialogs'
+import { showError, showInfo, showSuccess } from '@nextcloud/dialogs'
 import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
@@ -7,7 +7,9 @@ import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import { bulkGalleryMedia, createGalleryFolder, deleteGalleryMedia, fetchGalleryMedia, fetchMediaMetadata, fetchMediaVersions, indexGalleryMetadata, ownerMediaDownloadUrl, ownerPreviewUrl, renameGalleryMedia, replaceGalleryMedia, restoreMediaVersion, updateMediaMetadata, uploadGalleryMedia } from '../services/galleryApi.ts'
+import { bulkGalleryMedia, createGalleryFolder, deleteGalleryMedia, fetchGalleryMedia, fetchMediaMetadata, fetchMediaVersions, indexGalleryMetadata, ownerMediaDownloadUrl, ownerPreviewUrl, ownerUploadConcurrency, prepareOwnerUploadSessions, renameGalleryMedia, replaceGalleryMedia, restoreMediaVersion, updateMediaMetadata, uploadGalleryMedia } from '../services/galleryApi.ts'
+import type { OwnerUploadSession, UploadResolution } from '../services/galleryApi.ts'
+import { resolveOwnerUploadSelection } from '../services/uploadConflictResolver.ts'
 import type { Gallery, MediaItem, MediaMetadata, MediaVersion } from '../types.ts'
 import ProgressiveImage from './ProgressiveImage.vue'
 import VirtualMediaGrid from './VirtualMediaGrid.vue'
@@ -24,7 +26,7 @@ const sortDirection = ref<'asc' | 'desc'>('asc')
 const loading = ref(false)
 const loadingMore = ref(false)
 const uploading = ref(false)
-type UploadQueueItem = { id: string; file: File; progress: number; state: 'waiting' | 'uploading' | 'done' | 'failed'; attempts: number }
+type UploadQueueItem = { id: string; file: File; progress: number; state: 'waiting' | 'uploading' | 'done' | 'skipped' | 'failed'; attempts: number; resolution: UploadResolution; session?: OwnerUploadSession }
 const uploadQueue = ref<UploadQueueItem[]>([])
 const fileInput = ref<HTMLInputElement | null>(null)
 const replacementInput = ref<HTMLInputElement | null>(null)
@@ -226,42 +228,76 @@ async function upload(event: Event) {
 	const input = event.target as HTMLInputElement
 	const files = Array.from(input.files ?? [])
 	if (files.length === 0) return
+	let resolutions: Map<File, UploadResolution> | null
+	try {
+		resolutions = await resolveOwnerUploadSelection(props.gallery, path.value, files)
+	} catch {
+		showError(t('proofing_gallery', 'File conflicts could not be checked. No files were uploaded.'))
+		input.value = ''
+		return
+	}
+	if (resolutions === null) {
+		input.value = ''
+		return
+	}
 	uploading.value = true
 	uploadQueue.value = files.map((file, index) => ({
 		id: `${file.name}-${file.size}-${file.lastModified}-${index}`,
 		file,
 		progress: 0,
-		state: 'waiting',
+		state: resolutions.get(file)?.conflict === 'skip' ? 'skipped' : 'waiting',
 		attempts: 0,
+		resolution: resolutions.get(file) ?? { conflict: 'rename' },
 	}))
-	let cursor = 0
-	const worker = async () => {
-		while (cursor < uploadQueue.value.length) {
-			const item = uploadQueue.value[cursor++]
-			item.state = 'uploading'
-			while (item.attempts < 3 && item.state !== 'done') {
-				item.attempts++
-				try {
-					await uploadGalleryMedia(props.gallery.id, item.file, path.value, (loaded, total) => {
-						item.progress = Math.min(100, Math.round(loaded / Math.max(1, total) * 100))
-					})
-					item.progress = 100
-					item.state = 'done'
-				} catch {
-					if (item.attempts >= 3) item.state = 'failed'
-					else await new Promise(resolve => setTimeout(resolve, 500 * 2 ** (item.attempts - 1)))
+	const pending = uploadQueue.value.filter(item => item.state === 'waiting')
+	try {
+		const sessions = pending.length === 0
+			? []
+			: await prepareOwnerUploadSessions(props.gallery.id, pending.map(item => ({
+					file: item.file,
+					path: path.value,
+					resolution: item.resolution,
+				})))
+		pending.forEach((item, index) => item.session = sessions[index])
+		let cursor = 0
+		const worker = async () => {
+			while (cursor < pending.length) {
+				const item = pending[cursor++]
+				item.state = 'uploading'
+				while (item.attempts < 3 && item.state !== 'done' && item.state !== 'skipped') {
+					item.attempts++
+					try {
+						const uploaded = await uploadGalleryMedia(props.gallery.id, item.file, path.value, (loaded, total) => {
+							item.progress = Math.min(100, Math.round(loaded / Math.max(1, total) * 100))
+						}, item.resolution, async () => {
+							const updated = await resolveOwnerUploadSelection(props.gallery, path.value, [item.file])
+							const resolution = updated?.get(item.file) ?? null
+							if (resolution !== null) item.resolution = resolution
+							return resolution
+						}, item.session)
+						item.progress = uploaded === null ? 0 : 100
+						item.state = uploaded === null ? 'skipped' : 'done'
+					} catch {
+						if (item.attempts >= 3) item.state = 'failed'
+						else await new Promise(resolve => setTimeout(resolve, 500 * 2 ** (item.attempts - 1)))
+					}
 				}
 			}
 		}
-	}
-	try {
-		await Promise.all(Array.from({ length: Math.min(3, files.length) }, worker))
+		await Promise.all(Array.from({ length: Math.min(ownerUploadConcurrency(), pending.length) }, worker))
 		const uploaded = uploadQueue.value.filter(item => item.state === 'done').length
+		const replaced = uploadQueue.value.filter(item => item.state === 'done' && item.resolution.conflict === 'overwrite').length
+		const skipped = uploadQueue.value.filter(item => item.state === 'skipped').length
 		const failed = uploadQueue.value.filter(item => item.state === 'failed').length
 		if (uploaded > 0) showSuccess(t('proofing_gallery', '{count} files uploaded', { count: uploaded }))
+		if (replaced > 0) showInfo(t('proofing_gallery', '{count} existing files replaced.', { count: replaced }))
+		if (skipped > 0) showInfo(t('proofing_gallery', '{count} files skipped.', { count: skipped }))
 		if (failed > 0) showError(t('proofing_gallery', '{count} files need attention. You can retry them individually.', { count: failed }))
 		emit('changed')
 		await load()
+	} catch {
+		pending.filter(item => item.state !== 'done' && item.state !== 'skipped').forEach(item => item.state = 'failed')
+		showError(t('proofing_gallery', 'Upload sessions could not be prepared. No pending files were uploaded.'))
 	} finally {
 		uploading.value = false
 		input.value = ''
@@ -272,11 +308,19 @@ async function retryUpload(item: UploadQueueItem) {
 	item.state = 'uploading'
 	item.attempts = 0
 	try {
-		await uploadGalleryMedia(props.gallery.id, item.file, path.value, (loaded, total) => {
+		if (!item.session) {
+			item.session = (await prepareOwnerUploadSessions(props.gallery.id, [{ file: item.file, path: path.value, resolution: item.resolution }]))[0]
+		}
+		const uploaded = await uploadGalleryMedia(props.gallery.id, item.file, path.value, (loaded, total) => {
 			item.progress = Math.min(100, Math.round(loaded / Math.max(1, total) * 100))
-		})
-		item.state = 'done'
-		item.progress = 100
+		}, item.resolution, async () => {
+			const updated = await resolveOwnerUploadSelection(props.gallery, path.value, [item.file])
+			const resolution = updated?.get(item.file) ?? null
+			if (resolution !== null) item.resolution = resolution
+			return resolution
+		}, item.session)
+		item.state = uploaded === null ? 'skipped' : 'done'
+		item.progress = uploaded === null ? 0 : 100
 		emit('changed')
 		await load()
 	} catch {
@@ -422,7 +466,7 @@ onBeforeUnmount(() => {
 
 		<ul v-if="uploadQueue.length" class="owner-upload-queue" aria-live="polite">
 			<li v-for="item in uploadQueue" :key="item.id">
-				<div><strong>{{ item.file.name }}</strong><span>{{ item.state === 'done' ? t('proofing_gallery', 'Uploaded') : item.state === 'failed' ? t('proofing_gallery', 'Upload failed') : `${item.progress}%` }}</span></div>
+				<div><strong>{{ item.file.name }}</strong><span>{{ item.state === 'done' ? t('proofing_gallery', 'Uploaded') : item.state === 'skipped' ? t('proofing_gallery', 'Skipped') : item.state === 'failed' ? t('proofing_gallery', 'Upload failed') : `${item.progress}%` }}</span></div>
 				<progress :value="item.progress" max="100" />
 				<NcButton v-if="item.state === 'failed'" variant="tertiary" @click="retryUpload(item)">
 					{{ t('proofing_gallery', 'Try again') }}
