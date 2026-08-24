@@ -40,7 +40,7 @@
     "@fontsource-variable/manrope": "^5.3.0",
     "@fontsource-variable/newsreader": "^5.3.0",
     "@ionic/core": "^8.8.18",
-    "@ionic/vue": "^8.8.18",
+    "@ionic/vue": "^9.0.0",
     "@mdi/js": "^7.4.47",
     "@nextcloud/axios": "^2.5.0",
     "@nextcloud/dialogs": "^7.4.1",
