@@ -428,8 +428,8 @@ export async function saveCollection(
 	return data
 }
 
-export function ownerPreviewUrl(galleryId: number, fileId: number, width = 560, height = 360): string {
-	return generateUrl(`/apps/proofing_gallery/media/${galleryId}/${fileId}/preview?x=${width}&y=${height}`)
+export function ownerPreviewUrl(galleryId: number, fileId: number, width = 560, height = 360, mode: 'cover' | 'fit' = 'cover'): string {
+	return generateUrl(`/apps/proofing_gallery/media/${galleryId}/${fileId}/preview?x=${width}&y=${height}&mode=${mode}`)
 }
 
 export async function archiveGallery(id: number): Promise<Gallery> {

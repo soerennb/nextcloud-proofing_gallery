@@ -18,6 +18,8 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\ApiRoute;
 use OCP\AppFramework\Http\DataResponse;
+use OCP\AppFramework\Http\DataDisplayResponse;
+use OCP\Files\NotFoundException;
 use OCP\IRequest;
 
 final class AdminController extends Controller {
@@ -50,6 +52,20 @@ final class AdminController extends Controller {
 		}
 	}
 
+	#[ApiRoute(verb: 'GET', url: '/api/v1/admin/branding/logo')]
+	public function brandLogo(): DataDisplayResponse {
+		$id = $this->policies->instanceSettings()['branding']['logoAssetId'];
+		if (!is_string($id)) return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
+		try {
+			return new DataDisplayResponse($this->branding->get($id)->getContent(), Http::STATUS_OK, [
+				'Content-Type' => $this->branding->mimeType($id),
+				'Cache-Control' => 'private, no-store',
+			]);
+		} catch (NotFoundException) {
+			return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
+		}
+	}
+
 	#[ApiRoute(verb: 'DELETE', url: '/api/v1/admin/branding/logo')]
 	public function deleteBrandLogo(): DataResponse {
 		$previousId = $this->policies->instanceSettings()['branding']['logoAssetId'];
@@ -68,6 +84,11 @@ final class AdminController extends Controller {
 		} catch (InvalidArgumentException $exception) {
 			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
+	}
+
+	#[ApiRoute(verb: 'GET', url: '/api/v1/admin/galleries')]
+	public function galleries(int $limit = 50, int $offset = 0, string $search = ''): DataResponse {
+		return new DataResponse($this->rollout->listGalleries($limit, $offset, $search));
 	}
 
 	/** @param list<int> $galleryIds

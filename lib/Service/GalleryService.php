@@ -100,6 +100,7 @@ final class GalleryService {
 			['presentation' => [
 				'accentColor' => $this->policies->instanceSettings()['branding']['accentColor'],
 				'instanceLogoAssetId' => $this->policies->instanceSettings()['branding']['logoAssetId'],
+				'instanceStudioName' => $this->policies->instanceSettings()['branding']['studioName'],
 			]],
 			$personalDefaults,
 			$personalDesign,

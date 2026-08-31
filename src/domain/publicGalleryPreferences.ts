@@ -1,6 +1,5 @@
 export type PublicGalleryLayout = 'grid' | 'masonry' | 'list' | 'story'
 export interface PublicGallerySavedView {
-	layout: PublicGalleryLayout
 	sortBy: 'name' | 'modified' | 'size'
 	sortDirection: 'asc' | 'desc'
 	groupBy: 'none' | 'type' | 'folder'
@@ -9,20 +8,25 @@ export interface PublicGallerySavedView {
 export interface PublicGalleryContinuation { scrollY: number; fileId: number | null; path: string; page: number }
 
 export function viewStorageKey(token: string): string { return `proofing-gallery-view:${token}` }
+export function layoutSessionStorageKey(token: string): string { return `proofing-gallery-layout:${token}` }
 export function continuationStorageKey(token: string): string { return `proofing-gallery-continuation:${token}` }
 
 export function loadPublicGallerySavedView(token: string): PublicGallerySavedView | null {
 	try {
 		const value = JSON.parse(localStorage.getItem(viewStorageKey(token)) ?? 'null') as Record<string, unknown> | null
-		if (!value || !['grid', 'masonry', 'list', 'story'].includes(String(value.layout)) || !['name', 'modified', 'size'].includes(String(value.sortBy)) || !['asc', 'desc'].includes(String(value.sortDirection)) || !['none', 'type', 'folder'].includes(String(value.groupBy))) return null
+		if (!value || !['name', 'modified', 'size'].includes(String(value.sortBy)) || !['asc', 'desc'].includes(String(value.sortDirection)) || !['none', 'type', 'folder'].includes(String(value.groupBy))) return null
 		return {
-			layout: value.layout as PublicGalleryLayout,
 			sortBy: value.sortBy as PublicGallerySavedView['sortBy'],
 			sortDirection: value.sortDirection as PublicGallerySavedView['sortDirection'],
 			groupBy: value.groupBy as PublicGallerySavedView['groupBy'],
 			search: typeof value.search === 'string' ? value.search.slice(0, 120) : '',
 		}
 	} catch { return null }
+}
+
+export function loadPublicGallerySessionLayout(token: string): PublicGalleryLayout | null {
+	const value = sessionStorage.getItem(layoutSessionStorageKey(token))
+	return ['grid', 'masonry', 'list', 'story'].includes(String(value)) ? value as PublicGalleryLayout : null
 }
 
 export function loadPublicGalleryContinuation(token: string): PublicGalleryContinuation | null {

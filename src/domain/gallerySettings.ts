@@ -14,6 +14,7 @@ export interface GalleryAppearance {
 	welcomeMessage: string
 	logoFileId: number | null
 	instanceLogoAssetId: string | null
+	instanceStudioName: string
 	heroFileId: number | null
 	openerStyle: 'minimal' | 'compact' | 'cinematic'
 	heroFocusX: number
@@ -128,6 +129,7 @@ export function createDefaultGallerySettings(): GallerySettings {
 		welcomeMessage: '',
 		logoFileId: null,
 		instanceLogoAssetId: null,
+		instanceStudioName: '',
 		heroFileId: null,
 		openerStyle: 'minimal',
 		heroFocusX: 50,

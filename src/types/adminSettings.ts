@@ -13,11 +13,7 @@ export interface AdminInstanceSettings {
 export interface AdminSettingsState {
 	instanceSettings: AdminInstanceSettings
 	policies: Record<string, number>
-	galleryDefaults: {
-		publicLocale: string
-		presentation: { theme: string; layout: string }
-		delivery: { downloadScope: string }
-	}
+	galleryDefaults: CanonicalGallerySettings
 	coreSharing: Record<string, boolean>
 	health: {
 		cleanup: { state: string; lastRunAt: number | null }
@@ -27,6 +23,20 @@ export interface AdminSettingsState {
 		backlogs: { purges: { scheduled: number; running: number; due: number; oldestExecuteAfter: number | null }; lifecycleDue: number; expiredGuests: number; mediaFolders: number }
 	}
 	retentionConfiguration: { enabled: boolean; systemTagId: string; availableTags: Array<{ id: string; name: string }> }
+}
+
+export interface AdminGalleryRolloutItem {
+	id: number
+	title: string
+	ownerUid: string
+	status: string
+	published: boolean
+	revision: number
+}
+
+export interface AdminGalleryRolloutPage {
+	items: AdminGalleryRolloutItem[]
+	total: number
 }
 
 export interface AdminDomain {
@@ -45,3 +55,4 @@ export interface AdminDomainPage {
 	total: number
 	nextCursor: string | null
 }
+import type { CanonicalGallerySettings } from '../domain/gallerySettings.ts'

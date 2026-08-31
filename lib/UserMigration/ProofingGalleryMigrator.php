@@ -227,6 +227,7 @@ final class ProofingGalleryMigrator implements IMigrator, ISizeEstimationMigrato
 		$canonical['presentation']['logoFileId'] = null;
 		$canonical['presentation']['heroFileId'] = null;
 		$canonical['presentation']['instanceLogoAssetId'] = null;
+		$canonical['presentation']['instanceStudioName'] = '';
 		return $canonical;
 	}
 

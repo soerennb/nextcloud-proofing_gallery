@@ -176,7 +176,7 @@ kbd { padding: 2px 6px; border: 1px solid var(--color-border-maxcontrast); borde
 
 .culling-loupe__image { position: relative; min-width: 0; min-height: 0; background: #090a0c; }
 
-.culling-loupe__image :deep(.progressive-image img) { object-fit: contain; }
+.culling-loupe__image .progressive-image img { object-fit: contain; }
 
 .decision-badge { position: absolute; inset: 16px auto auto 16px; padding: 7px 10px; border-radius: 4px; background: #1eaf73; font-size: 11px; font-weight: 900; letter-spacing: .12em; }
 
@@ -368,9 +368,9 @@ kbd { padding: 2px 6px; border: 1px solid var(--color-border-maxcontrast); borde
 
 .culling-loupe__image { touch-action: pan-y; }
 
-.culling-loupe__image :deep(.progressive-image) { width: 100%; height: 100%; }
+.culling-loupe__image .progressive-image { width: 100%; height: 100%; }
 
-.culling-loupe__image :deep(.progressive-image img) { animation: darkroom-image-in 150ms ease-out; }
+.culling-loupe__image .progressive-image img { animation: darkroom-image-in 150ms ease-out; }
 
 .culling-selection { min-height: 28px; align-items: center; padding: 4px 12px; background: #17191f; color: #969ba8; }
 
@@ -429,5 +429,5 @@ kbd { padding: 2px 6px; border: 1px solid var(--color-border-maxcontrast); borde
 }
 
 @media (prefers-reduced-motion: reduce) {
-	.culling-loupe__image :deep(.progressive-image img) { animation: none; }
+	.culling-loupe__image .progressive-image img { animation: none; }
 }

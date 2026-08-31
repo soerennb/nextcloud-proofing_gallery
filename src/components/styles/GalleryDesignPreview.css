@@ -49,13 +49,58 @@
 }
 
 .gallery-preview__viewport {
+	--preview-surface: #f7f8fa;
+	--preview-card: #e8ebef;
+	--preview-text: #15171a;
+	--preview-muted: #636970;
+	--preview-gap: 5px;
+	--preview-radius: 7px;
 	width: 100%;
 	margin-inline: auto;
-	background: #0b0c0e;
+	min-height: 420px;
+	background: var(--preview-surface);
+	color: var(--preview-text);
 	transition: width 160ms ease;
 }
 
 .gallery-preview__viewport--phone { width: min(390px, 100%); }
+
+.gallery-preview__viewport--theme-dark {
+	--preview-surface: #090a0c;
+	--preview-card: #1a1c20;
+	--preview-text: #f7f7f8;
+	--preview-muted: #a5a8ae;
+	color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+	.gallery-preview__viewport--theme-auto {
+		--preview-surface: #090a0c;
+		--preview-card: #1a1c20;
+		--preview-text: #f7f7f8;
+		--preview-muted: #a5a8ae;
+		color-scheme: dark;
+	}
+}
+
+.gallery-preview__viewport--gap-tight { --preview-gap: 2px; }
+
+.gallery-preview__viewport--gap-wide { --preview-gap: 12px; }
+
+.gallery-preview__viewport--radius-square { --preview-radius: 0; }
+
+.gallery-preview__interactive-shell {
+	position: sticky;
+	z-index: 3;
+	top: 0;
+	pointer-events: none;
+}
+
+.gallery-preview__interactive-shell :deep(.gallery-app-header) {
+	position: relative;
+	background: color-mix(in srgb, var(--preview-surface) 88%, transparent);
+	color: var(--preview-text);
+}
 
 .gallery-preview__viewport :deep(.public-gallery__hero--cinematic) { min-height: 430px; }
 
@@ -64,37 +109,48 @@
 .gallery-preview__grid {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 3px;
-	padding: 3px;
+	gap: var(--preview-gap);
+	padding: var(--preview-gap);
 }
 
 .gallery-preview__grid--grid > div {
 	min-width: 70px;
-	flex: var(--preview-ratio) 1 calc(var(--preview-ratio) * 92px);
+	flex: var(--preview-ratio) 1 calc(var(--preview-ratio) * 100px);
 }
+
+.gallery-preview__viewport--tiles-small .gallery-preview__grid--grid > div { flex-basis: calc(var(--preview-ratio) * 72px); }
+
+.gallery-preview__viewport--tiles-large .gallery-preview__grid--grid > div { flex-basis: calc(var(--preview-ratio) * 140px); }
 
 .gallery-preview__grid--masonry {
 	display: block;
 	columns: 4;
-	column-gap: 3px;
+	column-gap: var(--preview-gap);
 }
+
+.gallery-preview__viewport--tiles-small .gallery-preview__grid--masonry { columns: 5; }
+
+.gallery-preview__viewport--tiles-large .gallery-preview__grid--masonry { columns: 3; }
 
 .gallery-preview__grid--masonry > div {
 	break-inside: avoid;
-	margin-bottom: 3px;
+	margin-bottom: var(--preview-gap);
 }
 
 .gallery-preview__grid--list { display: grid; grid-template-columns: 1fr; }
 
-.gallery-preview__viewport--phone .gallery-preview__grid { display: grid; grid-template-columns: 1fr; gap: 6px; padding: 6px; }
+.gallery-preview__viewport--phone .gallery-preview__grid--grid { display: flex; }
 
-.gallery-preview__viewport--phone .gallery-preview__grid--masonry { columns: 1; }
+.gallery-preview__viewport--phone .gallery-preview__grid--masonry { columns: 2; }
+
+.gallery-preview__viewport--phone.gallery-preview__viewport--tiles-large .gallery-preview__grid--masonry { columns: 1; }
 
 .gallery-preview__grid > div {
 	position: relative;
 	overflow: hidden;
 	aspect-ratio: 4 / 3;
-	background: #1d2026;
+	border-radius: var(--preview-radius);
+	background: var(--preview-card);
 }
 
 .gallery-preview__grid--list > div { height: 72px; aspect-ratio: auto; }
@@ -102,7 +158,7 @@
 .gallery-preview__grid img {
 	width: 100%;
 	height: 100%;
-	object-fit: contain;
+	object-fit: cover;
 }
 
 .gallery-preview__grid span {
@@ -155,13 +211,13 @@
 	.gallery-preview__viewport { transition: none; }
 }
 
-.gallery-preview__story { display: grid; gap: 42px; padding: 28px 18px 60px; }
+.gallery-preview__story { display: grid; gap: 42px; padding: 28px 18px 60px; background: var(--preview-surface); color: var(--preview-text); }
 
 .gallery-preview__story section { display: grid; gap: 14px; }
 
 .gallery-preview__story header strong { font-family: Newsreader, Georgia, serif; font-size: clamp(22px, 4vw, 44px); font-weight: 400; }
 
-.gallery-preview__story header p { max-width: 44ch; color: var(--gallery-muted, #888); white-space: pre-line; }
+.gallery-preview__story header p { max-width: 44ch; color: var(--preview-muted); white-space: pre-line; }
 
 .gallery-preview__story section > div { display: grid; gap: 6px; }
 

@@ -19,6 +19,7 @@ vi.mock('@nextcloud/vue/components/NcTextField', () => ({ default: { template: '
 vi.mock('./AdminDocumentation.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('./SettingsSaveBar.vue', () => ({ default: { template: '<div />' } }))
 import type { AdminSettingsState } from '../types/adminSettings.ts'
+import { canonicalGallerySettings, createDefaultGallerySettings } from '../domain/gallerySettings.ts'
 import AdminSettingsApp from './AdminSettingsApp.vue'
 
 function state(): AdminSettingsState {
@@ -31,7 +32,7 @@ function state(): AdminSettingsState {
 			livePush: { enabled: false }, customDomains: { enabled: true }, retention: { enabled: false, systemTagId: '' },
 		},
 		policies: {},
-		galleryDefaults: { publicLocale: 'auto', presentation: { theme: 'auto', layout: 'grid' }, delivery: { downloadScope: 'none' } },
+		galleryDefaults: canonicalGallerySettings(createDefaultGallerySettings()),
 		coreSharing: {},
 		health: {
 			cleanup: { state: 'healthy', lastRunAt: 1 }, integrations: { outbox: { pending: 0 } },
