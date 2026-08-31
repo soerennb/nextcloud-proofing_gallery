@@ -810,10 +810,10 @@ test('owner preset and locale controls remain clear and responsive', async ({ pa
 	await page.getByRole('button', { name: 'Reusable preset' }).click()
 	await page.getByRole('textbox', { name: 'Preset name' }).fill(presetName)
 	await page.getByRole('button', { name: 'Save as new' }).click()
-	await expect(page.getByText('Preset created.')).toBeVisible()
+	await expect(page.getByText('Preset created.', { exact: true })).toBeVisible()
 	await expect(page.getByRole('combobox', { name: 'Saved preset' })).toHaveValue(/\d+/)
 	await page.getByRole('button', { name: 'Apply', exact: true }).click()
-	await expect(page.getByText('Preset applied.')).toBeVisible()
+	await expect(page.getByText('Preset applied.', { exact: true })).toBeVisible()
 
 	const accessibility = await new AxeBuilder({ page }).include('.settings-page').analyze()
 	expect(accessibility.violations).toEqual([])
@@ -823,7 +823,7 @@ test('owner preset and locale controls remain clear and responsive', async ({ pa
 
 	page.once('dialog', dialog => dialog.accept())
 	await page.getByRole('button', { name: 'Delete preset' }).click()
-	await expect(page.getByText('Preset deleted.')).toBeVisible()
+	await expect(page.getByText('Preset deleted.', { exact: true })).toBeVisible()
 })
 
 test('invitation templates are owner-scoped, validated and render editable plain text', async ({ request, baseURL }) => {
@@ -1035,13 +1035,13 @@ test('notification and invitation controls stay understandable and responsive', 
 	await settingsNavigation.locator('summary').click()
 	await settingsNavigation.getByRole('button', { name: 'Team', exact: true }).click()
 	await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible()
-	await expect(page.getByRole('checkbox', { name: 'Nextcloud notification center' })).toBeChecked()
+	await expect(page.getByRole('switch', { name: 'Nextcloud notification center' })).toBeChecked()
 	await page.getByText('Email digest', { exact: true }).click()
 	await expect(page.getByRole('checkbox', { name: 'Email digest' })).toBeChecked()
 	await page.getByRole('combobox', { name: 'Delivery' }).selectOption('daily')
 	await expect(page.getByRole('combobox', { name: 'Delivery' })).toHaveValue('daily')
 	await page.getByRole('button', { name: /^(Subscribe|Update subscription)$/ }).click()
-	await expect(page.getByText('Notification subscription saved.')).toBeVisible()
+	await expect(page.getByText('Notification subscription saved.', { exact: true })).toBeVisible()
 	await expect(page.getByRole('button', { name: 'Update subscription' })).toBeVisible()
 
 	let violations = await new AxeBuilder({ page }).include('.settings-content').analyze()
@@ -1050,7 +1050,7 @@ test('notification and invitation controls stay understandable and responsive', 
 	const panelOverflow = await page.getByRole('heading', { name: 'Notifications' }).locator('..').evaluate(element => element.scrollWidth > element.clientWidth)
 	expect(panelOverflow).toBe(false)
 	await page.getByRole('button', { name: 'Remove subscription' }).click()
-	await expect(page.getByText('Notification subscription removed.')).toBeVisible()
+	await expect(page.getByText('Notification subscription removed.', { exact: true })).toBeVisible()
 
 	await page.setViewportSize({ width: 1280, height: 900 })
 	await page.locator('.settings-header__actions').getByRole('button', { name: 'Share', exact: true }).click()
@@ -1058,7 +1058,7 @@ test('notification and invitation controls stay understandable and responsive', 
 	await page.getByRole('textbox', { name: 'Template name' }).fill(templateName)
 	await page.getByRole('textbox', { name: 'Personal message (optional)' }).fill('<b>Hello {gallery}</b> — {owner}\n{url}')
 	await page.getByRole('button', { name: 'Save as template' }).click()
-	await expect(page.getByText('Invitation template saved.')).toBeVisible()
+	await expect(page.getByText('Invitation template saved.', { exact: true })).toBeVisible()
 	const templateSelect = page.getByRole('combobox', { name: 'Message template' })
 	await templateSelect.selectOption({ label: 'New template' })
 	await templateSelect.selectOption({ label: templateName })
@@ -1070,5 +1070,5 @@ test('notification and invitation controls stay understandable and responsive', 
 	expect(dialogOverflow).toBe(false)
 	page.once('dialog', dialog => dialog.accept())
 	await page.getByRole('button', { name: 'Delete template' }).click()
-	await expect(page.getByText('Invitation template deleted.')).toBeVisible()
+	await expect(page.getByText('Invitation template deleted.', { exact: true })).toBeVisible()
 })

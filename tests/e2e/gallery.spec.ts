@@ -253,7 +253,7 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await expect(cullingSave).toHaveText('Saved')
 	await page.getByRole('button', { name: 'Pick', exact: true }).click()
 	await page.getByRole('button', { name: 'Undo', exact: true }).click()
-	await expect(page.getByText('Last culling change undone.')).toBeVisible()
+	await expect(page.getByText('Last culling change undone.', { exact: true })).toBeVisible()
 	await page.getByRole('button', { name: 'Tools', exact: true }).click()
 	await page.getByRole('button', { name: 'XMP sync', exact: true }).click()
 	await expect(page.getByRole('heading', { name: 'Resolve App and XMP' })).toBeVisible()
@@ -326,15 +326,15 @@ test('owner duplicate uploads open the native conflict dialog on desktop and mob
 	}
 
 	await upload.setInputFiles(duplicate)
-	let dialog = page.getByRole('dialog', { name: /file conflict/ })
+	let dialog = page.getByRole('dialog', { name: 'Select file to keep' })
 	await expect(dialog).toBeVisible()
-	await expect(dialog.getByText('Which files do you want to keep?')).toBeVisible()
+	await expect(dialog.getByText(/An item with the same name already exists/)).toBeVisible()
 	await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
 	await expect(dialog).toHaveCount(0)
 
 	await page.setViewportSize({ width: 390, height: 844 })
 	await upload.setInputFiles(duplicate)
-	dialog = page.getByRole('dialog', { name: /file conflict/ })
+	dialog = page.getByRole('dialog', { name: 'Select file to keep' })
 	await expect(dialog).toBeVisible()
 	expect(await dialog.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
 	await settleVisualState(page)
@@ -354,8 +354,6 @@ test('guest completes an accessible proofing flow', async ({ page, baseURL }) =>
 	await page.waitForTimeout(2600)
 	await expect(dialog).not.toHaveClass(/lightbox-shell--chrome-hidden/)
 	await expect(dialog.getByRole('button', { name: 'Feedback', exact: true })).toBeVisible()
-	await expect(page.getByRole('navigation', { name: 'Photo filmstrip' })).toBeVisible()
-
 	const image = page.locator('.pswp__img[alt="proof.png"]')
 	const imageBox = await image.boundingBox()
 	expect(imageBox).not.toBeNull()
@@ -398,6 +396,16 @@ test('guest completes an accessible proofing flow', async ({ page, baseURL }) =>
 	expect(await markerRatio()).toMatchObject({ x: expect.closeTo(0.67, 2), y: expect.closeTo(0.42, 2) })
 	await dialog.getByRole('button', { name: 'Zoom in' }).click()
 	await expect.poll(markerRatio).toMatchObject({ x: expect.closeTo(0.67, 2), y: expect.closeTo(0.42, 2) })
+	await dialog.getByRole('button', { name: 'Feedback', exact: true }).click()
+	await page.getByRole('button', { name: 'Add point comment' }).click()
+	await expect(page.getByRole('status')).toContainText('Move the point with the arrow keys')
+	await page.keyboard.press('ArrowRight')
+	await page.keyboard.press('ArrowDown')
+	await page.keyboard.press('Enter')
+	await expect(page.getByRole('textbox', { name: 'Point comment' })).toBeVisible()
+	await page.keyboard.press('Escape')
+	await expect(page.locator('.annotation-composer')).toHaveCount(0)
+	await expect(page.locator('button.annotation-marker')).toHaveCount(1)
 	await dialog.getByRole('button', { name: 'Close', exact: true }).click()
 	const unchangedPoll = await page.evaluate(async () => {
 		const response = await fetch(`${location.pathname.replace(/^\/s\//, '/apps/proofing_gallery/public/')}/collaboration?cursor=999999`, { headers: { Accept: 'application/json' } })
@@ -450,6 +458,26 @@ test('guest and owner complete a link-scoped review round', async ({ page, reque
 		await page.reload()
 		await page.getByRole('button', { name: 'Review details' }).click()
 		await expect(page.getByText('Approved', { exact: true })).toBeVisible()
+
+		const presentationPolicy = {
+			...link.policy,
+			likes: false,
+			colors: false,
+			comments: false,
+			annotations: false,
+			selections: false,
+			ratings: false,
+			pick: false,
+		}
+		expect((await request.put(`${linksEndpoint.replace('?format=json', '')}/${link.id}?format=json`, {
+			headers: apiHeaders,
+			data: { name: link.name, policy: presentationPolicy, reviewEnabled: false, reviewDueDate: null },
+		})).ok()).toBe(true)
+		await page.reload()
+		await page.getByRole('button', { name: 'Open proof.png' }).click()
+		const presentationShell = page.getByRole('dialog', { name: 'proof.png' })
+		await expect(presentationShell.getByRole('button', { name: 'Feedback', exact: true })).toHaveCount(0)
+		await expect(presentationShell).toHaveClass(/lightbox-shell--chrome-hidden/, { timeout: 7000 })
 	} finally {
 		await request.delete(`${galleries.replace('?format=json', '')}/${gallery.id}?format=json`, { headers: apiHeaders })
 	}
@@ -528,7 +556,7 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 			folderId: largeFolderId,
 			title: 'E2E Mobile Gallery',
 			purpose: 'showcase',
-			settings: { publicLocale: 'en', presentation: { openerStyle: 'compact', layout: 'masonry', showFilenames: false } },
+			settings: { publicLocale: 'en', presentation: { openerStyle: 'compact', layout: 'masonry', showFilenames: false, lightboxChromeBehavior: 'persistent' } },
 		},
 	})
 	expect(galleryResponse.ok()).toBe(true)
@@ -544,8 +572,12 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 	await desktopPage.goto(`${baseURL}/s/${publish.gallery.shareToken}`)
 	await waitForGalleryImages(desktopPage)
 	await desktopPage.getByRole('button', { name: `Open ${firstName}` }).click()
+	const desktopShell = desktopPage.getByRole('dialog', { name: firstName })
 	await expect(desktopPage.getByRole('button', { name: 'Previous' })).toBeVisible()
 	await expect(desktopPage.getByRole('button', { name: 'Next' })).toBeVisible()
+	await desktopPage.waitForTimeout(2600)
+	await expect(desktopShell).not.toHaveClass(/lightbox-shell--chrome-hidden/)
+	await expect(desktopPage.getByRole('navigation', { name: 'Photo filmstrip' })).toBeVisible()
 	const desktopNavigation = await desktopPage.evaluate(() => {
 		const previous = document.querySelector('.lightbox-nav--previous')?.getBoundingClientRect()
 		const next = document.querySelector('.lightbox-nav--next')?.getBoundingClientRect()
@@ -569,6 +601,18 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 	await expect(desktopPage.getByRole('button', { name: 'Previous' })).toBeVisible()
 	await expect(desktopPage.getByRole('button', { name: 'Next' })).toBeVisible()
 	await desktopContext.close()
+	const currentGallery = await request.get(
+		`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries/${gallery.id}?format=json`,
+		{ headers: apiHeaders },
+	).then(response => response.json()) as { revision: number }
+	const autoHideResponse = await request.put(
+		`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries/${gallery.id}?format=json`,
+		{
+			headers: apiHeaders,
+			data: { expectedRevision: currentGallery.revision, settings: { presentation: { lightboxChromeBehavior: 'autoHide' } } },
+		},
+	)
+	expect(autoHideResponse.ok()).toBe(true)
 
 	const context = await browser.newContext({
 		viewport: { width: 390, height: 844 },
@@ -729,7 +773,7 @@ test('editorial story and contextual light table work on desktop and mobile', as
 	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
 	const createdResponse = await request.post(`${galleries}?format=json`, {
 		headers,
-		data: { folderId: largeFolderId, title: 'E2E Editorial Story', purpose: 'proofing', settings: { mode: 'collaboration', publicLocale: 'en', presentation: { openerStyle: 'compact' } } },
+		data: { folderId: largeFolderId, title: 'E2E Editorial Story', purpose: 'proofing', settings: { mode: 'collaboration', publicLocale: 'en', presentation: { openerStyle: 'compact', lightboxChromeBehavior: 'autoHide' } } },
 	})
 	expect(createdResponse.ok()).toBe(true)
 	const created = await createdResponse.json() as { id: number, revision: number }
@@ -777,7 +821,11 @@ test('editorial story and contextual light table work on desktop and mobile', as
 	}, { token, fileId: media.items[0]!.id })
 	await page.reload()
 	await page.getByRole('button', { name: 'Continue viewing' }).click()
-	await expect(page.getByRole('dialog', { name: media.items[0]!.name })).toBeVisible()
+	const collaborationShell = page.getByRole('dialog', { name: media.items[0]!.name })
+	await expect(collaborationShell).toBeVisible()
+	await page.waitForTimeout(2600)
+	await expect(collaborationShell).not.toHaveClass(/lightbox-shell--chrome-hidden/)
+	await expect(page.getByRole('navigation', { name: 'Photo filmstrip' })).toBeVisible()
 	await context.close()
 
 	await request.delete(`${galleries}/${created.id}?format=json`, { headers })

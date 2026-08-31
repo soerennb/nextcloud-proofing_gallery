@@ -191,7 +191,7 @@ test('owner creates and fills a collection through the content workspace', async
 		await page.getByRole('button', { name: 'Add selected files' }).click()
 		await expect(page.getByRole('region', { name: 'Selected files' }).getByText('proof.png')).toBeVisible()
 		await page.getByRole('button', { name: 'Save collection' }).click()
-		await expect(page.getByText('Collection content saved.')).toBeVisible()
+		await expect(page.getByText('Collection content saved.', { exact: true })).toBeVisible()
 
 	} finally {
 		if (collectionId !== null) {
