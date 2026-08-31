@@ -21,7 +21,7 @@ async function files(directory) {
 	for (const entry of await readdir(directory, { withFileTypes: true })) {
 		const target = path.join(directory, entry.name)
 		if (entry.isDirectory()) {
-			if (target.endsWith('/Migration')) continue
+			if (entry.name === 'Migration') continue
 			result.push(...await files(target))
 		} else if (extensions.has(path.extname(entry.name))) result.push(target)
 	}
@@ -32,7 +32,7 @@ const oversized = []
 for (const file of (await Promise.all(['lib', 'src'].map(directory => files(path.join(root, directory))))).flat()) {
 	const source = await readFile(file, 'utf8')
 	const extension = path.extname(file)
-	const relative = path.relative(root, file)
+	const relative = path.relative(root, file).split(path.sep).join('/')
 	const limit = fileLimits.get(relative) ?? limits.get(extension)
 	if (limit === undefined) continue
 	const significant = source.split('\n').filter(line => {

@@ -30,11 +30,14 @@ import type { SlideData } from 'photoswipe'
 import 'photoswipe/style.css'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import { normalizeAnnotationPoint } from '../domain/collaboration.ts'
+import { usePublicLightboxAnnotations } from '../composables/usePublicLightboxAnnotations.ts'
 import type { GallerySettings } from '../domain/gallerySettings.ts'
+import { shouldAutoHideLightboxChrome } from '../domain/lightboxReview.ts'
 import type { CollaborationState, MediaItem } from '../publicTypes.ts'
+import PublicLightboxAnnotations from './PublicLightboxAnnotations.vue'
 import PublicLightboxFilmstrip from './PublicLightboxFilmstrip.vue'
 import PublicLightboxHeader from './PublicLightboxHeader.vue'
+import PublicLightboxMetadata from './PublicLightboxMetadata.vue'
 
 type MediaDimensions = Record<number, { width: number; height: number }>
 
@@ -61,16 +64,14 @@ const enabledColorLabels = computed(() => props.settings.review ? props.settings
 const activeGuestRating = computed(() => props.collaboration?.ratings?.find(value => value.fileId === activeItem.value?.id)
 	?? { rating: 0, pick: 'none' as const })
 
-const shell = ref<HTMLElement | null>(null), annotationHost = ref<HTMLElement | null>(null)
+const shell = ref<HTMLElement | null>(null)
 const feedbackOpen = ref(false), metadataOpen = ref(false), slideshow = ref(false), shortcutsOpen = ref(false), actionMenuOpen = ref(false)
 const slideshowSuspended = ref(false), slideshowCycle = ref(0)
 const touchHint = ref(false), chromeVisible = ref(true), fullscreen = ref(Boolean(document.fullscreenElement))
 const filmstripSessionKey = `proofing-gallery-filmstrip:${window.location.pathname}`
 const guestFilmstripHidden = ref(sessionStorage.getItem(filmstripSessionKey) === 'hidden')
-const viewportWidth = ref(window.innerWidth)
+const viewportWidth = ref(window.innerWidth), viewportHeight = ref(window.innerHeight)
 const commentBody = ref('')
-const marking = ref(false)
-const annotationDraft = ref<{ x: number; y: number; width: number; height: number } | null>(null)
 const editingCommentId = ref<number | null>(null)
 const editingCommentBody = ref('')
 const guestExportFields = ref(['filename', 'rating', 'pick'])
@@ -87,7 +88,10 @@ const filmstripAllowed = computed(() => props.mediaItems.length > 1 && configure
 const filmstripPlacement = computed<'side' | 'bottom' | 'hidden'>(() => guestFilmstripHidden.value
 	? 'hidden'
 	: configuredFilmstripPlacement.value)
-const autoHideChrome = computed(() => props.settings.presentation?.lightboxChromeBehavior !== 'persistent')
+const autoHideChrome = computed(() => shouldAutoHideLightboxChrome(
+	props.settings.mode,
+	props.settings.presentation?.lightboxChromeBehavior ?? 'autoHide',
+))
 const chromeAutoHideDelay = computed(() => viewportWidth.value <= 760 ? 4500 : 2200)
 const loop = computed(() => props.mediaItems.length > 2)
 const canStepPrevious = computed(() => loop.value || activeIndex.value > 0)
@@ -142,6 +146,87 @@ let previousBodyOverflow = ''
 let previouslyFocused: HTMLElement | null = null
 let unmounting = false
 let wakeLock: { release(): Promise<void> } | null = null
+const annotations = usePublicLightboxAnnotations({
+	activeItem,
+	activeComments,
+	settings: () => props.settings,
+	hasIdentity: () => props.collaboration?.guest !== null,
+	mutate: props.mutate,
+	photoSwipe: () => pswp,
+	feedbackOpen,
+	metadataOpen,
+	shell,
+})
+const {
+	host: annotationHost,
+	draft: annotationDraft,
+	anchor: annotationAnchor,
+	body: annotationBody,
+	error: annotationError,
+	composerOpen: annotationComposerOpen,
+	keyboardPositioning: annotationKeyboardPositioning,
+	submitting: annotationSubmitting,
+	selectedCommentId,
+	canAnnotate,
+} = annotations
+
+function bindPhotoSwipeEvents() {
+	if (!pswp) return
+	pswp.on('change', () => {
+		if (!pswp) return
+		activeIndex.value = pswp.currIndex
+		if (activeItem.value) emit('active-change', activeItem.value)
+		feedbackOpen.value = false
+		metadataOpen.value = false
+		annotations.cancel()
+		selectedCommentId.value = null
+		if (slideshow.value) scheduleSlideshow()
+		wakeChrome()
+		nextTick(annotations.syncHost)
+	})
+	pswp.on('pointerMove', ({ originalEvent }) => {
+		if (originalEvent.pointerType === 'mouse' || originalEvent.pointerType === 'pen') wakeChrome()
+	})
+	pswp.on('pointerUp', ({ originalEvent }) => {
+		if (originalEvent.pointerType === 'touch') lastTouchPointerUpAt = Date.now()
+	})
+	pswp.on('tapAction', event => {
+		if (!annotations.handleAction(event, true) && props.settings.mode === 'presentation') toggleChrome()
+	})
+	pswp.on('imageClickAction', event => {
+		if (Date.now() - lastTouchPointerUpAt >= 700
+			&& !annotations.handleAction(event, true)
+			&& props.settings.mode === 'presentation') toggleChrome()
+	})
+	pswp.on('bgClickAction', event => {
+		if (Date.now() - lastTouchPointerUpAt >= 700) {
+			annotations.handleAction(event, false)
+			if (props.settings.mode === 'presentation') toggleChrome()
+		}
+	})
+	pswp.on('imageSizeChange', ({ slide }) => { if (slide === pswp?.currSlide) annotations.syncGeometry() })
+	pswp.on('zoomPanUpdate', ({ slide }) => { if (slide === pswp?.currSlide) annotations.syncGeometry() })
+	pswp.on('resize', annotations.syncGeometry)
+	pswp.on('afterInit', () => {
+		pswp?.element?.removeAttribute('role')
+		pswp?.element?.removeAttribute('aria-modal')
+		pswp?.element?.removeAttribute('aria-label')
+		nextTick(annotations.syncHost)
+		if (window.matchMedia('(pointer: coarse)').matches
+			&& localStorage.getItem('proofing-gallery-touch-hint') !== 'seen') {
+			touchHint.value = true
+			localStorage.setItem('proofing-gallery-touch-hint', 'seen')
+			hintTimer = window.setTimeout(() => { touchHint.value = false }, 2600)
+		}
+	})
+	pswp.on('destroy', () => {
+		pswp = null
+		if (!unmounting) emit('close')
+	})
+	pswp.on('close', () => {
+		if (!unmounting) emit('close')
+	})
+}
 
 onMounted(async () => {
 	previouslyFocused = document.activeElement as HTMLElement | null
@@ -189,53 +274,7 @@ onMounted(async () => {
 			right: window.innerWidth > 760 && (feedbackOpen.value || metadataOpen.value) ? 392 : filmstripPlacement.value === 'side' ? 104 : window.innerWidth <= 640 ? 8 : 72,
 		}),
 	})
-	pswp.on('change', () => {
-		if (!pswp) return
-		activeIndex.value = pswp.currIndex
-		if (activeItem.value) emit('active-change', activeItem.value)
-		feedbackOpen.value = false
-		metadataOpen.value = false
-		marking.value = false
-		annotationDraft.value = null
-		if (slideshow.value) scheduleSlideshow()
-		wakeChrome()
-		nextTick(syncAnnotationHost)
-	})
-	pswp.on('pointerMove', ({ originalEvent }) => {
-		if (originalEvent.pointerType === 'mouse' || originalEvent.pointerType === 'pen') wakeChrome()
-	})
-	pswp.on('pointerUp', ({ originalEvent }) => {
-		if (originalEvent.pointerType === 'touch') lastTouchPointerUpAt = Date.now()
-	})
-	pswp.on('tapAction', event => {
-		event.preventDefault()
-		toggleChrome()
-	})
-	for (const action of ['imageClickAction', 'bgClickAction'] as const) {
-		pswp.on(action, event => {
-			event.preventDefault()
-			if (Date.now() - lastTouchPointerUpAt >= 700) toggleChrome()
-		})
-	}
-	pswp.on('afterInit', () => {
-		pswp?.element?.removeAttribute('role')
-		pswp?.element?.removeAttribute('aria-modal')
-		pswp?.element?.removeAttribute('aria-label')
-		nextTick(syncAnnotationHost)
-		if (window.matchMedia('(pointer: coarse)').matches
-			&& localStorage.getItem('proofing-gallery-touch-hint') !== 'seen') {
-			touchHint.value = true
-			localStorage.setItem('proofing-gallery-touch-hint', 'seen')
-			hintTimer = window.setTimeout(() => { touchHint.value = false }, 2600)
-		}
-	})
-	pswp.on('destroy', () => {
-		pswp = null
-		if (!unmounting) emit('close')
-	})
-	pswp.on('close', () => {
-		if (!unmounting) emit('close')
-	})
+	bindPhotoSwipeEvents()
 	pswp.init()
 	wakeChrome()
 	nextTick(() => shell.value?.focus())
@@ -250,6 +289,7 @@ onBeforeUnmount(() => {
 	window.clearTimeout(slideshowTimer)
 	window.clearTimeout(hintTimer)
 	window.clearTimeout(chromeTimer)
+	annotations.destroy()
 	releaseWakeLock()
 	pswp?.destroy()
 	pswp = null
@@ -261,12 +301,17 @@ watch(feedbackOpen, () => { wakeChrome(); nextTick(() => pswp?.updateSize(true))
 watch(metadataOpen, () => { wakeChrome(); nextTick(() => pswp?.updateSize(true)) })
 watch(shortcutsOpen, wakeChrome)
 watch(actionMenuOpen, wakeChrome)
+watch(autoHideChrome, value => {
+	if (value) wakeChrome()
+	else {
+		window.clearTimeout(chromeTimer)
+		chromeVisible.value = true
+	}
+})
 watch([actionMenuOpen, feedbackOpen, metadataOpen, shortcutsOpen], () => {
 	if (slideshow.value) scheduleSlideshow()
 })
 watch(filmstripPlacement, () => nextTick(() => pswp?.updateSize(true)))
-watch(activeComments, () => nextTick(syncAnnotationHost), { deep: true })
-watch(marking, value => annotationHost.value?.classList.toggle('proofing-annotation-layer--marking', value))
 
 function toSlideData(item: MediaItem, index: number): SlideData {
 	if (!item.mimeType.startsWith('image/')) {
@@ -310,32 +355,15 @@ function escapeHtml(value: string): string {
 	return value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!)
 }
 
-function syncAnnotationHost() {
-	annotationHost.value?.remove()
-	annotationHost.value = null
-	if (!pswp?.currSlide || !activeItem.value?.mimeType.startsWith('image/')) return
-	const host = document.createElement('div')
-	host.className = 'proofing-annotation-layer'
-	host.addEventListener('click', placeAnnotation)
-	pswp.currSlide.container.append(host)
-	annotationHost.value = host
-}
-
-function placeAnnotation(event: MouseEvent) {
-	if (!marking.value || !annotationHost.value) return
-	event.stopPropagation()
-	annotationDraft.value = normalizeAnnotationPoint(
-		event.clientX,
-		event.clientY,
-		annotationHost.value.getBoundingClientRect(),
-	)
-}
-
 function close() { setSlideshow(false); emit('close') }
 
 function downloadActive() { if (activeItem.value) window.location.assign(props.downloadUrl(activeItem.value)) }
 
-function updateViewport() { viewportWidth.value = window.innerWidth }
+function updateViewport() {
+	viewportWidth.value = window.innerWidth
+	viewportHeight.value = window.innerHeight
+	annotations.updateAnchor()
+}
 
 function wakeChrome() {
 	chromeVisible.value = true
@@ -432,9 +460,14 @@ async function releaseWakeLock() {
 }
 
 function onKeydown(event: KeyboardEvent) {
+	if (annotations.handleKeyboard(event)) {
+		event.preventDefault()
+		return
+	}
 	if (event.key === 'Escape') {
 		event.preventDefault()
-		if (shortcutsOpen.value) shortcutsOpen.value = false
+		if (annotationDraft.value) annotations.cancel()
+		else if (shortcutsOpen.value) shortcutsOpen.value = false
 		else if (feedbackOpen.value) feedbackOpen.value = false
 		else close()
 		return
@@ -495,11 +528,9 @@ async function addComment() {
 	if (!item || !commentBody.value.trim()) return
 	if (await props.mutate(`media/${item.id}/comments`, 'POST', {
 		body: commentBody.value,
-		annotation: annotationDraft.value,
+		annotation: null,
 	})) {
 		commentBody.value = ''
-		annotationDraft.value = null
-		marking.value = false
 	}
 }
 
@@ -521,7 +552,7 @@ async function saveEditedComment(commentId: number) {
 	<div v-if="activeItem"
 		ref="shell"
 		class="lightbox-shell"
-		:class="{ 'lightbox-shell--chrome-hidden': !chromeVisible, 'lightbox-shell--filmstrip-side': filmstripPlacement === 'side' }"
+		:class="{ 'lightbox-shell--chrome-hidden': autoHideChrome && !chromeVisible, 'lightbox-shell--filmstrip-side': filmstripPlacement === 'side', 'lightbox-shell--annotatable': canAnnotate }"
 		role="dialog"
 		aria-modal="true"
 		:aria-label="activeItem.name"
@@ -559,7 +590,7 @@ async function saveEditedComment(commentId: number) {
 			:sub-header="`${activeIndex + 1} / ${mediaItems.length}`"
 			:buttons="actionSheetButtons"
 			@did-dismiss="actionMenuOpen = false" />
-		<IonButton v-if="!chromeVisible"
+		<IonButton v-if="autoHideChrome && !chromeVisible"
 			class="lightbox-chrome-handle"
 			fill="solid"
 			:aria-label="t('proofing_gallery', 'Show photo controls')"
@@ -598,17 +629,23 @@ async function saveEditedComment(commentId: number) {
 			:preview-url="previewUrl"
 			@select="goTo" />
 
-		<Teleport v-if="annotationHost" :to="annotationHost">
-			<span v-for="comment in activeComments" :key="`annotations-${comment.id}`">
-				<i v-for="(annotation, index) in comment.annotations"
-					:key="index"
-					class="annotation-marker"
-					:style="{ left: `${annotation.x / 100}%`, top: `${annotation.y / 100}%`, width: `${annotation.width / 100}%`, height: `${annotation.height / 100}%` }" />
-			</span>
-			<i v-if="annotationDraft"
-				class="annotation-marker annotation-marker--draft"
-				:style="{ left: `${annotationDraft.x / 100}%`, top: `${annotationDraft.y / 100}%`, width: `${annotationDraft.width / 100}%`, height: `${annotationDraft.height / 100}%` }" />
-		</Teleport>
+		<PublicLightboxAnnotations
+			:host="annotationHost"
+			:comments="activeComments"
+			:draft="annotationDraft"
+			:body="annotationBody"
+			:anchor="annotationAnchor"
+			:composer-open="annotationComposerOpen"
+			:keyboard-positioning="annotationKeyboardPositioning"
+			:submitting="annotationSubmitting"
+			:error="annotationError"
+			:selected-comment-id="selectedCommentId"
+			:viewport-width="viewportWidth"
+			:viewport-height="viewportHeight"
+			@update:body="annotationBody = $event"
+			@submit="annotations.submit"
+			@cancel="annotations.cancel"
+			@select="annotations.select" />
 
 		<IonModal :is-open="shortcutsOpen" css-class="lightbox-dialog lightbox-shortcuts-dialog" @did-dismiss="shortcutsOpen = false">
 			<IonHeader>
@@ -631,51 +668,7 @@ async function saveEditedComment(commentId: number) {
 				<small>{{ t('proofing_gallery', 'Slideshow interval: {seconds} seconds', { seconds: settings.presentation?.slideshowInterval ?? 5 }) }}</small>
 			</IonContent>
 		</IonModal>
-		<IonModal :is-open="metadataOpen && activeMetadata?.state === 'ready'" css-class="lightbox-sheet" @did-dismiss="metadataOpen = false">
-			<IonHeader>
-				<IonToolbar>
-					<IonTitle>{{ t('proofing_gallery', 'Image information') }}</IonTitle>
-					<IonButtons slot="end">
-						<IonButton :aria-label="t('proofing_gallery', 'Close')" @click="metadataOpen = false">
-							<IonIcon slot="icon-only" :icon="closeOutline" />
-						</IonButton>
-					</IonButtons>
-				</IonToolbar>
-			</IonHeader>
-			<IonContent class="ion-padding lightbox-metadata">
-				<template v-if="activeMetadata?.state === 'ready'">
-					<p class="lightbox-sheet__filename">
-						{{ activeItem.name }}
-					</p>
-					<dl>
-						<div v-if="activeMetadata.capturedAt">
-							<dt>{{ t('proofing_gallery', 'Captured') }}</dt><dd>{{ new Date(activeMetadata.capturedAt * 1000).toLocaleString() }}</dd>
-						</div>
-						<div v-if="activeMetadata.camera">
-							<dt>{{ t('proofing_gallery', 'Camera') }}</dt><dd>{{ activeMetadata.camera }}</dd>
-						</div>
-						<div v-if="activeMetadata.lens">
-							<dt>{{ t('proofing_gallery', 'Lens') }}</dt><dd>{{ activeMetadata.lens }}</dd>
-						</div>
-						<div v-if="activeMetadata.focalLength || activeMetadata.aperture || activeMetadata.exposureTime || activeMetadata.iso">
-							<dt>{{ t('proofing_gallery', 'Exposure') }}</dt><dd>{{ [activeMetadata.focalLength ? `${activeMetadata.focalLength} mm` : '', activeMetadata.aperture ? `ƒ/${activeMetadata.aperture}` : '', activeMetadata.exposureTime, activeMetadata.iso ? `ISO ${activeMetadata.iso}` : ''].filter(Boolean).join(' · ') }}</dd>
-						</div>
-						<div v-if="activeMetadata.title">
-							<dt>{{ t('proofing_gallery', 'Title') }}</dt><dd>{{ activeMetadata.title }}</dd>
-						</div>
-						<div v-if="activeMetadata.description">
-							<dt>{{ t('proofing_gallery', 'Description') }}</dt><dd>{{ activeMetadata.description }}</dd>
-						</div>
-						<div v-if="activeMetadata.creator">
-							<dt>{{ t('proofing_gallery', 'Creator') }}</dt><dd>{{ activeMetadata.creator }}</dd>
-						</div>
-						<div v-if="activeMetadata.copyright">
-							<dt>{{ t('proofing_gallery', 'Copyright') }}</dt><dd>{{ activeMetadata.copyright }}</dd>
-						</div>
-					</dl>
-				</template>
-			</IonContent>
-		</IonModal>
+		<PublicLightboxMetadata :open="metadataOpen" :item="activeItem" @close="metadataOpen = false" />
 		<IonModal :is-open="settings.mode === 'collaboration' && feedbackOpen" css-class="lightbox-sheet lightbox-feedback-sheet" @did-dismiss="feedbackOpen = false">
 			<IonHeader>
 				<IonToolbar>
@@ -727,12 +720,12 @@ async function saveEditedComment(commentId: number) {
 						<small>{{ t('proofing_gallery', 'Only you and the gallery owner can see this rating.') }}</small>
 					</div>
 					<form v-if="settings.review?.comments !== false" class="comment-form" @submit.prevent="addComment">
-						<button v-if="settings.review?.annotations !== false && activeItem.mimeType.startsWith('image/')"
+						<button v-if="canAnnotate"
 							type="button"
-							:aria-pressed="marking"
-							@click="marking = !marking; if (marking) feedbackOpen = false">
-							{{ marking ? t('proofing_gallery', 'Click the image to place a marker') : t('proofing_gallery', 'Mark image') }}
+							@click="annotations.startKeyboard">
+							{{ t('proofing_gallery', 'Add point comment') }}
 						</button>
+						<small v-if="canAnnotate">{{ t('proofing_gallery', 'Click the image anywhere to add a point comment.') }}</small>
 						<textarea v-model="commentBody"
 							name="comment"
 							required
@@ -744,7 +737,11 @@ async function saveEditedComment(commentId: number) {
 						</button>
 					</form>
 					<ul v-if="settings.review?.comments !== false" class="comment-list">
-						<li v-for="comment in activeComments" :key="comment.id">
+						<li v-for="comment in activeComments"
+							:key="comment.id"
+							:data-comment-id="comment.id"
+							:class="{ 'comment-list__item--selected': selectedCommentId === comment.id }"
+							@click="selectedCommentId = comment.id">
 							<form v-if="editingCommentId === comment.id" class="comment-edit" @submit.prevent="saveEditedComment(comment.id)">
 								<textarea v-model="editingCommentBody" required maxlength="5000" />
 								<button type="submit">

@@ -72,6 +72,13 @@ pick, reject, label, comment, annotate, and save named selections. Guests do
 not need Nextcloud accounts. Their identity and mutation token are stored in a
 private browser session; clearing site data ends access to private feedback.
 
+Click or tap an image to place a numbered point and open its comment editor.
+For keyboard placement, choose **Add point comment**, move the point with the
+arrow keys, press Enter to write, or Escape to cancel. Unpinned comments remain
+available in **Feedback**. Review controls and thumbnails stay visible in
+proofing mode; the lightbox auto-hide preference applies only to presentation
+viewing.
+
 Client ratings and decisions stay separate from owner culling. Authorized
 owners can inspect aggregates and individual responses, then preview an
 explicit promotion. Client signals never update XMP automatically.

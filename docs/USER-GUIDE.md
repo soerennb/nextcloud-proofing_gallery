@@ -86,6 +86,13 @@ guests like images, apply configured color states, comment, place point
 annotations, and save selections. Feedback can be private per guest or shared
 with all reviewers.
 
+In proofing mode, click or tap directly on an image to place a numbered point
+and write its comment. **Add point comment** provides keyboard placement: move
+the point with the arrow keys, press Enter to write, or Escape to cancel.
+General image comments remain available in **Feedback**. The review toolbar and
+filmstrip stay visible while reviewing; lightbox auto-hide applies only to
+presentation viewing.
+
 Guests do not need Nextcloud accounts. Their browser receives a private session
 cookie and a separate mutation nonce. Clearing site data or deleting the guest
 identity ends access to that identity's private feedback.

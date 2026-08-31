@@ -349,16 +349,56 @@ test('guest completes an accessible proofing flow', async ({ page, baseURL }) =>
 	await page.setViewportSize({ width: 1280, height: 900 })
 	await page.goto(`${baseURL}/s/${token}`)
 	await page.getByRole('button', { name: 'Open proof.png' }).click()
-	await expect(page.getByRole('dialog', { name: 'proof.png' })).toBeVisible()
-	await page.getByRole('button', { name: /Like/ }).click()
+	const dialog = page.getByRole('dialog', { name: 'proof.png' })
+	await expect(dialog).toBeVisible()
+	await page.waitForTimeout(2600)
+	await expect(dialog).not.toHaveClass(/lightbox-shell--chrome-hidden/)
+	await expect(dialog.getByRole('button', { name: 'Feedback', exact: true })).toBeVisible()
+	await expect(page.getByRole('navigation', { name: 'Photo filmstrip' })).toBeVisible()
+
+	const image = page.locator('.pswp__img[alt="proof.png"]')
+	const imageBox = await image.boundingBox()
+	expect(imageBox).not.toBeNull()
+	await page.mouse.click(imageBox!.x + imageBox!.width * 0.67, imageBox!.y + imageBox!.height * 0.42)
+	await expect(page.getByRole('textbox', { name: 'Point comment' })).toBeVisible()
+	await page.getByRole('textbox', { name: 'Point comment' }).fill('Move this detail to the left')
+	await page.locator('.annotation-composer').getByRole('button', { name: 'Comment', exact: true }).click()
 	await page.getByRole('textbox', { name: 'Your name' }).fill('Playwright Reviewer')
 	await page.getByRole('button', { name: 'Continue' }).click()
 	await expect(page.getByRole('textbox', { name: 'Your name' })).toHaveCount(0)
+	const pointMarker = page.locator('button.annotation-marker').first()
+	await expect(pointMarker).toBeVisible()
+	await expect(page.locator('.annotation-composer')).toHaveCount(0)
+	await pointMarker.click()
+	await expect(page.getByText('Move this detail to the left')).toBeVisible()
+	await page.getByRole('button', { name: 'Close feedback' }).click()
+	await dialog.getByRole('button', { name: 'Like', exact: true }).click()
+	await page.getByRole('button', { name: 'Close feedback' }).click()
+
+	await dialog.getByRole('button', { name: 'Feedback', exact: true }).click()
 	await page.getByRole('textbox', { name: 'Comment' }).fill('Approved in automated review')
 	await page.getByRole('button', { name: 'Comment', exact: true }).click()
 	await expect(page.getByText('Approved in automated review')).toBeVisible()
 	await page.getByRole('button', { name: 'Close feedback' }).click()
-	await page.getByRole('dialog', { name: 'proof.png' }).getByRole('button', { name: 'Close', exact: true }).click()
+	await dialog.getByRole('button', { name: 'Close', exact: true }).click()
+	await page.reload()
+	await page.getByRole('button', { name: 'Open proof.png' }).click()
+	await expect(pointMarker).toBeVisible()
+	const markerRatio = async () => {
+		const currentImage = await image.boundingBox()
+		const marker = await pointMarker.boundingBox()
+		if (!currentImage || !marker) {
+			return null
+		}
+		return {
+			x: (marker.x + marker.width / 2 - currentImage.x) / currentImage.width,
+			y: (marker.y + marker.height / 2 - currentImage.y) / currentImage.height,
+		}
+	}
+	expect(await markerRatio()).toMatchObject({ x: expect.closeTo(0.67, 2), y: expect.closeTo(0.42, 2) })
+	await dialog.getByRole('button', { name: 'Zoom in' }).click()
+	await expect.poll(markerRatio).toMatchObject({ x: expect.closeTo(0.67, 2), y: expect.closeTo(0.42, 2) })
+	await dialog.getByRole('button', { name: 'Close', exact: true }).click()
 	const unchangedPoll = await page.evaluate(async () => {
 		const response = await fetch(`${location.pathname.replace(/^\/s\//, '/apps/proofing_gallery/public/')}/collaboration?cursor=999999`, { headers: { Accept: 'application/json' } })
 		return { status: response.status, body: await response.json() }
