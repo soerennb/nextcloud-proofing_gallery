@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { n, t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
-import { createGesture } from '@ionic/core'
 import type {Gesture, GestureDetail} from '@ionic/core'
 import { IonAlert, IonApp, IonContent, IonLoading, IonPage } from '@ionic/vue'
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -10,7 +9,8 @@ import { calculateMediaLayout } from './domain/mediaGridLayout.ts'
 import { mergeCollaborationState } from './domain/collaboration.ts'
 import { contrastRgb, hexRgb, mixHex, readableText } from './domain/galleryTheme.ts'
 import { PUBLIC_GALLERY_PAGE_SIZE, readPublicGalleryLocation, writePublicGalleryLocation } from './domain/publicGalleryNavigation.ts'
-import { continuationStorageKey, loadPublicGalleryCompareIds, loadPublicGalleryContinuation, loadPublicGallerySavedView, viewStorageKey } from './domain/publicGalleryPreferences.ts'
+import { continuationStorageKey, layoutSessionStorageKey, loadPublicGalleryCompareIds, loadPublicGalleryContinuation, loadPublicGallerySavedView, loadPublicGallerySessionLayout, viewStorageKey } from './domain/publicGalleryPreferences.ts'
+import { galleryTitleMode } from './domain/galleryTitlePresentation.ts'
 import type { CollaborationState, GuestIdentity, MediaItem, PublicGallery, PublicGalleryPage } from './publicTypes.ts'
 const PublicGalleryControls = defineAsyncComponent(() => import('./components/PublicGalleryControls.vue'))
 const PublicLightbox = defineAsyncComponent(() => import('./components/PublicLightbox.vue'))
@@ -39,6 +39,7 @@ const indexState = ref(props.gallery.initialPage?.indexState ?? null)
 const scope = ref(props.gallery.initialPage?.scope ?? null)
 const settings = ref(props.gallery.initialPage?.gallery.settings ?? props.gallery.settings)
 const title = ref(props.gallery.initialPage?.gallery.title ?? props.gallery.title)
+const titleMode = computed(() => galleryTitleMode(settings.value.presentation))
 const canDownloadSelection = computed(() => ['selection', 'all'].includes(
 	settings.value.delivery?.downloadScope ?? (settings.value.allowDownloads ? 'all' : 'none'),
 ))
@@ -87,14 +88,11 @@ const guestDialogOpen = ref(false)
 const pendingMutation = ref<{ path: string; method: 'POST' | 'PUT' | 'DELETE'; body?: unknown } | null>(null)
 const review = ref(props.gallery.review ?? { enabled: false, dueDate: null, current: null })
 const savedView = loadPublicGallerySavedView(props.gallery.token)
-const savedLayout = localStorage.getItem(`proofing-gallery-layout:${props.gallery.token}`)
-const fallbackLayout = (
-	savedView?.layout === 'grid' || savedView?.layout === 'masonry' || savedView?.layout === 'list' || savedView?.layout === 'story'
-		? savedView.layout
-		: savedLayout === 'grid' || savedLayout === 'masonry' || savedLayout === 'list' || savedLayout === 'story'
-			? savedLayout
-			: settings.value.presentation?.layout ?? settings.value.appearance.layout ?? 'grid'
-)
+localStorage.removeItem(`proofing-gallery-layout:${props.gallery.token}`)
+const fallbackLayout = loadPublicGallerySessionLayout(props.gallery.token)
+	?? settings.value.presentation?.layout
+	?? settings.value.appearance.layout
+	?? 'grid'
 const initialLocation = readPublicGalleryLocation(new URL(window.location.href), {
 	search: savedView?.search ?? '',
 	sortBy: savedView?.sortBy ?? settings.value.navigation?.sortBy ?? 'name',
@@ -176,8 +174,8 @@ const gridPlaceholderStyle = computed(() => {
 })
 
 watch([layout, sortBy, sortDirection, groupBy, search], () => {
+	sessionStorage.setItem(layoutSessionStorageKey(props.gallery.token), layout.value)
 	localStorage.setItem(viewStorageKey(props.gallery.token), JSON.stringify({
-		layout: layout.value,
 		sortBy: sortBy.value,
 		sortDirection: sortDirection.value,
 		groupBy: groupBy.value,
@@ -186,6 +184,7 @@ watch([layout, sortBy, sortDirection, groupBy, search], () => {
 })
 
 onMounted(async () => {
+	const { createGesture } = await import('@ionic/core')
 	const contentElement = contentRef.value?.$el as HTMLElement & { getScrollElement?: () => Promise<HTMLElement> }
 	scrollElement.value = await contentElement?.getScrollElement?.() ?? null
 	if (scrollElement.value) {
@@ -767,6 +766,8 @@ function upOneLevel() {
 			<PublicGalleryHeader v-if="activeIndex === null && !compareOpen"
 				v-model:search="search"
 				:title="title"
+				:title-mode="titleMode"
+				:studio-name="settings.presentation.instanceStudioName"
 				:logo-url="headerLogoUrl"
 				:page="currentPage"
 				:page-count="pageCount"

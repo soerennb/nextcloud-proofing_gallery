@@ -52,6 +52,52 @@
 
 .admin-field-grid--numbers { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
+.admin-accent-field span { display: grid; grid-template-columns: 52px 1fr; gap: 8px; }
+
+.admin-accent-field input[type='color'] { padding: 4px; }
+
+.admin-brand-logo { display: flex; align-items: center; gap: 12px; margin: 8px 0 26px; padding: 14px; border: 1px solid var(--color-border); border-radius: 8px; }
+
+.admin-brand-logo img { width: 64px; height: 40px; object-fit: contain; }
+
+.admin-brand-logo div { min-width: 0; margin-inline-end: auto; }
+
+.admin-brand-logo p { margin: 2px 0 0; color: var(--color-text-maxcontrast); }
+
+.admin-rollout { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--color-border); }
+
+.admin-rollout__intro, .admin-rollout__toolbar, .admin-rollout__actions { display: flex; align-items: center; gap: 10px; }
+
+.admin-rollout__intro { justify-content: space-between; }
+
+.admin-rollout__intro p, .admin-rollout__summary { margin: 3px 0; color: var(--color-text-maxcontrast); }
+
+.admin-rollout__toolbar { margin-top: 18px; }
+
+.admin-rollout__toolbar .input-field { flex: 1; }
+
+.admin-rollout__summary { font-size: 12px; }
+
+.admin-rollout__list { max-height: 340px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: 8px; }
+
+.admin-rollout__list label { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 12px; border-bottom: 1px solid var(--color-border); cursor: pointer; }
+
+.admin-rollout__list label:last-child { border: 0; }
+
+.admin-rollout__list label:hover { background: var(--color-background-hover); }
+
+.admin-rollout__list span { display: grid; min-width: 0; margin-inline-end: auto; }
+
+.admin-rollout__list small { color: var(--color-text-maxcontrast); }
+
+.admin-rollout__list em { color: var(--color-success); font-size: 12px; font-style: normal; }
+
+.admin-rollout__list .admin-rollout__unchanged { color: var(--color-text-maxcontrast); }
+
+.admin-rollout__select-all { font-weight: 650; }
+
+.admin-rollout__actions { margin-top: 12px; }
+
 .admin-facts { display: grid; grid-template-columns: repeat(3, 1fr); margin: 12px 0 0; }
 
 .admin-facts div { padding: 8px 14px; border-inline-start: 1px solid var(--color-border); }
@@ -113,4 +159,5 @@
 	.admin-domain-toolbar { grid-template-columns: 1fr; }
 	.admin-domain > div:last-child { flex-wrap: wrap; }
 	.admin-status-actions { justify-content: space-between; }
+	.admin-brand-logo, .admin-rollout__intro { align-items: flex-start; flex-wrap: wrap; }
 }

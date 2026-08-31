@@ -43,6 +43,7 @@ final class GallerySettingsTest extends TestCase {
 		self::assertSame('auto', $settings['presentation']['lightboxFilmstripPlacement']);
 		self::assertSame('autoHide', $settings['presentation']['lightboxChromeBehavior']);
 		self::assertNull($settings['presentation']['instanceLogoAssetId']);
+		self::assertSame('', $settings['presentation']['instanceStudioName']);
 		self::assertFalse($settings['lifecycle']['enabled']);
 		self::assertFalse($settings['lifecycle']['retentionHandoff']);
 		self::assertSame([], $settings['metadata']['publicFields']);
@@ -138,6 +139,14 @@ final class GallerySettingsTest extends TestCase {
 		])->jsonSerialize();
 
 		self::assertSame(str_repeat('a', 32) . '.svg', $settings['presentation']['instanceLogoAssetId']);
+	}
+
+	public function testAcceptsBoundedInstanceStudioName(): void {
+		$settings = GallerySettings::fromArray([
+			'presentation' => ['instanceStudioName' => '  Northlight Studio  '],
+		])->jsonSerialize();
+
+		self::assertSame('Northlight Studio', $settings['presentation']['instanceStudioName']);
 	}
 
 	public function testRejectsUnsafeInstanceLogoAssetPath(): void {

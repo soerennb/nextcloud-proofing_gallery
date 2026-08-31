@@ -8,6 +8,9 @@ updates:
       time: "05:00"
       timezone: Europe/Berlin
     groups:
+      ionic:
+        patterns: ["@ionic/core", "@ionic/vue"]
+        update-types: [major, minor, patch]
       npm-development:
         dependency-type: development
         update-types: [minor, patch]

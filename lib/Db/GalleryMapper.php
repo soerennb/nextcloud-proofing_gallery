@@ -321,6 +321,26 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 		return $this->findEntities($qb);
 	}
 
+	/** @return array{items: list<Gallery>, total: int} */
+	public function findAdminPage(int $limit, int $offset, string $search = ''): array {
+		$filter = function (IQueryBuilder $qb) use ($search): void {
+			if ($search === '') return;
+			$needle = '%' . $this->db->escapeLikeParameter($search) . '%';
+			$qb->where($qb->expr()->orX(
+				$qb->expr()->iLike('title', $qb->createNamedParameter($needle)),
+				$qb->expr()->iLike('owner_uid', $qb->createNamedParameter($needle)),
+			));
+		};
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')->from($this->tableName)->orderBy('updated_at', 'DESC')->addOrderBy('id', 'DESC')
+			->setMaxResults(max(1, min(100, $limit)))->setFirstResult(max(0, $offset));
+		$filter($qb);
+		$count = $this->db->getQueryBuilder();
+		$count->select($count->func()->count())->from($this->tableName);
+		$filter($count);
+		return ['items' => $this->findEntities($qb), 'total' => (int)$count->executeQuery()->fetchOne()];
+	}
+
 	private function applyFilters(IQueryBuilder $qb, bool $archived, string $search): void {
 		$archiveStatus = $qb->createNamedParameter('archived');
 		$qb->andWhere($archived

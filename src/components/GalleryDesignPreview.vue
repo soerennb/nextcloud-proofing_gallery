@@ -3,23 +3,37 @@ import { t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import { computed, ref } from 'vue'
 
+import { galleryTitleMode } from '../domain/galleryTitlePresentation.ts'
 import { ownerPreviewUrl } from '../services/galleryApi.ts'
 import type { Gallery, MediaItem } from '../types.ts'
+import PublicGalleryHeader from './PublicGalleryHeader.vue'
 import PublicGalleryOpener from './PublicGalleryOpener.vue'
 
 const props = defineProps<{ gallery: Gallery; title: string; settings: Gallery['settings']; media: MediaItem[]; expanded: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 const exactUrl = computed(() => props.gallery.shareToken ? generateUrl('/s/{token}', { token: props.gallery.shareToken }) : null)
+const titleMode = computed(() => galleryTitleMode(props.settings.presentation))
+const search = ref('')
 const style = computed(() => ({
 	'--gallery-accent': props.settings.presentation.accentColor,
+	'--ion-color-primary': props.settings.presentation.accentColor,
 	'--hero-focus': `${props.settings.presentation.heroFocusX}% ${props.settings.presentation.heroFocusY}%`,
 	'--watermark-opacity': String(props.settings.presentation.watermarkOpacity / 100),
 }))
-const previewUrl = (fileId: number, width: number, height: number) => ownerPreviewUrl(props.gallery.id, fileId, width, height)
+const previewUrl = (fileId: number, width: number, height: number, mode: 'cover' | 'fit' = 'fit') => ownerPreviewUrl(props.gallery.id, fileId, width, height, mode)
 const viewport = ref<'desktop' | 'phone'>('desktop')
 const heroUrl = computed(() => props.settings.presentation.heroFileId
-	? previewUrl(props.settings.presentation.heroFileId, 1200, 800)
+	? previewUrl(props.settings.presentation.heroFileId, 1200, 800, 'cover')
 	: null)
+const logoUrl = computed(() => {
+	if (props.settings.presentation.logoFileId) return previewUrl(props.settings.presentation.logoFileId, 240, 120)
+	if (props.settings.presentation.instanceLogoAssetId) {
+		return props.gallery.shareToken
+			? generateUrl('/apps/proofing_gallery/public/{token}/asset/logo', { token: props.gallery.shareToken })
+			: generateUrl('/apps/proofing_gallery/media/{id}/asset/logo', { id: props.gallery.id })
+	}
+	return null
+})
 const previewById = computed(() => new Map(props.media.map(item => [item.id, item])))
 
 function previewItemStyle(item: MediaItem) {
@@ -53,7 +67,30 @@ function previewItemStyle(item: MediaItem) {
 				×
 			</button>
 		</div>
-		<div class="gallery-preview__viewport" :class="`gallery-preview__viewport--${viewport}`">
+		<div class="gallery-preview__viewport"
+			:class="[
+				`gallery-preview__viewport--${viewport}`,
+				`gallery-preview__viewport--theme-${settings.presentation.theme}`,
+				`gallery-preview__viewport--tiles-${settings.presentation.tileSize}`,
+				`gallery-preview__viewport--gap-${settings.presentation.tileGap}`,
+				`gallery-preview__viewport--radius-${settings.presentation.tileRadius}`,
+			]">
+			<div class="gallery-preview__interactive-shell">
+				<PublicGalleryHeader
+					v-model:search="search"
+					:title="title || t('proofing_gallery', 'Untitled gallery')"
+					:title-mode="titleMode"
+					:studio-name="settings.presentation.instanceStudioName"
+					:page="1"
+					:page-count="1"
+					:searching="false"
+					:selection-mode="false"
+					:selected-count="0"
+					:can-download="settings.delivery.downloadScope !== 'none'"
+					:can-compare="false"
+					:collaboration="settings.mode === 'collaboration'"
+					:logo-url="logoUrl" />
+			</div>
 			<PublicGalleryOpener
 				:title="title || t('proofing_gallery', 'Untitled gallery')"
 				:total="gallery.mediaSummary.total"

@@ -4,9 +4,12 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
+import { computed } from 'vue'
 
 import type { GallerySettings } from '../../domain/gallerySettings.ts'
 import { publicMetadataOptions } from '../../domain/gallerySettingsOptions.ts'
+import { applyGalleryTitleMode, galleryTitleMode } from '../../domain/galleryTitlePresentation.ts'
+import type { GalleryTitleMode } from '../../domain/galleryTitlePresentation.ts'
 import { ownerPreviewUrl } from '../../services/galleryApi.ts'
 import type { Gallery, MediaItem } from '../../types.ts'
 import GalleryDesignPreview from '../GalleryDesignPreview.vue'
@@ -25,6 +28,10 @@ const emit = defineEmits<{
 }>()
 const title = defineModel<string>('title', { required: true })
 const settings = defineModel<GallerySettings>('settings', { required: true })
+const titleMode = computed<GalleryTitleMode>({
+	get: () => galleryTitleMode(settings.value.presentation),
+	set: value => applyGalleryTitleMode(settings.value.presentation, value),
+})
 
 function previewUrl(fileId: number, width = 560, height = 360): string {
 	return ownerPreviewUrl(props.gallery.id, fileId, width, height)
@@ -50,9 +57,7 @@ function previewUrl(fileId: number, width = 560, height = 360): string {
 				{{ t('proofing_gallery', 'Choose a cover image for the cinematic opening. Until then, the gallery opens compactly.') }}
 			</p>
 			<div class="header-visibility">
-				<NcCheckboxRadioSwitch v-model="settings.presentation.showTitle" type="switch">
-					{{ t('proofing_gallery', 'Show title in header') }}
-				</NcCheckboxRadioSwitch>
+				<label class="select-field"><span>{{ t('proofing_gallery', 'Title display') }}</span><select v-model="titleMode" name="titleMode"><option value="large">{{ t('proofing_gallery', 'Large title') }}</option><option value="compact">{{ t('proofing_gallery', 'Compact title') }}</option><option value="hidden">{{ t('proofing_gallery', 'No title') }}</option></select></label>
 				<NcCheckboxRadioSwitch v-model="settings.presentation.showMediaCount" type="switch">
 					{{ t('proofing_gallery', 'Show photo count in header') }}
 				</NcCheckboxRadioSwitch>
@@ -107,7 +112,7 @@ function previewUrl(fileId: number, width = 560, height = 360): string {
 				</div>
 			</div>
 			<label class="select-field"><span>{{ t('proofing_gallery', 'Title typeface') }}</span><select v-model="settings.presentation.fontPreset" name="fontPreset"><option value="system">{{ t('proofing_gallery', 'System') }}</option><option value="editorial">{{ t('proofing_gallery', 'Editorial serif') }}</option><option value="modern">{{ t('proofing_gallery', 'Studio sans') }}</option></select></label>
-			<label class="select-field"><span>{{ t('proofing_gallery', 'Title size') }}</span><select v-model="settings.presentation.titleSize" name="titleSize"><option value="small">{{ t('proofing_gallery', 'Restrained') }}</option><option value="medium">{{ t('proofing_gallery', 'Standard') }}</option><option value="large">{{ t('proofing_gallery', 'Statement') }}</option></select></label>
+			<label v-if="titleMode === 'large'" class="select-field"><span>{{ t('proofing_gallery', 'Large title size') }}</span><select v-model="settings.presentation.titleSize" name="titleSize"><option value="medium">{{ t('proofing_gallery', 'Standard') }}</option><option value="large">{{ t('proofing_gallery', 'Statement') }}</option></select></label>
 			<div v-if="settings.presentation.heroFileId" class="range-fields">
 				<label><span>{{ t('proofing_gallery', 'Horizontal cover focus') }}</span><input v-model.number="settings.presentation.heroFocusX"
 					name="heroFocusX"
