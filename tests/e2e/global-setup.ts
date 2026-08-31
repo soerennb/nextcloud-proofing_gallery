@@ -5,10 +5,25 @@ import type { FullConfig } from '@playwright/test'
 
 const auth = `Basic ${Buffer.from('admin:admin').toString('base64')}`
 
+async function fetchWhenNextcloudIsReady(input: string, init: RequestInit): Promise<Response> {
+	let lastError: unknown
+	for (let attempt = 1; attempt <= 30; attempt++) {
+		try {
+			const response = await fetch(input, init)
+			if (response.status < 500) return response
+			lastError = new Error(`Nextcloud returned ${response.status}`)
+		} catch (error) {
+			lastError = error
+		}
+		if (attempt < 30) await new Promise(resolve => setTimeout(resolve, 1_000))
+	}
+	throw new Error('Nextcloud did not become ready for E2E setup', { cause: lastError })
+}
+
 export default async function globalSetup(config: FullConfig) {
 	const baseURL = String(config.projects[0].use.baseURL)
 	const headers = { Authorization: auth, 'OCS-APIRequest': 'true' }
-	const adminProfile = await fetch(`${baseURL}/ocs/v2.php/cloud/users/admin?format=json`, {
+	const adminProfile = await fetchWhenNextcloudIsReady(`${baseURL}/ocs/v2.php/cloud/users/admin?format=json`, {
 		method: 'PUT',
 		headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
 		body: new URLSearchParams({ key: 'email', value: 'admin@example.test' }),
