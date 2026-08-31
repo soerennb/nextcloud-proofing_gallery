@@ -13,6 +13,7 @@ final class PresentationSettings implements JsonSerializable {
 		public readonly string $welcomeMessage,
 		public readonly ?int $logoFileId,
 		public readonly ?string $instanceLogoAssetId,
+		public readonly string $instanceStudioName,
 		public readonly ?int $heroFileId,
 		public readonly string $openerStyle,
 		public readonly int $heroFocusX,
@@ -41,7 +42,7 @@ final class PresentationSettings implements JsonSerializable {
 	/** @return array<string, mixed> */
 	public static function defaults(): array {
 		return [
-			'accentColor' => '#E85D4A', 'welcomeMessage' => '', 'logoFileId' => null, 'instanceLogoAssetId' => null, 'heroFileId' => null,
+			'accentColor' => '#E85D4A', 'welcomeMessage' => '', 'logoFileId' => null, 'instanceLogoAssetId' => null, 'instanceStudioName' => '', 'heroFileId' => null,
 			'openerStyle' => 'minimal', 'heroFocusX' => 50, 'heroFocusY' => 50, 'fontPreset' => 'modern',
 			'watermarkText' => '', 'watermarkOpacity' => 24, 'theme' => 'auto', 'layout' => 'grid',
 			'tileSize' => 'medium', 'tileGap' => 'normal', 'tileRadius' => 'soft', 'titleAlignment' => 'left',
@@ -58,6 +59,7 @@ final class PresentationSettings implements JsonSerializable {
 		$accent = SettingsInput::string($value['accentColor'], 'presentation.accentColor');
 		$welcome = SettingsInput::string($value['welcomeMessage'], 'presentation.welcomeMessage');
 		$watermark = SettingsInput::string($value['watermarkText'], 'presentation.watermarkText');
+		$studioName = trim(SettingsInput::string($value['instanceStudioName'], 'presentation.instanceStudioName'));
 		$x = SettingsInput::int($value['heroFocusX'], 'presentation.heroFocusX');
 		$y = SettingsInput::int($value['heroFocusY'], 'presentation.heroFocusY');
 		$opacity = SettingsInput::int($value['watermarkOpacity'], 'presentation.watermarkOpacity');
@@ -66,13 +68,13 @@ final class PresentationSettings implements JsonSerializable {
 		if ($asset !== null && (!is_string($asset) || preg_match('/^[A-Za-z0-9]{32}\.(png|jpg|webp|svg)$/', $asset) !== 1)) {
 			throw new InvalidArgumentException('presentation.instanceLogoAssetId must be a branding asset ID or null');
 		}
-		if (preg_match('/^#[0-9a-fA-F]{6}$/', $accent) !== 1 || mb_strlen($welcome) > 4000 || mb_strlen($watermark) > 120
+		if (preg_match('/^#[0-9a-fA-F]{6}$/', $accent) !== 1 || mb_strlen($welcome) > 4000 || mb_strlen($watermark) > 120 || mb_strlen($studioName) > 120
 			|| $x < 0 || $x > 100 || $y < 0 || $y > 100 || $opacity < 5 || $opacity > 80 || $interval < 3 || $interval > 15) {
 			throw new InvalidArgumentException('Invalid presentation settings');
 		}
 		return new self(
 			$accent, $welcome,
-			SettingsInput::nullableInt($value['logoFileId'], 'presentation.logoFileId'), $asset,
+			SettingsInput::nullableInt($value['logoFileId'], 'presentation.logoFileId'), $asset, $studioName,
 			SettingsInput::nullableInt($value['heroFileId'], 'presentation.heroFileId'),
 			SettingsInput::choice($value['openerStyle'], 'presentation.openerStyle', ['minimal', 'compact', 'cinematic']),
 			$x, $y, SettingsInput::choice($value['fontPreset'], 'presentation.fontPreset', ['system', 'editorial', 'modern']),

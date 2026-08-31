@@ -26,6 +26,18 @@ if [[ -z "${private_author_email}" || -z "${private_content_pattern}" ]]; then
 	exit 2
 fi
 
+read -r -a private_email_list <<< "${private_author_email}"
+if [[ ${#private_email_list[@]} -eq 0 ]]; then
+	echo "PRIVATE_AUTHOR_EMAIL must contain at least one email address." >&2
+	exit 2
+fi
+for email in "${private_email_list[@]}"; do
+	if [[ "${email}" != *"@"* ]]; then
+		echo "PRIVATE_AUTHOR_EMAIL entries must be email addresses: ${email}" >&2
+		exit 2
+	fi
+done
+
 git clone --no-local --single-branch --branch main "${repo_dir}" "${destination}"
 cd "${destination}"
 
@@ -34,9 +46,13 @@ replacement_file="$(mktemp)"
 trap 'rm -f "${mailmap_file}" "${replacement_file}"' EXIT
 chmod 600 "${mailmap_file}"
 chmod 600 "${replacement_file}"
-printf 'soerennb <%s> <%s>\n' "${public_author_email}" "${private_author_email}" > "${mailmap_file}"
-printf 'literal:%s==>%s\nregex:%s==>internal.example.invalid\n' \
-	"${private_author_email}" "${public_author_email}" "${private_content_pattern}" > "${replacement_file}"
+: > "${mailmap_file}"
+: > "${replacement_file}"
+for email in "${private_email_list[@]}"; do
+	printf 'soerennb <%s> <%s>\n' "${public_author_email}" "${email}" >> "${mailmap_file}"
+	printf 'literal:%s==>%s\n' "${email}" "${public_author_email}" >> "${replacement_file}"
+done
+printf 'regex:%s==>internal.example.invalid\n' "${private_content_pattern}" >> "${replacement_file}"
 
 git filter-repo --force \
 	--path .agents \
@@ -49,7 +65,10 @@ git filter-repo --force \
 	--mailmap "${mailmap_file}" \
 	--replace-text "${replacement_file}"
 
-private_pattern="${private_content_pattern}|${private_author_email//./\\.}"
+private_pattern="${private_content_pattern}"
+for email in "${private_email_list[@]}"; do
+	private_pattern+="|${email//./\\.}"
+done
 if git log --all --format='%an <%ae>%n%cn <%ce>%n%B' | grep -Eiq "${private_pattern}"; then
 	echo "Private metadata remains in commit metadata or messages." >&2
 	exit 1

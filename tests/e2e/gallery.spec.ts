@@ -157,6 +157,7 @@ test('owner workspace deep links normalize and follow browser history', async ({
 })
 
 test('owner can move through the focused gallery workspace', async ({ browser, baseURL }) => {
+	test.setTimeout(75_000)
 	const context = await browser.newContext({
 		viewport: { width: 1440, height: 1000 },
 	})
@@ -218,6 +219,9 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await expect(page.locator('.culling-stage--side')).toBeVisible()
 	await page.getByRole('button', { name: 'Tools', exact: true }).click()
 	const cullingImage = page.locator('.culling-loupe__image')
+	const focusedPreview = cullingImage.locator('img')
+	await expect(focusedPreview).toHaveAttribute('src', /[?&]mode=fit(?:&|$)/)
+	expect(await focusedPreview.evaluate(image => getComputedStyle(image).objectFit)).toBe('contain')
 	await cullingImage.dispatchEvent('pointerdown', { isPrimary: true, pointerType: 'touch', clientX: 500, clientY: 350 })
 	await cullingImage.dispatchEvent('pointerup', { isPrimary: true, pointerType: 'touch', clientX: 504, clientY: 352 })
 	await expect(page.locator('.culling-workspace')).toHaveClass(/culling-workspace--chrome-hidden/)
@@ -262,6 +266,16 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await settingsNavigation.getByRole('button', { name: 'Design', exact: true }).click()
 	await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible()
 	await expect(page.getByText('Public image information')).toBeVisible()
+	const titleDisplay = page.getByLabel('Title display')
+	const preview = page.locator('.gallery-preview')
+	await titleDisplay.selectOption('compact')
+	await expect(preview.locator('.gallery-app-header__title')).toHaveText('E2E Gallery')
+	await expect(preview.locator('.gallery-opener__large-title')).toHaveCount(0)
+	await titleDisplay.selectOption('hidden')
+	await expect(preview.locator('.gallery-app-header__title')).toHaveCount(0)
+	await expect(preview.locator('.gallery-opener__large-title')).toHaveCount(0)
+	await titleDisplay.selectOption('large')
+	await expect(preview.getByRole('heading', { name: 'E2E Gallery' })).toBeVisible()
 	await page.setViewportSize({ width: 390, height: 844 })
 	await page.getByRole('button', { name: 'Preview gallery' }).click()
 	await expect(page.locator('.gallery-preview--expanded')).toBeVisible()

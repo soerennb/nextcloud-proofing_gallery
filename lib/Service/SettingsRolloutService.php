@@ -46,6 +46,22 @@ final class SettingsRolloutService {
 		return ['categories' => $categories, 'items' => $items, 'count' => count($items)];
 	}
 
+	/** @return array{items: list<array<string, mixed>>, total: int} */
+	public function listGalleries(int $limit, int $offset, string $search = ''): array {
+		$page = $this->galleries->findAdminPage($limit, $offset, trim($search));
+		return [
+			'items' => array_map(static fn ($gallery): array => [
+				'id' => $gallery->getId(),
+				'title' => $gallery->getTitle(),
+				'ownerUid' => $gallery->getOwnerUid(),
+				'status' => $gallery->getStatus(),
+				'published' => $gallery->getShareToken() !== null,
+				'revision' => $gallery->getRevision(),
+			], $page['items']),
+			'total' => $page['total'],
+		];
+	}
+
 	/** @param list<int> $galleryIds
 	 * @param list<string> $categories
 	 * @param array<int|string, int> $expectedRevisions
@@ -118,6 +134,7 @@ final class SettingsRolloutService {
 			$branding = $this->policies->instanceSettings()['branding'];
 			$patch['presentation']['accentColor'] = $branding['accentColor'];
 			$patch['presentation']['instanceLogoAssetId'] = $branding['logoAssetId'];
+			$patch['presentation']['instanceStudioName'] = $branding['studioName'];
 		}
 		if (in_array('review', $categories, true)) {
 			$patch['mode'] = $defaults['mode'];

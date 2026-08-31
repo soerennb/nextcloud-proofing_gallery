@@ -1,22 +1,36 @@
 <script setup lang="ts">
-import { IonNote } from '@ionic/vue'
+import { IonNote, IonTitle, IonToolbar } from '@ionic/vue'
 import { n } from '@nextcloud/l10n'
+import { computed } from 'vue'
 
 import type { GallerySettings } from '../domain/gallerySettings.ts'
+import { galleryTitleMode } from '../domain/galleryTitlePresentation.ts'
 
-defineProps<{
+const props = defineProps<{
 	title: string
 	total: number
 	settings: GallerySettings
 	heroUrl?: string | null
 }>()
+const titleMode = computed(() => galleryTitleMode(props.settings.presentation))
 </script>
 
 <template>
-	<div class="gallery-opener" :class="`gallery-opener--${settings.presentation.openerStyle}`">
-		<h1 class="gallery-opener__large-title" :class="`gallery-opener__title--${settings.presentation.fontPreset}`">
-			{{ title }}
-		</h1>
+	<div class="gallery-opener"
+		:class="[
+			`gallery-opener--${settings.presentation.openerStyle}`,
+			`gallery-opener--align-${settings.presentation.titleAlignment}`,
+		]">
+		<IonToolbar v-if="titleMode === 'large'" class="gallery-opener__title-toolbar">
+			<IonTitle size="large"
+				class="gallery-opener__large-title"
+				:class="[
+					`gallery-opener__title--${settings.presentation.fontPreset}`,
+					`gallery-opener__title--${settings.presentation.titleSize}`,
+				]">
+				<h1>{{ title }}</h1>
+			</IonTitle>
+		</IonToolbar>
 		<img v-if="heroUrl && settings.presentation.openerStyle !== 'minimal'"
 			class="gallery-opener__cover"
 			:class="`gallery-opener__cover--${settings.presentation.openerStyle}`"
@@ -37,7 +51,18 @@ defineProps<{
 <style scoped>
 .gallery-opener { background: var(--ion-background-color); }
 
-.gallery-opener__large-title { margin: 0; padding: 18px 16px 8px; color: var(--ion-text-color); font-size: clamp(32px, 7vw, 42px); font-weight: 700; letter-spacing: -.035em; line-height: 1.08; }
+.gallery-opener__title-toolbar { --background: var(--ion-background-color); --border-width: 0; --min-height: auto; --padding-start: 0; --padding-end: 0; }
+
+.gallery-opener__large-title { position: relative; width: 100%; margin: 0; padding: 18px 16px 8px; color: var(--ion-text-color); font-size: clamp(30px, 6vw, 40px); font-weight: 700; letter-spacing: -.035em; line-height: 1.08; text-align: start; }
+
+.gallery-opener__large-title h1 { margin: 0; color: inherit; font: inherit; letter-spacing: inherit; line-height: inherit; }
+
+.gallery-opener__title--large { font-size: clamp(38px, 8vw, 58px); }
+
+.gallery-opener--align-center .gallery-opener__large-title,
+.gallery-opener--align-center .gallery-opener__meta { text-align: center; }
+
+.gallery-opener--align-center .gallery-opener__meta p { margin-inline: auto; }
 
 .gallery-opener__cover { display: block; width: 100%; object-fit: cover; }
 

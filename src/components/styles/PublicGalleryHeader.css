@@ -10,6 +10,12 @@
 
 .gallery-app-header__brand img { width: 30px; height: 30px; object-fit: contain; }
 
+.gallery-app-header__identity :is(span, h1) { display: block; overflow: hidden; margin: 0; text-overflow: ellipsis; white-space: nowrap; }
+
+.gallery-app-header__studio { color: var(--ion-color-medium); font-size: 10px; font-weight: 560; line-height: 1.15; }
+
+.gallery-app-header__title { font-size: 15px; line-height: 1.2; }
+
 .gallery-app-header__search ion-searchbar { padding-block: 4px; }
 
 .gallery-app-header__pager { --min-height: 44px !important; }
@@ -20,6 +26,6 @@
 
 @media (max-width: 420px) {
 	.gallery-app-header__brand { display: none; }
-	.gallery-app-header > ion-toolbar:not(.gallery-app-header__pager, .gallery-app-header__search) ion-title { display: none; }
-	.gallery-app-header ion-buttons ion-button { --padding-start: 7px; --padding-end: 7px; }
+	.gallery-app-header > ion-toolbar:not(.gallery-app-header__pager, .gallery-app-header__search) ion-title { max-width: 150px; padding-inline: 10px 2px; }
+	.gallery-app-header ion-buttons ion-button { --padding-start: 5px; --padding-end: 5px; width: 38px; }
 }

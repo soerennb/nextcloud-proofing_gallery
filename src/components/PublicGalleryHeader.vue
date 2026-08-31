@@ -21,9 +21,12 @@ import {
 	searchOutline,
 	shareOutline,
 } from 'ionicons/icons'
+import type { GalleryTitleMode } from '../domain/galleryTitlePresentation.ts'
 
 defineProps<{
 	title: string
+	titleMode: GalleryTitleMode
+	studioName: string
 	page: number
 	pageCount: number
 	searching: boolean
@@ -87,7 +90,12 @@ const emit = defineEmits<{
 				<IonButtons v-if="logoUrl" slot="start" class="gallery-app-header__brand">
 					<img :src="logoUrl" :alt="t('proofing_gallery', 'Gallery logo')">
 				</IonButtons>
-				<IonTitle>{{ title }}</IonTitle>
+				<IonTitle v-if="titleMode === 'compact' || studioName" class="gallery-app-header__identity">
+					<span v-if="studioName" class="gallery-app-header__studio">{{ studioName }}</span>
+					<h1 v-if="titleMode === 'compact'" class="gallery-app-header__title">
+						{{ title }}
+					</h1>
+				</IonTitle>
 				<IonButtons slot="end">
 					<IonButton :aria-label="t('proofing_gallery', 'Search photos')" @click="emit('toggle-search')">
 						<IonIcon slot="icon-only" :icon="searchOutline" />

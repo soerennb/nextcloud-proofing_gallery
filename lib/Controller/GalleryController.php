@@ -35,6 +35,7 @@ use OCP\IRequest;
 use OCP\IUserSession;
 use OCP\Files\File;
 use OCA\ProofingGallery\Service\GalleryReadinessService;
+use OCA\ProofingGallery\Service\BrandingAssetService;
 
 final class GalleryController extends Controller {
 	public function __construct(
@@ -47,6 +48,7 @@ final class GalleryController extends Controller {
 		private MediaMetadataService $metadata,
 		private \OCA\ProofingGallery\Service\PolicyService $policies,
 		private GalleryReadinessService $readiness,
+		private BrandingAssetService $branding,
 		private IUserSession $userSession,
 	) {
 		parent::__construct(Application::APP_ID, $request);
@@ -493,8 +495,28 @@ final class GalleryController extends Controller {
 
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/media/{id}/asset/logo')]
+	public function brandLogo(int $id): DataDisplayResponse {
+		try {
+			$gallery = $this->galleries->view($this->userId(), $id);
+			$assetId = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR))->presentation->instanceLogoAssetId;
+			if ($assetId === null) return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
+			return new DataDisplayResponse($this->branding->get($assetId)->getContent(), Http::STATUS_OK, [
+				'Content-Type' => $this->branding->mimeType($assetId),
+				'Cache-Control' => 'private, max-age=3600',
+			]);
+		} catch (DoesNotExistException|AuthorizationException|\OCP\Files\NotFoundException) {
+			return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
+		}
+	}
+
+	#[NoAdminRequired]
+	#[NoCSRFRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/media/{id}/{fileId}/preview')]
-	public function preview(int $id, int $fileId, int $x = 560, int $y = 360): DataDisplayResponse {
+	public function preview(int $id, int $fileId, int $x = 560, int $y = 360, string $mode = 'cover'): DataDisplayResponse {
+		if (!in_array($mode, ['cover', 'fit'], true)) {
+			return new DataDisplayResponse('', Http::STATUS_BAD_REQUEST);
+		}
 		try {
 			$gallery = $this->galleries->view($this->userId(), $id);
 			if ($gallery->getSourceType() === 'collection') {
@@ -514,9 +536,15 @@ final class GalleryController extends Controller {
 			} else {
 				$file = $this->folders->resolveMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $fileId);
 			}
-			$x = max(64, min(1200, $x));
-			$y = max(64, min(1200, $y));
-			$preview = $this->preview->getPreview($file, $x, $y, true, IPreview::MODE_COVER);
+			$x = max(64, min(2400, $x));
+			$y = max(64, min(2400, $y));
+			$preview = $this->preview->getPreview(
+				$file,
+				$x,
+				$y,
+				$mode === 'cover',
+				$mode === 'cover' ? IPreview::MODE_COVER : IPreview::MODE_FILL,
+			);
 			return new DataDisplayResponse($preview->getContent(), Http::STATUS_OK, [
 				'Content-Type' => $preview->getMimeType(),
 				'Cache-Control' => 'private, max-age=3600',

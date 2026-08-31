@@ -128,6 +128,7 @@ function dismissMenu() {
 		:initial-breakpoint="mobile ? 0.72 : 1"
 		:breakpoints="mobile ? [0, 0.42, 0.72, 1] : [0, 1]"
 		:handle="mobile"
+		handle-behavior="cycle"
 		@did-dismiss="emit('update:panel', null)">
 		<div class="gallery-sheet__content">
 			<IonToolbar>

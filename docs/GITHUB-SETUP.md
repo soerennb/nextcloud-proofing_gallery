@@ -37,7 +37,10 @@ scan the complete rewritten history before publishing it. The sanitizer removes
 addition to rewriting configured private metadata.
 
 For later updates, use `scripts/prepare-incremental-public-history.sh` with the
-same private metadata inputs and an explicit public commit message. It starts
+same private metadata inputs and an explicit public commit message. Both scripts
+accept a space-separated list of private author emails in
+`PRIVATE_AUTHOR_EMAIL` so that historical and current identities are mapped to
+the same public author. It starts
 from the existing public `main`, replaces its working tree with the fully
 sanitized internal end state, and creates exactly one deterministic public sync
 commit. The result must remain a fast-forward of the fetched public branch.
@@ -49,7 +52,7 @@ The automation removes unreachable sanitizer objects before review. Never
 cherry-pick internal commits, reuse internal tags, or force-push public history.
 
 ```bash
-PRIVATE_AUTHOR_EMAIL="..." \
+PRIVATE_AUTHOR_EMAIL="historical@example.com current@example.com" \
 PRIVATE_CONTENT_PATTERN="..." \
 PUBLIC_COMMIT_MESSAGE="release: prepare X.Y.Z" \
 	./scripts/prepare-incremental-public-history.sh /tmp/proofing-gallery-public-a

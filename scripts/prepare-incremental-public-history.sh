@@ -64,7 +64,11 @@ if [[ -n "$(git -C "${destination}" ls-files '.agents/**' '.beads/**' '.claude/*
 	exit 1
 fi
 
-private_pattern="${private_content_pattern}|${private_author_email//./\.}"
+private_pattern="${private_content_pattern}"
+read -r -a private_email_list <<< "${private_author_email}"
+for email in "${private_email_list[@]}"; do
+	private_pattern+="|${email//./\.}"
+done
 if git -C "${destination}" grep -I -n -E "${private_pattern}"; then
 	echo "Private metadata remains in the incremental public tree." >&2
 	exit 1

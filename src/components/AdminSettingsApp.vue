@@ -14,6 +14,7 @@ import { adminSettingsCategoryPath, normalizeAdminSettingsCategory } from '../do
 import type { AdminSettingsCategory as Category } from '../domain/adminSettingsNavigation.ts'
 import type { AdminDomain, AdminDomainPage, AdminSettingsState } from '../types/adminSettings.ts'
 import AdminDocumentation from './AdminDocumentation.vue'
+import AdminGalleryRollout from './AdminGalleryRollout.vue'
 import SettingsSaveBar from './SettingsSaveBar.vue'
 
 const props = defineProps<{ initialState: AdminSettingsState }>()
@@ -35,12 +36,18 @@ const domainsLoadingMore = ref(false)
 const domainsLoaded = ref(false)
 const domainError = ref('')
 const domainActionId = ref<number | null>(null)
+const logoInput = ref<HTMLInputElement | null>(null)
+const logoBusy = ref(false)
+const logoVersion = ref(Date.now())
 const dirty = computed(() => JSON.stringify(draft.value) !== JSON.stringify(saved.value))
 const settings = computed(() => draft.value.instanceSettings)
 const policies = computed(() => draft.value.policies)
 const defaults = computed(() => draft.value.galleryDefaults)
 const features = computed(() => settings.value.features)
 const semanticHttps = computed(() => settings.value.semantic.provider === 'https')
+const logoUrl = computed(() => settings.value.branding.logoAssetId
+	? `${generateOcsUrl('/apps/proofing_gallery/api/v1/admin/branding/logo')}?v=${logoVersion.value}`
+	: null)
 let domainRequest = 0
 let domainSearchTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -82,6 +89,35 @@ function setGroups(key: string, value: string | number) { settings.value.access[
 function scaledPolicy(key: string, scale: number) { return Math.round(policies.value[key] / scale) }
 function setScaledPolicy(key: string, scale: number, value: string | number) { policies.value[key] = Number(value) * scale }
 function discard() { draft.value = clone(saved.value) }
+
+async function uploadLogo(event: Event) {
+	const file = (event.target as HTMLInputElement).files?.[0]
+	if (!file || logoBusy.value) return
+	logoBusy.value = true
+	try {
+		const body = new FormData()
+		body.append('logo', file)
+		const { data } = await axios.post<{ branding: AdminSettingsState['instanceSettings']['branding'] }>(generateOcsUrl('/apps/proofing_gallery/api/v1/admin/branding/logo'), body)
+		settings.value.branding.logoAssetId = data.branding.logoAssetId
+		saved.value.instanceSettings.branding.logoAssetId = data.branding.logoAssetId
+		logoVersion.value = Date.now()
+		showSuccess(t('proofing_gallery', 'Studio logo updated.'))
+	} catch { showError(t('proofing_gallery', 'The studio logo could not be uploaded.')) } finally {
+		logoBusy.value = false
+		if (logoInput.value) logoInput.value.value = ''
+	}
+}
+
+async function removeLogo() {
+	if (!settings.value.branding.logoAssetId || logoBusy.value) return
+	logoBusy.value = true
+	try {
+		const { data } = await axios.delete<{ branding: AdminSettingsState['instanceSettings']['branding'] }>(generateOcsUrl('/apps/proofing_gallery/api/v1/admin/branding/logo'))
+		settings.value.branding.logoAssetId = data.branding.logoAssetId
+		saved.value.instanceSettings.branding.logoAssetId = data.branding.logoAssetId
+		showSuccess(t('proofing_gallery', 'Studio logo removed.'))
+	} catch { showError(t('proofing_gallery', 'The studio logo could not be removed.')) } finally { logoBusy.value = false }
+}
 
 function setCategory(next: Category, historyMode: 'push' | 'replace' = 'push') {
 	category.value = next
@@ -271,8 +307,35 @@ onBeforeUnmount(() => {
 				</NcSettingsSection>
 				<NcSettingsSection :name="t('proofing_gallery', 'Defaults for new galleries')" :description="t('proofing_gallery', 'Existing galleries keep their current configuration.')">
 					<div class="admin-field-grid">
-						<label>{{ t('proofing_gallery', 'Default purpose') }}<select v-model="settings.workflow.defaultPurpose"><option v-for="purpose in ['delivery', 'showcase', 'selection', 'proofing', 'uploads', 'custom']" :key="purpose" :value="purpose">{{ purpose }}</option></select></label><label>{{ t('proofing_gallery', 'Public language') }}<select v-model="defaults.publicLocale"><option value="auto">{{ t('proofing_gallery', 'Automatic') }}</option><option value="de">Deutsch</option><option value="en">English</option></select></label><label>{{ t('proofing_gallery', 'Theme') }}<select v-model="defaults.presentation.theme"><option value="auto">{{ t('proofing_gallery', 'Automatic') }}</option><option value="light">{{ t('proofing_gallery', 'Light') }}</option><option value="dark">{{ t('proofing_gallery', 'Dark') }}</option></select></label><NcTextField v-model="settings.branding.studioName" :label="t('proofing_gallery', 'Studio name')" />
+						<label>{{ t('proofing_gallery', 'Default purpose') }}<select v-model="settings.workflow.defaultPurpose"><option v-for="purpose in ['delivery', 'showcase', 'selection', 'proofing', 'uploads', 'custom']" :key="purpose" :value="purpose">{{ purpose }}</option></select></label>
+						<label>{{ t('proofing_gallery', 'Public language') }}<select v-model="defaults.publicLocale"><option value="auto">{{ t('proofing_gallery', 'Automatic') }}</option><option value="de">Deutsch</option><option value="en">English</option></select></label>
+						<label>{{ t('proofing_gallery', 'Theme') }}<select v-model="defaults.presentation.theme"><option value="auto">{{ t('proofing_gallery', 'Automatic') }}</option><option value="light">{{ t('proofing_gallery', 'Light') }}</option><option value="dark">{{ t('proofing_gallery', 'Dark') }}</option></select></label>
+						<label>{{ t('proofing_gallery', 'Layout') }}<select v-model="defaults.presentation.layout"><option value="grid">{{ t('proofing_gallery', 'Grid') }}</option><option value="masonry">{{ t('proofing_gallery', 'Masonry') }}</option><option value="list">{{ t('proofing_gallery', 'List') }}</option><option value="story">{{ t('proofing_gallery', 'Story') }}</option></select></label>
+						<label>{{ t('proofing_gallery', 'Tile size') }}<select v-model="defaults.presentation.tileSize"><option value="small">{{ t('proofing_gallery', 'Small') }}</option><option value="medium">{{ t('proofing_gallery', 'Medium') }}</option><option value="large">{{ t('proofing_gallery', 'Large') }}</option></select></label>
+						<label>{{ t('proofing_gallery', 'Spacing') }}<select v-model="defaults.presentation.tileGap"><option value="tight">{{ t('proofing_gallery', 'Tight') }}</option><option value="normal">{{ t('proofing_gallery', 'Normal') }}</option><option value="wide">{{ t('proofing_gallery', 'Wide') }}</option></select></label>
+						<label>{{ t('proofing_gallery', 'Corners') }}<select v-model="defaults.presentation.tileRadius"><option value="square">{{ t('proofing_gallery', 'Square') }}</option><option value="soft">{{ t('proofing_gallery', 'Soft') }}</option></select></label>
+						<label class="admin-accent-field">{{ t('proofing_gallery', 'Accent color') }}<span><input v-model="settings.branding.accentColor" type="color"><input v-model="settings.branding.accentColor" type="text" maxlength="7"></span></label>
+						<NcTextField v-model="settings.branding.studioName" :label="t('proofing_gallery', 'Studio name')" />
 					</div>
+					<div class="admin-brand-logo">
+						<img v-if="logoUrl" :src="logoUrl" :alt="t('proofing_gallery', 'Studio logo')">
+						<div><strong>{{ t('proofing_gallery', 'Studio logo') }}</strong><p>{{ t('proofing_gallery', 'Shown in the Ionic app bar of new galleries.') }}</p></div>
+						<input ref="logoInput"
+							class="hidden-visually"
+							type="file"
+							accept="image/png,image/jpeg,image/webp,image/svg+xml"
+							@change="uploadLogo">
+						<NcButton variant="tertiary" :disabled="logoBusy" @click="logoInput?.click()">
+							{{ logoUrl ? t('proofing_gallery', 'Replace') : t('proofing_gallery', 'Upload') }}
+						</NcButton>
+						<NcButton v-if="logoUrl"
+							variant="tertiary"
+							:disabled="logoBusy"
+							@click="removeLogo">
+							{{ t('proofing_gallery', 'Remove') }}
+						</NcButton>
+					</div>
+					<AdminGalleryRollout :defaults-saved="!dirty" />
 				</NcSettingsSection>
 			</template>
 
