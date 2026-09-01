@@ -349,16 +349,51 @@ test('guest completes an accessible proofing flow', async ({ page, baseURL }) =>
 	await page.setViewportSize({ width: 1280, height: 900 })
 	await page.goto(`${baseURL}/s/${token}`)
 	await page.getByRole('button', { name: 'Open proof.png' }).click()
-	await expect(page.getByRole('dialog', { name: 'proof.png' })).toBeVisible()
-	await page.getByRole('button', { name: /Like/ }).click()
+	const lightbox = page.getByRole('dialog', { name: 'proof.png' })
+	await expect(lightbox).toBeVisible()
+	await page.waitForTimeout(2800)
+	await expect(lightbox).not.toHaveClass(/lightbox-shell--chrome-hidden/)
+	await expect(lightbox.getByRole('button', { name: 'Feedback', exact: true })).toBeVisible()
+
+	const image = page.locator('.pswp__img[alt="proof.png"]')
+	const imageBounds = await image.boundingBox()
+	expect(imageBounds).not.toBeNull()
+	await image.click({ position: { x: imageBounds!.width * 0.67, y: imageBounds!.height * 0.42 } })
+	await page.getByRole('textbox', { name: 'Point comment' }).fill('Retouch this point')
+	await page.getByRole('button', { name: 'Comment', exact: true }).click()
 	await page.getByRole('textbox', { name: 'Your name' }).fill('Playwright Reviewer')
 	await page.getByRole('button', { name: 'Continue' }).click()
 	await expect(page.getByRole('textbox', { name: 'Your name' })).toHaveCount(0)
+	const pointMarker = page.getByRole('button', { name: 'Open point comment 1' })
+	await expect(pointMarker).toBeVisible()
+	await pointMarker.click()
+	await expect(page.getByText('Retouch this point')).toBeVisible()
+	await page.getByRole('button', { name: 'Close feedback' }).click()
+
+	await lightbox.getByRole('button', { name: 'Feedback', exact: true }).click()
+	await page.getByRole('button', { name: 'Add point comment' }).click()
+	await expect(page.getByRole('status')).toContainText('Move the point with the arrow keys')
+	await page.keyboard.press('ArrowRight')
+	await page.keyboard.press('Escape')
+	await expect(page.getByRole('status')).toHaveCount(0)
+	await expect(pointMarker).toHaveCount(1)
+
+	await lightbox.getByRole('button', { name: 'Feedback', exact: true }).click()
+	await page.locator('ion-modal.lightbox-feedback-sheet .feedback-actions > button').click()
 	await page.getByRole('textbox', { name: 'Comment' }).fill('Approved in automated review')
 	await page.getByRole('button', { name: 'Comment', exact: true }).click()
 	await expect(page.getByText('Approved in automated review')).toBeVisible()
 	await page.getByRole('button', { name: 'Close feedback' }).click()
-	await page.getByRole('dialog', { name: 'proof.png' }).getByRole('button', { name: 'Close', exact: true }).click()
+	await lightbox.getByRole('button', { name: 'Close', exact: true }).click()
+	await page.getByRole('button', { name: 'Open proof.png' }).click()
+	await expect(pointMarker).toBeVisible()
+	const reopenedImageBounds = await image.boundingBox()
+	const markerBounds = await pointMarker.boundingBox()
+	expect(reopenedImageBounds).not.toBeNull()
+	expect(markerBounds).not.toBeNull()
+	expect((markerBounds!.x + markerBounds!.width / 2 - reopenedImageBounds!.x) / reopenedImageBounds!.width).toBeCloseTo(0.67, 1)
+	expect((markerBounds!.y + markerBounds!.height / 2 - reopenedImageBounds!.y) / reopenedImageBounds!.height).toBeCloseTo(0.42, 1)
+	await lightbox.getByRole('button', { name: 'Close', exact: true }).click()
 	const unchangedPoll = await page.evaluate(async () => {
 		const response = await fetch(`${location.pathname.replace(/^\/s\//, '/apps/proofing_gallery/public/')}/collaboration?cursor=999999`, { headers: { Accept: 'application/json' } })
 		return { status: response.status, body: await response.json() }
@@ -383,6 +418,12 @@ test('guest and owner complete a link-scoped review round', async ({ page, reque
 	const created = await request.post(galleries, { headers: apiHeaders, data: { folderId: fixture.folderId, title: 'E2E Review rounds', settings: { mode: 'collaboration', publicLocale: 'en' } } })
 	const gallery = await created.json() as { id: number }
 	try {
+		const galleryEndpoint = `${galleries.replace('?format=json', '')}/${gallery.id}`
+		const mediaResponse = await request.get(`${galleryEndpoint}/media?format=json&limit=100`, { headers: apiHeaders })
+		expect(mediaResponse.ok()).toBe(true)
+		const media = await mediaResponse.json() as { items: Array<{ id: number; name: string }> }
+		const proof = media.items.find(item => item.name === 'proof.png')
+		expect(proof).toBeTruthy()
 		const published = await request.post(`${galleries.replace('?format=json', '')}/${gallery.id}/publish?format=json`, { headers: apiHeaders, data: { allowDownloads: false } })
 		const token = (await published.json() as { gallery: { shareToken: string } }).gallery.shareToken
 		const linksEndpoint = `${galleries.replace('?format=json', '')}/${gallery.id}/public-links?format=json`
@@ -397,13 +438,53 @@ test('guest and owner complete a link-scoped review round', async ({ page, reque
 		await page.getByRole('button', { name: 'More options', exact: true }).click()
 		await expect(page.getByRole('button', { name: 'Download entire gallery' })).toHaveCount(0)
 		await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+		await page.getByRole('button', { name: 'Open proof.png' }).click()
+		const lightbox = page.getByRole('dialog', { name: 'proof.png' })
+		await lightbox.getByRole('button', { name: 'Feedback', exact: true }).click()
+		await page.locator('ion-modal.lightbox-feedback-sheet .feedback-actions > button').click()
+		await page.getByRole('textbox', { name: 'Your name' }).fill('Round Reviewer')
+		await page.getByRole('button', { name: 'Continue' }).click()
+		await page.getByRole('button', { name: 'Close feedback' }).click()
+		await lightbox.getByRole('button', { name: 'Close', exact: true }).click()
+		const nonce = await page.evaluate(token => sessionStorage.getItem(`proofing-gallery-nonce:${token}`), token)
+		expect(nonce).toBeTruthy()
+		const allowedAnnotation = await page.evaluate(async ({ token, nonce, fileId }) => {
+			const response = await fetch(`/apps/proofing_gallery/public/${token}/collaboration/media/${fileId}/comments`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', 'X-Proofing-Nonce': nonce! },
+				body: JSON.stringify({ body: 'Policy-scoped point', annotation: { x: 2500, y: 7500, width: 800, height: 800 } }),
+			})
+			return { status: response.status, body: await response.json() }
+		}, { token, nonce, fileId: proof!.id })
+		expect(allowedAnnotation).toEqual({ status: 201, body: { id: expect.any(Number) } })
 		await page.getByRole('button', { name: 'Review details' }).click()
 		await expect(page.getByText('Review open')).toBeVisible()
 		await page.getByRole('button', { name: 'Submit review' }).click()
-		await page.getByRole('textbox', { name: 'Your name' }).fill('Round Reviewer')
-		await page.getByRole('button', { name: 'Continue' }).click()
 		await expect(page.getByText('Submitted for approval')).toBeVisible()
 		expect(await page.locator('#proofing_gallery_public').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+
+		const restrictedPolicy = { ...link.policy, comments: true, annotations: false }
+		const restricted = await request.put(`${linksEndpoint.replace('?format=json', '')}/${link.id}?format=json`, {
+			headers: apiHeaders,
+			data: { name: link.name, policy: restrictedPolicy, reviewEnabled: true, reviewDueDate: dueDate },
+		})
+		expect(restricted.ok()).toBe(true)
+		await page.reload()
+		const restrictedState = await page.evaluate(async ({ token, fileId }) => {
+			const response = await fetch(`/apps/proofing_gallery/public/${token}/collaboration?cursor=0&fileIds=${fileId}`)
+			return response.json()
+		}, { token, fileId: proof!.id }) as { policy: { features: { annotations: boolean } }; comments: Array<{ body: string; annotations: unknown[] }> }
+		expect(restrictedState.policy.features.annotations).toBe(false)
+		expect(restrictedState.comments.find(comment => comment.body === 'Policy-scoped point')?.annotations).toEqual([])
+		const deniedAnnotation = await page.evaluate(async ({ token, nonce, fileId }) => {
+			const response = await fetch(`/apps/proofing_gallery/public/${token}/collaboration/media/${fileId}/comments`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', 'X-Proofing-Nonce': nonce! },
+				body: JSON.stringify({ body: 'Must be denied', annotation: { x: 5000, y: 5000, width: 800, height: 800 } }),
+			})
+			return response.status
+		}, { token, nonce, fileId: proof!.id })
+		expect(deniedAnnotation).toBe(403)
 
 		const approved = await request.post(`${galleries.replace('?format=json', '')}/${gallery.id}/public-links/${link.id}/review/approve?format=json`, { headers: apiHeaders })
 		expect(approved.ok()).toBe(true)

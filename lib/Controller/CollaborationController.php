@@ -46,19 +46,47 @@ final class CollaborationController extends ResolvedPublicShareController {
 		$visibleFileIds = $fileIds === '' ? [] : array_map('intval', array_filter(explode(',', $fileIds)));
 		$state = $this->collaboration->state($this->resolvedGallery(), $this->optionalGuest(), $cursor, $visibleFileIds);
 		if (($state['unchanged'] ?? false) === true) return new JSONResponse($state);
-		$policy = $this->policy();
-		foreach (['likes', 'colors', 'comments', 'annotations', 'selections'] as $feature) {
-			$state['policy']['features'][$feature] = ($state['policy']['features'][$feature] ?? true) && $policy[$feature];
+		$features = $this->effectiveStateFeatures($state['policy']['features'] ?? []);
+		$ratingEnabled = $this->ratingEnabled();
+		$state['policy']['features'] = $features;
+		$state['likes'] = $features['likes']
+			? array_filter($state['likes'], fn (mixed $_, int $fileId): bool => $this->allowsFile($fileId), ARRAY_FILTER_USE_BOTH)
+			: [];
+		$state['colors'] = $features['colors']
+			? array_filter($state['colors'], fn (mixed $_, int $fileId): bool => $this->allowsFile($fileId), ARRAY_FILTER_USE_BOTH)
+			: [];
+		$state['colorStates'] = $features['colors']
+			? array_filter($state['colorStates'], fn (mixed $_, int $fileId): bool => $this->allowsFile($fileId), ARRAY_FILTER_USE_BOTH)
+			: [];
+		$state['comments'] = $features['comments']
+			? array_values(array_filter($state['comments'], fn (array $comment): bool => $this->allowsFile((int)$comment['fileId'])))
+			: [];
+		if (!$features['annotations']) {
+			foreach ($state['comments'] as &$comment) $comment['annotations'] = [];
+			unset($comment);
 		}
-		$state['likes'] = array_filter($state['likes'], fn (mixed $_, int $fileId): bool => $this->allowsFile($fileId), ARRAY_FILTER_USE_BOTH);
-		$state['colors'] = array_filter($state['colors'], fn (mixed $_, int $fileId): bool => $this->allowsFile($fileId), ARRAY_FILTER_USE_BOTH);
-		$state['colorStates'] = array_filter($state['colorStates'], fn (mixed $_, int $fileId): bool => $this->allowsFile($fileId), ARRAY_FILTER_USE_BOTH);
-		$state['comments'] = array_values(array_filter($state['comments'], fn (array $comment): bool => $this->allowsFile((int)$comment['fileId'])));
-		foreach ($state['selections'] as &$selection) $selection['fileIds'] = array_values(array_filter($selection['fileIds'], fn (int $fileId): bool => $this->allowsFile($fileId)));
-		unset($selection);
-		$state['events'] = array_values(array_filter($state['events'], fn (array $event): bool => !isset($event['payload']['fileId']) || $this->allowsFile((int)$event['payload']['fileId'])));
+		$state['selections'] = $features['selections'] ? array_values(array_filter(array_map(function (array $selection): array {
+			$selection['fileIds'] = array_values(array_filter($selection['fileIds'], fn (int $fileId): bool => $this->allowsFile($fileId)));
+			return $selection;
+		}, $state['selections']), static fn (array $selection): bool => $selection['fileIds'] !== [])) : [];
+		$visibleSelectionIds = array_fill_keys(array_column($state['selections'], 'id'), true);
+		$state['events'] = array_values(array_filter($state['events'], function (array $event) use ($features, $ratingEnabled, $visibleSelectionIds): bool {
+			$type = (string)($event['type'] ?? '');
+			$family = strtok($type, '.');
+			$feature = match ($family) {
+				'like' => 'likes', 'color' => 'colors', 'comment' => 'comments', 'selection' => 'selections',
+				default => null,
+			};
+			if ($family === 'rating' && !$ratingEnabled) return false;
+			if ($feature !== null && !$features[$feature]) return false;
+			if (isset($event['payload']['fileId']) && !$this->allowsFile((int)$event['payload']['fileId'])) return false;
+			if ($feature === 'selections' && isset($event['payload']['selectionId'])) {
+				return isset($visibleSelectionIds[(string)$event['payload']['selectionId']]);
+			}
+			return true;
+		}));
 		$guest = $this->optionalGuest();
-		$state['ratings'] = $guest === null || !$this->ratingEnabled()
+		$state['ratings'] = $guest === null || !$ratingEnabled
 			? []
 			: array_values(array_map(
 				static fn ($rating): array => $rating->jsonSerialize(),
@@ -122,6 +150,9 @@ final class CollaborationController extends ResolvedPublicShareController {
 	#[FrontpageRoute(verb: 'POST', url: '/public/{token}/collaboration/media/{fileId}/comments')]
 	public function addComment(int $fileId, string $body, ?array $annotation = null): JSONResponse {
 		if (!$this->allowsFile($fileId)) return new JSONResponse(['message' => 'Media not found'], Http::STATUS_NOT_FOUND);
+		if ($annotation !== null && !$this->policy()['annotations']) {
+			return new JSONResponse(['message' => 'Image annotations are disabled for this link'], Http::STATUS_FORBIDDEN);
+		}
 		return $this->mutation('comments', fn (Guest $guest): array => [
 			'id' => $this->collaboration->addComment($this->resolvedGallery(), $guest, $fileId, $body, $annotation),
 		], Http::STATUS_CREATED);
@@ -247,6 +278,19 @@ final class CollaborationController extends ResolvedPublicShareController {
 	/** @return array<string, bool|string> */
 	private function policy(): array {
 		return $this->publicContext()->policy->jsonSerialize();
+	}
+
+	/** @param array<string, bool> $serviceFeatures
+	 * @return array{likes: bool, colors: bool, comments: bool, annotations: bool, selections: bool}
+	 */
+	private function effectiveStateFeatures(array $serviceFeatures): array {
+		$policy = $this->policy();
+		$result = [];
+		foreach (['likes', 'colors', 'comments', 'annotations', 'selections'] as $feature) {
+			$result[$feature] = ($serviceFeatures[$feature] ?? false) && (bool)$policy[$feature];
+		}
+		$result['annotations'] = $result['annotations'] && $result['comments'];
+		return $result;
 	}
 
 	private function ratingEnabled(): bool {

@@ -17,6 +17,8 @@
 
 :global(.lightbox-shell .pswp__img) { cursor: zoom-in; }
 
+:global(.lightbox-shell--annotatable .pswp__img) { cursor: crosshair; }
+
 :global(.lightbox-shell .pswp__content) { display: grid; place-items: center; }
 
 :global(.proofing-pswp-video) { width: min(100%, 1400px); height: min(100%, 900px); object-fit: contain; }
@@ -94,13 +96,7 @@
 
 .touch-hint-enter-from, .touch-hint-leave-to { opacity: 0; transform: translate(50%, 6px); }
 
-:global(.proofing-annotation-layer) { position: absolute; z-index: 2; inset: 0; pointer-events: none; }
-
-:global(.proofing-annotation-layer--marking) { pointer-events: auto; cursor: crosshair; }
-
-.annotation-marker { position: absolute; z-index: 2; min-width: 22px; min-height: 22px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 3px rgb(0 0 0 / 66%); pointer-events: none; transform: translate(-50%, -50%); }
-
-.annotation-marker--draft { border-color: var(--gallery-accent); }
+:global(.proofing-annotation-layer) { position: absolute; z-index: 2; inset-block-start: 0; inset-inline-start: 0; pointer-events: none; }
 
 :global(ion-action-sheet.lightbox-action-sheet),
 :global(ion-modal.lightbox-sheet),
@@ -213,11 +209,15 @@
 
 .comment-form { display: grid; gap: 10px; margin-top: 20px; }
 
+.comment-form small { color: var(--ion-color-medium); line-height: 1.4; }
+
 .comment-form textarea { min-height: 104px; resize: vertical; }
 
 .comment-list { padding: 0; list-style: none; }
 
 .comment-list li { padding: 16px 0; border-bottom: 1px solid var(--ion-border-color); }
+
+.comment-list__item--selected { margin-inline: -10px; padding-inline: 10px !important; border-radius: 9px; background: color-mix(in srgb, var(--gallery-accent) 16%, transparent); }
 
 .comment-list p { margin: 0 0 7px; white-space: pre-wrap; }
 

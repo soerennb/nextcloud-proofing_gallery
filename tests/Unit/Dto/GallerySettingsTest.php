@@ -124,6 +124,21 @@ final class GallerySettingsTest extends TestCase {
 		self::assertSame($settings['presentation'], $settings['appearance']);
 	}
 
+	public function testPublicPolicyTreatsLegacyAnnotationsWithoutCommentsAsPresentation(): void {
+		$policy = \OCA\ProofingGallery\Domain\PublicLinkPolicy::fromArray([
+			'comments' => false,
+			'annotations' => true,
+		]);
+		$settings = GallerySettings::fromArray([
+			'mode' => 'collaboration',
+			'review' => ['comments' => true, 'annotations' => true],
+		])->withPublicPolicy($policy)->jsonSerialize();
+
+		self::assertSame('presentation', $settings['mode']);
+		self::assertFalse($settings['review']['comments']);
+		self::assertFalse($settings['review']['annotations']);
+	}
+
 	public function testDeepMergesOneSettingsSection(): void {
 		$settings = GallerySettings::merge(GallerySettings::defaults(), [
 			'presentation' => ['theme' => 'light'],

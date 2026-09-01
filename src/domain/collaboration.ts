@@ -61,14 +61,17 @@ export function mergeCollaborationState(current: CollaborationState, incoming: C
 		for (const id of affected) delete result[id]
 		return { ...result, ...values }
 	}
+	const comments = [...current.comments.filter(comment => !hydratedIds.includes(comment.fileId) && !incoming.comments.some(value => value.id === comment.id)), ...incoming.comments]
+		.sort((left, right) => left.createdAt - right.createdAt || left.id - right.id)
 	return {
 		...incoming,
 		likes: replaceRecord(current.likes, incoming.likes),
 		colors: replaceRecord(current.colors, incoming.colors),
 		colorStates: replaceRecord(current.colorStates, incoming.colorStates),
-		comments: [...current.comments.filter(comment => !hydratedIds.includes(comment.fileId) && !incoming.comments.some(value => value.id === comment.id)), ...incoming.comments],
+		comments,
 		selections: [...current.selections.filter(selection => !incoming.selections.some(value => value.id === selection.id)), ...incoming.selections],
 		ratings: [...current.ratings.filter(rating => !affected.has(rating.fileId)), ...incoming.ratings],
+		cursor: Math.max(current.cursor, incoming.cursor),
 	}
 }
 import type { CollaborationState } from '../publicTypes.ts'

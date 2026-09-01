@@ -10,8 +10,10 @@ import { mergeCollaborationState } from './domain/collaboration.ts'
 import { contrastRgb, hexRgb, mixHex, readableText } from './domain/galleryTheme.ts'
 import { PUBLIC_GALLERY_PAGE_SIZE, readPublicGalleryLocation, writePublicGalleryLocation } from './domain/publicGalleryNavigation.ts'
 import { continuationStorageKey, layoutSessionStorageKey, loadPublicGalleryCompareIds, loadPublicGalleryContinuation, loadPublicGallerySavedView, loadPublicGallerySessionLayout, viewStorageKey } from './domain/publicGalleryPreferences.ts'
+import { serialTask } from './domain/serialTask.ts'
 import { galleryTitleMode } from './domain/galleryTitlePresentation.ts'
 import type { CollaborationState, GuestIdentity, MediaItem, PublicGallery, PublicGalleryPage } from './publicTypes.ts'
+import { useDeferredMutation } from './composables/useDeferredMutation.ts'
 const PublicGalleryControls = defineAsyncComponent(() => import('./components/PublicGalleryControls.vue'))
 const PublicLightbox = defineAsyncComponent(() => import('./components/PublicLightbox.vue'))
 const PublicGalleryHeader = defineAsyncComponent(() => import('./components/PublicGalleryHeader.vue'))
@@ -85,7 +87,6 @@ const galleryDownloadError = ref('')
 const [selectionName, selectionMessage] = [ref(''), ref('')]
 const savingSelection = ref(false)
 const guestDialogOpen = ref(false)
-const pendingMutation = ref<{ path: string; method: 'POST' | 'PUT' | 'DELETE'; body?: unknown } | null>(null)
 const review = ref(props.gallery.review ?? { enabled: false, dueDate: null, current: null })
 const savedView = loadPublicGallerySavedView(props.gallery.token)
 localStorage.removeItem(`proofing-gallery-layout:${props.gallery.token}`)
@@ -222,6 +223,7 @@ onBeforeUnmount(() => {
 	window.removeEventListener('popstate', onHistoryChange)
 	pageController?.abort()
 	pageSwipeGesture?.destroy()
+	deferredMutation.cancel()
 })
 
 function canStartPageSwipe(detail: GestureDetail): boolean {
@@ -399,11 +401,7 @@ async function initializeCollaboration() {
 	}
 	await loadCollaboration()
 	if (guest.value && nonce.value) guestDialogOpen.value = false
-	if (guest.value && nonce.value && pendingMutation.value) {
-		const pending = pendingMutation.value
-		pendingMutation.value = null
-		await performMutation(pending.path, pending.method, pending.body)
-	}
+	if (guest.value && nonce.value && deferredMutation.hasPending()) await deferredMutation.complete()
 	startCollaborationPolling()
 }
 
@@ -439,11 +437,7 @@ async function joinCollaboration() {
 		sessionStorage.setItem(`proofing-gallery-nonce:${props.gallery.token}`, payload.nonce)
 		await loadCollaboration()
 		guestDialogOpen.value = false
-		if (pendingMutation.value) {
-			const pending = pendingMutation.value
-			pendingMutation.value = null
-			await performMutation(pending.path, pending.method, pending.body)
-		}
+		if (deferredMutation.hasPending()) await deferredMutation.complete()
 	} catch (exception) {
 		collaborationError.value = exception instanceof Error ? exception.message : String(exception)
 	} finally {
@@ -451,8 +445,7 @@ async function joinCollaboration() {
 	}
 }
 
-async function loadCollaboration() {
-	if (settings.value.mode !== 'collaboration') return
+async function performCollaborationLoad() {
 	try {
 		const visibleIds = mediaItems.value.slice(0, 200).map(item => item.id)
 		const unhydratedIds = visibleIds.filter(id => !collaborationHydratedIds.has(id))
@@ -476,13 +469,17 @@ async function loadCollaboration() {
 	}
 }
 
+const loadCollaboration = serialTask(async () => {
+	if (settings.value.mode === 'collaboration') await performCollaborationLoad()
+})
+
 async function mutateCollaboration(path: string, method: 'POST' | 'PUT' | 'DELETE', body?: unknown) {
-	if (!guest.value || !nonce.value) {
-		pendingMutation.value = { path, method, body }
-		guestDialogOpen.value = true
-		return false
-	}
-	return performMutation(path, method, body)
+	return deferredMutation.mutate(path, method, body)
+}
+
+function cancelPendingMutation() {
+	deferredMutation.cancel()
+	guestDialogOpen.value = false
 }
 
 async function performMutation(path: string, method: 'POST' | 'PUT' | 'DELETE', body?: unknown) {
@@ -504,6 +501,12 @@ async function performMutation(path: string, method: 'POST' | 'PUT' | 'DELETE', 
 	await loadCollaboration()
 	return true
 }
+
+const deferredMutation = useDeferredMutation(
+	() => Boolean(guest.value && nonce.value),
+	() => { guestDialogOpen.value = true },
+	performMutation,
+)
 
 function applyView() {
 	error.value = false
@@ -970,7 +973,7 @@ function upOneLevel() {
 						v-model:email="guestEmail"
 						:open="guestDialogOpen"
 						:joining="joining"
-						@dismiss="guestDialogOpen = false; pendingMutation = null"
+						@dismiss="cancelPendingMutation"
 						@submit="joinCollaboration" />
 
 					<PublicLightbox

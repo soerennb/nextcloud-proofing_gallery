@@ -187,6 +187,9 @@ final class CollaborationService {
 		if ($annotation !== null && !$settings->review->annotations) {
 			throw new InvalidArgumentException('Image annotations are disabled');
 		}
+		if ($annotation !== null && !str_starts_with($this->resolveMedia($gallery, $fileId)->getMimeType(), 'image/')) {
+			throw new InvalidArgumentException('Image annotations require an image file');
+		}
 		$body = trim($body);
 		if ($body === '' || mb_strlen($body) > 5000) {
 			throw new InvalidArgumentException('Comment must contain between 1 and 5000 characters');
@@ -201,10 +204,11 @@ final class CollaborationService {
 
 	public function deleteComment(Gallery $gallery, Guest $guest, int $commentId): void {
 		$this->capabilities->assertFeature('comments');
+		$fileId = $this->ownedCommentFileId($gallery, $guest, $commentId);
 		if (!$this->repository->deleteComment($gallery->getId(), $guest->getId(), $commentId, $this->clock->getTime())) {
 			throw new InvalidArgumentException('Comment cannot be deleted');
 		}
-		$this->event($gallery, $guest, 'comment.deleted', ['commentId' => $commentId]);
+		$this->event($gallery, $guest, 'comment.deleted', ['fileId' => $fileId, 'commentId' => $commentId]);
 	}
 
 	public function ownedCommentFileId(Gallery $gallery, Guest $guest, int $commentId): int {
@@ -215,6 +219,7 @@ final class CollaborationService {
 
 	public function updateComment(Gallery $gallery, Guest $guest, int $commentId, string $body): void {
 		$this->capabilities->assertFeature('comments');
+		$fileId = $this->ownedCommentFileId($gallery, $guest, $commentId);
 		$body = trim($body);
 		if ($body === '' || mb_strlen($body) > 5000) {
 			throw new InvalidArgumentException('Comment must contain between 1 and 5000 characters');
@@ -222,7 +227,7 @@ final class CollaborationService {
 		if (!$this->repository->updateComment($gallery->getId(), $guest->getId(), $commentId, $body, $this->clock->getTime())) {
 			throw new InvalidArgumentException('Comment cannot be edited');
 		}
-		$this->event($gallery, $guest, 'comment.updated', ['commentId' => $commentId]);
+		$this->event($gallery, $guest, 'comment.updated', ['fileId' => $fileId, 'commentId' => $commentId]);
 	}
 
 	/** @param list<int> $fileIds */

@@ -133,7 +133,10 @@ final class GallerySettings implements JsonSerializable {
 		foreach ($reviewCapabilities as $capability) {
 			$enabled = $settings['review'][$capability->value] && $policy->allows($capability);
 			$settings['review'][$capability->value] = $enabled;
-			$reviewEnabled = $reviewEnabled || $enabled;
+		}
+		$settings['review']['annotations'] = $settings['review']['annotations'] && $settings['review']['comments'];
+		foreach ($reviewCapabilities as $capability) {
+			$reviewEnabled = $reviewEnabled || $settings['review'][$capability->value];
 		}
 		$settings['delivery']['guestUploads'] = $settings['delivery']['guestUploads'] && $policy->allows(PublicLinkCapability::Upload);
 		$settings['delivery']['downloadScope'] = $this->delivery->downloadScope->restrict($policy->downloadScope)->value;
