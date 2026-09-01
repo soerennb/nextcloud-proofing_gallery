@@ -7,6 +7,26 @@ import { fetchOwnerUploadConflicts } from './ownerUploadApi.ts'
 import type { UploadResolution } from './ownerUploadApi.ts'
 import { ownerPreviewUrl } from './galleryApi.ts'
 
+const conflictPickerFormSelector = 'form[aria-labelledby="conflict-picker-description"]'
+
+function makeConflictPickerFormKeyboardAccessible(): () => void {
+	const makeFocusable = () => {
+		const form = document.querySelector<HTMLFormElement>(conflictPickerFormSelector)
+		if (!form) return false
+		// The single-file picker has a scrollable form without focusable children.
+		// Keep that native dialog keyboard-scrollable until the dependency supplies a tab stop.
+		if (!form.hasAttribute('tabindex')) form.tabIndex = 0
+		return true
+	}
+
+	if (makeFocusable()) return () => undefined
+	const observer = new MutationObserver(() => {
+		if (makeFocusable()) observer.disconnect()
+	})
+	observer.observe(document.body, { childList: true, subtree: true })
+	return () => observer.disconnect()
+}
+
 export async function resolveOwnerUploadSelection(
 	gallery: Gallery,
 	path: string,
@@ -35,7 +55,13 @@ export async function resolveOwnerUploadSelection(
 			attributes: { etag: item.etag, previewUrl: ownerPreviewUrl(gallery.id, item.id, 64, 64) },
 		})
 	})
-	const result = await openConflictPicker(path || gallery.title, conflicts, nodes)
+	const stopAccessibilityObserver = makeConflictPickerFormKeyboardAccessible()
+	let result
+	try {
+		result = await openConflictPicker(path || gallery.title, conflicts, nodes)
+	} finally {
+		stopAccessibilityObserver()
+	}
 	if (result === null) return null
 	for (const file of result.selected) {
 		const item = existing[file.name]

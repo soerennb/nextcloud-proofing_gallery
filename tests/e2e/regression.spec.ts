@@ -1037,7 +1037,7 @@ test('notification and invitation controls stay understandable and responsive', 
 	await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible()
 	await expect(page.getByRole('switch', { name: 'Nextcloud notification center' })).toBeChecked()
 	await page.getByText('Email digest', { exact: true }).click()
-	await expect(page.getByRole('checkbox', { name: 'Email digest' })).toBeChecked()
+	await expect(page.getByRole('switch', { name: 'Email digest' })).toBeChecked()
 	await page.getByRole('combobox', { name: 'Delivery' }).selectOption('daily')
 	await expect(page.getByRole('combobox', { name: 'Delivery' })).toHaveValue('daily')
 	await page.getByRole('button', { name: /^(Subscribe|Update subscription)$/ }).click()

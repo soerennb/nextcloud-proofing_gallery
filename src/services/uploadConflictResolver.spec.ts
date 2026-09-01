@@ -25,7 +25,10 @@ function existing(name: string, id: number, folder = false): MediaItem {
 }
 
 describe('uploadConflictResolver', () => {
-	beforeEach(() => vi.clearAllMocks())
+	beforeEach(() => {
+		vi.clearAllMocks()
+		document.body.replaceChildren()
+	})
 
 	it('keeps non-conflicting files race-safe with rename semantics', async () => {
 		vi.mocked(fetchOwnerUploadConflicts).mockResolvedValue({})
@@ -53,6 +56,25 @@ describe('uploadConflictResolver', () => {
 		expect(result?.get(replace)).toEqual({ conflict: 'overwrite', expectedFileId: 1, expectedEtag: 'etag-1' })
 		expect(result?.get(rename)).toEqual({ conflict: 'rename' })
 		expect(result?.get(skip)).toEqual({ conflict: 'skip' })
+	})
+
+	it('makes the native picker scroll region keyboard accessible', async () => {
+		const file = new File(['new'], 'proof.jpg', { type: 'image/jpeg' })
+		vi.mocked(fetchOwnerUploadConflicts).mockResolvedValue({ 'proof.jpg': existing('proof.jpg', 1) })
+		let finishPicker!: (result: null) => void
+		vi.mocked(openConflictPicker).mockImplementation(() => new Promise(resolve => {
+			finishPicker = resolve
+		}))
+
+		const resolution = resolveOwnerUploadSelection(gallery, '', [file])
+		await vi.waitFor(() => expect(openConflictPicker).toHaveBeenCalledOnce())
+		const form = document.createElement('form')
+		form.setAttribute('aria-labelledby', 'conflict-picker-description')
+		document.body.append(form)
+
+		await vi.waitFor(() => expect(form.tabIndex).toBe(0))
+		finishPicker(null)
+		await expect(resolution).resolves.toBeNull()
 	})
 
 	it('never offers replacement when the conflicting node is a folder', async () => {
