@@ -36,6 +36,7 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		private \OCA\ProofingGallery\Service\FolderService $folders,
 		private IPreview $preview,
 		private WatermarkPreviewService $watermarks,
+		private \OCA\ProofingGallery\Service\DesignAssetService $designAssets,
 		private PublicGalleryDataService $galleryData,
 		private CollectionService $collections,
 		private \OCA\ProofingGallery\Service\PublicMediaResolver $publicMedia,
@@ -244,8 +245,16 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 			return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
 		}
 		$presentation = $this->publicContext()->settings->presentation;
-		$fileId = $kind === 'hero' ? $presentation->heroFileId : $presentation->logoFileId;
-		if ($kind === 'logo' && $fileId === null && $presentation->instanceLogoAssetId !== null) {
+		$fileId = $kind === 'hero' ? $presentation->heroFileId : ($presentation->logoMode === 'gallery' ? $presentation->logoFileId : null);
+		if ($kind === 'logo' && $presentation->logoMode === 'upload' && $presentation->logoAssetId !== null) {
+			try {
+				$asset = $this->designAssets->owned($this->resolvedGallery()->getOwnerUid(), $presentation->logoAssetId, 'logo');
+				return new DataDisplayResponse($this->designAssets->content($asset), Http::STATUS_OK, [
+					'Content-Type' => $asset->getMimeType(), 'Cache-Control' => 'private, max-age=86400, immutable', 'X-Content-Type-Options' => 'nosniff',
+				]);
+			} catch (\Throwable) { return new DataDisplayResponse('', Http::STATUS_NOT_FOUND); }
+		}
+		if ($kind === 'logo' && $presentation->logoMode === 'inherit' && $presentation->instanceLogoAssetId !== null) {
 			try {
 				$asset = $this->branding->get($presentation->instanceLogoAssetId);
 				return new DataDisplayResponse($asset->getContent(), Http::STATUS_OK, [
@@ -297,14 +306,7 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		try {
 			$appearance = $this->publicContext()->settings->presentation;
 			if ($applyWatermark) {
-				$derivative = $this->watermarks->render(
-					$file,
-					$x,
-					$y,
-					$appearance->watermarkText,
-					$appearance->watermarkOpacity,
-					$mode,
-				);
+				$derivative = $this->watermarks->render($file, $x, $y, $appearance, $this->resolvedGallery()->getOwnerUid(), $mode);
 				return new DataDisplayResponse($derivative['content'], Http::STATUS_OK, [
 					'Content-Type' => $derivative['mimeType'],
 					'Cache-Control' => 'private, max-age=86400, immutable',

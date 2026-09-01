@@ -3,6 +3,12 @@ import { t } from '@nextcloud/l10n'
 
 import { classifyCullingGesture } from '../domain/cullingGesture.ts'
 import type { CullColor, CullPick, IndexedMediaItem, MediaCull } from '../types.ts'
+import ChevronLeftIcon from 'vue-material-design-icons/ChevronLeft.vue'
+import ChevronRightIcon from 'vue-material-design-icons/ChevronRight.vue'
+import FlagIcon from 'vue-material-design-icons/Flag.vue'
+import FlagRemoveIcon from 'vue-material-design-icons/FlagRemove.vue'
+import StarIcon from 'vue-material-design-icons/Star.vue'
+import StarOutlineIcon from 'vue-material-design-icons/StarOutline.vue'
 import ProgressiveImage from './ProgressiveImage.vue'
 
 const props = defineProps<{
@@ -50,7 +56,7 @@ function togglePick(pick: Exclude<CullPick, 'none'>) {
 				:src="previewUrl"
 				:alt="item.name"
 				priority />
-			<span v-if="state.pick !== 'none'" class="decision-badge" :class="`decision-badge--${state.pick}`">{{ state.pick === 'pick' ? 'PICK' : 'REJECT' }}</span>
+			<span v-if="state.pick !== 'none'" class="decision-badge" :class="`decision-badge--${state.pick}`"><FlagIcon :size="11" />{{ state.pick === 'pick' ? 'PICK' : 'REJECT' }}</span>
 		</div>
 		<aside class="culling-loupe__controls" :aria-label="t('proofing_gallery', 'Photo controls')">
 			<div><strong>{{ item.name }}</strong><small>{{ item.relativePath }}</small></div>
@@ -59,38 +65,48 @@ function togglePick(pick: Exclude<CullPick, 'none'>) {
 					:disabled="index <= 0"
 					:aria-label="t('proofing_gallery', 'Previous photo')"
 					@click="emit('navigate', -1)">
-					←
+					<ChevronLeftIcon :size="20" />
 				</button>
 				<span>{{ index + 1 }} / {{ count }}</span>
 				<button type="button"
 					:disabled="index >= count - 1"
 					:aria-label="t('proofing_gallery', 'Next photo')"
 					@click="emit('navigate', 1)">
-					→
+					<ChevronRightIcon :size="20" />
 				</button>
 			</div>
 			<div class="rating-buttons" :aria-label="t('proofing_gallery', 'Set rating')">
-				<button v-for="rating in 6"
-					:key="rating - 1"
+				<button type="button"
+					:class="{ active: state.rating === 0 }"
+					:aria-label="t('proofing_gallery', '{rating} stars', { rating: 0 })"
+					@click="emit('mutate', { rating: 0 })">
+					–
+				</button>
+				<button v-for="rating in 5"
+					:key="rating"
 					type="button"
-					:class="{ active: state.rating === rating - 1 }"
-					:aria-label="t('proofing_gallery', '{rating} stars', { rating: rating - 1 })"
-					@click="emit('mutate', { rating: rating - 1 })">
-					{{ rating - 1 || '–' }}<span v-if="rating > 1">★</span>
+					:class="{ active: state.rating >= rating }"
+					:aria-pressed="state.rating === rating"
+					:aria-label="t('proofing_gallery', '{rating} stars', { rating })"
+					@click="emit('mutate', { rating })">
+					<StarIcon v-if="state.rating >= rating" class="rating-star--filled" :size="20" />
+					<StarOutlineIcon v-else :size="20" />
 				</button>
 			</div>
 			<div class="decision-buttons">
 				<button type="button"
 					:class="{ active: state.pick === 'pick' }"
+					:aria-pressed="state.pick === 'pick'"
 					:aria-label="t('proofing_gallery', 'Pick')"
 					@click="togglePick('pick')">
-					✓ {{ t('proofing_gallery', 'Pick') }}
+					<FlagIcon :size="16" /> {{ t('proofing_gallery', 'Pick') }}
 				</button>
 				<button type="button"
 					:class="{ active: state.pick === 'reject' }"
+					:aria-pressed="state.pick === 'reject'"
 					:aria-label="t('proofing_gallery', 'Reject')"
 					@click="togglePick('reject')">
-					× {{ t('proofing_gallery', 'Reject') }}
+					<FlagRemoveIcon :size="16" /> {{ t('proofing_gallery', 'Reject') }}
 				</button>
 			</div>
 			<div class="color-buttons" :aria-label="t('proofing_gallery', 'Set color label')">

@@ -2,8 +2,12 @@ import type { Page } from '@playwright/test'
 
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test } from '@playwright/test'
+import { execFile } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { promisify } from 'node:util'
+
+const execFileAsync = promisify(execFile)
 
 async function state(): Promise<{ galleryId: number, token: string, folderId: number, largeFolderId: number, largeExtension: 'png' | 'webp' }> {
 	return JSON.parse(await readFile(path.join(process.cwd(), 'test-results-e2e-state.json'), 'utf8'))
@@ -174,6 +178,7 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await readiness.locator('summary').click()
 	await expect(readiness.locator('.readiness-popover__panel')).toBeVisible()
 	await readiness.locator('summary').click()
+	await page.getByLabel('Public gallery language').selectOption('de')
 	const originalTitle = await page.getByLabel('Gallery title').inputValue()
 	await page.getByLabel('Gallery title').fill(`${originalTitle} draft`)
 	await expect(page.locator('.save-indicator[data-state="pending"]')).toBeVisible()
@@ -253,7 +258,7 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await expect(cullingSave).toHaveText('Saved')
 	await page.getByRole('button', { name: 'Pick', exact: true }).click()
 	await page.getByRole('button', { name: 'Undo', exact: true }).click()
-	await expect(page.getByText('Last culling change undone.')).toBeVisible()
+	await expect(page.locator('.toastify.toast-success').filter({ hasText: 'Last culling change undone.' })).toBeVisible()
 	await page.getByRole('button', { name: 'Tools', exact: true }).click()
 	await page.getByRole('button', { name: 'XMP sync', exact: true }).click()
 	await expect(page.getByRole('heading', { name: 'Resolve App and XMP' })).toBeVisible()
@@ -266,25 +271,77 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await settingsNavigation.getByRole('button', { name: 'Design', exact: true }).click()
 	await expect(page.getByRole('heading', { name: 'Appearance' })).toBeVisible()
 	await expect(page.getByText('Public image information')).toBeVisible()
+	await expect(page.getByRole('heading', { name: 'Branding' })).toBeVisible()
+	await expect(page.getByRole('heading', { name: 'Preview watermark' })).toBeVisible()
+	const opening = page.getByLabel('Opening')
+	await opening.selectOption('compact')
+	await expect(page.getByText('Cover image', { exact: true })).toHaveCount(0)
+	await opening.selectOption('cinematic')
+	const coverField = page.getByText('Cover image', { exact: true }).locator('..')
+	await coverField.getByRole('button', { name: 'Choose' }).click()
+	const artworkPicker = page.getByRole('dialog', { name: 'Choose gallery artwork' })
+	await expect(artworkPicker.getByText('proof.png', { exact: true })).toBeVisible()
+	await artworkPicker.getByRole('button', { name: 'Cancel' }).click()
 	const titleDisplay = page.getByLabel('Title display')
 	const preview = page.locator('.gallery-preview')
+	const previewFrame = preview.frameLocator('iframe.gallery-preview__frame')
+	await previewFrame.locator('.public-gallery').waitFor()
+	await expect(previewFrame.getByRole('button', { name: 'Teilen' })).toBeVisible()
+	await expect(previewFrame.locator('body')).toHaveClass(/proofing-gallery-public-page/)
+	const previewShare = previewFrame.getByRole('button', { name: 'Teilen' })
+	expect(await previewShare.evaluate(element => getComputedStyle(element).backgroundColor)).toBe('rgba(0, 0, 0, 0)')
+	const titleAndCount = page.locator('.header-visibility').locator(':scope > *')
+	expect(await titleAndCount.evaluateAll(elements => {
+		const [title, count] = elements.map(element => element.getBoundingClientRect())
+		return title !== undefined && count !== undefined && title.bottom <= count.top
+	})).toBe(true)
+	await expect(page.getByLabel('Logo background')).toHaveValue('transparent')
 	await titleDisplay.selectOption('compact')
-	await expect(preview.locator('.gallery-app-header__title')).toHaveText('E2E Gallery')
-	await expect(preview.locator('.gallery-opener__large-title')).toHaveCount(0)
+	await expect(previewFrame.locator('.gallery-app-header__title')).toHaveText('E2E Gallery')
+	await expect(previewFrame.locator('.gallery-opener__large-title')).toHaveCount(0)
 	await titleDisplay.selectOption('hidden')
-	await expect(preview.locator('.gallery-app-header__title')).toHaveCount(0)
-	await expect(preview.locator('.gallery-opener__large-title')).toHaveCount(0)
+	await expect(page.getByLabel('Title alignment')).toHaveCount(0)
+	await expect(previewFrame.locator('.gallery-app-header__title')).toHaveCount(0)
+	await expect(previewFrame.locator('.gallery-opener__large-title')).toHaveCount(0)
 	await titleDisplay.selectOption('large')
-	await expect(preview.getByRole('heading', { name: 'E2E Gallery' })).toBeVisible()
+	await expect(page.getByLabel('Title alignment')).toBeVisible()
+	await expect(previewFrame.getByRole('heading', { name: 'E2E Gallery' })).toBeVisible()
+	const watermarkText = page.getByLabel('Watermark text')
+	await watermarkText.fill('Studio proof')
+	await expect(previewFrame.locator('.media-tile img').first()).toHaveAttribute('src', /design-preview/)
+	await previewFrame.locator('.media-tile img').first().evaluate((image: HTMLImageElement) => image.decode())
+	await watermarkText.fill('')
+	const previewScene = page.getByLabel('Scene')
+	await previewScene.selectOption('photo')
+	await expect(previewFrame.getByRole('dialog', { name: 'proof.png' })).toBeVisible()
+	await previewScene.selectOption('slideshow')
+	await expect(previewFrame.locator('.lightbox-slideshow-progress')).toBeVisible()
+	await page.getByText('Capture date', { exact: true }).click()
+	await expect(previewScene).toHaveValue('metadata')
+	await expect(previewFrame.getByText('Bildinformationen', { exact: true })).toBeVisible()
+	await previewScene.selectOption('gallery')
+	await expect(previewFrame.getByRole('dialog')).toBeHidden()
+	await expect(previewFrame.locator('.media-grid')).toBeVisible()
+	await page.getByText('Capture date', { exact: true }).click()
+	await expect(previewScene).toHaveValue('metadata')
+	await previewScene.selectOption('gallery')
+	const accentInput = page.locator('input[name="accentColor"]')
+	const originalAccent = await accentInput.inputValue()
+	await accentInput.fill('#1a73e8')
+	await expect(previewFrame.locator('ion-app')).toHaveCSS('--gallery-accent', '#1a73e8')
+	await accentInput.fill(originalAccent)
 	await page.setViewportSize({ width: 390, height: 844 })
+	expect(await page.locator('.settings-page').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
 	await page.getByRole('button', { name: 'Preview gallery' }).click()
 	await expect(page.locator('.gallery-preview--expanded')).toBeVisible()
 	await expect(page.getByText('Live preview', { exact: true })).toBeVisible()
 	await page.getByRole('button', { name: 'Phone' }).click()
 	await expect(page.locator('.gallery-preview__viewport--phone')).toBeVisible()
-	await expect(page.locator('.gallery-preview__grid img')).toHaveCount(1)
+	await expect(previewFrame.locator('.media-tile img')).toHaveCount(1)
 	await page.getByRole('button', { name: 'Close preview' }).click()
 	await page.setViewportSize({ width: 1440, height: 1000 })
+	await settingsNavigation.getByRole('button', { name: 'Overview', exact: true }).click()
+	await page.getByLabel('Public gallery language').selectOption('en')
 	await settingsNavigation.getByRole('button', { name: 'Share', exact: true }).click()
 	await expect(page.getByRole('heading', { level: 2, name: 'Client links' })).toBeVisible()
 	await page.getByRole('button', { name: 'New client link' }).click()
@@ -349,16 +406,61 @@ test('guest completes an accessible proofing flow', async ({ page, baseURL }) =>
 	await page.setViewportSize({ width: 1280, height: 900 })
 	await page.goto(`${baseURL}/s/${token}`)
 	await page.getByRole('button', { name: 'Open proof.png' }).click()
-	await expect(page.getByRole('dialog', { name: 'proof.png' })).toBeVisible()
-	await page.getByRole('button', { name: /Like/ }).click()
+	const lightbox = page.getByRole('dialog', { name: 'proof.png' })
+	await expect(lightbox).toBeVisible()
+	await page.waitForTimeout(2800)
+	await expect(lightbox).not.toHaveClass(/lightbox-shell--chrome-hidden/)
+	await expect(lightbox.getByRole('button', { name: 'Feedback', exact: true })).toBeVisible()
+
+	const image = page.locator('.pswp__img[alt="proof.png"]')
+	const imageBounds = await image.boundingBox()
+	expect(imageBounds).not.toBeNull()
+	await image.click({ position: { x: imageBounds!.width * 0.67, y: imageBounds!.height * 0.42 } })
+	await page.getByRole('textbox', { name: 'Point comment' }).fill('Retouch this point')
+	await page.getByRole('button', { name: 'Comment', exact: true }).click()
 	await page.getByRole('textbox', { name: 'Your name' }).fill('Playwright Reviewer')
 	await page.getByRole('button', { name: 'Continue' }).click()
 	await expect(page.getByRole('textbox', { name: 'Your name' })).toHaveCount(0)
+	const pointMarker = page.getByRole('button', { name: 'Open point comment 1' })
+	await expect(pointMarker).toBeVisible()
+	await pointMarker.click()
+	await expect(page.getByText('Retouch this point')).toBeVisible()
+	await page.getByRole('button', { name: 'Close feedback' }).click()
+
+	await lightbox.getByRole('button', { name: 'Feedback', exact: true }).click()
+	const addPointComment = page.getByRole('button', { name: 'Add point comment' })
+	await addPointComment.click()
+	await expect(page.getByRole('status')).toContainText('Move the point with the arrow keys')
+	await page.keyboard.press('ArrowRight')
+	await page.keyboard.press('Escape')
+	await expect(page.getByRole('status')).toHaveCount(0)
+	await expect(pointMarker).toHaveCount(1)
+	await lightbox.getByRole('button', { name: 'Feedback', exact: true }).click()
+	await page.getByRole('button', { name: 'Add point comment' }).click()
+	await page.keyboard.press('Enter')
+	await expect(page.getByRole('textbox', { name: 'Point comment' })).toBeFocused()
+	await page.keyboard.press('Escape')
+	await expect(page.getByRole('textbox', { name: 'Point comment' })).toHaveCount(0)
+	await expect(lightbox).toBeFocused()
+	const lightboxAccessibility = await new AxeBuilder({ page }).include('.lightbox-shell').analyze()
+	expect(lightboxAccessibility.violations).toEqual([])
+
+	await lightbox.getByRole('button', { name: 'Feedback', exact: true }).click()
+	await page.locator('ion-modal.lightbox-feedback-sheet .feedback-actions > button').click()
 	await page.getByRole('textbox', { name: 'Comment' }).fill('Approved in automated review')
 	await page.getByRole('button', { name: 'Comment', exact: true }).click()
 	await expect(page.getByText('Approved in automated review')).toBeVisible()
 	await page.getByRole('button', { name: 'Close feedback' }).click()
-	await page.getByRole('dialog', { name: 'proof.png' }).getByRole('button', { name: 'Close', exact: true }).click()
+	await lightbox.getByRole('button', { name: 'Close', exact: true }).click()
+	await page.getByRole('button', { name: 'Open proof.png' }).click()
+	await expect(pointMarker).toBeVisible()
+	const reopenedImageBounds = await image.boundingBox()
+	const markerBounds = await pointMarker.boundingBox()
+	expect(reopenedImageBounds).not.toBeNull()
+	expect(markerBounds).not.toBeNull()
+	expect((markerBounds!.x + markerBounds!.width / 2 - reopenedImageBounds!.x) / reopenedImageBounds!.width).toBeCloseTo(0.67, 1)
+	expect((markerBounds!.y + markerBounds!.height / 2 - reopenedImageBounds!.y) / reopenedImageBounds!.height).toBeCloseTo(0.42, 1)
+	await lightbox.getByRole('button', { name: 'Close', exact: true }).click()
 	const unchangedPoll = await page.evaluate(async () => {
 		const response = await fetch(`${location.pathname.replace(/^\/s\//, '/apps/proofing_gallery/public/')}/collaboration?cursor=999999`, { headers: { Accept: 'application/json' } })
 		return { status: response.status, body: await response.json() }
@@ -376,6 +478,280 @@ test('guest completes an accessible proofing flow', async ({ page, baseURL }) =>
 	})
 })
 
+test('private collaboration state never discloses another guest feedback', async ({ browser, request, baseURL }) => {
+	const fixture = await state()
+	const apiHeaders = { Authorization: `Basic ${Buffer.from('admin:admin').toString('base64')}`, 'OCS-APIRequest': 'true' }
+	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
+	const createdResponse = await request.post(`${galleries}?format=json`, {
+		headers: apiHeaders,
+		data: { folderId: fixture.folderId, title: 'E2E Private collaboration', settings: { mode: 'collaboration', feedbackVisibility: 'private', publicLocale: 'en' } },
+	})
+	expect(createdResponse.ok()).toBe(true)
+	const created = await createdResponse.json() as { id: number }
+	try {
+		const media = await request.get(`${galleries}/${created.id}/media?format=json&limit=100`, { headers: apiHeaders }).then(response => response.json()) as { items: Array<{ id: number; name: string }> }
+		const fileId = media.items.find(item => item.name === 'proof.png')?.id
+		expect(fileId).toBeTruthy()
+		const published = await request.post(`${galleries}/${created.id}/publish?format=json`, { headers: apiHeaders, data: { allowDownloads: false } }).then(response => response.json()) as { gallery: { shareToken: string } }
+		const publicUrl = `${baseURL}/s/${published.gallery.shareToken}`
+
+		const firstContext = await browser.newContext()
+		const firstPage = await firstContext.newPage()
+		await firstPage.goto(publicUrl)
+		const firstState = await firstPage.evaluate(async fileId => {
+			const base = location.pathname.replace(/^\/s\//, '/apps/proofing_gallery/public/')
+			const session = await fetch(`${base}/session`, {
+				method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ displayName: 'Private guest A' }),
+			}).then(response => response.json()) as { nonce: string }
+			const comment = await fetch(`${base}/collaboration/media/${fileId}/comments`, {
+				method: 'POST', credentials: 'same-origin',
+				headers: { 'Content-Type': 'application/json', 'X-Proofing-Nonce': session.nonce },
+				body: JSON.stringify({ body: 'Guest A private note' }),
+			})
+			const state = await fetch(`${base}/collaboration?fileIds=${fileId}`).then(response => response.json())
+			return { commentStatus: comment.status, state }
+		}, fileId!)
+		expect(firstState.commentStatus).toBe(201)
+		expect(firstState.state.comments).toHaveLength(1)
+		await firstContext.close()
+
+		const anonymousContext = await browser.newContext()
+		const anonymousPage = await anonymousContext.newPage()
+		await anonymousPage.goto(publicUrl)
+		const anonymous = await anonymousPage.evaluate(async fileId => {
+			const base = location.pathname.replace(/^\/s\//, '/apps/proofing_gallery/public/')
+			const response = await fetch(`${base}/collaboration?fileIds=${fileId}`)
+			const excessive = await fetch(`${base}/collaboration?fileIds=${Array.from({ length: 201 }, (_, index) => index + 1).join(',')}`)
+			const negativeCursor = await fetch(`${base}/collaboration?cursor=-1`)
+			const malformedIds = await fetch(`${base}/collaboration?fileIds=${fileId},nope`)
+			return {
+				state: await response.json(),
+				excessiveStatus: excessive.status,
+				negativeCursorStatus: negativeCursor.status,
+				malformedIdsStatus: malformedIds.status,
+			}
+		}, fileId!)
+		expect(anonymous.state).toMatchObject({ likes: {}, colors: {}, colorStates: {}, comments: [], selections: [], events: [], ratings: [], cursor: 0 })
+		expect(anonymous.excessiveStatus).toBe(422)
+		expect(anonymous.negativeCursorStatus).toBe(422)
+		expect(anonymous.malformedIdsStatus).toBe(422)
+		await anonymousContext.close()
+
+		const secondContext = await browser.newContext()
+		const secondPage = await secondContext.newPage()
+		await secondPage.goto(publicUrl)
+		const secondState = await secondPage.evaluate(async fileId => {
+			const base = location.pathname.replace(/^\/s\//, '/apps/proofing_gallery/public/')
+			await fetch(`${base}/session`, {
+				method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ displayName: 'Private guest B' }),
+			})
+			return fetch(`${base}/collaboration?fileIds=${fileId}`).then(response => response.json())
+		}, fileId!)
+		expect(secondState.comments).toEqual([])
+		expect(secondState.events).toEqual([])
+		await secondContext.close()
+	} finally {
+		await request.delete(`${galleries}/${created.id}?format=json`, { headers: apiHeaders })
+	}
+})
+
+test('guest sessions remain gallery-scoped and recover their mutation nonce', async ({ browser, request, baseURL }) => {
+	const fixture = await state()
+	const apiHeaders = { Authorization: `Basic ${Buffer.from('admin:admin').toString('base64')}`, 'OCS-APIRequest': 'true' }
+	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
+	const createdIds: number[] = []
+	try {
+		const createGallery = async (title: string) => {
+			const createdResponse = await request.post(`${galleries}?format=json`, {
+				headers: apiHeaders,
+				data: { folderId: fixture.folderId, title, settings: { mode: 'collaboration', publicLocale: 'en' } },
+			})
+			expect(createdResponse.ok()).toBe(true)
+			const created = await createdResponse.json() as { id: number }
+			createdIds.push(created.id)
+			const published = await request.post(`${galleries}/${created.id}/publish?format=json`, { headers: apiHeaders, data: { allowDownloads: false } })
+			expect(published.ok()).toBe(true)
+			return (await published.json() as { gallery: { shareToken: string } }).gallery.shareToken
+		}
+		const firstToken = await createGallery('E2E Scoped guest A')
+		const secondToken = await createGallery('E2E Scoped guest B')
+		const context = await browser.newContext()
+		const page = await context.newPage()
+		const createSession = async (token: string, displayName: string) => {
+			await page.goto(`${baseURL}/s/${token}`)
+			return page.evaluate(async ({ token, displayName }) => {
+				const response = await fetch(`/apps/proofing_gallery/public/${token}/session`, {
+					method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ displayName }),
+				})
+				return response.json() as Promise<{ guest: { displayName: string }, nonce: string }>
+			}, { token, displayName })
+		}
+		const first = await createSession(firstToken, 'Scoped guest A')
+		const second = await createSession(secondToken, 'Scoped guest B')
+		expect(first.nonce).not.toBe(second.nonce)
+
+		const resume = async (token: string) => {
+			await page.goto(`${baseURL}/s/${token}`)
+			return page.evaluate(async token => {
+				const response = await fetch(`/apps/proofing_gallery/public/${token}/session`, { credentials: 'same-origin' })
+				return response.json() as Promise<{ guest: { displayName: string }, nonce: string }>
+			}, token)
+		}
+		const resumedFirst = await resume(firstToken)
+		expect(resumedFirst).toMatchObject({ guest: { displayName: 'Scoped guest A' }, nonce: first.nonce })
+		const resumedSecond = await resume(secondToken)
+		expect(resumedSecond).toMatchObject({ guest: { displayName: 'Scoped guest B' }, nonce: second.nonce })
+
+		await page.goto(`${baseURL}/s/${firstToken}`)
+		await page.evaluate(token => sessionStorage.removeItem(`proofing-gallery-nonce:${token}`), firstToken)
+		await page.reload()
+		await expect.poll(() => page.evaluate(token => sessionStorage.getItem(`proofing-gallery-nonce:${token}`), firstToken)).toBe(first.nonce)
+		let likeAttempts = 0
+		await page.route('**/collaboration/media/*/like', async route => {
+			likeAttempts++
+			if (likeAttempts === 1) {
+				await route.fulfill({ status: 403, contentType: 'application/json', json: { code: 'invalid_nonce', message: 'Invalid request nonce' } })
+				return
+			}
+			await route.continue()
+		})
+		await page.getByRole('button', { name: 'Open proof.png' }).click()
+		await page.getByRole('button', { name: 'Like', exact: true }).first().click()
+		await expect.poll(() => likeAttempts).toBe(2)
+		await page.unroute('**/collaboration/media/*/like')
+		const secondTab = await context.newPage()
+		await secondTab.goto(`${baseURL}/s/${firstToken}`)
+		await expect.poll(() => secondTab.evaluate(token => sessionStorage.getItem(`proofing-gallery-nonce:${token}`), firstToken)).toBe(first.nonce)
+
+		const cookieNames = (await context.cookies()).map(cookie => cookie.name)
+		expect(cookieNames.filter(name => name.startsWith('proofing_gallery_guest_'))).toHaveLength(2)
+		await context.close()
+	} finally {
+		for (const id of createdIds) await request.delete(`${galleries}/${id}?format=json`, { headers: apiHeaders })
+	}
+})
+
+test('owner selection deltas and collaboration event paging remain complete', async ({ browser, request, baseURL }) => {
+	test.setTimeout(90_000)
+	const fixture = await state()
+	const apiHeaders = { Authorization: `Basic ${Buffer.from('admin:admin').toString('base64')}`, 'OCS-APIRequest': 'true' }
+	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
+	const createdResponse = await request.post(`${galleries}?format=json`, {
+		headers: apiHeaders,
+		data: { folderId: fixture.folderId, title: 'E2E Collaboration deltas', settings: { mode: 'collaboration', publicLocale: 'en' } },
+	})
+	expect(createdResponse.ok()).toBe(true)
+	const created = await createdResponse.json() as { id: number }
+	try {
+		const media = await request.get(`${galleries}/${created.id}/media?format=json&limit=100`, { headers: apiHeaders }).then(response => response.json()) as { items: Array<{ id: number, name: string }> }
+		const fileId = media.items.find(item => item.name === 'proof.png')?.id
+		expect(fileId).toBeTruthy()
+		const published = await request.post(`${galleries}/${created.id}/publish?format=json`, { headers: apiHeaders, data: { allowDownloads: false } })
+		const token = (await published.json() as { gallery: { shareToken: string } }).gallery.shareToken
+		const context = await browser.newContext()
+		const page = await context.newPage()
+		await page.goto(`${baseURL}/s/${token}`)
+		const guest = await page.evaluate(async ({ token, fileId }) => {
+			const base = `/apps/proofing_gallery/public/${token}`
+			const session = await fetch(`${base}/session`, {
+				method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ displayName: 'Delta reviewer' }),
+			}).then(response => response.json()) as { nonce: string }
+			const selectionResponse = await fetch(`${base}/collaboration/selections`, {
+				method: 'POST', credentials: 'same-origin',
+				headers: { 'Content-Type': 'application/json', 'X-Proofing-Nonce': session.nonce },
+				body: JSON.stringify({ name: 'Initial selection', fileIds: [fileId] }),
+			})
+			return { nonce: session.nonce, selection: await selectionResponse.json() as { id: string } }
+		}, { token, fileId: fileId! })
+
+		const initialState = await page.evaluate(async ({ token, fileId }) => {
+			return fetch(`/apps/proofing_gallery/public/${token}/collaboration?cursor=0&fileIds=${fileId}`).then(response => response.json())
+		}, { token, fileId: fileId! }) as { cursor: number }
+		const subscriptions = `${galleries}/${created.id}/notification-subscriptions`
+		expect((await request.put(`${subscriptions}?format=json`, {
+			headers: apiHeaders,
+			data: { recipientUid: 'admin', eventTypes: ['like.changed'], frequency: 'immediate', locale: 'auto' },
+		})).ok()).toBe(true)
+		const updateSubscriptionJson = async (value: string) => execFileAsync('docker', [
+			'compose', 'exec', '-T', 'db', 'mariadb', '--user=nextcloud', '--password=nextcloud', 'nextcloud',
+			'--execute', `UPDATE oc_proofing_notify_subs SET native_event_types='${value}' WHERE gallery_id=${created.id}`,
+		], { cwd: process.cwd() })
+		await updateSubscriptionJson('{')
+		try {
+			const failedMutation = await page.evaluate(async ({ token, nonce, fileId }) => {
+				const response = await fetch(`/apps/proofing_gallery/public/${token}/collaboration/media/${fileId}/like`, {
+					method: 'POST', credentials: 'same-origin', headers: { 'X-Proofing-Nonce': nonce },
+				})
+				return response.status
+			}, { token, nonce: guest.nonce, fileId: fileId! })
+			expect(failedMutation).toBe(500)
+			const stateAfterRollback = await page.evaluate(async ({ token, cursor, fileId }) => {
+				return fetch(`/apps/proofing_gallery/public/${token}/collaboration?cursor=${cursor}&fileIds=${fileId}`).then(response => response.json())
+			}, { token, cursor: initialState.cursor, fileId: fileId! })
+			expect(stateAfterRollback).toEqual({ unchanged: true, cursor: initialState.cursor })
+		} finally {
+			await updateSubscriptionJson('[]')
+		}
+		const updatedResponse = await request.put(`${galleries}/${created.id}/selections/${guest.selection.id}?format=json`, {
+			headers: apiHeaders,
+			data: { name: 'Owner-renamed selection', status: 'completed' },
+		})
+		expect(updatedResponse.ok()).toBe(true)
+		const updatedDelta = await page.evaluate(async ({ token, cursor, fileId }) => {
+			return fetch(`/apps/proofing_gallery/public/${token}/collaboration?cursor=${cursor}&fileIds=${fileId}`).then(response => response.json())
+		}, { token, cursor: initialState.cursor, fileId: fileId! }) as {
+			cursor: number
+			events: Array<{ type: string, payload: { selectionId?: string } }>
+			selections: Array<{ id: string, name: string, status: string }>
+		}
+		expect(updatedDelta.events).toContainEqual(expect.objectContaining({ type: 'selection.updated', payload: { selectionId: guest.selection.id } }))
+		expect(updatedDelta.selections).toContainEqual(expect.objectContaining({ id: guest.selection.id, name: 'Owner-renamed selection', status: 'completed' }))
+
+		const deletedResponse = await request.delete(`${galleries}/${created.id}/selections/${guest.selection.id}?format=json`, { headers: apiHeaders })
+		expect(deletedResponse.ok()).toBe(true)
+		const deletedDelta = await page.evaluate(async ({ token, cursor, fileId }) => {
+			return fetch(`/apps/proofing_gallery/public/${token}/collaboration?cursor=${cursor}&fileIds=${fileId}`).then(response => response.json())
+		}, { token, cursor: updatedDelta.cursor, fileId: fileId! }) as { cursor: number, events: Array<{ type: string, payload: { selectionId?: string } }> }
+		expect(deletedDelta.events).toContainEqual(expect.objectContaining({
+			type: 'selection.deleted',
+			payload: expect.objectContaining({ selectionId: guest.selection.id }),
+		}))
+
+		await page.evaluate(async ({ token, nonce, fileId }) => {
+			for (let index = 0; index < 205; index++) {
+				const response = await fetch(`/apps/proofing_gallery/public/${token}/collaboration/media/${fileId}/like`, {
+					method: 'POST', credentials: 'same-origin', headers: { 'X-Proofing-Nonce': nonce },
+				})
+				if (!response.ok) throw new Error(`Like mutation failed with ${response.status}`)
+			}
+		}, { token, nonce: guest.nonce, fileId: fileId! })
+		const pages = await page.evaluate(async ({ token, fileId }) => {
+			let cursor = 0
+			const events: Array<{ id: number, type: string }> = []
+			for (let pageIndex = 0; pageIndex < 5; pageIndex++) {
+				const state = await fetch(`/apps/proofing_gallery/public/${token}/collaboration?cursor=${cursor}&fileIds=${fileId}`).then(response => response.json()) as {
+					unchanged?: boolean, cursor: number, events?: Array<{ id: number, type: string }>
+				}
+				if (state.unchanged) break
+				events.push(...(state.events ?? []))
+				if (state.cursor === cursor) throw new Error('Collaboration cursor did not advance')
+				cursor = state.cursor
+			}
+			return events
+		}, { token, fileId: fileId! })
+		const likeEvents = pages.filter(event => event.type === 'like.changed')
+		expect(likeEvents).toHaveLength(205)
+		expect(new Set(pages.map(event => event.id)).size).toBe(pages.length)
+		await context.close()
+	} finally {
+		await request.delete(`${galleries}/${created.id}?format=json`, { headers: apiHeaders })
+	}
+})
+
 test('guest and owner complete a link-scoped review round', async ({ page, request, baseURL }) => {
 	const fixture = await state()
 	const apiHeaders = { Authorization: `Basic ${Buffer.from('admin:admin').toString('base64')}`, 'OCS-APIRequest': 'true' }
@@ -383,6 +759,12 @@ test('guest and owner complete a link-scoped review round', async ({ page, reque
 	const created = await request.post(galleries, { headers: apiHeaders, data: { folderId: fixture.folderId, title: 'E2E Review rounds', settings: { mode: 'collaboration', publicLocale: 'en' } } })
 	const gallery = await created.json() as { id: number }
 	try {
+		const galleryEndpoint = `${galleries.replace('?format=json', '')}/${gallery.id}`
+		const mediaResponse = await request.get(`${galleryEndpoint}/media?format=json&limit=100`, { headers: apiHeaders })
+		expect(mediaResponse.ok()).toBe(true)
+		const media = await mediaResponse.json() as { items: Array<{ id: number; name: string }> }
+		const proof = media.items.find(item => item.name === 'proof.png')
+		expect(proof).toBeTruthy()
 		const published = await request.post(`${galleries.replace('?format=json', '')}/${gallery.id}/publish?format=json`, { headers: apiHeaders, data: { allowDownloads: false } })
 		const token = (await published.json() as { gallery: { shareToken: string } }).gallery.shareToken
 		const linksEndpoint = `${galleries.replace('?format=json', '')}/${gallery.id}/public-links?format=json`
@@ -397,13 +779,53 @@ test('guest and owner complete a link-scoped review round', async ({ page, reque
 		await page.getByRole('button', { name: 'More options', exact: true }).click()
 		await expect(page.getByRole('button', { name: 'Download entire gallery' })).toHaveCount(0)
 		await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+		await page.getByRole('button', { name: 'Open proof.png' }).click()
+		const lightbox = page.getByRole('dialog', { name: 'proof.png' })
+		await lightbox.getByRole('button', { name: 'Feedback', exact: true }).click()
+		await page.locator('ion-modal.lightbox-feedback-sheet .feedback-actions > button').click()
+		await page.getByRole('textbox', { name: 'Your name' }).fill('Round Reviewer')
+		await page.getByRole('button', { name: 'Continue' }).click()
+		await page.getByRole('button', { name: 'Close feedback' }).click()
+		await lightbox.getByRole('button', { name: 'Close', exact: true }).click()
+		const nonce = await page.evaluate(token => sessionStorage.getItem(`proofing-gallery-nonce:${token}`), token)
+		expect(nonce).toBeTruthy()
+		const allowedAnnotation = await page.evaluate(async ({ token, nonce, fileId }) => {
+			const response = await fetch(`/apps/proofing_gallery/public/${token}/collaboration/media/${fileId}/comments`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', 'X-Proofing-Nonce': nonce! },
+				body: JSON.stringify({ body: 'Policy-scoped point', annotation: { x: 2500, y: 7500, width: 800, height: 800 } }),
+			})
+			return { status: response.status, body: await response.json() }
+		}, { token, nonce, fileId: proof!.id })
+		expect(allowedAnnotation).toEqual({ status: 201, body: { id: expect.any(Number) } })
 		await page.getByRole('button', { name: 'Review details' }).click()
 		await expect(page.getByText('Review open')).toBeVisible()
 		await page.getByRole('button', { name: 'Submit review' }).click()
-		await page.getByRole('textbox', { name: 'Your name' }).fill('Round Reviewer')
-		await page.getByRole('button', { name: 'Continue' }).click()
 		await expect(page.getByText('Submitted for approval')).toBeVisible()
 		expect(await page.locator('#proofing_gallery_public').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+
+		const restrictedPolicy = { ...link.policy, comments: true, annotations: false }
+		const restricted = await request.put(`${linksEndpoint.replace('?format=json', '')}/${link.id}?format=json`, {
+			headers: apiHeaders,
+			data: { name: link.name, policy: restrictedPolicy, reviewEnabled: true, reviewDueDate: dueDate },
+		})
+		expect(restricted.ok()).toBe(true)
+		await page.reload()
+		const restrictedState = await page.evaluate(async ({ token, fileId }) => {
+			const response = await fetch(`/apps/proofing_gallery/public/${token}/collaboration?cursor=0&fileIds=${fileId}`)
+			return response.json()
+		}, { token, fileId: proof!.id }) as { policy: { features: { annotations: boolean } }; comments: Array<{ body: string; annotations: unknown[] }> }
+		expect(restrictedState.policy.features.annotations).toBe(false)
+		expect(restrictedState.comments.find(comment => comment.body === 'Policy-scoped point')?.annotations).toEqual([])
+		const deniedAnnotation = await page.evaluate(async ({ token, nonce, fileId }) => {
+			const response = await fetch(`/apps/proofing_gallery/public/${token}/collaboration/media/${fileId}/comments`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', 'X-Proofing-Nonce': nonce! },
+				body: JSON.stringify({ body: 'Must be denied', annotation: { x: 5000, y: 5000, width: 800, height: 800 } }),
+			})
+			return response.status
+		}, { token, nonce, fileId: proof!.id })
+		expect(deniedAnnotation).toBe(403)
 
 		const approved = await request.post(`${galleries.replace('?format=json', '')}/${gallery.id}/public-links/${link.id}/review/approve?format=json`, { headers: apiHeaders })
 		expect(approved.ok()).toBe(true)
@@ -699,7 +1121,7 @@ test('editorial story and contextual light table work on desktop and mobile', as
 	expect(media.items.length).toBeGreaterThanOrEqual(2)
 	const updated = await request.put(`${galleries}/${created.id}?format=json`, {
 		headers,
-		data: { expectedRevision: created.revision, settings: { presentation: { layout: 'story', story: { showAllMedia: true, sections: [{
+		data: { expectedRevision: created.revision, settings: { presentation: { layout: 'story', showFilenames: true, story: { showAllMedia: true, sections: [{
 			id: 'opening', title: 'A quiet visual story', body: 'Portrait and landscape photographs share one deliberate sequence.', style: 'split', mediaIds: media.items.slice(0, 2).map(item => item.id),
 		}] } } } },
 	})
@@ -712,6 +1134,7 @@ test('editorial story and contextual light table work on desktop and mobile', as
 	const page = await context.newPage()
 	await page.goto(`${baseURL}/s/${token}`)
 	await expect(page.getByText('A quiet visual story')).toBeVisible()
+	for (const item of media.items.slice(0, 2)) await expect(page.locator('.story-gallery figcaption').getByText(item.name, { exact: true })).toBeVisible()
 	await expect(page.getByText('A/B mode', { exact: false })).toHaveCount(0)
 	await page.getByRole('button', { name: 'More options', exact: true }).click()
 	await page.getByRole('button', { name: 'Select', exact: true }).click()

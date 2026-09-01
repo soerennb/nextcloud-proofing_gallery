@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
+import DotsHorizontalIcon from 'vue-material-design-icons/DotsHorizontal.vue'
 
 defineProps<{ label: string }>()
 
@@ -97,7 +98,7 @@ onBeforeUnmount(() => {
 			:aria-label="label"
 			aria-haspopup="menu"
 			@click="toggle">
-			<span aria-hidden="true">•••</span>
+			<DotsHorizontalIcon aria-hidden="true" :size="18" />
 		</button>
 		<Teleport to="body">
 			<div

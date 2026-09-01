@@ -86,8 +86,10 @@ const emit = defineEmits<{
 					@ion-input="emit('search')"
 					@ion-cancel="emit('toggle-search')" />
 			</IonToolbar>
-			<IonToolbar v-else>
-				<IonButtons v-if="logoUrl" slot="start" class="gallery-app-header__brand">
+			<IonToolbar v-else :class="{ 'gallery-app-header__toolbar--branded': logoUrl }">
+				<IonButtons v-if="logoUrl"
+					slot="start"
+					class="gallery-app-header__brand">
 					<img :src="logoUrl" :alt="t('proofing_gallery', 'Gallery logo')">
 				</IonButtons>
 				<IonTitle v-if="titleMode === 'compact' || studioName" class="gallery-app-header__identity">

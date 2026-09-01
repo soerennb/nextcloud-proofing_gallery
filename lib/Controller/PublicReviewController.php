@@ -45,15 +45,18 @@ final class PublicReviewController extends ResolvedPublicShareController {
 			$context = $this->publicContext();
 			$guest = $this->guests->authenticate(
 				$context->gallery,
-				$this->request->getCookie(GuestService::COOKIE_NAME),
+				$this->guestSecret($context->gallery),
 				$this->request->getHeader('X-Proofing-Nonce'),
 			);
 			return new JSONResponse($this->reviews->submit($context->gallery, $context->link, $guest));
 		} catch (DoesNotExistException) {
-			return new JSONResponse(['message' => 'Guest session required'], Http::STATUS_UNAUTHORIZED);
+			return new JSONResponse(['code' => 'guest_session_required', 'message' => 'Guest session required'], Http::STATUS_UNAUTHORIZED);
 		} catch (ReviewConflictException $exception) {
-			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_CONFLICT);
+			return new JSONResponse(['code' => 'review_conflict', 'message' => $exception->getMessage()], Http::STATUS_CONFLICT);
 		} catch (\InvalidArgumentException $exception) {
+			if ($exception->getMessage() === 'Invalid request nonce') {
+				return new JSONResponse(['code' => 'invalid_nonce', 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
+			}
 			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
 	}

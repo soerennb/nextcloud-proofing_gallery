@@ -12,7 +12,10 @@ export interface GalleryStorySection {
 export interface GalleryAppearance {
 	accentColor: string
 	welcomeMessage: string
+	logoMode: 'inherit' | 'none' | 'gallery' | 'upload'
+	logoBackground: 'transparent' | 'light' | 'dark'
 	logoFileId: number | null
+	logoAssetId: string | null
 	instanceLogoAssetId: string | null
 	instanceStudioName: string
 	heroFileId: number | null
@@ -22,6 +25,12 @@ export interface GalleryAppearance {
 	fontPreset: 'system' | 'editorial' | 'modern'
 	watermarkText: string
 	watermarkOpacity: number
+	watermarkTextPosition: 'tile' | 'center' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
+	watermarkTextSize: number
+	watermarkImageAssetId: string | null
+	watermarkImageOpacity: number
+	watermarkImagePosition: 'center' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
+	watermarkImageScale: number
 }
 
 export interface GalleryPresentation extends GalleryAppearance {
@@ -31,9 +40,9 @@ export interface GalleryPresentation extends GalleryAppearance {
 	tileGap: 'tight' | 'normal' | 'wide'
 	tileRadius: 'square' | 'soft'
 	titleAlignment: 'left' | 'center'
-	showTitle: boolean
+	titleMode: 'large' | 'compact' | 'hidden'
 	showMediaCount: boolean
-	titleSize: 'small' | 'medium' | 'large'
+	titleSize: 'medium' | 'large'
 	showFilenames: boolean
 	slideshowInterval: number
 	motionPreset: 'off' | 'subtle' | 'expressive'
@@ -43,13 +52,8 @@ export interface GalleryPresentation extends GalleryAppearance {
 }
 
 export interface GallerySettings {
-	schemaVersion?: 9
+	schemaVersion?: 11
 	mode: GalleryMode
-	feedbackVisibility: FeedbackVisibility
-	allowDownloads: boolean
-	allowGuestUploads: boolean
-	showFilenames: boolean
-	colorLabels: [string, string, string, string]
 	publicLocale: 'auto' | 'en' | 'de'
 	review: {
 		visibility: FeedbackVisibility
@@ -94,8 +98,6 @@ export interface GallerySettings {
 		retentionHandoff: boolean
 	}
 	presentation: GalleryPresentation
-	/** Version 1 response alias. New writes use presentation. */
-	appearance: GalleryPresentation
 }
 
 export type CanonicalGallerySettings = Pick<GallerySettings,
@@ -103,7 +105,7 @@ export type CanonicalGallerySettings = Pick<GallerySettings,
 
 export function canonicalGallerySettings(settings: GallerySettings): CanonicalGallerySettings {
 	return {
-		schemaVersion: 9,
+		schemaVersion: 11,
 		mode: settings.mode,
 		publicLocale: settings.publicLocale,
 		review: structuredClone(settings.review),
@@ -116,7 +118,7 @@ export function canonicalGallerySettings(settings: GallerySettings): CanonicalGa
 	}
 }
 
-const DEFAULT_COLOR_LABELS: GallerySettings['colorLabels'] = [
+const DEFAULT_COLOR_LABELS: GallerySettings['review']['colorLabels'] = [
 	'Favorit',
 	'Auswahl',
 	'Überarbeiten',
@@ -127,7 +129,10 @@ export function createDefaultGallerySettings(): GallerySettings {
 	const presentation: GallerySettings['presentation'] = {
 		accentColor: '#E85D4A',
 		welcomeMessage: '',
+		logoMode: 'inherit',
+		logoBackground: 'transparent',
 		logoFileId: null,
+		logoAssetId: null,
 		instanceLogoAssetId: null,
 		instanceStudioName: '',
 		heroFileId: null,
@@ -137,13 +142,19 @@ export function createDefaultGallerySettings(): GallerySettings {
 		fontPreset: 'modern',
 		watermarkText: '',
 		watermarkOpacity: 24,
+		watermarkTextPosition: 'tile',
+		watermarkTextSize: 18,
+		watermarkImageAssetId: null,
+		watermarkImageOpacity: 24,
+		watermarkImagePosition: 'bottom-right',
+		watermarkImageScale: 20,
 		theme: 'auto',
 		layout: 'grid',
 		tileSize: 'medium',
 		tileGap: 'normal',
 		tileRadius: 'soft',
 		titleAlignment: 'left',
-		showTitle: true,
+		titleMode: 'large',
 		showMediaCount: true,
 		titleSize: 'medium',
 		showFilenames: false,
@@ -154,13 +165,8 @@ export function createDefaultGallerySettings(): GallerySettings {
 		story: { sections: [], showAllMedia: true },
 	}
 	return {
-		schemaVersion: 9,
+		schemaVersion: 11,
 		mode: 'presentation',
-		feedbackVisibility: 'collaborative',
-		allowDownloads: false,
-		allowGuestUploads: false,
-		showFilenames: false,
-		colorLabels: [...DEFAULT_COLOR_LABELS],
 		publicLocale: 'auto',
 		review: {
 			visibility: 'collaborative',
@@ -171,7 +177,7 @@ export function createDefaultGallerySettings(): GallerySettings {
 			selections: true,
 			ratings: false,
 			pick: false,
-			colorLabels: [...DEFAULT_COLOR_LABELS],
+			colorLabels: [...DEFAULT_COLOR_LABELS] as GallerySettings['review']['colorLabels'],
 			colorEnabled: [true, true, true, true],
 			selectionWarningThreshold: 0,
 		},
@@ -181,6 +187,5 @@ export function createDefaultGallerySettings(): GallerySettings {
 		metadata: { publicFields: [] },
 		lifecycle: { enabled: false, trigger: 'after_completion', revokeAt: '', revokeAfterDays: 30, archiveAfterDays: 30, reminderDays: [7, 1], retentionHandoff: false },
 		presentation,
-		appearance: presentation,
 	}
 }

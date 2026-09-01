@@ -56,16 +56,21 @@
 .filmstrip-item__focus span {
 	position: absolute;
 	inset: 5px auto auto 5px;
-	padding: 2px 4px;
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	padding: 2px 5px;
 	border-radius: 3px;
 	background: rgb(8 9 12 / 78%);
-	color: #fff;
+	color: #f1be3d;
 	font-size: 10px;
+	font-weight: 700;
 }
 
 .filmstrip-item__focus i { position: absolute; inset: auto 5px 5px auto; width: 8px; height: 8px; border-radius: 50%; }
 
 .filmstrip-item__select {
+	--btn-accent: #9b82ff;
 	position: absolute;
 	inset: 8px 8px auto auto;
 	display: grid;
@@ -73,11 +78,17 @@
 	height: 24px;
 	place-items: center;
 	padding: 0;
-	border: 1px solid rgb(255 255 255 / 65%);
+	border: 1px solid rgb(255 255 255 / 55%);
 	border-radius: 50%;
 	background: rgb(8 9 12 / 72%);
 	color: #fff;
 	cursor: pointer;
+	transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease, color 120ms ease;
+	backdrop-filter: blur(6px);
 }
+
+.filmstrip-item__select:hover { border-color: color-mix(in srgb, var(--btn-accent) 75%, transparent); background: color-mix(in srgb, var(--btn-accent) 18%, rgb(8 9 12 / 72%)); box-shadow: 0 0 10px color-mix(in srgb, var(--btn-accent) 35%, transparent); color: color-mix(in srgb, var(--btn-accent) 40%, #fff); }
+
+.filmstrip-item__select[aria-pressed='true'] { border-color: var(--btn-accent); background: color-mix(in srgb, var(--btn-accent) 32%, rgb(8 9 12 / 82%)); box-shadow: 0 0 10px color-mix(in srgb, var(--btn-accent) 30%, transparent); color: color-mix(in srgb, var(--btn-accent) 42%, #fff); }
 
 .filmstrip-item button:focus-visible { outline: 3px solid #8ea2ff; outline-offset: -3px; }

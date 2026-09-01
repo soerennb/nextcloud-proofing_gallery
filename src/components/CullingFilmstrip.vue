@@ -3,6 +3,9 @@ import { t } from '@nextcloud/l10n'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 
+import CheckIcon from 'vue-material-design-icons/Check.vue'
+import PlusIcon from 'vue-material-design-icons/Plus.vue'
+import StarIcon from 'vue-material-design-icons/Star.vue'
 import type { IndexedMediaItem, MediaCull } from '../types.ts'
 import ProgressiveImage from './ProgressiveImage.vue'
 
@@ -87,7 +90,7 @@ onMounted(() => virtualizer.value.measure())
 					:aria-label="t('proofing_gallery', 'Focus {name}', { name: items[virtualItem.index].name })"
 					@click="emit('focus', items[virtualItem.index], $event.shiftKey)">
 					<ProgressiveImage :src="previewUrl(items[virtualItem.index].id)" :alt="items[virtualItem.index].name" />
-					<span v-if="stateFor(items[virtualItem.index].id)?.rating">{{ stateFor(items[virtualItem.index].id)?.rating }}★</span>
+					<span v-if="stateFor(items[virtualItem.index].id)?.rating" class="filmstrip-rating"><StarIcon :size="10" /> {{ stateFor(items[virtualItem.index].id)?.rating }}</span>
 					<i :class="`color-${stateFor(items[virtualItem.index].id)?.color ?? 'none'}`" />
 				</button>
 				<button
@@ -96,7 +99,8 @@ onMounted(() => virtualizer.value.measure())
 					:aria-pressed="selectedIds.includes(items[virtualItem.index].id)"
 					:aria-label="t('proofing_gallery', 'Select {name}', { name: items[virtualItem.index].name })"
 					@click="emit('select', items[virtualItem.index].id)">
-					{{ selectedIds.includes(items[virtualItem.index].id) ? '✓' : '+' }}
+					<CheckIcon v-if="selectedIds.includes(items[virtualItem.index].id)" :size="14" />
+					<PlusIcon v-else :size="14" />
 				</button>
 			</article>
 		</div>

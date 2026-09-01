@@ -16,6 +16,7 @@ final class PresetService {
 		private PresetMapper $presets,
 		private GalleryService $galleries,
 		private ITimeFactory $clock,
+		private DesignAssetService $designAssets,
 	) {
 	}
 
@@ -31,7 +32,7 @@ final class PresetService {
 		$preset = new Preset();
 		$preset->setOwnerUid($ownerUid);
 		$preset->setName($name);
-		$preset->setSettings(json_encode(GallerySettings::fromArray($settings), JSON_THROW_ON_ERROR));
+		$preset->setSettings(json_encode($this->portable($ownerUid, $settings), JSON_THROW_ON_ERROR));
 		$preset->setCreatedAt($now);
 		$preset->setUpdatedAt($now);
 		return $this->presets->insert($preset);
@@ -44,7 +45,7 @@ final class PresetService {
 			$preset->setName($this->validateName($ownerUid, $name, $id));
 		}
 		if ($settings !== null) {
-			$preset->setSettings(json_encode(GallerySettings::fromArray($settings), JSON_THROW_ON_ERROR));
+			$preset->setSettings(json_encode($this->portable($ownerUid, $settings), JSON_THROW_ON_ERROR));
 		}
 		$preset->setUpdatedAt($this->clock->getTime());
 		return $this->presets->update($preset);
@@ -58,10 +59,31 @@ final class PresetService {
 		$preset = $this->presets->findOwned($id, $ownerUid);
 		$settings = json_decode($preset->getSettings(), true, flags: JSON_THROW_ON_ERROR);
 		$gallery = $this->galleries->get($ownerUid, $galleryId);
+		$current = GallerySettings::fromArray(
+			json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR),
+		)->canonical();
+		$settings = $this->preserveGalleryReferences($settings, $current);
 		if ($gallery->getSourceType() === 'collection') {
-			$settings['allowGuestUploads'] = false;
+			$settings['delivery']['guestUploads'] = false;
+			unset($settings['allowGuestUploads']);
 		}
 		return $this->galleries->update($ownerUid, $galleryId, null, $settings, $expectedRevision);
+	}
+
+	/** @param array<string, mixed> $preset
+	 * @param array<string, mixed> $current
+	 * @return array<string, mixed>
+	 */
+	private function preserveGalleryReferences(array $preset, array $current): array {
+		foreach (['heroFileId', 'logoFileId', 'instanceLogoAssetId', 'instanceStudioName'] as $field) {
+			$preset['presentation'][$field] = $current['presentation'][$field];
+		}
+		$currentSections = array_column($current['presentation']['story']['sections'], null, 'id');
+		foreach ($preset['presentation']['story']['sections'] as &$section) {
+			$section['mediaIds'] = $currentSections[$section['id']]['mediaIds'] ?? [];
+		}
+		unset($section);
+		return $preset;
 	}
 
 	private function validateName(string $ownerUid, string $name, ?int $exceptId = null): string {
@@ -73,5 +95,29 @@ final class PresetService {
 			throw new InvalidArgumentException('A preset with this name already exists');
 		}
 		return $name;
+	}
+
+	/** @param array<string, mixed> $input
+	 * @return array<string, mixed>
+	 */
+	private function portable(string $ownerUid, array $input): array {
+		$settings = GallerySettings::fromArray($input);
+		foreach ([[$settings->presentation->logoAssetId, 'logo'], [$settings->presentation->watermarkImageAssetId, 'watermark']] as [$assetId, $kind]) {
+			if ($assetId === null) continue;
+			try {
+				$this->designAssets->owned($ownerUid, $assetId, $kind);
+			} catch (\OCP\Files\NotFoundException|\OCP\AppFramework\Db\DoesNotExistException $exception) {
+				throw new InvalidArgumentException('Preset assets must belong to their owner and match their intended use', previous: $exception);
+			}
+		}
+		$portable = $settings->canonical();
+		$portable['presentation']['heroFileId'] = null;
+		$portable['presentation']['logoFileId'] = null;
+		$portable['presentation']['instanceLogoAssetId'] = null;
+		$portable['presentation']['instanceStudioName'] = '';
+		if ($portable['presentation']['logoMode'] === 'gallery') $portable['presentation']['logoMode'] = 'inherit';
+		foreach ($portable['presentation']['story']['sections'] as &$section) $section['mediaIds'] = [];
+		unset($section);
+		return $portable;
 	}
 }

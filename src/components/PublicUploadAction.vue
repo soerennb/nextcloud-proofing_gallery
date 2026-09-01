@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { t } from '@nextcloud/l10n'
-import { generateUrl } from '@nextcloud/router'
 import { ref } from 'vue'
 
 import { missingChunkIndexes } from '../domain/collaboration.ts'
 
-const props = defineProps<{ token: string; nonce: string }>()
+const props = defineProps<{
+	token: string
+	nonce: string
+	request(path: string, init?: RequestInit, mayRecover?: boolean): Promise<Response>
+}>()
 const emit = defineEmits<{ error: [message: string] }>()
 const uploading = ref(false)
 const progress = ref<Record<string, number>>({})
@@ -32,7 +35,7 @@ async function uploadFile(file: File) {
 	let chunkSize = 5 * 1024 * 1024
 	let uploadedChunks: number[] = []
 	if (uploadId) {
-		const status = await request(`uploads/${uploadId}`, 'GET')
+		const status = await requestJson(`uploads/${uploadId}`, 'GET')
 		if (status.status === 'pending') {
 			chunkSize = status.chunkSize as number
 			uploadedChunks = status.uploadedChunks as number[]
@@ -42,7 +45,7 @@ async function uploadFile(file: File) {
 		}
 	}
 	if (!uploadId) {
-		const initiated = await request('uploads', 'POST', {
+		const initiated = await requestJson('uploads', 'POST', {
 			filename: file.name,
 			mimeType: file.type || 'application/octet-stream',
 			size: file.size,
@@ -53,25 +56,23 @@ async function uploadFile(file: File) {
 	}
 	const totalChunks = Math.ceil(file.size / chunkSize)
 	for (const index of missingChunkIndexes(file.size, chunkSize, uploadedChunks)) {
-		const response = await fetch(endpoint(`uploads/${uploadId}/chunks/${index}`), {
+		const response = await props.request(`uploads/${uploadId}/chunks/${index}`, {
 			method: 'PUT',
-			credentials: 'same-origin',
-			headers: { 'Content-Type': 'application/octet-stream', 'X-Proofing-Nonce': props.nonce },
+			headers: { 'Content-Type': 'application/octet-stream' },
 			body: file.slice(index * chunkSize, Math.min(file.size, (index + 1) * chunkSize)),
 		})
 		if (!response.ok) throw new Error(t('proofing_gallery', 'A file chunk could not be uploaded.'))
 		progress.value[file.name] = Math.round(((index + 1) / totalChunks) * 100)
 	}
-	await request(`uploads/${uploadId}/finalize`, 'POST')
+	await requestJson(`uploads/${uploadId}/finalize`, 'POST')
 	localStorage.removeItem(storageKey)
 	progress.value[file.name] = 100
 }
 
-async function request(path: string, method: 'GET' | 'POST', body?: unknown): Promise<Record<string, unknown>> {
-	const response = await fetch(endpoint(path), {
+async function requestJson(path: string, method: 'GET' | 'POST', body?: unknown): Promise<Record<string, unknown>> {
+	const response = await props.request(path, {
 		method,
-		credentials: 'same-origin',
-		headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Proofing-Nonce': props.nonce },
+		headers: { 'Content-Type': 'application/json' },
 		body: body === undefined ? undefined : JSON.stringify(body),
 	})
 	const payload = await response.json() as Record<string, unknown> & { message?: string }
@@ -79,9 +80,6 @@ async function request(path: string, method: 'GET' | 'POST', body?: unknown): Pr
 	return payload
 }
 
-function endpoint(path: string) {
-	return generateUrl(`/apps/proofing_gallery/public/${props.token}/${path}`)
-}
 </script>
 
 <template>

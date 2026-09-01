@@ -1,16 +1,16 @@
-.folder-workspace { display: grid; gap: 20px; }
+.folder-workspace { display: grid; gap: 10px; }
 
-.folder-workspace__header { display: flex; align-items: start; justify-content: space-between; gap: 20px; }
+.folder-workspace__header { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 
-.folder-workspace__header h2, .folder-workspace__header p { margin: 0; }
+.folder-workspace__header h2 { margin: 0; }
 
-.folder-workspace__header p { max-width: 650px; margin-top: 5px; color: var(--color-text-maxcontrast); }
-
-.folder-workspace__actions, .folder-toolbar, .breadcrumbs { display: flex; align-items: center; gap: 8px; }
+.folder-workspace__actions, .folder-toolbar, .breadcrumbs, .folder-toolbar-row { display: flex; align-items: center; gap: 8px; }
 
 .folder-workspace__actions { flex-wrap: wrap; justify-content: flex-end; }
 
-.upload-resume-hint { flex-basis: 100%; max-width: 340px; color: var(--color-text-maxcontrast); text-align: end; }
+.folder-toolbar-row { flex-wrap: wrap; justify-content: space-between; border-bottom: 1px solid var(--color-border); }
+
+.folder-toolbar { min-width: 0; }
 
 .owner-upload-queue { display: grid; gap: 6px; margin: 0; padding: 12px 0; border-block: 1px solid var(--color-border); list-style: none; }
 
@@ -24,7 +24,7 @@
 
 .owner-upload-queue progress { width: 100%; accent-color: var(--color-primary-element); }
 
-.breadcrumbs { min-height: 36px; border-bottom: 1px solid var(--color-border); }
+.breadcrumbs { flex-wrap: wrap; min-height: 36px; }
 
 .breadcrumbs button { padding: 4px; border: 0; background: transparent; color: var(--color-primary-element); cursor: pointer; }
 
@@ -155,4 +155,4 @@
 .version-panel li small { margin-top: 3px; color: var(--color-text-maxcontrast); }
 
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-@media (max-width: 700px) { .folder-workspace__header { display: grid; } .folder-workspace__actions { flex-wrap: wrap; } .folder-toolbar { grid-template-columns: minmax(0, 1fr) auto auto; } .folder-toolbar > :first-child { grid-column: 1 / -1; } .metadata-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .metadata-filters > :last-child { grid-column: 1 / -1; } .selection-rail { align-items: stretch; flex-direction: column; } .file-grid { grid-template-columns: minmax(0, 1fr); } .metadata-panel__technical { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 700px) { .folder-workspace__header { display: grid; } .folder-workspace__actions { flex-wrap: wrap; } .folder-toolbar-row { align-items: stretch; flex-direction: column; } .folder-toolbar { grid-template-columns: minmax(0, 1fr) auto auto; } .folder-toolbar > :first-child { grid-column: 1 / -1; } .metadata-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .metadata-filters > :last-child { grid-column: 1 / -1; } .selection-rail { align-items: stretch; flex-direction: column; } .file-grid { grid-template-columns: minmax(0, 1fr); } .metadata-panel__technical { grid-template-columns: minmax(0, 1fr); } }

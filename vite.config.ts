@@ -58,6 +58,7 @@ export default createAppConfig(
 	{
 		main: resolve(join('src', 'main.ts')),
 		public: resolve(join('src', 'public.ts')),
+		'public-preview': resolve(join('src', 'publicPreview.ts')),
 		admin: resolve(join('src', 'admin.ts')),
 		personal: resolve(join('src', 'personal.ts')),
 		'files-legacy': resolve(join('src', 'files-legacy.ts')),

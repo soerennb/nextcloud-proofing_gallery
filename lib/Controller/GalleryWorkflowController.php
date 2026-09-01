@@ -119,7 +119,7 @@ final class GalleryWorkflowController extends Controller {
 			$selection = $this->selection($gallery, $selectionId);
 			$fileIds = array_values(array_unique(array_map('intval', $selection['fileIds'])));
 			if ($fileIds === [] || count($fileIds) > 200) throw new InvalidArgumentException('Select between 1 and 200 files');
-			$state = $this->collaboration->state($gallery, null, 0);
+			$state = $this->collaboration->ownerState($gallery);
 			$results = [];
 			$written = 0;
 			foreach ($fileIds as $fileId) {

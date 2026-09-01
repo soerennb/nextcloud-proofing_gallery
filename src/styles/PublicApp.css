@@ -36,7 +36,19 @@
 :global(#proofing_gallery_public),
 .public-gallery-app { width: 100%; height: 100dvh; }
 
-.public-gallery-app { --ion-font-family: "Geist Variable", sans-serif; background: var(--ion-background-color); }
+.public-gallery-app {
+	--ion-font-family: "Geist Variable", sans-serif;
+	--gallery-accent-on-dark: color-mix(in srgb, var(--gallery-accent) 45%, white);
+	--gallery-accent-on-light: color-mix(in srgb, var(--gallery-accent) 40%, black);
+	--gallery-accent-readable: var(--gallery-accent-on-dark);
+	background: var(--ion-background-color);
+}
+
+.public-gallery-app--theme-light { --gallery-accent-readable: var(--gallery-accent-on-light); }
+
+@media (prefers-color-scheme: light) {
+	.public-gallery-app--theme-auto { --gallery-accent-readable: var(--gallery-accent-on-light); }
+}
 
 .public-gallery-app ion-content { --background: var(--gallery-bg, #000); }
 
@@ -54,7 +66,9 @@
 
 .public-gallery {
 	--gallery-accent: #e85d4a;
-	--gallery-accent-readable: #ff7665;
+	--gallery-accent-on-dark: color-mix(in srgb, var(--gallery-accent) 45%, white);
+	--gallery-accent-on-light: color-mix(in srgb, var(--gallery-accent) 40%, black);
+	--gallery-accent-readable: var(--gallery-accent-on-dark);
 	--gallery-bg: var(--ion-background-color);
 	--gallery-surface: var(--ion-item-background, var(--ion-background-color));
 	--gallery-surface-raised: var(--ion-color-step-100, #1e1e1e);
@@ -79,7 +93,7 @@
 	--gallery-muted: #636366;
 	--gallery-glass: rgb(255 255 255 / 92%);
 	--gallery-glass-border: rgb(17 19 24 / 12%);
-	--gallery-accent-readable: var(--gallery-accent);
+	--gallery-accent-readable: var(--gallery-accent-on-light);
 }
 
 @media (prefers-color-scheme: light) {
@@ -92,7 +106,7 @@
 		--gallery-muted: #636366;
 		--gallery-glass: rgb(255 255 255 / 92%);
 		--gallery-glass-border: rgb(17 19 24 / 12%);
-		--gallery-accent-readable: var(--gallery-accent);
+		--gallery-accent-readable: var(--gallery-accent-on-light);
 	}
 }
 

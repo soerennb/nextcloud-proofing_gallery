@@ -8,22 +8,22 @@ describe('gallery title presentation', () => {
 		const presentation = createDefaultGallerySettings().presentation
 		expect(galleryTitleMode(presentation)).toBe('large')
 
-		presentation.titleSize = 'small'
+		presentation.titleMode = 'compact'
 		expect(galleryTitleMode(presentation)).toBe('compact')
 
-		presentation.showTitle = false
+		presentation.titleMode = 'hidden'
 		expect(galleryTitleMode(presentation)).toBe('hidden')
 	})
 
 	it('keeps the underlying settings compatible when switching modes', () => {
 		const presentation = createDefaultGallerySettings().presentation
 		applyGalleryTitleMode(presentation, 'compact')
-		expect(presentation).toMatchObject({ showTitle: true, titleSize: 'small' })
+		expect(presentation).toMatchObject({ titleMode: 'compact', titleSize: 'medium' })
 
 		applyGalleryTitleMode(presentation, 'large')
-		expect(presentation).toMatchObject({ showTitle: true, titleSize: 'medium' })
+		expect(presentation).toMatchObject({ titleMode: 'large', titleSize: 'medium' })
 
 		applyGalleryTitleMode(presentation, 'hidden')
-		expect(presentation.showTitle).toBe(false)
+		expect(presentation.titleMode).toBe('hidden')
 	})
 })

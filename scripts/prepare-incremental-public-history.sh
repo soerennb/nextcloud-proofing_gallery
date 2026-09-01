@@ -8,6 +8,9 @@ public_remote="${PUBLIC_REMOTE:-git@github.com:soerennb/nextcloud-proofing_galle
 public_author_name="${PUBLIC_AUTHOR_NAME:-soerennb}"
 public_author_email="${PUBLIC_AUTHOR_EMAIL:-soerennb@users.noreply.github.com}"
 public_commit_message="${PUBLIC_COMMIT_MESSAGE:-}"
+public_base_branch="${PUBLIC_BASE_BRANCH:-main}"
+public_output_branch="${PUBLIC_OUTPUT_BRANCH:-${public_base_branch}}"
+public_paths_file="${PUBLIC_PATHS_FILE:-}"
 private_author_email="${PRIVATE_AUTHOR_EMAIL:-}"
 private_content_pattern="${PRIVATE_CONTENT_PATTERN:-}"
 
@@ -23,7 +26,7 @@ if [[ -z "${private_author_email}" || -z "${private_content_pattern}" ]]; then
 	echo "Set PRIVATE_AUTHOR_EMAIL and PRIVATE_CONTENT_PATTERN for the private values to remove." >&2
 	exit 2
 fi
-for command in git git-filter-repo gitleaks; do
+for command in git git-filter-repo gitleaks tar; do
 	if ! command -v "${command}" >/dev/null 2>&1; then
 		echo "${command} is required to prepare incremental public history." >&2
 		exit 2
@@ -45,15 +48,66 @@ PRIVATE_CONTENT_PATTERN="${private_content_pattern}" \
 PUBLIC_AUTHOR_EMAIL="${public_author_email}" \
 	"${repo_dir}/scripts/prepare-public-history.sh" "${sanitized_source}"
 
-git clone --no-local --single-branch --branch main "${public_remote}" "${destination}"
+git clone --no-local --single-branch --branch "${public_base_branch}" "${public_remote}" "${destination}"
 public_base="$(git -C "${destination}" rev-parse HEAD)"
 source_date="$(git -C "${sanitized_source}" show -s --format=%aI HEAD)"
+if [[ "${public_output_branch}" != "${public_base_branch}" ]]; then
+	git -C "${destination}" checkout -b "${public_output_branch}"
+fi
 
-git -C "${destination}" remote add sanitized-source "${sanitized_source}"
-git -C "${destination}" fetch --no-tags sanitized-source main
-sanitized_tree="$(git -C "${destination}" rev-parse 'FETCH_HEAD^{tree}')"
-git -C "${destination}" read-tree --reset -u "${sanitized_tree}"
-git -C "${destination}" remote remove sanitized-source
+declare -a public_paths=()
+if [[ -n "${public_paths_file}" ]]; then
+	if [[ ! -f "${public_paths_file}" ]]; then
+		echo "PUBLIC_PATHS_FILE does not exist: ${public_paths_file}" >&2
+		exit 2
+	fi
+	while IFS= read -r path || [[ -n "${path}" ]]; do
+		path="${path%$'\r'}"
+		[[ -z "${path}" || "${path}" == \#* ]] && continue
+		if [[ "${path}" == /* || "${path}" == .. || "${path}" == ../* || "${path}" == */../* || "${path}" == */.. \
+			|| "${path}" == *[\*\?\[]* || "${path}" == :* || "${path}" == *\\* ]]; then
+			echo "Unsafe public path entry: ${path}" >&2
+			exit 2
+		fi
+		case "${path}" in
+			.agents|.agents/*|.beads|.beads/*|.claude|.claude/*|.codex|.codex/*|AGENTS.md|CLAUDE.md)
+				echo "Internal path cannot be exported: ${path}" >&2
+				exit 2
+				;;
+		esac
+		public_paths+=("${path}")
+	done < "${public_paths_file}"
+	if [[ ${#public_paths[@]} -eq 0 ]]; then
+		echo "PUBLIC_PATHS_FILE contains no exportable paths." >&2
+		exit 2
+	fi
+	for path in "${public_paths[@]}"; do
+		git -C "${destination}" rm -r --ignore-unmatch -- "${path}" >/dev/null
+		if git -C "${sanitized_source}" ls-files --error-unmatch -- "${path}" >/dev/null 2>&1; then
+			git -C "${sanitized_source}" archive HEAD -- "${path}" | tar -x -C "${destination}"
+		fi
+		git -C "${destination}" add -A -- "${path}"
+	done
+	while IFS= read -r changed_path; do
+		allowed=false
+		for path in "${public_paths[@]}"; do
+			if [[ "${changed_path}" == "${path}" || "${changed_path}" == "${path}/"* ]]; then
+				allowed=true
+				break
+			fi
+		done
+		if [[ "${allowed}" != true ]]; then
+			echo "Incremental diff escaped PUBLIC_PATHS_FILE: ${changed_path}" >&2
+			exit 1
+		fi
+	done < <(git -C "${destination}" diff --cached --name-only)
+else
+	git -C "${destination}" remote add sanitized-source "${sanitized_source}"
+	git -C "${destination}" fetch --no-tags sanitized-source main
+	sanitized_tree="$(git -C "${destination}" rev-parse 'FETCH_HEAD^{tree}')"
+	git -C "${destination}" read-tree --reset -u "${sanitized_tree}"
+	git -C "${destination}" remote remove sanitized-source
+fi
 
 if git -C "${destination}" diff --cached --quiet; then
 	echo "The sanitized source tree already matches public main; no incremental commit is needed." >&2
@@ -84,7 +138,7 @@ GIT_COMMITTER_DATE="${source_date}" \
 
 public_head="$(git -C "${destination}" rev-parse HEAD)"
 if [[ "$(git -C "${destination}" rev-parse HEAD^)" != "${public_base}" ]]; then
-	echo "Incremental public commit does not directly extend the fetched public main." >&2
+	echo "Incremental public commit does not directly extend the fetched public base branch." >&2
 	exit 1
 fi
 git -C "${destination}" merge-base --is-ancestor "${public_base}" "${public_head}"
@@ -104,7 +158,8 @@ git -C "${destination}" gc --prune=now >/dev/null
 "${repo_dir}/scripts/scan-git-history.sh" "${destination}"
 
 echo "Incremental sanitized public clone prepared at ${destination}"
+echo "Public branch: ${public_output_branch} (base: ${public_base_branch})"
 echo "Public base: ${public_base}"
 echo "Public head: ${public_head}"
 git -C "${destination}" diff --stat "${public_base}..${public_head}"
-echo "Review the complete diff, reproduce the same head from a second clean clone, then push only: git push origin main"
+echo "Review the complete diff, reproduce the same head from a second clean clone, then push only: git push origin ${public_output_branch}"

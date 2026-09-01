@@ -4,9 +4,15 @@ import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import ArrowLeftIcon from 'vue-material-design-icons/ArrowLeft.vue'
+import ArrowRightIcon from 'vue-material-design-icons/ArrowRight.vue'
+import ArrowUpIcon from 'vue-material-design-icons/ArrowUp.vue'
+import CheckIcon from 'vue-material-design-icons/Check.vue'
+import CloseIcon from 'vue-material-design-icons/Close.vue'
+import StarIcon from 'vue-material-design-icons/Star.vue'
 
 import { cullingShortcut } from '../domain/cullingShortcuts.ts'
-import { defaultCullState, effectiveCullingFilmstripPlacement } from '../domain/cullingWorkspace.ts'
+import { CULLING_COLORS, defaultCullState, effectiveCullingFilmstripPlacement } from '../domain/cullingWorkspace.ts'
 import { fetchGuestRatings, fetchIndexedMedia, fetchMediaCulling, fetchSemanticStatus, fetchUserPreferences, ownerPreviewUrl, previewGuestRatingPromotion, promoteGuestRatings, rebuildGalleryMediaIndex, rebuildSemanticIndex, searchSemanticMedia, synchronizeCullingXmp, updateMediaCulling, updateUserPreferences } from '../services/galleryApi.ts'
 import type { CullColor, CullingXmpReport, CullPick, Gallery, GuestRatingAggregate, GuestRatingPromotion, IndexedMediaItem, MediaCull, UserPreferences } from '../types.ts'
 import CullingFilmstrip from './CullingFilmstrip.vue'
@@ -15,14 +21,7 @@ import CullingLoupe from './CullingLoupe.vue'
 const props = defineProps<{ gallery: Gallery }>()
 const emit = defineEmits<{ exit: [] }>()
 
-const colors: Array<{ value: CullColor; label: string }> = [
-	{ value: 'none', label: t('proofing_gallery', 'No color') },
-	{ value: 'red', label: t('proofing_gallery', 'Red') },
-	{ value: 'yellow', label: t('proofing_gallery', 'Yellow') },
-	{ value: 'green', label: t('proofing_gallery', 'Green') },
-	{ value: 'blue', label: t('proofing_gallery', 'Blue') },
-	{ value: 'purple', label: t('proofing_gallery', 'Purple') },
-]
+const colors = CULLING_COLORS
 
 const items = ref<IndexedMediaItem[]>([])
 const states = ref<Record<number, MediaCull>>({})
@@ -445,7 +444,7 @@ onBeforeUnmount(() => {
 					class="culling-back"
 					:aria-label="t('proofing_gallery', 'Back to project')"
 					@click="emit('exit')">
-					←
+					<ArrowLeftIcon :size="20" />
 				</button>
 				<div>
 					<p class="culling-header__eyebrow">
@@ -504,7 +503,7 @@ onBeforeUnmount(() => {
 				<label><span>{{ t('proofing_gallery', 'Color') }}</span><select v-model="colorFilter" name="cullingColor"><option value="all">{{ t('proofing_gallery', 'All') }}</option><option v-for="color in colors" :key="color.value" :value="color.value">{{ color.label }}</option></select></label>
 				<label><span>{{ t('proofing_gallery', 'Sort') }}</span><select v-model="sortBy" name="cullingSort" @change="loadPage(true)"><option value="name">{{ t('proofing_gallery', 'Filename') }}</option><option value="modified">{{ t('proofing_gallery', 'Last modified') }}</option><option value="size">{{ t('proofing_gallery', 'File size') }}</option></select></label>
 				<NcButton variant="tertiary" :aria-label="t('proofing_gallery', 'Reverse sort direction')" @click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'; loadPage(true)">
-					{{ sortDirection === 'asc' ? '↑' : '↓' }}
+					<ArrowUpIcon :size="18" :class="{ 'sort-icon--desc': sortDirection === 'desc' }" />
 				</NcButton>
 				<label class="saved-view"><span>{{ t('proofing_gallery', 'Saved view') }}</span><select v-model="activeViewId" name="savedView" @change="applySavedView"><option value="">{{ t('proofing_gallery', 'Choose…') }}</option><option v-for="view in savedViews" :key="view.id" :value="view.id">{{ view.name }}</option></select></label>
 				<NcButton variant="tertiary" :disabled="viewWorking" @click="saveCurrentView">
@@ -515,7 +514,7 @@ onBeforeUnmount(() => {
 					:disabled="viewWorking"
 					:aria-label="t('proofing_gallery', 'Delete saved view')"
 					@click="deleteSavedView">
-					×
+					<CloseIcon :size="18" />
 				</NcButton>
 				<NcButton variant="tertiary" :aria-expanded="showShortcuts" @click="showShortcuts = !showShortcuts">
 					{{ t('proofing_gallery', 'Shortcuts') }}
@@ -603,9 +602,9 @@ onBeforeUnmount(() => {
 				<ul class="guest-signal__items">
 					<li v-for="aggregate in guestRatings" :key="aggregate.fileId" :class="{ selected: selectedIds.includes(aggregate.fileId) }">
 						<button type="button" :aria-pressed="selectedIds.includes(aggregate.fileId)" @click="toggleSelected(aggregate.fileId)">
-							<span><strong>{{ items.find(item => item.id === aggregate.fileId)?.name || `#${aggregate.fileId}` }}</strong><small>{{ aggregate.count }} · Ø {{ aggregate.average.toFixed(1) }} ★ · {{ aggregate.picks.pick }} ✓ · {{ aggregate.picks.reject }} ×</small></span><b>{{ Math.round(aggregate.average) }}★</b>
+							<span><strong>{{ items.find(item => item.id === aggregate.fileId)?.name || `#${aggregate.fileId}` }}</strong><small>{{ aggregate.count }} · Ø {{ aggregate.average.toFixed(1) }} <StarIcon :size="11" class="inline-star" /> · {{ aggregate.picks.pick }} <CheckIcon :size="11" class="inline-pick" /> · {{ aggregate.picks.reject }} <CloseIcon :size="11" class="inline-reject" /></small></span><b>{{ Math.round(aggregate.average) }}<StarIcon :size="11" class="inline-star" /></b>
 						</button>
-						<details><summary>{{ t('proofing_gallery', 'Show individual ratings') }}</summary><span v-for="individual in aggregate.individuals" :key="individual.guestId">{{ individual.name }} · {{ individual.rating }}★ · {{ individual.pick }}</span></details>
+						<details><summary>{{ t('proofing_gallery', 'Show individual ratings') }}</summary><span v-for="individual in aggregate.individuals" :key="individual.guestId">{{ individual.name }} · {{ individual.rating }} <StarIcon :size="10" class="inline-star" /> · {{ individual.pick }}</span></details>
 					</li>
 				</ul>
 				<NcButton v-if="guestRatingsCursor"
@@ -623,7 +622,7 @@ onBeforeUnmount(() => {
 				<div v-if="guestPlan.length" class="guest-signal__plan">
 					<h4>{{ t('proofing_gallery', 'Promotion preview') }}</h4>
 					<div v-for="plan in guestPlan" :key="plan.fileId">
-						<strong>{{ items.find(item => item.id === plan.fileId)?.name || `#${plan.fileId}` }}</strong><span>{{ plan.owner.rating }}★ / {{ plan.owner.pick }} → {{ plan.target.rating }}★ / {{ plan.target.pick }}</span>
+						<strong>{{ items.find(item => item.id === plan.fileId)?.name || `#${plan.fileId}` }}</strong><span>{{ plan.owner.rating }}<StarIcon :size="11" class="inline-star" /> / {{ plan.owner.pick }} <ArrowRightIcon :size="11" /> {{ plan.target.rating }}<StarIcon :size="11" class="inline-star" /> / {{ plan.target.pick }}</span>
 					</div>
 					<NcButton variant="primary" :disabled="guestWorking" @click="applyGuestPlan">
 						{{ t('proofing_gallery', 'Apply to owner culling') }}

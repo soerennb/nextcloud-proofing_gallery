@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Tests\Unit\Dto;
 
+use InvalidArgumentException;
 use OCA\ProofingGallery\Domain\DownloadScope;
 use OCA\ProofingGallery\Domain\PublicLinkCapability;
 use OCA\ProofingGallery\Dto\PublicLinkConfiguration;
@@ -41,5 +42,14 @@ final class PublicLinkConfigurationTest extends TestCase {
 	public function testRejectsLinksThatDisableViewing(): void {
 		$this->expectException(\InvalidArgumentException::class);
 		PublicLinkConfiguration::fromArray(['name' => 'Hidden', 'policy' => ['view' => false]]);
+	}
+
+	public function testRejectsAnnotationsWithoutComments(): void {
+		$this->expectException(InvalidArgumentException::class);
+		$this->expectExceptionMessage('Image annotations require comments');
+		PublicLinkConfiguration::fromArray([
+			'name' => 'Broken proofing',
+			'policy' => ['comments' => false, 'annotations' => true],
+		]);
 	}
 }

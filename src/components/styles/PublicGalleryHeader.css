@@ -4,11 +4,40 @@
 
 .gallery-app-header ion-title { font-size: 17px; font-weight: 600; letter-spacing: -.015em; }
 
-.gallery-app-header ion-button { letter-spacing: 0; text-transform: none; }
+.gallery-app-header ion-button {
+	box-sizing: border-box;
+	min-height: 32px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: transparent !important;
+	color: var(--gallery-accent-readable) !important;
+	letter-spacing: 0;
+	text-transform: none;
+	--background: transparent;
+	--color: var(--gallery-accent-readable);
+}
 
-.gallery-app-header__brand { width: 34px; height: 34px; margin-inline-start: 12px; }
+.gallery-app-header__toolbar--branded { --min-height: 64px !important; }
 
-.gallery-app-header__brand img { width: 30px; height: 30px; object-fit: contain; }
+.gallery-app-header__brand {
+	display: flex;
+	width: auto;
+	max-width: 160px;
+	height: 52px;
+	align-items: center;
+	justify-content: center;
+	margin-inline-start: 10px;
+	padding: 4px 7px;
+	border: 1px solid transparent;
+	border-radius: 7px;
+}
+
+.logo-light .gallery-app-header__brand { border-color: rgb(17 19 24 / 14%); background: #fff; }
+
+.logo-dark .gallery-app-header__brand { border-color: rgb(255 255 255 / 18%); background: #151515; }
+
+.gallery-app-header__brand img { display: block; width: auto; max-width: 144px; height: auto; max-height: 42px; object-fit: contain; }
 
 .gallery-app-header__identity :is(span, h1) { display: block; overflow: hidden; margin: 0; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -25,7 +54,9 @@
 .gallery-app-header__pager ion-title ion-button { min-height: 36px; margin: 0; font-size: 14px; font-variant-numeric: tabular-nums; }
 
 @media (max-width: 420px) {
-	.gallery-app-header__brand { display: none; }
-	.gallery-app-header > ion-toolbar:not(.gallery-app-header__pager, .gallery-app-header__search) ion-title { max-width: 150px; padding-inline: 10px 2px; }
+	.gallery-app-header__toolbar--branded { --min-height: 52px !important; }
+	.gallery-app-header__brand { max-width: 84px; height: 36px; margin-inline-start: 6px; padding: 2px 4px; }
+	.gallery-app-header__brand img { max-width: 74px; max-height: 30px; }
+	.gallery-app-header > ion-toolbar:not(.gallery-app-header__pager, .gallery-app-header__search) ion-title { max-width: 88px; padding-inline: 6px 2px; }
 	.gallery-app-header ion-buttons ion-button { --padding-start: 5px; --padding-end: 5px; width: 38px; }
 }

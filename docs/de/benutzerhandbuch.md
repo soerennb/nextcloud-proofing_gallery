@@ -77,6 +77,14 @@ Auswahlen speichern. Ein Nextcloud-Konto ist nicht nötig. Identität und
 Änderungstoken liegen in einer privaten Browsersitzung; gelöschte Website-Daten
 beenden den Zugriff auf privates Feedback.
 
+Klicke oder tippe direkt auf ein Bild, um einen nummerierten Punkt zu setzen
+und den zugehörigen Kommentar zu schreiben. Wähle für die Tastaturplatzierung
+**Punktkommentar hinzufügen**, verschiebe den Punkt mit den Pfeiltasten, drücke
+zum Schreiben die Eingabetaste oder brich mit Escape ab. Kommentare ohne Punkt
+bleiben unter **Feedback** verfügbar. Im Abstimmungsmodus bleiben die
+Bedienelemente sichtbar; automatisches Ausblenden gilt nur für die
+Präsentationsansicht. Eine explizite Filmstreifen-Einstellung bleibt wirksam.
+
 Kundenbewertungen bleiben von der Eigentümer-Sichtung getrennt. Berechtigte
 Personen können Zusammenfassungen prüfen und eine Übernahme ausdrücklich in
 einer Vorschau bestätigen. XMP wird dadurch nie automatisch verändert.

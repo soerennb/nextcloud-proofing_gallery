@@ -12,6 +12,39 @@ export type { GalleryActivity, InboxUpload, PrincipalOption } from './collaborat
 
 const galleriesUrl = generateOcsUrl('/apps/proofing_gallery/api/v1/galleries')
 const galleriesV2Url = generateOcsUrl('/apps/proofing_gallery/api/v2/galleries')
+const designAssetsUrl = generateOcsUrl('/apps/proofing_gallery/api/v1/design-assets')
+
+export interface DesignAsset {
+	id: string
+	kind: 'logo' | 'watermark'
+	name: string
+	mimeType: string
+	size: number
+	width: number
+	height: number
+	createdAt: number
+}
+
+export async function uploadDesignAsset(kind: DesignAsset['kind'], file: File): Promise<DesignAsset> {
+	const body = new FormData()
+	body.append('kind', kind)
+	body.append('asset', file)
+	const { data } = await axios.post<DesignAsset>(designAssetsUrl, body)
+	return data
+}
+
+export async function fetchDesignAssets(): Promise<DesignAsset[]> {
+	const { data } = await axios.get<{ items: DesignAsset[] }>(designAssetsUrl)
+	return data.items
+}
+
+export async function deleteDesignAsset(assetId: string): Promise<void> {
+	await axios.delete(`${designAssetsUrl}/${encodeURIComponent(assetId)}`)
+}
+
+export function designAssetUrl(assetId: string): string {
+	return `${designAssetsUrl}/${encodeURIComponent(assetId)}`
+}
 
 export interface GalleryQuery {
 	archived?: boolean
@@ -205,6 +238,13 @@ export async function fetchGalleryMedia(
 	const { data } = await axios.get<MediaPage>(`${galleriesUrl}/${id}/media`, {
 		params: { limit, offset, path, search, sortBy, sortDirection, ...metadataFilters },
 		signal,
+	})
+	return data
+}
+
+export async function fetchStoryMedia(id: number, fileIds: number[]): Promise<{ items: MediaItem[]; missingIds: number[] }> {
+	const { data } = await axios.get<{ items: MediaItem[]; missingIds: number[] }>(`${galleriesUrl}/${id}/story-media`, {
+		params: { fileIds: fileIds.join(','), format: 'json' },
 	})
 	return data
 }
@@ -430,6 +470,18 @@ export async function saveCollection(
 
 export function ownerPreviewUrl(galleryId: number, fileId: number, width = 560, height = 360, mode: 'cover' | 'fit' = 'cover'): string {
 	return generateUrl(`/apps/proofing_gallery/media/${galleryId}/${fileId}/preview?x=${width}&y=${height}&mode=${mode}`)
+}
+
+export function ownerDesignPreviewUrl(
+	galleryId: number,
+	fileId: number,
+	presentation: GallerySettings['presentation'],
+	width = 560,
+	height = 360,
+	mode: 'cover' | 'fit' = 'cover',
+): string {
+	const query = new URLSearchParams({ x: String(width), y: String(height), mode, presentation: JSON.stringify(presentation) })
+	return `${generateUrl(`/apps/proofing_gallery/media/${galleryId}/${fileId}/design-preview`)}?${query}`
 }
 
 export async function archiveGallery(id: number): Promise<Gallery> {

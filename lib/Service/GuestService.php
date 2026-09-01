@@ -41,7 +41,7 @@ final class GuestService {
 		}
 
 		$secret = $this->random->generate(64, ISecureRandom::CHAR_ALPHANUMERIC);
-		$nonce = $this->random->generate(48, ISecureRandom::CHAR_ALPHANUMERIC);
+		$nonce = self::nonceForSecret($secret);
 		$publicId = $this->uuid();
 
 		$guest = new Guest();
@@ -76,6 +76,17 @@ final class GuestService {
 		return $guest;
 	}
 
+	/** @return array{guest: Guest, nonce: string} */
+	public function resume(Gallery $gallery, ?string $secret): array {
+		$guest = $this->authenticate($gallery, $secret);
+		$nonce = self::nonceForSecret((string)$secret);
+		if (!self::nonceMatches($guest->getNonceHash(), $nonce)) {
+			$guest->setNonceHash(self::hashSecret($nonce));
+			$this->guests->update($guest);
+		}
+		return ['guest' => $guest, 'nonce' => $nonce];
+	}
+
 	public function delete(Guest $guest): void {
 		$this->guests->delete($guest);
 	}
@@ -90,6 +101,14 @@ final class GuestService {
 
 	public static function nonceMatches(string $storedHash, string $providedNonce): bool {
 		return hash_equals($storedHash, self::hashSecret($providedNonce));
+	}
+
+	public static function nonceForSecret(string $secret): string {
+		return hash_hmac('sha256', 'proofing-gallery-request-nonce-v1', $secret);
+	}
+
+	public static function cookieName(Gallery $gallery): string {
+		return self::COOKIE_NAME . '_' . $gallery->getId();
 	}
 
 	private function uuid(): string {

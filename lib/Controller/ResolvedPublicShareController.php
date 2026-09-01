@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace OCA\ProofingGallery\Controller;
 
 use OCA\ProofingGallery\AppInfo\Application;
+use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Dto\PublicShareContext;
 use OCA\ProofingGallery\Domain\PublicLinkCapability;
+use OCA\ProofingGallery\Service\GuestService;
 use OCA\ProofingGallery\Service\PublicShareContextResolver;
 use OCP\AppFramework\PublicShareController;
 use OCP\IRequest;
@@ -39,5 +41,12 @@ abstract class ResolvedPublicShareController extends PublicShareController {
 
 	final protected function publicContext(): PublicShareContext {
 		return $this->shareContext ??= $this->contextResolver->resolve($this->getToken(), $this->requiredPermission);
+	}
+
+	final protected function guestSecret(Gallery $gallery): ?string {
+		$scoped = $this->request->getCookie(GuestService::cookieName($gallery));
+		return $scoped === null || $scoped === ''
+			? $this->request->getCookie(GuestService::COOKIE_NAME)
+			: $scoped;
 	}
 }

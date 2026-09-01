@@ -256,14 +256,12 @@ final class PublicGalleryDataService {
 			));
 		}
 		unset($section);
-		$serialized['appearance'] = $serialized['presentation'];
+		$storyItems = $this->storyItems($context, $serialized, $items);
 		if (!$effective['downloads']['allowed']) {
 			$serialized['delivery']['downloadScope'] = 'none';
-			$serialized['allowDownloads'] = false;
 		}
 		if (!$effective['guestUploads']['allowed']) {
 			$serialized['delivery']['guestUploads'] = false;
-			$serialized['allowGuestUploads'] = false;
 		}
 		foreach (['likes', 'colors', 'comments', 'annotations', 'selections'] as $feature) {
 			if (!$effective[$feature]['allowed']) $serialized['review'][$feature] = false;
@@ -271,18 +269,8 @@ final class PublicGalleryDataService {
 		$serialized['review']['ratings'] = $serialized['review']['ratings'] && $this->capabilities->feature('guestRatings');
 		$serialized['review']['pick'] = $serialized['review']['pick'] && $this->capabilities->feature('guestRatings');
 		if ($context->link->getPublicLocale() !== null) $serialized['publicLocale'] = $context->link->getPublicLocale();
-		foreach ($items as &$item) {
-			if (!str_starts_with((string)($item['mimeType'] ?? ''), 'video/')) continue;
-			try {
-				$item['playback'] = $this->videoTranscodes->request(
-					$gallery->getOwnerUid(),
-					$this->publicMedia->resolve($context, (int)$item['id']),
-				);
-			} catch (\Throwable) {
-				$item['playback'] = ['state' => 'unavailable', 'playable' => false];
-			}
-		}
-		unset($item);
+		$this->addPlayback($context, $items);
+		$this->addPlayback($context, $storyItems);
 		return [
 			'gallery' => [
 				'id' => $gallery->getId(),
@@ -291,6 +279,7 @@ final class PublicGalleryDataService {
 				'effectiveCapabilities' => $effective,
 			],
 			'items' => $items,
+			's' => $storyItems,
 			'total' => $total,
 			'limit' => $limit,
 			'offset' => $offset,
@@ -306,6 +295,50 @@ final class PublicGalleryDataService {
 			'scope' => $scope,
 			'view' => compact('search', 'sortBy', 'sortDirection', 'groupBy'),
 		];
+	}
+
+	/** @param array<string, mixed> $settings
+	 * @param list<array<string, mixed>> $pageItems
+	 * @return list<array<string, mixed>>
+	 */
+	private function storyItems(PublicShareContext $context, array $settings, array $pageItems): array {
+		$pageIds = array_fill_keys(array_map(static fn (array $item): int => (int)$item['id'], $pageItems), true);
+		$storyIds = array_values(array_unique(array_merge(...array_map(
+			static fn (array $section): array => $section['mediaIds'] ?? [],
+			$settings['presentation']['story']['sections'] ?? [],
+		))));
+		$items = [];
+		foreach ($storyIds as $fileId) {
+			if (isset($pageIds[$fileId])) continue;
+			try {
+				$file = $this->publicMedia->resolve($context, $fileId);
+				$items[] = [
+					'id' => $fileId, 'name' => $file->getName(), 'mimeType' => $file->getMimeType(),
+					'size' => (int)$file->getSize(), 'modifiedAt' => $file->getMTime(), 'etag' => $file->getEtag(), 'folder' => false,
+					'metadata' => $this->metadata->publicSummary($file, $settings['metadata']['publicFields']),
+					...$this->publicGeometry($file),
+				];
+			} catch (\Throwable) {
+				// Removed, unreadable or out-of-scope story media stays private.
+			}
+		}
+		return $items;
+	}
+
+	/** @param list<array<string, mixed>> $items */
+	private function addPlayback(PublicShareContext $context, array &$items): void {
+		foreach ($items as &$item) {
+			if (!str_starts_with((string)($item['mimeType'] ?? ''), 'video/')) continue;
+			try {
+				$item['playback'] = $this->videoTranscodes->request(
+					$context->gallery->getOwnerUid(),
+					$this->publicMedia->resolve($context, (int)$item['id']),
+				);
+			} catch (\Throwable) {
+				$item['playback'] = ['state' => 'unavailable', 'playable' => false];
+			}
+		}
+		unset($item);
 	}
 
 	/** @param list<array<string, mixed>> $items */

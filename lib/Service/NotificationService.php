@@ -108,7 +108,13 @@ final class NotificationService {
 	}
 
 	public function queue(Gallery $gallery, int $eventId, string $eventType, int $createdAt): void {
-		if (!in_array($eventType, self::EVENT_TYPES, true)) return;
+		$staged = $this->stage($gallery, $eventId, $eventType, $createdAt);
+		$this->publishActivity($gallery, $eventType, $createdAt, $staged['recipients'], $staged['nativeStateIds']);
+	}
+
+	/** @return array{recipients: list<string>, nativeStateIds: list<int>} */
+	public function stage(Gallery $gallery, int $eventId, string $eventType, int $createdAt): array {
+		if (!in_array($eventType, self::EVENT_TYPES, true)) return ['recipients' => [], 'nativeStateIds' => []];
 		$rows = $this->repository->activeSubscriptions($gallery->getId());
 		$rows = array_values(array_filter($rows, function (array $row) use ($gallery): bool {
 			try {
@@ -121,6 +127,28 @@ final class NotificationService {
 			}
 		}));
 		$recipients = array_values(array_unique([$gallery->getOwnerUid(), ...array_map(static fn (array $row): string => (string)$row['user_uid'], $rows)]));
+		$nativeStateIds = [];
+		foreach ($rows as $row) {
+			$nativeTypes = json_decode((string)($row['native_event_types'] ?? '[]'), true, flags: JSON_THROW_ON_ERROR);
+			if ((bool)$row['native_enabled'] && in_array($eventType, $nativeTypes, true)) {
+				$stateId = $this->native->stageSignal((int)$gallery->getId(), (string)$row['user_uid'], $eventId, $eventType);
+				if ($stateId !== null) $nativeStateIds[] = $stateId;
+			}
+			if (!(bool)$row['email_enabled']) continue;
+			$types = json_decode($row['event_types'], true, flags: JSON_THROW_ON_ERROR);
+			if (!in_array($eventType, $types, true)) continue;
+			$availableAt = $row['frequency'] === 'daily'
+				? ((int)floor($createdAt / 86400) + 1) * 86400
+				: $createdAt;
+			$this->repository->enqueue((int)$row['id'], $eventId, $availableAt, $createdAt);
+		}
+		return ['recipients' => $recipients, 'nativeStateIds' => array_values(array_unique($nativeStateIds))];
+	}
+
+	/** @param list<string> $recipients
+	 * @param list<int> $nativeStateIds */
+	public function publishActivity(Gallery $gallery, string $eventType, int $createdAt, array $recipients, array $nativeStateIds = []): void {
+		foreach ($nativeStateIds as $stateId) $this->native->publish($stateId);
 		foreach ($recipients as $recipient) {
 			try {
 				$event = $this->activity->generateEvent()
@@ -134,19 +162,6 @@ final class NotificationService {
 			} catch (\Throwable) {
 				// Activity integration must never fail the underlying gallery action.
 			}
-		}
-		foreach ($rows as $row) {
-			$nativeTypes = json_decode((string)($row['native_event_types'] ?? '[]'), true, flags: JSON_THROW_ON_ERROR);
-			if ((bool)$row['native_enabled'] && in_array($eventType, $nativeTypes, true)) {
-				$this->native->signal((int)$gallery->getId(), (string)$row['user_uid'], $eventId, $eventType);
-			}
-			if (!(bool)$row['email_enabled']) continue;
-			$types = json_decode($row['event_types'], true, flags: JSON_THROW_ON_ERROR);
-			if (!in_array($eventType, $types, true)) continue;
-			$availableAt = $row['frequency'] === 'daily'
-				? ((int)floor($createdAt / 86400) + 1) * 86400
-				: $createdAt;
-			$this->repository->enqueue((int)$row['id'], $eventId, $availableAt, $createdAt);
 		}
 	}
 

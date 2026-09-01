@@ -67,11 +67,11 @@ test('collection membership protects originals and rejects stale revisions', asy
 		})
 		expect(createdResponse.status()).toBe(201)
 		const created = await createdResponse.json() as {
-			id: number; sourceType: string; settings: { allowGuestUploads: boolean }; mediaSummary: { total: number }
+			id: number; sourceType: string; settings: { delivery: { guestUploads: boolean } }; mediaSummary: { total: number }
 		}
 		collectionId = created.id
 		expect(created.sourceType).toBe('collection')
-		expect(created.settings.allowGuestUploads).toBe(false)
+		expect(created.settings.delivery.guestUploads).toBe(false)
 
 		const emptyPublish = await request.post(`${galleries}/${collectionId}/publish?format=json`, {
 			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
@@ -191,7 +191,7 @@ test('owner creates and fills a collection through the content workspace', async
 		await page.getByRole('button', { name: 'Add selected files' }).click()
 		await expect(page.getByRole('region', { name: 'Selected files' }).getByText('proof.png')).toBeVisible()
 		await page.getByRole('button', { name: 'Save collection' }).click()
-		await expect(page.getByText('Collection content saved.')).toBeVisible()
+		await expect(page.locator('.toastify.toast-success').filter({ hasText: 'Collection content saved.' })).toBeVisible()
 
 	} finally {
 		if (collectionId !== null) {

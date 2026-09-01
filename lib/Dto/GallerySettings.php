@@ -18,7 +18,7 @@ use OCA\ProofingGallery\Dto\Settings\SecuritySettings;
 use OCA\ProofingGallery\Dto\Settings\SettingsInput;
 
 final class GallerySettings implements JsonSerializable {
-	public const SCHEMA_VERSION = 9;
+	public const SCHEMA_VERSION = 11;
 	public const PUBLIC_METADATA_FIELDS = MetadataSettings::PUBLIC_FIELDS;
 
 	private function __construct(
@@ -59,6 +59,9 @@ final class GallerySettings implements JsonSerializable {
 			$openerProvided = $openerProvided || array_key_exists('openerStyle', $appearance);
 			$presentation = array_replace($presentation, $appearance);
 		}
+		if (!array_key_exists('logoBackground', $presentation)) {
+			$presentation['logoBackground'] = ($presentation['logoMode'] ?? 'inherit') === 'upload' ? 'light' : 'transparent';
+		}
 		if (array_key_exists('allowDownloads', $input)) $delivery['downloadScope'] = SettingsInput::bool($input['allowDownloads'], 'allowDownloads') ? 'all' : 'none';
 		if (array_key_exists('allowGuestUploads', $input)) $delivery['guestUploads'] = SettingsInput::bool($input['allowGuestUploads'], 'allowGuestUploads');
 		if (array_key_exists('showFilenames', $input)) $presentation['showFilenames'] = SettingsInput::bool($input['showFilenames'], 'showFilenames');
@@ -67,7 +70,7 @@ final class GallerySettings implements JsonSerializable {
 		}
 		if (!$openerProvided && $heroProvided && ($presentation['heroFileId'] ?? null) !== null) $presentation['openerStyle'] = 'cinematic';
 		$schemaVersion = is_int($input['schemaVersion'] ?? null) ? $input['schemaVersion'] : null;
-		if (($schemaVersion !== null && $schemaVersion < self::SCHEMA_VERSION)
+		if (($schemaVersion !== null && $schemaVersion < 9)
 			|| ($schemaVersion === null && array_key_exists('appearance', $input))) {
 			$presentation['openerStyle'] = 'cinematic';
 			$presentation['fontPreset'] = 'modern';
@@ -93,6 +96,10 @@ final class GallerySettings implements JsonSerializable {
 	/** @param array<string, mixed> $patch */
 	public static function merge(self $current, array $patch): self {
 		$base = $current->canonical();
+		if (($patch['presentation']['logoMode'] ?? null) === 'upload'
+			&& !array_key_exists('logoBackground', $patch['presentation'])) {
+			$patch['presentation']['logoBackground'] = 'light';
+		}
 		foreach (['review', 'presentation', 'delivery', 'navigation', 'security', 'metadata', 'lifecycle'] as $section) {
 			if (isset($patch[$section]) && is_array($patch[$section])) {
 				$base[$section] = array_replace($base[$section], $patch[$section]);
@@ -114,12 +121,7 @@ final class GallerySettings implements JsonSerializable {
 
 	/** @return array<string, mixed> */
 	public function jsonSerialize(): array {
-		$presentation = $this->presentation->jsonSerialize();
-		return [
-			...$this->canonical(), 'feedbackVisibility' => $this->review->visibility->value,
-			'allowDownloads' => $this->delivery->downloadScope->value !== 'none', 'allowGuestUploads' => $this->delivery->guestUploads,
-			'showFilenames' => $this->presentation->showFilenames, 'colorLabels' => $this->review->colorLabels, 'appearance' => $presentation,
-		];
+		return $this->canonical();
 	}
 
 	public function withPublicPolicy(\OCA\ProofingGallery\Domain\PublicLinkPolicy $policy): self {
@@ -133,7 +135,10 @@ final class GallerySettings implements JsonSerializable {
 		foreach ($reviewCapabilities as $capability) {
 			$enabled = $settings['review'][$capability->value] && $policy->allows($capability);
 			$settings['review'][$capability->value] = $enabled;
-			$reviewEnabled = $reviewEnabled || $enabled;
+		}
+		$settings['review']['annotations'] = $settings['review']['annotations'] && $settings['review']['comments'];
+		foreach ($reviewCapabilities as $capability) {
+			$reviewEnabled = $reviewEnabled || $settings['review'][$capability->value];
 		}
 		$settings['delivery']['guestUploads'] = $settings['delivery']['guestUploads'] && $policy->allows(PublicLinkCapability::Upload);
 		$settings['delivery']['downloadScope'] = $this->delivery->downloadScope->restrict($policy->downloadScope)->value;

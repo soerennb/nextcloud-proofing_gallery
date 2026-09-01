@@ -6,6 +6,12 @@ import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import ArrowDownIcon from 'vue-material-design-icons/ArrowDown.vue'
+import ArrowUpIcon from 'vue-material-design-icons/ArrowUp.vue'
+import CloseIcon from 'vue-material-design-icons/Close.vue'
+import DotsHorizontalIcon from 'vue-material-design-icons/DotsHorizontal.vue'
+import FolderIcon from 'vue-material-design-icons/Folder.vue'
+import PlayIcon from 'vue-material-design-icons/Play.vue'
 
 import { bulkGalleryMedia, createGalleryFolder, deleteGalleryMedia, fetchGalleryMedia, fetchMediaMetadata, fetchMediaVersions, indexGalleryMetadata, ownerMediaDownloadUrl, ownerPreviewUrl, ownerUploadConcurrency, prepareOwnerUploadSessions, renameGalleryMedia, replaceGalleryMedia, restoreMediaVersion, updateMediaMetadata, uploadGalleryMedia } from '../services/galleryApi.ts'
 import type { OwnerUploadSession, UploadResolution } from '../services/galleryApi.ts'
@@ -439,10 +445,7 @@ onBeforeUnmount(() => {
 <template>
 	<section class="folder-workspace">
 		<header class="folder-workspace__header">
-			<div>
-				<h2>{{ t('proofing_gallery', 'Gallery files') }}</h2>
-				<p>{{ t('proofing_gallery', 'Upload and organize the files clients see. Changes are applied to the source folder in Nextcloud.') }}</p>
-			</div>
+			<h2>{{ t('proofing_gallery', 'Gallery files') }}</h2>
 			<div class="folder-workspace__actions">
 				<input ref="fileInput"
 					class="visually-hidden"
@@ -451,10 +454,11 @@ onBeforeUnmount(() => {
 					accept="image/*,video/*"
 					multiple
 					@change="upload">
-				<NcButton :disabled="uploading" @click="fileInput?.click()">
+				<NcButton :disabled="uploading"
+					:title="t('proofing_gallery', 'Interrupted uploads resume when you select the same files again.')"
+					@click="fileInput?.click()">
 					{{ uploading ? t('proofing_gallery', 'Uploading…') : t('proofing_gallery', 'Upload files') }}
 				</NcButton>
-				<small class="upload-resume-hint">{{ t('proofing_gallery', 'Interrupted uploads resume when you select the same files again.') }}</small>
 				<NcButton variant="tertiary" @click="addFolder">
 					{{ t('proofing_gallery', 'New folder') }}
 				</NcButton>
@@ -474,25 +478,27 @@ onBeforeUnmount(() => {
 			</li>
 		</ul>
 
-		<nav class="breadcrumbs" :aria-label="t('proofing_gallery', 'Current folder')">
-			<button type="button" @click="path = ''; load()">
-				{{ t('proofing_gallery', 'Gallery root') }}
-			</button>
-			<span v-for="(crumb, index) in crumbs" :key="`${crumb}-${index}`" class="breadcrumb-part">
-				<span>/</span><button type="button" @click="openCrumb(index)">{{ crumb }}</button>
-			</span>
-		</nav>
-
-		<div class="folder-toolbar">
-			<NcTextField v-model="search" type="search" :label="t('proofing_gallery', 'Search this folder')" />
-			<label><span>{{ t('proofing_gallery', 'Sort') }}</span><select v-model="sortBy" :aria-label="t('proofing_gallery', 'Sort files')"><option value="name">{{ t('proofing_gallery', 'Name') }}</option><option value="modified">{{ t('proofing_gallery', 'Modified') }}</option><option value="size">{{ t('proofing_gallery', 'Size') }}</option><option value="capturedAt">{{ t('proofing_gallery', 'Captured') }}</option></select></label>
-			<NcButton variant="tertiary" :aria-label="t('proofing_gallery', 'Reverse file order')" @click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'">
-				{{ sortDirection === 'asc' ? '↑' : '↓' }}
-			</NcButton>
-			<span>{{ total }}</span>
-			<NcButton variant="tertiary" :aria-expanded="metadataFiltersOpen" @click="metadataFiltersOpen = !metadataFiltersOpen">
-				{{ t('proofing_gallery', 'Metadata filters') }}
-			</NcButton>
+		<div class="folder-toolbar-row">
+			<nav class="breadcrumbs" :aria-label="t('proofing_gallery', 'Current folder')">
+				<button type="button" @click="path = ''; load()">
+					{{ t('proofing_gallery', 'Gallery root') }}
+				</button>
+				<span v-for="(crumb, index) in crumbs" :key="`${crumb}-${index}`" class="breadcrumb-part">
+					<span>/</span><button type="button" @click="openCrumb(index)">{{ crumb }}</button>
+				</span>
+			</nav>
+			<div class="folder-toolbar">
+				<NcTextField v-model="search" type="search" :label="t('proofing_gallery', 'Search this folder')" />
+				<label><span>{{ t('proofing_gallery', 'Sort') }}</span><select v-model="sortBy" :aria-label="t('proofing_gallery', 'Sort files')"><option value="name">{{ t('proofing_gallery', 'Name') }}</option><option value="modified">{{ t('proofing_gallery', 'Modified') }}</option><option value="size">{{ t('proofing_gallery', 'Size') }}</option><option value="capturedAt">{{ t('proofing_gallery', 'Captured') }}</option></select></label>
+				<NcButton variant="tertiary" :aria-label="t('proofing_gallery', 'Reverse file order')" @click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'">
+					<ArrowDownIcon v-if="sortDirection === 'desc'" :size="18" />
+					<ArrowUpIcon v-else :size="18" />
+				</NcButton>
+				<span>{{ total }}</span>
+				<NcButton variant="tertiary" :aria-expanded="metadataFiltersOpen" @click="metadataFiltersOpen = !metadataFiltersOpen">
+					{{ t('proofing_gallery', 'Metadata filters') }}
+				</NcButton>
+			</div>
 		</div>
 		<div v-if="metadataFiltersOpen" class="metadata-filters">
 			<label><span>{{ t('proofing_gallery', 'Captured from') }}</span><input v-model="capturedFrom" type="date"></label>
@@ -554,14 +560,14 @@ onBeforeUnmount(() => {
 						class="file-card__preview file-card__folder"
 						type="button"
 						@click="openFolder(item)">
-						<span aria-hidden="true">▰</span><span>{{ t('proofing_gallery', 'Open folder') }}</span>
+						<FolderIcon :size="40" /><span>{{ t('proofing_gallery', 'Open folder') }}</span>
 					</button>
 					<ProgressiveImage v-else-if="item.mimeType.startsWith('image/')"
 						class="file-card__preview"
 						:src="ownerPreviewUrl(gallery.id, item.id, 440, 320)"
 						:alt="item.name" />
 					<div v-else class="file-card__preview file-card__video">
-						▶ <span>{{ t('proofing_gallery', 'Video') }}</span>
+						<PlayIcon :size="28" /> <span>{{ t('proofing_gallery', 'Video') }}</span>
 					</div>
 					<div class="file-card__meta">
 						<strong :title="item.name">{{ item.name }}</strong><small>{{ item.folder ? t('proofing_gallery', 'Folder') : formatSize(item.size) }}</small>
@@ -571,7 +577,7 @@ onBeforeUnmount(() => {
 					</div>
 					<details class="file-card__actions">
 						<summary role="button" :aria-label="t('proofing_gallery', 'Actions for {name}', { name: item.name })">
-							•••
+							<DotsHorizontalIcon :size="16" />
 						</summary>
 						<div>
 							<button v-if="!item.folder && item.mimeType.startsWith('image/')" type="button" @click="showMetadata(item)">
@@ -598,7 +604,7 @@ onBeforeUnmount(() => {
 			<header>
 				<div><h3>{{ metadataItem.name }}</h3><p>{{ t('proofing_gallery', 'Technical data stays read-only. Descriptive fields are written to an XMP sidecar next to the original.') }}</p></div>
 				<button type="button" :aria-label="t('proofing_gallery', 'Close')" @click="metadataItem = null">
-					×
+					<CloseIcon :size="22" />
 				</button>
 			</header>
 			<div v-if="metadataLoading" class="workspace-status">
@@ -646,7 +652,7 @@ onBeforeUnmount(() => {
 					<p>{{ t('proofing_gallery', 'Replacing a file keeps its gallery feedback and selections.') }}</p>
 				</div>
 				<button type="button" :aria-label="t('proofing_gallery', 'Close')" @click="versionItem = null">
-					×
+					<CloseIcon :size="22" />
 				</button>
 			</header>
 			<input ref="replacementInput"

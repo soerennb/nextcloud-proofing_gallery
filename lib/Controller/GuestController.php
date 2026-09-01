@@ -40,7 +40,8 @@ final class GuestController extends ResolvedPublicShareController {
 				'nonce' => $session['nonce'],
 				'expiresIn' => 2592000,
 			], Http::STATUS_CREATED);
-			$response->addCookie(GuestService::COOKIE_NAME, $session['secret'], new \DateTime('+30 days'), 'Lax');
+			$response->addHeader('Cache-Control', 'private, no-store');
+			$response->addCookie(GuestService::cookieName($this->gallery()), $session['secret'], new \DateTime('+30 days'), 'Lax');
 			return $response;
 		} catch (InvalidArgumentException $exception) {
 			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
@@ -52,12 +53,18 @@ final class GuestController extends ResolvedPublicShareController {
 	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/session')]
 	public function current(): JSONResponse {
 		try {
-			return new JSONResponse([
-				'guest' => $this->guests->authenticate($this->gallery(), $this->request->getCookie(GuestService::COOKIE_NAME)),
-			]);
+			$secret = $this->guestSecret($this->gallery());
+			$session = $this->guests->resume($this->gallery(), $secret);
+			$response = new JSONResponse(['guest' => $session['guest'], 'nonce' => $session['nonce'], 'expiresIn' => 2592000]);
+			$response->addHeader('Cache-Control', 'private, no-store');
+			$response->addCookie(GuestService::cookieName($this->gallery()), (string)$secret, new \DateTime('+30 days'), 'Lax');
+			return $response;
 		} catch (DoesNotExistException) {
 			// An anonymous visitor is the normal initial state of a public gallery.
-			return new JSONResponse(['guest' => null]);
+			$response = new JSONResponse(['guest' => null]);
+			$response->addHeader('Cache-Control', 'private, no-store');
+			$response->invalidateCookie(GuestService::cookieName($this->gallery()));
+			return $response;
 		}
 	}
 
@@ -69,11 +76,12 @@ final class GuestController extends ResolvedPublicShareController {
 		try {
 			$guest = $this->guests->authenticate(
 				$this->gallery(),
-				$this->request->getCookie(GuestService::COOKIE_NAME),
+				$this->guestSecret($this->gallery()),
 				$this->request->getHeader('X-Proofing-Nonce'),
 			);
 			$this->guests->delete($guest);
 			$response = new JSONResponse([], Http::STATUS_NO_CONTENT);
+			$response->invalidateCookie(GuestService::cookieName($this->gallery()));
 			$response->invalidateCookie(GuestService::COOKIE_NAME);
 			return $response;
 		} catch (DoesNotExistException) {

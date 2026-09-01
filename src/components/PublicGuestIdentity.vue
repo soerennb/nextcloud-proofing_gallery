@@ -7,7 +7,14 @@ import { defineAsyncComponent } from 'vue'
 import type { GuestIdentity } from '../publicTypes.ts'
 
 const PublicUploadAction = defineAsyncComponent(() => import('./PublicUploadAction.vue'))
-const props = defineProps<{ guest: GuestIdentity; token: string; nonce: string; privateFeedback: boolean; allowUploads: boolean }>()
+const props = defineProps<{
+	guest: GuestIdentity
+	token: string
+	nonce: string
+	privateFeedback: boolean
+	allowUploads: boolean
+	request(path: string, init?: RequestInit, mayRecover?: boolean): Promise<Response>
+}>()
 const emit = defineEmits<{ deleted: []; error: [message: string] }>()
 
 function endpoint(path: string): string {
@@ -17,8 +24,12 @@ function endpoint(path: string): string {
 async function deleteData() {
 	if (!window.confirm(t('proofing_gallery', 'Delete your review data from this gallery? This cannot be undone.'))) return
 	try {
-		const response = await fetch(endpoint('privacy'), { method: 'DELETE', credentials: 'same-origin', headers: { 'X-Proofing-Nonce': props.nonce } })
-		if (!response.ok) throw new Error()
+		const response = await props.request('privacy', { method: 'DELETE' }, false)
+		if (!response.ok) {
+			const payload = await response.json().catch(() => ({})) as { code?: string }
+			if (response.status === 401 || payload.code === 'invalid_nonce') emit('deleted')
+			throw new Error()
+		}
 		sessionStorage.removeItem(`proofing-gallery-nonce:${props.token}`)
 		emit('deleted')
 		showSuccess(t('proofing_gallery', 'Your review data was deleted.'))
@@ -42,6 +53,7 @@ async function deleteData() {
 			<PublicUploadAction v-if="allowUploads"
 				:token="token"
 				:nonce="nonce"
+				:request="request"
 				@error="emit('error', $event)" />
 		</div>
 	</div>

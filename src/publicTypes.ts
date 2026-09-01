@@ -5,6 +5,7 @@ export type { MediaItem } from './types.ts'
 export interface PublicGalleryPage {
 	gallery: { id: number; title: string; settings: GallerySettings }
 	items: MediaItem[]
+	s: MediaItem[]
 	total: number
 	limit: number
 	offset: number
@@ -82,8 +83,8 @@ export interface CollaborationState {
 		deletedAt: number | null
 		annotations: Array<{ x: number; y: number; width: number; height: number }>
 	}>
-	selections: Array<{ id: string; name: string; message: string; fileIds: number[]; author: string; mine: boolean }>
+	selections: Array<{ id: string; name: string; message: string; status: 'open' | 'completed'; fileIds: number[]; author: string; mine: boolean; updatedAt: number }>
 	ratings: Array<{ fileId: number; rating: number; pick: 'none' | 'pick' | 'reject'; updatedAt: number }>
-	events?: Array<{ id: number; type: string; payload: { fileId?: number; commentId?: number; selectionId?: string }; createdAt: number }>
+	events?: Array<{ id: number; type: string; payload: { fileId?: number; commentId?: number; selectionId?: string; deleted?: boolean }; createdAt: number }>
 	cursor: number
 }

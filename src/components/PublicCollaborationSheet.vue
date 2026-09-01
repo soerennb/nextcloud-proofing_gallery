@@ -17,6 +17,7 @@ defineProps<{
 	privateFeedback: boolean
 	allowUploads: boolean
 	dialogOpen: boolean
+	request(path: string, init?: RequestInit, mayRecover?: boolean): Promise<Response>
 }>()
 
 const emit = defineEmits<{
@@ -51,6 +52,7 @@ const emit = defineEmits<{
 				:nonce="nonce"
 				:private-feedback="privateFeedback"
 				:allow-uploads="allowUploads"
+				:request="request"
 				@deleted="emit('deleted')"
 				@error="emit('error', $event)" />
 			<IonButton v-else expand="block" @click="emit('identify')">
@@ -60,8 +62,8 @@ const emit = defineEmits<{
 				:review="review"
 				:guest="Boolean(guest)"
 				:nonce="nonce"
-				:token="token"
 				:dialog-open="dialogOpen"
+				:request="request"
 				@identify="emit('identify')"
 				@updated="emit('updated', $event)"
 				@error="emit('error', $event)" />

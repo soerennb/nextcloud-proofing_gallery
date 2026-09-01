@@ -4,12 +4,19 @@ import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import { AnimatePresence, motion, useReducedMotion } from 'motion-v'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import AlertCircleIcon from 'vue-material-design-icons/AlertCircle.vue'
+import CheckAllIcon from 'vue-material-design-icons/CheckAll.vue'
+import CheckIcon from 'vue-material-design-icons/Check.vue'
+import CheckboxBlankCircleOutlineIcon from 'vue-material-design-icons/CheckboxBlankCircleOutline.vue'
+import DotsHorizontalIcon from 'vue-material-design-icons/DotsHorizontal.vue'
+import RefreshIcon from 'vue-material-design-icons/Refresh.vue'
 
 import { canonicalGallerySettings } from '../domain/gallerySettings.ts'
 import { availableGalleryWorkspaces, galleryWorkspaceFromReadinessAction, galleryWorkspacePath, normalizeGalleryWorkspace, galleryPurposeLabels as purposeLabels } from '../domain/gallerySettingsOptions.ts'
 import type { GalleryWorkspace } from '../domain/gallerySettingsOptions.ts'
 import { useGalleryPresets } from '../composables/useGalleryPresets.ts'
-import { completeGallery, fetchCollection, fetchGalleryMedia, fetchGalleryReadiness, updateGallery, updateGallerySource } from '../services/galleryApi.ts'
+import { completeGallery, fetchCollection, fetchDesignAssets, fetchGalleryMedia, fetchGalleryReadiness, fetchStoryMedia, updateGallery, updateGallerySource, uploadDesignAsset } from '../services/galleryApi.ts'
+import type { DesignAsset } from '../services/galleryApi.ts'
 import type { Gallery, GalleryReadiness, MediaItem } from '../types.ts'
 import CollectionContent from './CollectionContent.vue'
 import CullingWorkspace from './CullingWorkspace.vue'
@@ -46,9 +53,12 @@ let savePromise: Promise<boolean> | null = null
 const rebinding = ref(false)
 const showSharing = ref(false)
 const designPreviewOpen = ref(false)
+const designAssetUploading = ref<'logo' | 'watermark' | null>(null)
+const designAssets = ref<DesignAsset[]>([])
 const media = ref<MediaItem[]>([])
 const mediaTotal = ref(0)
 const mediaLoading = ref(true)
+const missingStoryMediaIds = ref<number[]>([])
 const serverReadiness = ref<GalleryReadiness | null>(null)
 const baseline = ref('')
 const draft = reactive({
@@ -66,7 +76,7 @@ const saveStateLabel = computed(() => ({
 	conflict: t('proofing_gallery', 'Changed in another session'),
 	invalid: t('proofing_gallery', 'Enter a gallery title'),
 })[saveState.value])
-const storyMedia = computed(() => media.value.filter(item => !item.folder).slice(0, 60)); const previewMedia = computed(() => storyMedia.value.slice(0, 8))
+const storyMedia = computed(() => media.value.filter(item => !item.folder)); const previewMedia = computed(() => storyMedia.value.slice(0, 8))
 const readinessLabels = computed<Record<GalleryReadiness['checks'][number]['code'], string>>(() => ({
 	source_readable: t('proofing_gallery', 'Project folder is available'),
 	media_available: t('proofing_gallery', 'At least one photo is ready'),
@@ -187,17 +197,45 @@ async function loadMedia() {
 				sourceGalleryTitle: item.sourceGalleryTitle ?? undefined,
 			}))
 			mediaTotal.value = collection.items.length
+			await loadStoryReferences()
 			return
 		}
 		const page = await fetchGalleryMedia(props.gallery.id, 60)
 		media.value = page.items
 		mediaTotal.value = page.total
+		await loadStoryReferences()
 	} catch {
 		media.value = []
 		mediaTotal.value = 0
 	} finally {
 		mediaLoading.value = false
 	}
+}
+
+async function loadStoryReferences() {
+	const referenced = [...new Set(draft.settings.presentation.story.sections.flatMap(section => section.mediaIds))]
+	const loaded = new Set(media.value.map(item => item.id))
+	const missing = referenced.filter(id => !loaded.has(id))
+	if (missing.length === 0) { missingStoryMediaIds.value = []; return }
+	try {
+		const resolved = await fetchStoryMedia(props.gallery.id, missing)
+		const byId = new Map(media.value.map(item => [item.id, item]))
+		for (const item of resolved.items) byId.set(item.id, item)
+		media.value = [...byId.values()]
+		missingStoryMediaIds.value = resolved.missingIds
+	} catch {
+		missingStoryMediaIds.value = missing
+	}
+}
+
+async function searchDesignMedia(query: string): Promise<MediaItem[]> {
+	const normalized = query.trim().toLocaleLowerCase()
+	if (props.gallery.sourceType === 'collection') return storyMedia.value.filter(item => item.name.toLocaleLowerCase().includes(normalized)).slice(0, 60)
+	const page = await fetchGalleryMedia(props.gallery.id, 60, 0, '', query)
+	const byId = new Map(media.value.map(item => [item.id, item]))
+	for (const item of page.items) byId.set(item.id, item)
+	media.value = [...byId.values()]
+	return page.items.filter(item => !item.folder)
 }
 
 async function loadReadiness() {
@@ -212,21 +250,35 @@ function collectionChanged() {
 	loadMedia()
 }
 
-async function chooseImage(kind: 'heroFileId' | 'logoFileId') {
+async function uploadAsset(kind: 'logo' | 'watermark', file: File) {
+	if (designAssetUploading.value !== null) return
+	designAssetUploading.value = kind
 	try {
-		const nodes = await getFilePickerBuilder(t('proofing_gallery', 'Choose an image'))
-			.setMultiSelect(false)
-			.setType(FilePickerType.Choose)
-			.setCanPick(node => node.type === 'file' && node.mime.startsWith('image/'))
-			.build()
-			.pickNodes()
-		const image = nodes[0]
-		if (image?.fileid === undefined) {
-			showError(t('proofing_gallery', 'The selected image has no compatible file ID.'))
-			return
+		const asset = await uploadDesignAsset(kind, file)
+		designAssets.value = [asset, ...designAssets.value.filter(item => item.id !== asset.id)]
+		if (kind === 'logo') {
+			draft.settings.presentation.logoAssetId = asset.id
+			draft.settings.presentation.logoMode = 'upload'
+			draft.settings.presentation.logoBackground = 'light'
+		} else {
+			draft.settings.presentation.watermarkImageAssetId = asset.id
 		}
-		draft.settings.presentation[kind] = image.fileid
-	} catch { /* Closing the picker is not an error. */ }
+		showSuccess(kind === 'logo'
+			? t('proofing_gallery', 'Logo uploaded.')
+			: t('proofing_gallery', 'Watermark uploaded.'))
+	} catch {
+		showError(t('proofing_gallery', 'The image could not be uploaded. Use a supported image up to 5 MiB.'))
+	} finally {
+		designAssetUploading.value = null
+	}
+}
+
+async function loadDesignAssets() {
+	try {
+		designAssets.value = await fetchDesignAssets()
+	} catch {
+		designAssets.value = []
+	}
 }
 
 async function chooseSource() {
@@ -380,7 +432,7 @@ function handleOffline() {
 
 onMounted(() => {
 	setTab(activeTab.value, 'replace')
-	resetDraft(); loadMedia(); loadReadiness(); loadPresets()
+	resetDraft(); loadMedia(); loadReadiness(); loadPresets(); loadDesignAssets()
 	window.addEventListener('beforeunload', beforeUnload)
 	window.addEventListener('online', handleOnline)
 	window.addEventListener('offline', handleOffline)
@@ -412,7 +464,10 @@ onBeforeUnmount(() => {
 					<span class="purpose-name">{{ purposeLabels[gallery.purpose] }}</span>
 					<details class="readiness-popover">
 						<summary :aria-label="t('proofing_gallery', 'Project readiness')">
-							<span :class="{ ready: publishReady }" aria-hidden="true">{{ publishReady ? '✓' : '!' }}</span>
+							<span :class="{ ready: publishReady }" aria-hidden="true">
+								<CheckIcon v-if="publishReady" :size="14" />
+								<AlertCircleIcon v-else :size="14" />
+							</span>
 							{{ publishReady ? t('proofing_gallery', 'Ready') : t('proofing_gallery', '{count} open', { count: readiness.filter(item => !item.ready).length }) }}
 						</summary>
 						<div class="readiness-popover__panel">
@@ -420,7 +475,10 @@ onBeforeUnmount(() => {
 							<ul>
 								<li v-for="item in readiness" :key="item.label" :class="{ ready: item.ready }">
 									<button type="button" @click="setTab(item.action)">
-										<span aria-hidden="true">{{ item.ready ? '✓' : '○' }}</span>{{ item.label }}
+										<span aria-hidden="true">
+											<CheckIcon v-if="item.ready" :size="14" />
+											<CheckboxBlankCircleOutlineIcon v-else :size="14" />
+										</span>{{ item.label }}
 									</button>
 								</li>
 							</ul>
@@ -433,7 +491,11 @@ onBeforeUnmount(() => {
 					:data-state="saveState"
 					role="status"
 					aria-live="polite">
-					<span aria-hidden="true">{{ saveState === 'saved' ? '✓' : saveState === 'saving' ? '↻' : '•' }}</span>
+					<span aria-hidden="true" class="save-indicator__glyph">
+						<CheckAllIcon v-if="saveState === 'saved'" :size="16" />
+						<RefreshIcon v-else-if="saveState === 'saving'" :size="16" class="save-indicator__spin" />
+						<DotsHorizontalIcon v-else :size="16" />
+					</span>
 					{{ saveStateLabel }}
 				</div>
 				<NcButton v-if="gallery.permissions.canManageAccess" @click="openSharing">
@@ -516,9 +578,12 @@ onBeforeUnmount(() => {
 					v-model:settings="draft.settings"
 					:gallery="gallery"
 					:media="storyMedia"
-					:preview-media="previewMedia"
+					:missing-story-media-ids="missingStoryMediaIds"
+					:search-media="searchDesignMedia"
 					:preview-open="designPreviewOpen"
-					@choose-image="chooseImage"
+					:asset-uploading="designAssetUploading"
+					:assets="designAssets"
+					@upload-asset="uploadAsset"
 					@update:preview-open="designPreviewOpen = $event" />
 
 				<GalleryShareWorkspace

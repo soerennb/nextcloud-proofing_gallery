@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { t } from '@nextcloud/l10n'
 import { computed } from 'vue'
+import CheckIcon from 'vue-material-design-icons/Check.vue'
 
 import type { GalleryStorySection } from '../domain/gallerySettings.ts'
 import type { MediaItem } from '../publicTypes.ts'
@@ -9,6 +10,7 @@ import ProgressiveImage from './ProgressiveImage.vue'
 const props = defineProps<{
 	sections: GalleryStorySection[]
 	showAllMedia: boolean
+	showFilenames: boolean
 	items: MediaItem[]
 	selecting?: boolean
 	selectedIds?: number[]
@@ -43,7 +45,10 @@ function mediaFor(section: GalleryStorySection): MediaItem[] {
 						@click="emit('open', item, $event)">
 						<ProgressiveImage :src="previewUrl(item, 1800, 1400, 'fit')" direct :alt="item.name" />
 					</button>
-					<span v-if="selecting" class="story-gallery__selection" aria-hidden="true">{{ selectedIds?.includes(item.id) ? '✓' : '' }}</span>
+					<figcaption v-if="showFilenames">
+						{{ item.name }}
+					</figcaption>
+					<span v-if="selecting" class="story-gallery__selection" aria-hidden="true"><CheckIcon v-if="selectedIds?.includes(item.id)" aria-hidden="true" :size="14" /></span>
 				</figure>
 			</div>
 		</article>
@@ -54,7 +59,10 @@ function mediaFor(section: GalleryStorySection): MediaItem[] {
 					<button type="button" @click="emit('open', item, $event)">
 						<ProgressiveImage :src="previewUrl(item, 900, 900, 'fit')" direct :alt="item.name" />
 					</button>
-					<span v-if="selecting" class="story-gallery__selection" aria-hidden="true">{{ selectedIds?.includes(item.id) ? '✓' : '' }}</span>
+					<figcaption v-if="showFilenames">
+						{{ item.name }}
+					</figcaption>
+					<span v-if="selecting" class="story-gallery__selection" aria-hidden="true"><CheckIcon v-if="selectedIds?.includes(item.id)" aria-hidden="true" :size="14" /></span>
 				</figure>
 			</div>
 		</section>
