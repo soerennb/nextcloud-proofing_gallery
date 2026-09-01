@@ -23,4 +23,12 @@ final class GuestServiceTest extends TestCase {
 		self::assertFalse(GuestService::nonceMatches($hash, 'wrong-nonce'));
 		self::assertFalse(GuestService::nonceMatches($hash, 'correct-nonce '));
 	}
+
+	public function testMutationNonceIsStableAndBoundToTheSessionSecret(): void {
+		$nonce = GuestService::nonceForSecret('session-secret');
+
+		self::assertSame(64, strlen($nonce));
+		self::assertSame($nonce, GuestService::nonceForSecret('session-secret'));
+		self::assertNotSame($nonce, GuestService::nonceForSecret('different-secret'));
+	}
 }

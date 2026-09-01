@@ -7,6 +7,7 @@ namespace OCA\ProofingGallery\Service;
 use OCA\ProofingGallery\Db\CollaborationRepository;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\PublicLinkMapper;
+use OCA\ProofingGallery\Domain\CollaborationReadScope;
 use OCP\IURLGenerator;
 
 final class IntegrationReadService {
@@ -53,7 +54,7 @@ final class IntegrationReadService {
 	/** @return array<string, mixed> */
 	public function feedback(string $userUid, int $galleryId): array {
 		$gallery = $this->access->view($userUid, $galleryId);
-		$state = $this->collaboration->state($gallery->getId(), null, 0);
+		$state = $this->collaboration->state($gallery->getId(), CollaborationReadScope::all(), 0, allFiles: true);
 		$comments = array_map(static fn (array $comment): array => [
 			'fileId' => (int)$comment['file_id'],
 			'body' => mb_substr(trim(strip_tags((string)$comment['body'])), 0, 2000),

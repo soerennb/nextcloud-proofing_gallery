@@ -4,6 +4,10 @@ import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import { computed, onMounted, ref, watch } from 'vue'
+import ArrowDownIcon from 'vue-material-design-icons/ArrowDown.vue'
+import ArrowUpIcon from 'vue-material-design-icons/ArrowUp.vue'
+import CloseIcon from 'vue-material-design-icons/Close.vue'
+import DragHorizontalIcon from 'vue-material-design-icons/DragHorizontal.vue'
 
 import {
 	fetchCollection,
@@ -282,12 +286,12 @@ async function save() {
 						@dragstart="draggedIndex = index"
 						@dragover.prevent
 						@drop="drop(index)">
-						<span class="collection-grip" aria-hidden="true">⠿</span>
+						<span class="collection-grip" aria-hidden="true"><DragHorizontalIcon :size="16" /></span>
 						<img
 							v-if="item.state === 'available'"
 							:src="ownerPreviewUrl(item.sourceGalleryId, item.fileId, 120, 90)"
 							alt="">
-						<span v-else class="collection-placeholder" aria-hidden="true">×</span>
+						<span v-else class="collection-placeholder" aria-hidden="true"><CloseIcon :size="16" /></span>
 						<span class="collection-name">
 							<strong>{{ item.name || t('proofing_gallery', 'Unavailable file') }}</strong>
 							<span>{{ item.sourceGalleryTitle || t('proofing_gallery', 'Source unavailable') }}</span>
@@ -298,20 +302,20 @@ async function save() {
 								:aria-label="t('proofing_gallery', 'Move up')"
 								:disabled="index === 0"
 								@click="move(index, -1)">
-								↑
+								<ArrowUpIcon :size="16" />
 							</button>
 							<button
 								type="button"
 								:aria-label="t('proofing_gallery', 'Move down')"
 								:disabled="index === items.length - 1"
 								@click="move(index, 1)">
-								↓
+								<ArrowDownIcon :size="16" />
 							</button>
 							<button
 								type="button"
 								:aria-label="t('proofing_gallery', 'Remove {name}', { name: item.name || t('proofing_gallery', 'unavailable file') })"
 								@click="items.splice(index, 1)">
-								×
+								<CloseIcon :size="16" />
 							</button>
 						</span>
 					</li>

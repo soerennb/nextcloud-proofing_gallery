@@ -10,9 +10,148 @@ const auth = `Basic ${Buffer.from('admin:admin').toString('base64')}`
 const apiHeaders = { Authorization: auth, 'OCS-APIRequest': 'true' }
 const execFileAsync = promisify(execFile)
 
-async function state(): Promise<{ galleryId: number, token: string, folderId: number }> {
+async function state(): Promise<{ galleryId: number, token: string, folderId: number, largeFolderId: number }> {
 	return JSON.parse(await readFile(path.join(process.cwd(), 'test-results-e2e-state.json'), 'utf8'))
 }
+
+test('design assets are reusable and cannot be deleted while referenced', async ({ request, baseURL }) => {
+	const stable = await state()
+	const assets = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/design-assets`
+	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
+	const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAFklEQVQImWP8z8DAwMDAxMDAwMDAAAANHQEDDMfniQAAAABJRU5ErkJggg==', 'base64')
+	const uploaded = await request.post(`${assets}?format=json`, {
+		headers: apiHeaders,
+		multipart: {
+			kind: 'watermark',
+			asset: { name: 'studio-mark.png', mimeType: 'image/png', buffer: png },
+		},
+	})
+	const uploadedBody = await uploaded.text()
+	expect(uploaded.status(), uploadedBody).toBe(201)
+	const asset = JSON.parse(uploadedBody) as { id: string; name: string; kind: string; mimeType: string }
+	expect(asset).toEqual(expect.objectContaining({ name: 'studio-mark.png', kind: 'watermark', mimeType: 'image/png' }))
+
+	const listed = await request.get(`${assets}?format=json&kind=watermark`, { headers: apiHeaders })
+	expect(listed.status()).toBe(200)
+	expect((await listed.json() as { items: Array<{ id: string }> }).items.map(item => item.id)).toContain(asset.id)
+	const content = await request.get(`${assets}/${asset.id}?format=json`, { headers: apiHeaders })
+	expect(content.status()).toBe(200)
+	expect(content.headers()['content-type']).toContain('image/png')
+	const rejected = await request.post(`${galleries}?format=json`, {
+		headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+		data: { folderId: stable.folderId, title: `E2E Foreign asset ${Date.now()}`, settings: { presentation: { watermarkImageAssetId: 'b'.repeat(32) } } },
+	})
+	expect(rejected.status()).toBe(422)
+
+	const created = await request.post(`${galleries}?format=json`, {
+		headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+		data: { folderId: stable.folderId, title: `E2E Design assets ${Date.now()}`, settings: { presentation: { watermarkImageAssetId: asset.id } } },
+	})
+	expect(created.status()).toBe(201)
+	let gallery = await created.json() as { id: number; revision: number }
+	expect((await request.delete(`${assets}/${asset.id}?format=json`, { headers: apiHeaders })).status()).toBe(409)
+
+	const detached = await request.put(`${galleries}/${gallery.id}?format=json`, {
+		headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+		data: { expectedRevision: gallery.revision, settings: { presentation: { watermarkImageAssetId: null } } },
+	})
+	expect(detached.status()).toBe(200)
+	gallery = await detached.json() as { id: number; revision: number }
+	expect((await request.delete(`${assets}/${asset.id}?format=json`, { headers: apiHeaders })).status()).toBe(200)
+	expect((await request.get(`${assets}/${asset.id}?format=json`, { headers: apiHeaders })).status()).toBe(404)
+	await request.delete(`${galleries}/${gallery.id}?format=json`, { headers: apiHeaders })
+})
+
+test('uploaded gallery logos use the authenticated image route', async ({ request, baseURL }) => {
+	const stable = await state()
+	const assets = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/design-assets`
+	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
+	const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAFklEQVQImWP8z8DAwMDAxMDAwMDAAAANHQEDDMfniQAAAABJRU5ErkJggg==', 'base64')
+	const uploaded = await request.post(`${assets}?format=json`, {
+		headers: apiHeaders,
+		multipart: { kind: 'logo', asset: { name: 'wordmark.png', mimeType: 'image/png', buffer: png } },
+	})
+	expect(uploaded.status()).toBe(201)
+	const asset = await uploaded.json() as { id: string }
+	const created = await request.post(`${galleries}?format=json`, {
+		headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+		data: {
+			folderId: stable.folderId,
+			title: `E2E uploaded logo ${Date.now()}`,
+			settings: { presentation: { logoMode: 'upload', logoAssetId: asset.id } },
+		},
+	})
+	expect(created.status()).toBe(201)
+	const gallery = await created.json() as { id: number; settings: { schemaVersion: number; presentation: { logoBackground: string } } }
+	try {
+		expect(gallery.settings.schemaVersion).toBe(11)
+		expect(gallery.settings.presentation.logoBackground).toBe('light')
+		const logo = await request.get(`${baseURL}/apps/proofing_gallery/media/${gallery.id}/asset/logo`, { headers: apiHeaders })
+		expect(logo.status()).toBe(200)
+		expect(logo.headers()['content-type']).toContain('image/png')
+		expect((await logo.body()).length).toBeGreaterThan(0)
+	} finally {
+		await request.delete(`${galleries}/${gallery.id}?format=json`, { headers: apiHeaders })
+		await request.delete(`${assets}/${asset.id}?format=json`, { headers: apiHeaders })
+	}
+})
+
+test('owner design preview renders and caches the exact watermark settings', async ({ request, baseURL }) => {
+	const stable = await state()
+	const media = await request.get(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries/${stable.galleryId}/media?format=json&limit=1`, { headers: apiHeaders })
+	const fileId = (await media.json() as { items: Array<{ id: number }> }).items[0]!.id
+	const presentation = encodeURIComponent(JSON.stringify({ watermarkText: `Cache ${Date.now()}`, watermarkTextPosition: 'center', watermarkTextSize: 22 }))
+	const endpoint = `${baseURL}/apps/proofing_gallery/media/${stable.galleryId}/${fileId}/design-preview?x=320&y=240&mode=cover&presentation=${presentation}`
+	const first = await request.get(endpoint, { headers: apiHeaders })
+	expect(first.status()).toBe(200)
+	expect(first.headers()['content-type']).toMatch(/^image\/(?:png|webp)/)
+	expect(first.headers()['x-proofing-derivative-cache']).toBe('miss')
+	const second = await request.get(endpoint, { headers: apiHeaders })
+	expect(second.status()).toBe(200)
+	expect(second.headers()['x-proofing-derivative-cache']).toBe('hit')
+	expect(await second.body()).toEqual(await first.body())
+})
+
+test('story media remains available beyond the current page without escaping the share scope', async ({ request, baseURL }) => {
+	const stable = await state()
+	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
+	const mediaSource = await request.post(`${galleries}?format=json`, {
+		headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+		data: { folderId: stable.largeFolderId, title: `E2E story source ${Date.now()}` },
+	}).then(response => response.json()) as { id: number }
+	const mediaResponse = await request.get(`${galleries}/${mediaSource.id}/media?format=json&limit=2`, { headers: apiHeaders })
+	const sourceItems = (await mediaResponse.json() as { items: Array<{ id: number }> }).items
+	expect(sourceItems.length).toBeGreaterThan(1)
+	const storyFileId = sourceItems[1]!.id
+	const created = await request.post(`${galleries}?format=json`, {
+		headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+		data: {
+			folderId: stable.largeFolderId,
+			title: `E2E paginated story ${Date.now()}`,
+			settings: { presentation: { layout: 'story', story: { sections: [{ id: 'story_page_two', title: '', body: '', style: 'full', mediaIds: [storyFileId] }], showAllMedia: true } } },
+		},
+	})
+	expect(created.status()).toBe(201)
+	const gallery = await created.json() as { id: number }
+	try {
+		const resolved = await request.get(`${galleries}/${gallery.id}/story-media?format=json&fileIds=${storyFileId}`, { headers: apiHeaders })
+		expect(resolved.status()).toBe(200)
+		expect((await resolved.json() as { items: Array<{ id: number }> }).items.map(item => item.id)).toEqual([storyFileId])
+		const published = await request.post(`${galleries}/${gallery.id}/publish?format=json`, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+			data: { allowDownloads: false },
+		}).then(response => response.json()) as { gallery: { shareToken: string } }
+		const page = await request.get(`${baseURL}/apps/proofing_gallery/public/${published.gallery.shareToken}/gallery?limit=1&page=1`)
+		expect(page.status()).toBe(200)
+		const payload = await page.json() as { items: Array<{ id: number }>; s: Array<{ id: number; name: string }> }
+		expect(payload.items).toHaveLength(1)
+		expect(payload.items[0]?.id).not.toBe(storyFileId)
+		expect(payload.s).toEqual([expect.objectContaining({ id: storyFileId, name: expect.any(String) })])
+	} finally {
+		await request.delete(`${galleries}/${gallery.id}?format=json`, { headers: apiHeaders })
+		await request.delete(`${galleries}/${mediaSource.id}?format=json`, { headers: apiHeaders })
+	}
+})
 
 test('installed Nextcloud collaboration apps are discovered @ecosystem', async ({ request, baseURL }) => {
 	test.skip(process.env.E2E_ECOSYSTEM !== '1', 'Set E2E_ECOSYSTEM=1 with Calendar, Deck, and Talk installed')
@@ -725,21 +864,42 @@ test('owner presets preserve gallery identity and explicit public language', asy
 			data: { title: `Preset target ${Date.now()}`, folderId: stable.folderId },
 		}).then(response => response.json()) as { id: number; folderId: number; settings: Record<string, unknown> }
 		galleryId = created.id
+		const mediaPage = await request.get(`${galleries}/${galleryId}/media?limit=2&format=json`, { headers: apiHeaders })
+		const mediaItems = (await mediaPage.json() as { items: Array<{ id: number }> }).items
+		expect(mediaItems.length).toBeGreaterThan(0)
+		const localFileId = mediaItems[0]!.id
 		const settings = {
 			...created.settings,
 			publicLocale: 'de',
 			showFilenames: false,
 			allowGuestUploads: true,
+			presentation: {
+				...(created.settings.presentation as Record<string, unknown>),
+				heroFileId: localFileId,
+				logoFileId: localFileId,
+				logoMode: 'gallery',
+				story: {
+					sections: [{ id: 'story_portability', title: 'Opening', body: '', style: 'full', mediaIds: [localFileId] }],
+					showAllMedia: true,
+				},
+			},
 		}
+		const configured = await request.put(`${galleries}/${galleryId}?format=json`, {
+			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
+			data: { settings },
+		}).then(response => response.json()) as { settings: Record<string, unknown> }
 		const presetResponse = await request.post(`${presets}?format=json`, {
 			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
-			data: { name, settings },
+			data: { name, settings: configured.settings },
 		})
 		expect(presetResponse.status()).toBe(201)
-		presetId = (await presetResponse.json() as { id: number }).id
+		const preset = await presetResponse.json() as { id: number; settings: { presentation: { heroFileId: number | null; logoFileId: number | null; logoMode: string; story: { sections: Array<{ mediaIds: number[] }> } } } }
+		presetId = preset.id
+		expect(preset.settings.presentation).toEqual(expect.objectContaining({ heroFileId: null, logoFileId: null, logoMode: 'inherit' }))
+		expect(preset.settings.presentation.story.sections[0]?.mediaIds).toEqual([])
 		expect((await request.post(`${presets}?format=json`, {
 			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
-			data: { name, settings },
+			data: { name, settings: configured.settings },
 		})).status()).toBe(422)
 
 		const projectResponse = await request.post(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/projects?format=json`, {
@@ -765,9 +925,12 @@ test('owner presets preserve gallery identity and explicit public language', asy
 		}).then(response => response.json()) as { gallery: { shareToken: string } }
 		const token = published.gallery.shareToken
 		const applied = await request.post(`${presets}/${presetId}/apply/${galleryId}?format=json`, { headers: apiHeaders })
-		const appliedGallery = await applied.json() as { folderId: number; shareToken: string; settings: { publicLocale: string } }
+		const appliedGallery = await applied.json() as { folderId: number; shareToken: string; settings: { publicLocale: string; presentation: { heroFileId: number | null; logoFileId: number | null; story: { sections: Array<{ mediaIds: number[] }> } } } }
 		expect(appliedGallery).toEqual(expect.objectContaining({ folderId: stable.folderId, shareToken: token }))
 		expect(appliedGallery.settings.publicLocale).toBe('de')
+		expect(appliedGallery.settings.presentation.heroFileId).toBe(localFileId)
+		expect(appliedGallery.settings.presentation.logoFileId).toBe(localFileId)
+		expect(appliedGallery.settings.presentation.story.sections[0]?.mediaIds).toEqual([localFileId])
 
 		await page.goto(`${baseURL}/s/${token}`)
 		await expect(page.locator('html')).toHaveAttribute('lang', 'de')
@@ -779,7 +942,7 @@ test('owner presets preserve gallery identity and explicit public language', asy
 		}).then(response => response.json()) as { id: number }
 		collectionId = collection.id
 		const appliedCollection = await request.post(`${presets}/${presetId}/apply/${collectionId}?format=json`, { headers: apiHeaders })
-		expect((await appliedCollection.json() as { settings: { allowGuestUploads: boolean } }).settings.allowGuestUploads).toBe(false)
+		expect((await appliedCollection.json() as { settings: { delivery: { guestUploads: boolean } } }).settings.delivery.guestUploads).toBe(false)
 	} finally {
 		if (presetId !== null) await request.delete(`${presets}/${presetId}?format=json`, { headers: apiHeaders })
 		if (galleryId !== null) await request.delete(`${galleries}/${galleryId}?format=json`, { headers: apiHeaders })
@@ -810,10 +973,10 @@ test('owner preset and locale controls remain clear and responsive', async ({ pa
 	await page.getByRole('button', { name: 'Reusable preset' }).click()
 	await page.getByRole('textbox', { name: 'Preset name' }).fill(presetName)
 	await page.getByRole('button', { name: 'Save as new' }).click()
-	await expect(page.getByText('Preset created.')).toBeVisible()
+	await expect(page.locator('.toastify.toast-success').filter({ hasText: 'Preset created.' })).toBeVisible()
 	await expect(page.getByRole('combobox', { name: 'Saved preset' })).toHaveValue(/\d+/)
 	await page.getByRole('button', { name: 'Apply', exact: true }).click()
-	await expect(page.getByText('Preset applied.')).toBeVisible()
+	await expect(page.locator('.toastify.toast-success').filter({ hasText: 'Preset applied.' })).toBeVisible()
 
 	const accessibility = await new AxeBuilder({ page }).include('.settings-page').analyze()
 	expect(accessibility.violations).toEqual([])
@@ -823,7 +986,7 @@ test('owner preset and locale controls remain clear and responsive', async ({ pa
 
 	page.once('dialog', dialog => dialog.accept())
 	await page.getByRole('button', { name: 'Delete preset' }).click()
-	await expect(page.getByText('Preset deleted.')).toBeVisible()
+	await expect(page.locator('.toastify.toast-success').filter({ hasText: 'Preset deleted.' })).toBeVisible()
 })
 
 test('invitation templates are owner-scoped, validated and render editable plain text', async ({ request, baseURL }) => {
@@ -984,6 +1147,10 @@ test('notification subscriptions are opt-in, eligible, deduplicated and scoped o
 		expect(invitationMail.HTML).toContain('&lt;b&gt;Literal invitation text&lt;/b&gt;')
 
 		await request.delete('http://127.0.0.1:8026/api/v1/messages')
+		// Other serial scenarios can leave due digests queued even though their
+		// mailbox is empty. Drain them before observing this scenario's message.
+		await runDigestJob()
+		await request.delete('http://127.0.0.1:8026/api/v1/messages')
 		const endpoint = (suffix: string) => `${baseURL}/index.php/apps/proofing_gallery/public/${stable.token}/${suffix}`
 		const media = await request.get(endpoint('gallery')).then(response => response.json()) as { items: Array<{ id: number; folder: boolean }> }
 		const file = media.items.find(item => !item.folder)
@@ -998,13 +1165,14 @@ test('notification subscriptions are opt-in, eligible, deduplicated and scoped o
 		let mailbox = await request.get('http://127.0.0.1:8026/api/v1/messages').then(response => response.json()) as {
 			count: number; messages: Array<{ ID: string; Subject: string }>
 		}
-		expect(mailbox.count).toBe(1)
-		expect(mailbox.messages[0].Subject).toContain('Aktualisierungen')
+		let ownMessages = mailbox.messages.filter(message => message.Subject.includes('Aktualisierungen für „E2E Gallery“'))
+		expect(ownMessages).toHaveLength(1)
 		await runDigestJob()
 		mailbox = await request.get('http://127.0.0.1:8026/api/v1/messages').then(response => response.json()) as typeof mailbox
-		expect(mailbox.count).toBe(1)
+		ownMessages = mailbox.messages.filter(message => message.Subject.includes('Aktualisierungen für „E2E Gallery“'))
+		expect(ownMessages).toHaveLength(1)
 
-		const message = await request.get(`http://127.0.0.1:8026/api/v1/message/${mailbox.messages[0].ID}`).then(response => response.json()) as { Text: string }
+		const message = await request.get(`http://127.0.0.1:8026/api/v1/message/${ownMessages[0]!.ID}`).then(response => response.json()) as { Text: string }
 		const unsubscribePath = message.Text.match(/http:\/\/localhost(\/index\.php\/apps\/proofing_gallery\/notifications\/unsubscribe\/[A-Za-z0-9]{48})/)?.[1]
 		expect(unsubscribePath).toBeDefined()
 		expect((await request.get(`${baseURL}${unsubscribePath}`)).status()).toBe(200)
@@ -1041,7 +1209,7 @@ test('notification and invitation controls stay understandable and responsive', 
 	await page.getByRole('combobox', { name: 'Delivery' }).selectOption('daily')
 	await expect(page.getByRole('combobox', { name: 'Delivery' })).toHaveValue('daily')
 	await page.getByRole('button', { name: /^(Subscribe|Update subscription)$/ }).click()
-	await expect(page.getByText('Notification subscription saved.')).toBeVisible()
+	await expect(page.locator('.toastify.toast-success').filter({ hasText: 'Notification subscription saved.' })).toBeVisible()
 	await expect(page.getByRole('button', { name: 'Update subscription' })).toBeVisible()
 
 	let violations = await new AxeBuilder({ page }).include('.settings-content').analyze()
@@ -1050,7 +1218,7 @@ test('notification and invitation controls stay understandable and responsive', 
 	const panelOverflow = await page.getByRole('heading', { name: 'Notifications' }).locator('..').evaluate(element => element.scrollWidth > element.clientWidth)
 	expect(panelOverflow).toBe(false)
 	await page.getByRole('button', { name: 'Remove subscription' }).click()
-	await expect(page.getByText('Notification subscription removed.')).toBeVisible()
+	await expect(page.locator('.toastify.toast-success').filter({ hasText: 'Notification subscription removed.' })).toBeVisible()
 
 	await page.setViewportSize({ width: 1280, height: 900 })
 	await page.locator('.settings-header__actions').getByRole('button', { name: 'Share', exact: true }).click()
@@ -1058,7 +1226,7 @@ test('notification and invitation controls stay understandable and responsive', 
 	await page.getByRole('textbox', { name: 'Template name' }).fill(templateName)
 	await page.getByRole('textbox', { name: 'Personal message (optional)' }).fill('<b>Hello {gallery}</b> — {owner}\n{url}')
 	await page.getByRole('button', { name: 'Save as template' }).click()
-	await expect(page.getByText('Invitation template saved.')).toBeVisible()
+	await expect(page.locator('.toastify.toast-success').filter({ hasText: 'Invitation template saved.' })).toBeVisible()
 	const templateSelect = page.getByRole('combobox', { name: 'Message template' })
 	await templateSelect.selectOption({ label: 'New template' })
 	await templateSelect.selectOption({ label: templateName })
@@ -1070,5 +1238,5 @@ test('notification and invitation controls stay understandable and responsive', 
 	expect(dialogOverflow).toBe(false)
 	page.once('dialog', dialog => dialog.accept())
 	await page.getByRole('button', { name: 'Delete template' }).click()
-	await expect(page.getByText('Invitation template deleted.')).toBeVisible()
+	await expect(page.locator('.toastify.toast-success').filter({ hasText: 'Invitation template deleted.' })).toBeVisible()
 })

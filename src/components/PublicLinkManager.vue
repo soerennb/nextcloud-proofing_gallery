@@ -68,6 +68,11 @@ function applyPreset(name: string) {
 	if (presets.value[name]) draft.value.policy = structuredClone(presets.value[name])
 }
 
+function updatePermission(key: Exclude<keyof PublicLinkPolicy, 'view' | 'downloadScope'>, value: boolean) {
+	draft.value.policy[key] = value
+	if (key === 'comments' && !value) draft.value.policy.annotations = false
+}
+
 async function save() {
 	saving.value = true
 	try {
@@ -230,7 +235,13 @@ onMounted(load)
 				<label class="link-editor__review"><span>{{ t('proofing_gallery', 'Review round') }}</span><span><input v-model="draft.reviewEnabled" name="reviewEnabled" type="checkbox"> {{ t('proofing_gallery', 'Let guests submit this link for approval') }}</span></label>
 				<label v-if="draft.reviewEnabled"><span>{{ t('proofing_gallery', 'Review due date') }}</span><input v-model="draft.reviewDueDate" name="reviewDueDate" type="date"></label>
 			</div>
-			<fieldset><legend>{{ t('proofing_gallery', 'Permissions') }}</legend><label v-for="key in permissionKeys" :key="key"><input v-model="draft.policy[key]" type="checkbox" :name="`policy-${key}`">{{ key }}</label><label><span>{{ t('proofing_gallery', 'Downloads') }}</span><select v-model="draft.policy.downloadScope" name="linkDownloads"><option value="none">none</option><option value="individual">individual</option><option value="selection">selection</option><option value="all">all</option></select></label></fieldset>
+			<fieldset>
+				<legend>{{ t('proofing_gallery', 'Permissions') }}</legend><label v-for="key in permissionKeys" :key="key"><input :checked="draft.policy[key]"
+					type="checkbox"
+					:name="`policy-${key}`"
+					:disabled="key === 'annotations' && !draft.policy.comments"
+					@change="updatePermission(key, ($event.target as HTMLInputElement).checked)">{{ key }}</label><label><span>{{ t('proofing_gallery', 'Downloads') }}</span><select v-model="draft.policy.downloadScope" name="linkDownloads"><option value="none">none</option><option value="individual">individual</option><option value="selection">selection</option><option value="all">all</option></select></label>
+			</fieldset>
 			<div class="link-editor__actions">
 				<NcButton type="submit" variant="primary" :disabled="saving">
 					{{ saving ? t('proofing_gallery', 'Saving…') : t('proofing_gallery', 'Save link') }}

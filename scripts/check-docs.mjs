@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
-import { dirname, extname, resolve } from 'node:path'
+import { dirname, extname, resolve, sep } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
 const required = [
@@ -16,7 +16,7 @@ const markdownLink = /!?(?:\[[^\]]*\])\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g
 const documentationRoot = resolve(root, 'docs')
 const documentation = readdirSync(documentationRoot, { recursive: true })
 	.filter(relative => typeof relative === 'string' && relative.endsWith('.md'))
-	.map(relative => `docs/${relative}`)
+	.map(relative => `docs/${relative.split(sep).join('/')}`)
 let failed = false
 
 for (const relative of documentation) {

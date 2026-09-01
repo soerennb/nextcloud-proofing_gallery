@@ -33,6 +33,9 @@ final class PublicLinkConfiguration {
 		if (!is_array($policyInput)) throw new InvalidArgumentException('Public link policy must be an object');
 		$policy = PublicLinkPolicy::fromArray($policyInput);
 		if (!$policy->allows(PublicLinkCapability::View)) throw new InvalidArgumentException('Public links must allow viewing');
+		if ($policy->allows(PublicLinkCapability::Annotations) && !$policy->allows(PublicLinkCapability::Comments)) {
+			throw new InvalidArgumentException('Image annotations require comments');
+		}
 		$startPath = self::string($input['startPath'] ?? '', 'Public link start path');
 		$viewMode = self::string($input['viewMode'] ?? 'folder', 'Public link view mode');
 		$groupDepth = self::int($input['groupDepth'] ?? 0, 'Public link group depth');

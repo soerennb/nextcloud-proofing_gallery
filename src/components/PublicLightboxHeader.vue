@@ -39,11 +39,11 @@ const emit = defineEmits<{
 </script>
 
 <template>
-	<IonHeader class="lightbox-bar">
+	<IonHeader class="lightbox-bar" role="presentation">
 		<IonToolbar>
 			<IonButtons slot="start">
 				<IonButton :aria-label="t('proofing_gallery', 'Close')" @click="emit('close')">
-					<IonIcon slot="icon-only" :icon="closeOutline" />
+					<IonIcon slot="icon-only" :icon="closeOutline" aria-hidden="true" />
 				</IonButton>
 			</IonButtons>
 			<IonTitle>
@@ -55,32 +55,32 @@ const emit = defineEmits<{
 					class="lightbox-bar__desktop-action"
 					:aria-label="t('proofing_gallery', 'Zoom out')"
 					@click="emit('zoom', -1)">
-					<IonIcon slot="icon-only" :icon="removeOutline" />
+					<IonIcon slot="icon-only" :icon="removeOutline" aria-hidden="true" />
 				</IonButton>
 				<IonButton v-if="isImage"
 					class="lightbox-bar__desktop-action"
 					:aria-label="t('proofing_gallery', 'Zoom in')"
 					@click="emit('zoom', 1)">
-					<IonIcon slot="icon-only" :icon="addOutline" />
+					<IonIcon slot="icon-only" :icon="addOutline" aria-hidden="true" />
 				</IonButton>
 				<IonButton v-if="canLike" :aria-label="t('proofing_gallery', 'Like')" @click="emit('like')">
-					<IonIcon slot="icon-only" :icon="liked ? heart : heartOutline" />
+					<IonIcon slot="icon-only" :icon="liked ? heart : heartOutline" aria-hidden="true" />
 				</IonButton>
 				<IonButton v-if="canFeedback" :aria-label="t('proofing_gallery', 'Feedback')" @click="emit('feedback')">
-					<IonIcon slot="icon-only" :icon="chatbubbleEllipsesOutline" />
+					<IonIcon slot="icon-only" :icon="chatbubbleEllipsesOutline" aria-hidden="true" />
 					<span v-if="commentCount" class="lightbox-bar__count">{{ commentCount }}</span>
 				</IonButton>
 				<IonButton v-if="hasMetadata" :aria-label="t('proofing_gallery', 'Info')" @click="emit('info')">
-					<IonIcon slot="icon-only" :icon="informationCircleOutline" />
+					<IonIcon slot="icon-only" :icon="informationCircleOutline" aria-hidden="true" />
 				</IonButton>
 				<IonButton v-if="canDownload"
 					class="lightbox-bar__desktop-action"
 					:href="downloadUrl"
 					:aria-label="t('proofing_gallery', 'Download')">
-					<IonIcon slot="icon-only" :icon="downloadOutline" />
+					<IonIcon slot="icon-only" :icon="downloadOutline" aria-hidden="true" />
 				</IonButton>
 				<IonButton :aria-label="t('proofing_gallery', 'More options')" @click="emit('more')">
-					<IonIcon slot="icon-only" :icon="ellipsisHorizontal" />
+					<IonIcon slot="icon-only" :icon="ellipsisHorizontal" aria-hidden="true" />
 				</IonButton>
 			</IonButtons>
 		</IonToolbar>
@@ -109,7 +109,7 @@ ion-title small { display: block; margin-top: 1px; color: rgb(255 255 255 / 56%)
 
 .lightbox-bar__title { display: block; overflow: hidden; font-size: 14px; font-weight: 620; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
 
-.lightbox-bar__count { position: absolute; inset: 1px 0 auto auto; display: grid; min-width: 17px; height: 17px; place-items: center; padding-inline: 4px; border: 2px solid #141416; border-radius: 9px; background: var(--gallery-accent); color: #fff; font-size: 9px; font-weight: 700; }
+.lightbox-bar__count { position: absolute; inset: 1px 0 auto auto; display: grid; min-width: 17px; height: 17px; place-items: center; padding-inline: 4px; border: 2px solid #141416; border-radius: 9px; background: var(--gallery-accent); color: var(--ion-color-primary-contrast); font-size: 9px; font-weight: 700; }
 
 @media (max-width: 760px) {
 	ion-toolbar { --min-height: calc(54px + env(safe-area-inset-top)); --padding-top: env(safe-area-inset-top); }

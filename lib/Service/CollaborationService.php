@@ -8,10 +8,14 @@ use InvalidArgumentException;
 use OCA\ProofingGallery\Db\CollaborationRepository;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\Guest;
+use OCA\ProofingGallery\Db\GuestRating;
+use OCA\ProofingGallery\Db\PublicLink;
+use OCA\ProofingGallery\Domain\CollaborationReadScope;
 use OCA\ProofingGallery\Domain\FeedbackVisibility;
 use OCA\ProofingGallery\Domain\GalleryMode;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\IDBConnection;
 
 final class CollaborationService {
 	private const MAX_FEEDBACK_PER_GALLERY = 200000;
@@ -19,8 +23,11 @@ final class CollaborationService {
 	private const MAX_COMMENTS_PER_GUEST = 1000;
 	private const MAX_SELECTIONS_PER_GALLERY = 2000;
 	private const MAX_SELECTIONS_PER_GUEST = 100;
+	/** @var list<array{gallery: Gallery, type: string, createdAt: int, recipients: list<string>, nativeStateIds: list<int>}> */
+	private array $stagedActivities = [];
 	public function __construct(
 		private CollaborationRepository $repository,
+		private IDBConnection $db,
 		private ITimeFactory $clock,
 		private FolderService $folders,
 		private CollectionService $collections,
@@ -34,12 +41,27 @@ final class CollaborationService {
 
 	/** @param list<int> $visibleFileIds
 	 * @return array<string, mixed> */
-	public function state(Gallery $gallery, ?Guest $guest, int $cursor, array $visibleFileIds = []): array {
+	public function publicState(Gallery $gallery, ?Guest $guest, int $cursor, array $visibleFileIds = []): array {
 		$settings = $this->settings($gallery);
-		$visibleGuestId = $settings->review->visibility === FeedbackVisibility::Private ? $guest?->getId() : null;
+		$scope = $settings->review->visibility === FeedbackVisibility::Collaborative
+			? CollaborationReadScope::all()
+			: ($guest === null ? CollaborationReadScope::none() : CollaborationReadScope::guest($guest->getId()));
+		return $this->state($gallery, $guest, $scope, $cursor, $visibleFileIds, false);
+	}
+
+	/** @param list<int> $visibleFileIds
+	 * @return array<string, mixed> */
+	public function ownerState(Gallery $gallery, array $visibleFileIds = []): array {
+		return $this->state($gallery, null, CollaborationReadScope::all(), 0, $visibleFileIds, $visibleFileIds === []);
+	}
+
+	/** @param list<int> $visibleFileIds
+	 * @return array<string, mixed> */
+	private function state(Gallery $gallery, ?Guest $guest, CollaborationReadScope $scope, int $cursor, array $visibleFileIds, bool $allFiles): array {
+		$settings = $this->settings($gallery);
 		$visibleFileIds = array_values(array_unique(array_filter(array_map('intval', $visibleFileIds), static fn (int $id): bool => $id > 0)));
 		if (count($visibleFileIds) > 200) throw new InvalidArgumentException('Too many visible media IDs');
-		$state = $this->repository->state($gallery->getId(), $visibleGuestId, $cursor, $visibleFileIds);
+		$state = $this->repository->state($gallery->getId(), $scope, $cursor, $visibleFileIds, $allFiles);
 		if (($state['unchanged'] ?? false) === true) return ['unchanged' => true, 'cursor' => $cursor];
 		$feedback = $state['feedback'];
 		$comments = $state['comments'];
@@ -62,7 +84,7 @@ final class CollaborationService {
 			'payload' => json_decode($row['payload'], true, flags: JSON_THROW_ON_ERROR),
 			'createdAt' => (int)$row['created_at'],
 		], $state['events']);
-		$nextCursor = $cursor;
+		$nextCursor = $scope->isEmpty() ? 0 : $cursor;
 		foreach ($events as $event) {
 			$nextCursor = max($nextCursor, (int)$event['id']);
 		}
@@ -128,83 +150,99 @@ final class CollaborationService {
 	}
 
 	public function toggleLike(Gallery $gallery, Guest $guest, int $fileId): bool {
-		$this->capabilities->assertFeature('likes');
-		$settings = $this->assertCollaboration($gallery, $fileId);
-		if (!$settings->review->likes) {
-			throw new InvalidArgumentException('Likes are disabled');
-		}
-		$existing = $this->repository->feedbackId($gallery->getId(), $guest->getId(), $fileId, 'like');
-		if ($existing !== null) {
-			$this->repository->deleteFeedback($existing);
-			$liked = false;
-		} else {
-			$this->assertQuota('proofing_feedback', $gallery->getId(), $guest->getId(), self::MAX_FEEDBACK_PER_GALLERY, self::MAX_FEEDBACK_PER_GALLERY);
-			$this->repository->insertFeedback($gallery->getId(), $guest->getId(), $fileId, 'like', '1', $this->clock->getTime());
-			$liked = true;
-		}
-		$this->event($gallery, $guest, 'like.changed', ['fileId' => $fileId, 'liked' => $liked]);
-		return $liked;
+		return $this->atomic(function () use ($gallery, $guest, $fileId): bool {
+			$this->capabilities->assertFeature('likes');
+			$settings = $this->assertCollaboration($gallery, $fileId);
+			if (!$settings->review->likes) {
+				throw new InvalidArgumentException('Likes are disabled');
+			}
+			$existing = $this->repository->feedbackId($gallery->getId(), $guest->getId(), $fileId, 'like');
+			if ($existing !== null) {
+				$this->repository->deleteFeedback($existing);
+				$liked = false;
+			} else {
+				$this->assertQuota('proofing_feedback', $gallery->getId(), $guest->getId(), self::MAX_FEEDBACK_PER_GALLERY, self::MAX_FEEDBACK_PER_GALLERY);
+				$this->repository->insertFeedback($gallery->getId(), $guest->getId(), $fileId, 'like', '1', $this->clock->getTime());
+				$liked = true;
+			}
+			$this->event($gallery, $guest, 'like.changed', ['fileId' => $fileId, 'liked' => $liked]);
+			return $liked;
+		});
 	}
 
-	public function recordRatingChanged(Gallery $gallery, Guest $guest, int $fileId): void {
-		$this->event($gallery, $guest, 'rating.changed', ['fileId' => $fileId]);
+	public function saveRating(PublicLink $link, Gallery $gallery, Guest $guest, int $fileId, int $rating, string $pick): GuestRating {
+		return $this->atomic(function () use ($link, $gallery, $guest, $fileId, $rating, $pick): GuestRating {
+			$value = $this->guestRatings->save($link, $guest, $fileId, $rating, $pick);
+			$this->event($gallery, $guest, 'rating.changed', ['fileId' => $fileId]);
+			return $value;
+		});
 	}
 
 	public function setColor(Gallery $gallery, Guest $guest, int $fileId, ?string $value): void {
-		$this->capabilities->assertFeature('colors');
-		$settings = $this->assertCollaboration($gallery, $fileId);
-		if (!$settings->review->colors) {
-			throw new InvalidArgumentException('Color states are disabled');
-		}
-		$enabledLabels = array_values(array_filter(
-			$settings->review->colorLabels,
-			static fn (string $_label, int $index): bool => $settings->review->colorEnabled[$index],
-			ARRAY_FILTER_USE_BOTH,
-		));
-		if ($value !== null && !in_array($value, $enabledLabels, true)) {
-			throw new InvalidArgumentException('Unknown color workflow state');
-		}
-		$id = $this->repository->feedbackId($gallery->getId(), $guest->getId(), $fileId, 'color');
-		if ($value === null && $id !== null) {
-			$this->repository->deleteFeedback($id);
-		} elseif ($value !== null && $id === null) {
-			$this->assertQuota('proofing_feedback', $gallery->getId(), $guest->getId(), self::MAX_FEEDBACK_PER_GALLERY, self::MAX_FEEDBACK_PER_GALLERY);
-			$this->repository->insertFeedback($gallery->getId(), $guest->getId(), $fileId, 'color', $value, $this->clock->getTime());
-		} elseif ($value !== null) {
-			$this->repository->updateFeedback($id, $value, $this->clock->getTime());
-		}
-		$this->event($gallery, $guest, 'color.changed', ['fileId' => $fileId, 'value' => $value]);
+		$this->atomic(function () use ($gallery, $guest, $fileId, $value): void {
+			$this->capabilities->assertFeature('colors');
+			$settings = $this->assertCollaboration($gallery, $fileId);
+			if (!$settings->review->colors) {
+				throw new InvalidArgumentException('Color states are disabled');
+			}
+			$enabledLabels = array_values(array_filter(
+				$settings->review->colorLabels,
+				static fn (string $_label, int $index): bool => $settings->review->colorEnabled[$index],
+				ARRAY_FILTER_USE_BOTH,
+			));
+			if ($value !== null && !in_array($value, $enabledLabels, true)) {
+				throw new InvalidArgumentException('Unknown color workflow state');
+			}
+			$id = $this->repository->feedbackId($gallery->getId(), $guest->getId(), $fileId, 'color');
+			if ($value === null && $id !== null) {
+				$this->repository->deleteFeedback($id);
+			} elseif ($value !== null && $id === null) {
+				$this->assertQuota('proofing_feedback', $gallery->getId(), $guest->getId(), self::MAX_FEEDBACK_PER_GALLERY, self::MAX_FEEDBACK_PER_GALLERY);
+				$this->repository->insertFeedback($gallery->getId(), $guest->getId(), $fileId, 'color', $value, $this->clock->getTime());
+			} elseif ($value !== null) {
+				$this->repository->updateFeedback($id, $value, $this->clock->getTime());
+			}
+			$this->event($gallery, $guest, 'color.changed', ['fileId' => $fileId, 'value' => $value]);
+		});
 	}
 
 	/** @param array<string, int>|null $annotation */
 	public function addComment(Gallery $gallery, Guest $guest, int $fileId, string $body, ?array $annotation): int {
-		$this->capabilities->assertFeature('comments');
-		if ($annotation !== null) $this->capabilities->assertFeature('annotations');
-		$settings = $this->assertCollaboration($gallery, $fileId);
-		if (!$settings->review->comments) {
-			throw new InvalidArgumentException('Comments are disabled');
-		}
-		if ($annotation !== null && !$settings->review->annotations) {
-			throw new InvalidArgumentException('Image annotations are disabled');
-		}
-		$body = trim($body);
-		if ($body === '' || mb_strlen($body) > 5000) {
-			throw new InvalidArgumentException('Comment must contain between 1 and 5000 characters');
-		}
-		$this->assertQuota('proofing_comments', $gallery->getId(), $guest->getId(), self::MAX_COMMENTS_PER_GALLERY, self::MAX_COMMENTS_PER_GUEST);
-		$commentId = $this->repository->insertComment(
-			$gallery->getId(), $guest->getId(), $fileId, $body, $annotation, $this->clock->getTime(),
-		);
-		$this->event($gallery, $guest, 'comment.created', ['fileId' => $fileId, 'commentId' => $commentId]);
-		return $commentId;
+		return $this->atomic(function () use ($gallery, $guest, $fileId, $body, $annotation): int {
+			$this->capabilities->assertFeature('comments');
+			if ($annotation !== null) $this->capabilities->assertFeature('annotations');
+			$settings = $this->assertCollaboration($gallery, $fileId);
+			if (!$settings->review->comments) {
+				throw new InvalidArgumentException('Comments are disabled');
+			}
+			if ($annotation !== null && !$settings->review->annotations) {
+				throw new InvalidArgumentException('Image annotations are disabled');
+			}
+			if ($annotation !== null && !str_starts_with($this->resolveMedia($gallery, $fileId)->getMimeType(), 'image/')) {
+				throw new InvalidArgumentException('Image annotations require an image file');
+			}
+			$body = trim($body);
+			if ($body === '' || mb_strlen($body) > 5000) {
+				throw new InvalidArgumentException('Comment must contain between 1 and 5000 characters');
+			}
+			$this->assertQuota('proofing_comments', $gallery->getId(), $guest->getId(), self::MAX_COMMENTS_PER_GALLERY, self::MAX_COMMENTS_PER_GUEST);
+			$commentId = $this->repository->insertComment(
+				$gallery->getId(), $guest->getId(), $fileId, $body, $annotation, $this->clock->getTime(),
+			);
+			$this->event($gallery, $guest, 'comment.created', ['fileId' => $fileId, 'commentId' => $commentId]);
+			return $commentId;
+		});
 	}
 
 	public function deleteComment(Gallery $gallery, Guest $guest, int $commentId): void {
-		$this->capabilities->assertFeature('comments');
-		if (!$this->repository->deleteComment($gallery->getId(), $guest->getId(), $commentId, $this->clock->getTime())) {
-			throw new InvalidArgumentException('Comment cannot be deleted');
-		}
-		$this->event($gallery, $guest, 'comment.deleted', ['commentId' => $commentId]);
+		$this->atomic(function () use ($gallery, $guest, $commentId): void {
+			$this->capabilities->assertFeature('comments');
+			$fileId = $this->ownedCommentFileId($gallery, $guest, $commentId);
+			if (!$this->repository->deleteComment($gallery->getId(), $guest->getId(), $commentId, $this->clock->getTime())) {
+				throw new InvalidArgumentException('Comment cannot be deleted');
+			}
+			$this->event($gallery, $guest, 'comment.deleted', ['fileId' => $fileId, 'commentId' => $commentId]);
+		});
 	}
 
 	public function ownedCommentFileId(Gallery $gallery, Guest $guest, int $commentId): int {
@@ -214,45 +252,50 @@ final class CollaborationService {
 	}
 
 	public function updateComment(Gallery $gallery, Guest $guest, int $commentId, string $body): void {
-		$this->capabilities->assertFeature('comments');
-		$body = trim($body);
-		if ($body === '' || mb_strlen($body) > 5000) {
-			throw new InvalidArgumentException('Comment must contain between 1 and 5000 characters');
-		}
-		if (!$this->repository->updateComment($gallery->getId(), $guest->getId(), $commentId, $body, $this->clock->getTime())) {
-			throw new InvalidArgumentException('Comment cannot be edited');
-		}
-		$this->event($gallery, $guest, 'comment.updated', ['commentId' => $commentId]);
+		$this->atomic(function () use ($gallery, $guest, $commentId, $body): void {
+			$this->capabilities->assertFeature('comments');
+			$fileId = $this->ownedCommentFileId($gallery, $guest, $commentId);
+			$body = trim($body);
+			if ($body === '' || mb_strlen($body) > 5000) {
+				throw new InvalidArgumentException('Comment must contain between 1 and 5000 characters');
+			}
+			if (!$this->repository->updateComment($gallery->getId(), $guest->getId(), $commentId, $body, $this->clock->getTime())) {
+				throw new InvalidArgumentException('Comment cannot be edited');
+			}
+			$this->event($gallery, $guest, 'comment.updated', ['fileId' => $fileId, 'commentId' => $commentId]);
+		});
 	}
 
 	/** @param list<int> $fileIds */
 	public function saveSelection(Gallery $gallery, Guest $guest, string $name, string $message, array $fileIds): string {
-		$this->capabilities->assertFeature('selections');
-		$this->assertCollaborationMode($gallery);
-		if (!$this->settings($gallery)->review->selections) {
-			throw new InvalidArgumentException('Selections are disabled');
-		}
-		$name = trim($name);
-		$message = trim($message);
-		if ($name === '' || mb_strlen($name) > 120 || mb_strlen($message) > 2000) {
-			throw new InvalidArgumentException('Invalid selection name or message');
-		}
-		$fileIds = array_values(array_unique(array_map('intval', $fileIds)));
-		if (count($fileIds) > 1000) {
-			throw new InvalidArgumentException('Selection is too large');
-		}
-		foreach ($fileIds as $fileId) {
-			$this->resolveMedia($gallery, $fileId);
-		}
-		$this->assertQuota('proofing_selections', $gallery->getId(), $guest->getId(), self::MAX_SELECTIONS_PER_GALLERY, self::MAX_SELECTIONS_PER_GUEST);
-		$publicId = $this->uuid();
-		$now = $this->clock->getTime();
-		$this->repository->insertSelection(
-			$gallery->getId(), $guest->getId(), $publicId, $name, $message, $fileIds, $now,
-		);
-		$this->event($gallery, $guest, 'selection.created', ['selectionId' => $publicId, 'count' => count($fileIds)]);
-		$this->markResponseReceived($gallery, $now);
-		return $publicId;
+		return $this->atomic(function () use ($gallery, $guest, $name, $message, $fileIds): string {
+			$this->capabilities->assertFeature('selections');
+			$this->assertCollaborationMode($gallery);
+			if (!$this->settings($gallery)->review->selections) {
+				throw new InvalidArgumentException('Selections are disabled');
+			}
+			$name = trim($name);
+			$message = trim($message);
+			if ($name === '' || mb_strlen($name) > 120 || mb_strlen($message) > 2000) {
+				throw new InvalidArgumentException('Invalid selection name or message');
+			}
+			$fileIds = array_values(array_unique(array_map('intval', $fileIds)));
+			if (count($fileIds) > 1000) {
+				throw new InvalidArgumentException('Selection is too large');
+			}
+			foreach ($fileIds as $fileId) {
+				$this->resolveMedia($gallery, $fileId);
+			}
+			$this->assertQuota('proofing_selections', $gallery->getId(), $guest->getId(), self::MAX_SELECTIONS_PER_GALLERY, self::MAX_SELECTIONS_PER_GUEST);
+			$publicId = $this->uuid();
+			$now = $this->clock->getTime();
+			$this->repository->insertSelection(
+				$gallery->getId(), $guest->getId(), $publicId, $name, $message, $fileIds, $now,
+			);
+			$this->event($gallery, $guest, 'selection.created', ['selectionId' => $publicId, 'count' => count($fileIds)]);
+			$this->markResponseReceived($gallery, $now);
+			return $publicId;
+		});
 	}
 
 	private function markResponseReceived(Gallery $gallery, int $now): void {
@@ -377,17 +420,34 @@ final class CollaborationService {
 	}
 
 	public function updateOwnerSelection(Gallery $gallery, string $publicId, string $name, string $status): void {
-		$name = trim($name);
-		if ($name === '' || mb_strlen($name) > 120 || !in_array($status, ['open', 'completed'], true)) {
-			throw new InvalidArgumentException('Invalid selection name or status');
-		}
-		if (!$this->repository->updateSelection($gallery->getId(), $publicId, $name, $status, $this->clock->getTime())) {
-			throw new InvalidArgumentException('Selection not found');
-		}
+		$this->atomic(function () use ($gallery, $publicId, $name, $status): void {
+			$name = trim($name);
+			if ($name === '' || mb_strlen($name) > 120 || !in_array($status, ['open', 'completed'], true)) {
+				throw new InvalidArgumentException('Invalid selection name or status');
+			}
+			$selection = $this->repository->selection($gallery->getId(), $publicId);
+			if ($selection === null) throw new InvalidArgumentException('Selection not found');
+			$now = $this->clock->getTime();
+			if (!$this->repository->updateSelection($gallery->getId(), $publicId, $name, $status, $now)) {
+				throw new InvalidArgumentException('Selection not found');
+			}
+			$this->repository->insertOwnerEvent(
+				$gallery->getId(), (int)$selection['guest_id'], $gallery->getOwnerUid(),
+				'selection.updated', ['selectionId' => $publicId], $now,
+			);
+		});
 	}
 
 	public function deleteOwnerSelection(Gallery $gallery, string $publicId): void {
-		if (!$this->repository->deleteSelection($gallery->getId(), $publicId)) throw new InvalidArgumentException('Selection not found');
+		$this->atomic(function () use ($gallery, $publicId): void {
+			$selection = $this->repository->selection($gallery->getId(), $publicId);
+			if ($selection === null) throw new InvalidArgumentException('Selection not found');
+			if (!$this->repository->deleteSelection($gallery->getId(), $publicId)) throw new InvalidArgumentException('Selection not found');
+			$this->repository->insertOwnerEvent(
+				$gallery->getId(), (int)$selection['guest_id'], $gallery->getOwnerUid(),
+				'selection.deleted', ['selectionId' => $publicId, 'deleted' => true], $this->clock->getTime(),
+			);
+		});
 	}
 
 	private function settings(Gallery $gallery): GallerySettings {
@@ -469,7 +529,45 @@ final class CollaborationService {
 	private function event(Gallery $gallery, Guest $guest, string $type, array $payload): void {
 		$now = $this->clock->getTime();
 		$eventId = $this->repository->insertEvent($gallery->getId(), $guest->getId(), $type, $payload, $now);
-		$this->notifications->queue($gallery, $eventId, $type, $now);
+		$staged = $this->notifications->stage($gallery, $eventId, $type, $now);
+		$this->stagedActivities[] = [
+			'gallery' => $gallery,
+			'type' => $type,
+			'createdAt' => $now,
+			'recipients' => $staged['recipients'],
+			'nativeStateIds' => $staged['nativeStateIds'],
+		];
+	}
+
+	private function atomic(callable $callback): mixed {
+		$ownsTransaction = !$this->db->inTransaction();
+		$activityOffset = count($this->stagedActivities);
+		if ($ownsTransaction) $this->db->beginTransaction();
+		try {
+			$result = $callback();
+			if ($ownsTransaction) $this->db->commit();
+		} catch (\Throwable $exception) {
+			if ($ownsTransaction) $this->db->rollBack();
+			array_splice($this->stagedActivities, $activityOffset);
+			throw $exception;
+		}
+		if (!$ownsTransaction) {
+			// The outer transaction owns publication. Native states remain pending for
+			// the background dispatcher; never retain them for an unrelated request.
+			array_splice($this->stagedActivities, $activityOffset);
+			return $result;
+		}
+		$activities = array_splice($this->stagedActivities, $activityOffset);
+		foreach ($activities as $activity) {
+			$this->notifications->publishActivity(
+				$activity['gallery'],
+				$activity['type'],
+				$activity['createdAt'],
+				$activity['recipients'],
+				$activity['nativeStateIds'],
+			);
+		}
+		return $result;
 	}
 
 	private function uuid(): string {

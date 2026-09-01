@@ -12,6 +12,8 @@
 
 .story-gallery figure { position: relative; margin: 0; }
 
+.story-gallery figcaption { overflow: hidden; padding-top: 8px; color: var(--gallery-muted); font-size: 12px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+
 .story-gallery button { border: 0; background: transparent; color: inherit; cursor: pointer; }
 
 .story-gallery__open { display: block; width: 100%; padding: 0; }

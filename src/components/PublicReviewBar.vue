@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import { t } from '@nextcloud/l10n'
-import { generateUrl } from '@nextcloud/router'
 import { ref, watch } from 'vue'
 
 import type { PublicReviewState } from '../publicTypes.ts'
 
-const props = defineProps<{ review: PublicReviewState; guest: boolean; nonce: string; token: string; dialogOpen: boolean }>()
+const props = defineProps<{
+	review: PublicReviewState
+	guest: boolean
+	nonce: string
+	dialogOpen: boolean
+	request(path: string, init?: RequestInit, mayRecover?: boolean): Promise<Response>
+}>()
 const emit = defineEmits<{ identify: []; updated: [state: PublicReviewState]; error: [message: string] }>()
 const submitting = ref(false)
 const awaitingIdentity = ref(false)
@@ -22,8 +27,13 @@ async function submit() {
 	if (!props.guest || !props.nonce) { awaitingIdentity.value = true; emit('identify'); return }
 	submitting.value = true
 	try {
-		const response = await fetch(generateUrl(`/apps/proofing_gallery/public/${props.token}/review/submit`), { method: 'POST', credentials: 'same-origin', headers: { Accept: 'application/json', 'X-Proofing-Nonce': props.nonce } })
-		const payload = await response.json() as PublicReviewState & { message?: string }
+		const response = await props.request('review/submit', { method: 'POST' })
+		const payload = await response.json().catch(() => ({})) as PublicReviewState & { code?: string, message?: string }
+		if (response.status === 401 || payload.code === 'invalid_nonce') {
+			awaitingIdentity.value = true
+			emit('identify')
+			return
+		}
 		if (!response.ok) throw new Error(payload.message || t('proofing_gallery', 'The review could not be submitted.'))
 		awaitingIdentity.value = false
 		emit('updated', payload)

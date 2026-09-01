@@ -45,12 +45,20 @@
 
 .save-indicator {
 	display: flex;
+	min-height: 44px;
 	align-items: center;
 	gap: 7px;
-	min-height: 44px;
 	color: var(--color-text-maxcontrast);
 	font-size: 13px;
 }
+
+.save-indicator__glyph { display: inline-flex; align-items: center; }
+
+.save-indicator__spin { animation: save-indicator-rotate 900ms linear infinite; }
+
+@keyframes save-indicator-rotate { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) { .save-indicator__spin { animation: none; } }
 
 .save-indicator[data-state='saved'] { color: var(--color-success-text); }
 
@@ -402,7 +410,7 @@
 
 .header-visibility {
 	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
+	grid-template-columns: minmax(0, 1fr);
 	gap: 8px 18px;
 }
 
@@ -509,6 +517,10 @@
 }
 
 .mobile-preview-button {
+	display: none;
+}
+
+.hidden-file-input {
 	display: none;
 }
 

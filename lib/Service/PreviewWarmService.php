@@ -23,12 +23,12 @@ final class PreviewWarmService {
 		$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
 		$cover = $this->cover($gallery);
 		if ($cover !== null && str_starts_with($cover->getMimeType(), 'image/')) {
-			$this->watermarks->render($cover, 900, 900, $settings->presentation->watermarkText, $settings->presentation->watermarkOpacity, 'fit');
+			$this->watermarks->render($cover, 900, 900, $settings->presentation, $gallery->getOwnerUid(), 'fit');
 		}
 		if ($settings->presentation->heroFileId !== null) {
 			foreach ($this->rootFolder->getUserFolder($gallery->getOwnerUid())->getById($settings->presentation->heroFileId) as $node) {
 				if ($node instanceof File && str_starts_with($node->getMimeType(), 'image/') && $node->isReadable()) {
-					$this->watermarks->render($node, 1800, 1000, '', 0, 'cover');
+					$this->watermarks->render($node, 1800, 1000, GallerySettings::defaults()->presentation, $gallery->getOwnerUid(), 'cover');
 					break;
 				}
 			}

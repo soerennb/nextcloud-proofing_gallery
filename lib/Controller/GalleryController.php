@@ -13,6 +13,7 @@ use OCA\ProofingGallery\Service\FolderService;
 use OCA\ProofingGallery\Service\GalleryService;
 use OCA\ProofingGallery\Service\MediaSummaryService;
 use OCA\ProofingGallery\Service\CollectionService;
+use OCA\ProofingGallery\Service\DesignAssetService;
 use OCA\ProofingGallery\Service\MediaMetadataService;
 use OCA\ProofingGallery\Exception\MetadataConflictException;
 use OCA\ProofingGallery\Exception\GalleryConflictException;
@@ -36,6 +37,7 @@ use OCP\IUserSession;
 use OCP\Files\File;
 use OCA\ProofingGallery\Service\GalleryReadinessService;
 use OCA\ProofingGallery\Service\BrandingAssetService;
+use OCA\ProofingGallery\Service\WatermarkPreviewService;
 
 final class GalleryController extends Controller {
 	public function __construct(
@@ -49,6 +51,8 @@ final class GalleryController extends Controller {
 		private \OCA\ProofingGallery\Service\PolicyService $policies,
 		private GalleryReadinessService $readiness,
 		private BrandingAssetService $branding,
+		private DesignAssetService $designAssets,
+		private WatermarkPreviewService $watermarks,
 		private IUserSession $userSession,
 	) {
 		parent::__construct(Application::APP_ID, $request);
@@ -294,6 +298,36 @@ final class GalleryController extends Controller {
 		}
 	}
 
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/v1/galleries/{id}/story-media')]
+	public function storyMedia(int $id, string $fileIds): DataResponse {
+		try {
+			$gallery = $this->galleries->view($this->userId(), $id);
+			$ids = array_values(array_unique(array_filter(array_map('intval', explode(',', $fileIds)))));
+			if ($ids === [] || count($ids) > 240) throw new InvalidArgumentException('Select between 1 and 240 story files');
+			$items = [];
+			$missing = [];
+			foreach ($ids as $fileId) {
+				try {
+					$file = $gallery->getSourceType() === 'collection'
+						? $this->collections->resolveMedia($gallery, $fileId)
+						: $this->folders->resolveMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $fileId);
+					$items[] = [
+						'id' => $fileId, 'name' => $file->getName(), 'mimeType' => $file->getMimeType(),
+						'size' => (int)$file->getSize(), 'modifiedAt' => $file->getMTime(), 'etag' => $file->getEtag(), 'folder' => false,
+					];
+				} catch (DoesNotExistException|FolderAccessException|\OCP\Files\NotFoundException) {
+					$missing[] = $fileId;
+				}
+			}
+			return new DataResponse(['items' => $items, 'missingIds' => $missing]);
+		} catch (DoesNotExistException|AuthorizationException) {
+			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
+		} catch (InvalidArgumentException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
+		}
+	}
+
 
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v1/galleries/{id}/media/{fileId}/metadata')]
@@ -499,13 +533,34 @@ final class GalleryController extends Controller {
 	public function brandLogo(int $id): DataDisplayResponse {
 		try {
 			$gallery = $this->galleries->view($this->userId(), $id);
-			$assetId = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR))->presentation->instanceLogoAssetId;
-			if ($assetId === null) return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
-			return new DataDisplayResponse($this->branding->get($assetId)->getContent(), Http::STATUS_OK, [
-				'Content-Type' => $this->branding->mimeType($assetId),
+			$presentation = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR))->presentation;
+			if ($presentation->logoMode === 'upload' && $presentation->logoAssetId !== null) {
+				$asset = $this->designAssets->owned($gallery->getOwnerUid(), $presentation->logoAssetId, 'logo');
+				return new DataDisplayResponse($this->designAssets->content($asset), Http::STATUS_OK, [
+					'Content-Type' => $asset->getMimeType(),
+					'Cache-Control' => 'private, max-age=3600',
+					'X-Content-Type-Options' => 'nosniff',
+				]);
+			}
+			if ($presentation->logoMode === 'inherit' && $presentation->instanceLogoAssetId !== null) {
+				return new DataDisplayResponse($this->branding->get($presentation->instanceLogoAssetId)->getContent(), Http::STATUS_OK, [
+					'Content-Type' => $this->branding->mimeType($presentation->instanceLogoAssetId),
+					'Cache-Control' => 'private, max-age=3600',
+				]);
+			}
+			if ($presentation->logoMode !== 'gallery' || $presentation->logoFileId === null) {
+				return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
+			}
+			$file = $gallery->getSourceType() === 'collection'
+				? $this->collections->resolveMedia($gallery, $presentation->logoFileId)
+				: $this->folders->resolveMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $presentation->logoFileId);
+			$preview = $this->preview->getPreview($file, 480, 160, false, IPreview::MODE_FILL);
+			return new DataDisplayResponse($preview->getContent(), Http::STATUS_OK, [
+				'Content-Type' => $preview->getMimeType(),
 				'Cache-Control' => 'private, max-age=3600',
+				'ETag' => '"' . $file->getEtag() . '"',
 			]);
-		} catch (DoesNotExistException|AuthorizationException|\OCP\Files\NotFoundException) {
+		} catch (DoesNotExistException|AuthorizationException|FolderAccessException|InvalidArgumentException|\OCP\Files\NotFoundException|\JsonException) {
 			return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
 		}
 	}
@@ -552,6 +607,48 @@ final class GalleryController extends Controller {
 			]);
 		} catch (DoesNotExistException|FolderAccessException|AuthorizationException|\OCP\Files\NotFoundException) {
 			return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
+		}
+	}
+
+	#[NoAdminRequired]
+	#[NoCSRFRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/media/{id}/{fileId}/design-preview')]
+	public function designPreview(
+		int $id,
+		int $fileId,
+		int $x = 560,
+		int $y = 360,
+		string $mode = 'cover',
+		string $presentation = '{}',
+	): DataDisplayResponse {
+		if (!in_array($mode, ['cover', 'fit'], true)) return new DataDisplayResponse('', Http::STATUS_BAD_REQUEST);
+		try {
+			$gallery = $this->galleries->view($this->userId(), $id);
+			$file = $gallery->getSourceType() === 'collection'
+				? $this->collections->resolveMedia($gallery, $fileId)
+				: $this->folders->resolveMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $fileId);
+			$patch = json_decode($presentation, true, flags: JSON_THROW_ON_ERROR);
+			if (!is_array($patch)) throw new InvalidArgumentException('Invalid presentation settings');
+			$current = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
+			$settings = GallerySettings::merge($current, ['presentation' => $patch])->presentation;
+			$derivative = $this->watermarks->render(
+				$file,
+				max(64, min(2400, $x)),
+				max(64, min(2400, $y)),
+				$settings,
+				$gallery->getOwnerUid(),
+				$mode,
+			);
+			return new DataDisplayResponse($derivative['content'], Http::STATUS_OK, [
+				'Content-Type' => $derivative['mimeType'],
+				'Cache-Control' => 'private, max-age=3600',
+				'ETag' => '"' . $derivative['etag'] . '"',
+				'X-Proofing-Derivative-Cache' => $derivative['cached'] ? 'hit' : 'miss',
+			]);
+		} catch (DoesNotExistException|FolderAccessException|AuthorizationException|\OCP\Files\NotFoundException) {
+			return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
+		} catch (\JsonException|InvalidArgumentException) {
+			return new DataDisplayResponse('', Http::STATUS_BAD_REQUEST);
 		}
 	}
 

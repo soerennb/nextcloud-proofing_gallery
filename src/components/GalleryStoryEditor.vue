@@ -2,7 +2,9 @@
 import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import CheckIcon from 'vue-material-design-icons/Check.vue'
+import PlusIcon from 'vue-material-design-icons/Plus.vue'
 
 import type { GalleryStorySection } from '../domain/gallerySettings.ts'
 import type { MediaItem } from '../types.ts'
@@ -10,11 +12,35 @@ import type { MediaItem } from '../types.ts'
 const props = defineProps<{
 	modelValue: { sections: GalleryStorySection[]; showAllMedia: boolean }
 	media: MediaItem[]
+	missingIds: number[]
+	searchMedia(query: string): Promise<MediaItem[]>
 	previewUrl(fileId: number, width?: number, height?: number): string
 }>()
 const emit = defineEmits<{ 'update:model-value': [value: { sections: GalleryStorySection[]; showAllMedia: boolean }] }>()
 const draggedIndex = ref<number | null>(null)
 const assignedIds = computed(() => new Set(props.modelValue.sections.flatMap(section => section.mediaIds)))
+const mediaById = computed(() => new Map(props.media.map(item => [item.id, item])))
+const search = ref('')
+const results = ref<MediaItem[]>(props.media.slice(0, 60))
+const searching = ref(false)
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+let searchSequence = 0
+
+watch(() => props.media, value => { if (!search.value) results.value = value.slice(0, 60) }, { deep: true })
+watch(search, query => {
+	if (searchTimer !== null) clearTimeout(searchTimer)
+	searchTimer = setTimeout(async () => {
+		const sequence = ++searchSequence
+		searching.value = true
+		try {
+			const found = await props.searchMedia(query)
+			if (sequence === searchSequence) results.value = found
+		} finally {
+			if (sequence === searchSequence) searching.value = false
+		}
+	}, 200)
+})
+onBeforeUnmount(() => { if (searchTimer !== null) clearTimeout(searchTimer) })
 
 function update(patch: Partial<typeof props.modelValue>) {
 	emit('update:model-value', { ...props.modelValue, ...patch })
@@ -75,6 +101,7 @@ function dropSection(targetIndex: number) {
 			@update:model-value="update({ showAllMedia: $event })">
 			{{ t('proofing_gallery', 'Show unassigned photos after the story') }}
 		</NcCheckboxRadioSwitch>
+		<label class="story-editor__search"><span>{{ t('proofing_gallery', 'Find gallery media') }}</span><input v-model="search" type="search" :placeholder="t('proofing_gallery', 'Search filenames')"><small v-if="searching">{{ t('proofing_gallery', 'Searching…') }}</small></label>
 		<p v-if="modelValue.sections.length === 0" class="story-editor__empty">
 			{{ t('proofing_gallery', 'Add a section to begin your visual story.') }}
 		</p>
@@ -112,19 +139,36 @@ function dropSection(targetIndex: number) {
 				rows="3"
 				:placeholder="t('proofing_gallery', 'Short narrative (optional)')"
 				@input="updateSection(index, { body: ($event.target as HTMLTextAreaElement).value })" />
+			<div v-if="section.mediaIds.length" class="story-editor__selected" :aria-label="t('proofing_gallery', 'Selected story photos')">
+				<div v-for="fileId in section.mediaIds" :key="fileId">
+					<img v-if="mediaById.get(fileId)" :src="previewUrl(fileId, 160, 120)" :alt="mediaById.get(fileId)?.name">
+					<span v-else class="story-editor__missing">{{ t('proofing_gallery', 'Unavailable photo #{id}', { id: fileId }) }}</span>
+					<small v-if="mediaById.get(fileId)">{{ mediaById.get(fileId)?.name }}</small>
+					<button type="button" :aria-label="t('proofing_gallery', 'Remove {name}', { name: mediaById.get(fileId)?.name ?? `#${fileId}` })" @click="toggleMedia(index, fileId)">
+						×
+					</button>
+				</div>
+			</div>
 			<div class="story-editor__media" :aria-label="t('proofing_gallery', 'Photos in this section')">
-				<button v-for="item in media"
+				<button v-for="item in results"
 					:key="item.id"
 					type="button"
 					:class="{ 'story-editor__media-item--active': section.mediaIds.includes(item.id) }"
-					:disabled="!section.mediaIds.includes(item.id) && section.mediaIds.length >= 12"
+					:disabled="!section.mediaIds.includes(item.id) && (section.mediaIds.length >= 12 || assignedIds.has(item.id))"
 					:aria-pressed="section.mediaIds.includes(item.id)"
 					:title="assignedIds.has(item.id) && !section.mediaIds.includes(item.id) ? t('proofing_gallery', 'Already used in another section') : item.name"
 					@click="toggleMedia(index, item.id)">
 					<img :src="previewUrl(item.id, 160, 120)" :alt="item.name">
-					<span>{{ section.mediaIds.includes(item.id) ? '✓' : '+' }}</span>
+					<span aria-hidden="true">
+						<CheckIcon v-if="section.mediaIds.includes(item.id)" :size="14" />
+						<PlusIcon v-else :size="14" />
+					</span>
+					<small>{{ item.name }}</small>
 				</button>
 			</div>
+			<p v-if="missingIds.some(id => section.mediaIds.includes(id))" class="story-editor__warning">
+				{{ t('proofing_gallery', 'Unavailable story photos stay listed until you remove or replace them.') }}
+			</p>
 		</article>
 	</section>
 </template>

@@ -9,7 +9,7 @@ const presentation = defineModel<GalleryPresentation>({ required: true })
 <template>
 	<label class="select-field"><span>{{ t('proofing_gallery', 'Motion') }}</span><select v-model="presentation.motionPreset" name="motionPreset"><option value="off">{{ t('proofing_gallery', 'Off') }}</option><option value="subtle">{{ t('proofing_gallery', 'Subtle') }}</option><option value="expressive">{{ t('proofing_gallery', 'Expressive') }}</option></select></label>
 	<label class="select-field"><span>{{ t('proofing_gallery', 'Lightbox filmstrip') }}</span><select v-model="presentation.lightboxFilmstripPlacement" name="lightboxFilmstripPlacement"><option value="auto">{{ t('proofing_gallery', 'Automatic') }}</option><option value="side">{{ t('proofing_gallery', 'Right side') }}</option><option value="bottom">{{ t('proofing_gallery', 'Below') }}</option><option value="hidden">{{ t('proofing_gallery', 'Hidden') }}</option></select></label>
-	<label class="select-field"><span>{{ t('proofing_gallery', 'Lightbox controls') }}</span><select v-model="presentation.lightboxChromeBehavior" name="lightboxChromeBehavior"><option value="autoHide">{{ t('proofing_gallery', 'Hide while viewing') }}</option><option value="persistent">{{ t('proofing_gallery', 'Always visible') }}</option></select></label>
+	<label class="select-field"><span>{{ t('proofing_gallery', 'Presentation lightbox controls') }}</span><select v-model="presentation.lightboxChromeBehavior" name="lightboxChromeBehavior"><option value="autoHide">{{ t('proofing_gallery', 'Hide while viewing') }}</option><option value="persistent">{{ t('proofing_gallery', 'Always visible') }}</option></select></label>
 </template>
 
 <style scoped>

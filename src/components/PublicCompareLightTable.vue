@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { t } from '@nextcloud/l10n'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import CloseIcon from 'vue-material-design-icons/Close.vue'
+import MagnifyMinusIcon from 'vue-material-design-icons/MagnifyMinus.vue'
+import MagnifyPlusIcon from 'vue-material-design-icons/MagnifyPlus.vue'
 
 import type { MediaItem } from '../publicTypes.ts'
 
@@ -47,11 +50,11 @@ onBeforeUnmount(() => { document.body.style.overflow = ''; window.removeEventLis
 			<div><span>{{ t('proofing_gallery', 'Light table') }}</span><strong>{{ t('proofing_gallery', 'Compare photos') }}</strong></div>
 			<div v-if="!mobile" class="compare-table__zoom">
 				<button type="button" :aria-label="t('proofing_gallery', 'Zoom out')" @click="zoom(-.25)">
-					−
+					<MagnifyMinusIcon :size="18" />
 				</button>
 				<span>{{ Math.round(scale * 100) }}%</span>
 				<button type="button" :aria-label="t('proofing_gallery', 'Zoom in')" @click="zoom(.25)">
-					+
+					<MagnifyPlusIcon :size="18" />
 				</button>
 				<button type="button" @click="scale = 1; pan = { x: 0, y: 0 }">
 					{{ t('proofing_gallery', 'Fit') }}
@@ -61,7 +64,7 @@ onBeforeUnmount(() => { document.body.style.overflow = ''; window.removeEventLis
 				type="button"
 				:aria-label="t('proofing_gallery', 'Close')"
 				@click="emit('close')">
-				×
+				<CloseIcon :size="18" />
 			</button>
 		</header>
 
@@ -94,7 +97,7 @@ onBeforeUnmount(() => { document.body.style.overflow = ''; window.removeEventLis
 					draggable="false">
 				<figcaption>
 					<span>{{ index + 1 }}</span><strong>{{ item.name }}</strong><button type="button" :aria-label="t('proofing_gallery', 'Remove {name} from compare', { name: item.name })" @click.stop="emit('remove', item.id)">
-						×
+						<CloseIcon :size="14" />
 					</button>
 				</figcaption>
 			</figure>

@@ -5,27 +5,26 @@ import { createDefaultGallerySettings } from './gallerySettings'
 describe('createDefaultGallerySettings', () => {
 	it('starts with conservative public capabilities', () => {
 		expect(createDefaultGallerySettings()).toMatchObject({
+			schemaVersion: 11,
 			mode: 'presentation',
-			feedbackVisibility: 'collaborative',
-			allowDownloads: false,
-			allowGuestUploads: false,
-			showFilenames: false,
-			appearance: {
+			presentation: {
 				openerStyle: 'minimal',
 				fontPreset: 'modern',
 				theme: 'auto',
 				accentColor: '#E85D4A',
-				showTitle: true,
+				titleMode: 'large',
 				showMediaCount: true,
 				showFilenames: false,
 				titleSize: 'medium',
-			},
-			schemaVersion: 9,
-			presentation: {
 				motionPreset: 'subtle',
 				lightboxFilmstripPlacement: 'auto',
 				lightboxChromeBehavior: 'autoHide',
 				story: { sections: [], showAllMedia: true },
+				logoMode: 'inherit',
+				logoBackground: 'transparent',
+				logoAssetId: null,
+				watermarkTextPosition: 'tile',
+				watermarkImageAssetId: null,
 			},
 		})
 	})
@@ -34,8 +33,8 @@ describe('createDefaultGallerySettings', () => {
 		const first = createDefaultGallerySettings()
 		const second = createDefaultGallerySettings()
 
-		first.colorLabels[0] = 'Changed'
+		first.review.colorLabels[0] = 'Changed'
 
-		expect(second.colorLabels[0]).toBe('Favorit')
+		expect(second.review.colorLabels[0]).toBe('Favorit')
 	})
 })

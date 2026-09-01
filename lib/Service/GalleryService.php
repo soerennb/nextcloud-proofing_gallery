@@ -38,6 +38,7 @@ final class GalleryService {
 		private MediaSummaryRepository $summaryRows,
 		private CollectionRepository $collectionRows,
 		private RetentionHandoffService $retention,
+		private DesignAssetService $designAssets,
 	) {
 	}
 
@@ -66,7 +67,8 @@ final class GalleryService {
 		} else {
 			$anchor = $this->collections->createAnchor($ownerUid);
 			$folderId = $anchor->getId();
-			$settings['allowGuestUploads'] = false;
+			$settings['delivery']['guestUploads'] = false;
+			unset($settings['allowGuestUploads']);
 		}
 		$title = $this->validateTitle($title);
 		$now = $this->clock->getTime();
@@ -94,6 +96,10 @@ final class GalleryService {
 			'publicLocale' => $preferences['publicLocale'],
 			'lifecycle' => $preferences['lifecycle'],
 		];
+		if (($settings['presentation']['logoMode'] ?? null) === 'upload'
+			&& !array_key_exists('logoBackground', $settings['presentation'])) {
+			$settings['presentation']['logoBackground'] = 'light';
+		}
 		$composed = array_replace_recursive(
 			$galleryPurpose->settings(),
 			$this->policies->galleryDefaults(),
@@ -418,7 +424,8 @@ final class GalleryService {
 			$gallery->setTitle($this->validateTitle($title));
 		}
 		if ($settings !== null) {
-			if ($gallery->getSourceType() === 'collection' && ($settings['allowGuestUploads'] ?? false) === true) {
+			if ($gallery->getSourceType() === 'collection'
+				&& (($settings['allowGuestUploads'] ?? false) === true || ($settings['delivery']['guestUploads'] ?? false) === true)) {
 				throw new InvalidArgumentException('Guest uploads are unavailable for collections');
 			}
 			$current = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
@@ -482,6 +489,17 @@ final class GalleryService {
 			}
 			if (!str_starts_with($file->getMimeType(), 'image/')) {
 				throw new InvalidArgumentException('Gallery artwork must be an image inside the gallery source');
+			}
+		}
+		foreach ([
+			[$settings->presentation->logoAssetId, 'logo'],
+			[$settings->presentation->watermarkImageAssetId, 'watermark'],
+		] as [$assetId, $kind]) {
+			if ($assetId === null) continue;
+			try {
+				$this->designAssets->owned($gallery->getOwnerUid(), $assetId, $kind);
+			} catch (\OCP\Files\NotFoundException|\OCP\AppFramework\Db\DoesNotExistException $exception) {
+				throw new InvalidArgumentException('Design assets must belong to the gallery owner and match their intended use', previous: $exception);
 			}
 		}
 	}

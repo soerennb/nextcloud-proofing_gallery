@@ -40,16 +40,17 @@ final class GuestPrivacyController extends ResolvedPublicShareController {
 		try {
 			$this->privacy->deleteGuest($this->authenticate(true));
 			$response = new JSONResponse([], Http::STATUS_NO_CONTENT);
+			$response->invalidateCookie(GuestService::cookieName($this->publicContext()->gallery));
 			$response->invalidateCookie(GuestService::COOKIE_NAME);
 			return $response;
-		} catch (DoesNotExistException) { return new JSONResponse(['message' => 'Guest session required'], Http::STATUS_UNAUTHORIZED); }
-		catch (\InvalidArgumentException) { return new JSONResponse(['message' => 'Invalid request nonce'], Http::STATUS_FORBIDDEN); }
+		} catch (DoesNotExistException) { return new JSONResponse(['code' => 'guest_session_required', 'message' => 'Guest session required'], Http::STATUS_UNAUTHORIZED); }
+		catch (\InvalidArgumentException) { return new JSONResponse(['code' => 'invalid_nonce', 'message' => 'Invalid request nonce'], Http::STATUS_FORBIDDEN); }
 	}
 
 	private function authenticate(bool $requireNonce = false): \OCA\ProofingGallery\Db\Guest {
 		return $this->guests->authenticate(
 			$this->publicContext()->gallery,
-			$this->request->getCookie(GuestService::COOKIE_NAME),
+			$this->guestSecret($this->publicContext()->gallery),
 			$requireNonce ? $this->request->getHeader('X-Proofing-Nonce') : null,
 		);
 	}

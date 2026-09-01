@@ -49,12 +49,18 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{ 'load-more': [] }>()
+
+const CONTAINED_MIN_HEIGHT = 360
+const CONTAINED_VIEWPORT_MARGIN = 8
+const CONTAINED_HEADER_RESERVE = 64
+
 const root = ref<HTMLDivElement | null>(null)
 const loadSentinel = ref<HTMLSpanElement | null>(null)
 const width = ref(1000)
 const viewportWidth = ref(1000)
 const visibleTop = ref(0)
 const visibleHeight = ref(900)
+const availableHeight = ref(900)
 const measured = ref(false)
 let resizeObserver: ResizeObserver | undefined
 let loadObserver: IntersectionObserver | undefined
@@ -128,7 +134,7 @@ const totalHeight = computed(() => positions.value.reduce(
 	0,
 ))
 const rootHeight = computed(() => props.contained
-	? Math.min(totalHeight.value, Math.max(360, Math.min(760, Math.round(visibleHeight.value * 0.66))))
+	? Math.min(totalHeight.value, Math.max(CONTAINED_MIN_HEIGHT, Math.min(availableHeight.value, window.innerHeight - CONTAINED_HEADER_RESERVE)))
 	: totalHeight.value)
 const overscan = computed(() => Math.max(900, visibleHeight.value * 1.5))
 const renderedPositions = computed(() => {
@@ -146,6 +152,10 @@ function updateViewport() {
 		if (props.contained) {
 			visibleTop.value = root.value.scrollTop
 			visibleHeight.value = root.value.clientHeight || window.innerHeight
+			const gridTop = root.value.getBoundingClientRect().top
+			const fill = window.innerHeight - Math.max(0, gridTop) - CONTAINED_VIEWPORT_MARGIN
+			const full = window.innerHeight - CONTAINED_HEADER_RESERVE - CONTAINED_VIEWPORT_MARGIN
+			availableHeight.value = Math.max(fill, full)
 		} else if (props.scrollElement) {
 			const rootRect = root.value.getBoundingClientRect()
 			const scrollRect = props.scrollElement.getBoundingClientRect()

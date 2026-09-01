@@ -37,6 +37,8 @@ __pycache__/
 /.env.local
 /.env.studio
 /.local/
+/.tmp/
+/tmp/
 /.idea/
 /.vscode/
 *.log

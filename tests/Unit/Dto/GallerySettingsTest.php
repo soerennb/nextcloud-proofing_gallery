@@ -27,17 +27,17 @@ final class GallerySettingsTest extends TestCase {
 		$settings = GallerySettings::defaults()->jsonSerialize();
 
 		self::assertSame('presentation', $settings['mode']);
-		self::assertFalse($settings['allowDownloads']);
-		self::assertFalse($settings['allowGuestUploads']);
-		self::assertCount(4, $settings['colorLabels']);
-		self::assertSame(50, $settings['appearance']['heroFocusX']);
-		self::assertSame('modern', $settings['appearance']['fontPreset']);
-		self::assertSame('minimal', $settings['appearance']['openerStyle']);
-		self::assertTrue($settings['appearance']['showTitle']);
-		self::assertTrue($settings['appearance']['showMediaCount']);
-		self::assertSame('medium', $settings['appearance']['titleSize']);
+		self::assertSame('none', $settings['delivery']['downloadScope']);
+		self::assertFalse($settings['delivery']['guestUploads']);
+		self::assertCount(4, $settings['review']['colorLabels']);
+		self::assertSame(50, $settings['presentation']['heroFocusX']);
+		self::assertSame('modern', $settings['presentation']['fontPreset']);
+		self::assertSame('minimal', $settings['presentation']['openerStyle']);
+		self::assertSame('large', $settings['presentation']['titleMode']);
+		self::assertTrue($settings['presentation']['showMediaCount']);
+		self::assertSame('medium', $settings['presentation']['titleSize']);
 		self::assertSame('auto', $settings['publicLocale']);
-		self::assertSame(9, $settings['schemaVersion']);
+		self::assertSame(11, $settings['schemaVersion']);
 		self::assertSame(['sections' => [], 'showAllMedia' => true], $settings['presentation']['story']);
 		self::assertSame('subtle', $settings['presentation']['motionPreset']);
 		self::assertSame('auto', $settings['presentation']['lightboxFilmstripPlacement']);
@@ -51,6 +51,63 @@ final class GallerySettingsTest extends TestCase {
 		self::assertFalse($settings['presentation']['showFilenames']);
 		self::assertSame('none', $settings['delivery']['downloadScope']);
 		self::assertTrue($settings['review']['likes']);
+		self::assertSame('inherit', $settings['presentation']['logoMode']);
+		self::assertSame('transparent', $settings['presentation']['logoBackground']);
+		self::assertNull($settings['presentation']['logoAssetId']);
+		self::assertNull($settings['presentation']['watermarkImageAssetId']);
+		self::assertSame('tile', $settings['presentation']['watermarkTextPosition']);
+	}
+
+	public function testAcceptsCompleteWatermarkAndLogoConfiguration(): void {
+		$id = str_repeat('a', 32);
+		$settings = GallerySettings::fromArray(['presentation' => [
+			'logoMode' => 'upload', 'logoBackground' => 'dark', 'logoAssetId' => $id,
+			'watermarkText' => '© Studio', 'watermarkOpacity' => 100,
+			'watermarkTextPosition' => 'bottom-right', 'watermarkTextSize' => 36,
+			'watermarkImageAssetId' => $id, 'watermarkImageOpacity' => 75,
+			'watermarkImagePosition' => 'center', 'watermarkImageScale' => 30,
+		]])->presentation;
+
+		self::assertSame('upload', $settings->logoMode);
+		self::assertSame('dark', $settings->logoBackground);
+		self::assertSame($id, $settings->logoAssetId);
+		self::assertSame('© Studio', $settings->watermarkText);
+		self::assertSame('bottom-right', $settings->watermarkTextPosition);
+		self::assertSame(36, $settings->watermarkTextSize);
+		self::assertSame($id, $settings->watermarkImageAssetId);
+		self::assertSame(75, $settings->watermarkImageOpacity);
+		self::assertSame(30, $settings->watermarkImageScale);
+	}
+
+	public function testLegacyUploadedLogoDefaultsToLightBackground(): void {
+		$settings = GallerySettings::fromArray(['schemaVersion' => 10, 'presentation' => [
+			'logoMode' => 'upload', 'logoAssetId' => str_repeat('a', 32),
+		]])->presentation;
+
+		self::assertSame('light', $settings->logoBackground);
+	}
+
+	public function testSwitchingToUploadedLogoDefaultsToLightBackground(): void {
+		$settings = GallerySettings::merge(GallerySettings::defaults(), ['presentation' => [
+			'logoMode' => 'upload', 'logoAssetId' => str_repeat('a', 32),
+		]])->presentation;
+
+		self::assertSame('light', $settings->logoBackground);
+	}
+
+	public function testRejectsInvalidLogoBackground(): void {
+		$this->expectException(InvalidArgumentException::class);
+		GallerySettings::fromArray(['presentation' => ['logoBackground' => 'tracker']]);
+	}
+
+	public function testRejectsMalformedDesignAssetId(): void {
+		$this->expectException(InvalidArgumentException::class);
+		GallerySettings::fromArray(['presentation' => ['logoAssetId' => '../foreign']]);
+	}
+
+	public function testRejectsOutOfRangeWatermarkImageScale(): void {
+		$this->expectException(InvalidArgumentException::class);
+		GallerySettings::fromArray(['presentation' => ['watermarkImageScale' => 51]]);
 	}
 
 	public function testRejectsUnknownKeys(): void {
@@ -83,10 +140,10 @@ final class GallerySettingsTest extends TestCase {
 		])->jsonSerialize();
 
 		self::assertSame('collaboration', $settings['mode']);
-		self::assertSame('#abcdef', $settings['appearance']['accentColor']);
-		self::assertSame(50, $settings['appearance']['heroFocusY']);
-		self::assertSame('cinematic', $settings['appearance']['openerStyle']);
-		self::assertSame('modern', $settings['appearance']['fontPreset']);
+		self::assertSame('#abcdef', $settings['presentation']['accentColor']);
+		self::assertSame(50, $settings['presentation']['heroFocusY']);
+		self::assertSame('cinematic', $settings['presentation']['openerStyle']);
+		self::assertSame('modern', $settings['presentation']['fontPreset']);
 	}
 
 	public function testPreservesCinematicLegacyHeroIntent(): void {
@@ -94,7 +151,7 @@ final class GallerySettingsTest extends TestCase {
 			'appearance' => ['heroFileId' => 42],
 		])->jsonSerialize();
 
-		self::assertSame('cinematic', $settings['appearance']['openerStyle']);
+		self::assertSame('cinematic', $settings['presentation']['openerStyle']);
 	}
 
 	public function testRejectsUnknownOpenerStyle(): void {
@@ -107,7 +164,7 @@ final class GallerySettingsTest extends TestCase {
 		GallerySettings::fromArray(['publicLocale' => 'fr']);
 	}
 
-	public function testAcceptsVersionTwoSectionsAndKeepsLegacyAliases(): void {
+	public function testAcceptsLegacyAliasesButEmitsCanonicalSections(): void {
 		$settings = GallerySettings::fromArray([
 			'mode' => 'collaboration',
 			'presentation' => ['theme' => 'light', 'layout' => 'masonry', 'tileGap' => 'tight'],
@@ -120,8 +177,24 @@ final class GallerySettingsTest extends TestCase {
 		self::assertSame('masonry', $settings['presentation']['layout']);
 		self::assertFalse($settings['review']['comments']);
 		self::assertSame('selection', $settings['delivery']['downloadScope']);
-		self::assertTrue($settings['allowDownloads']);
-		self::assertSame($settings['presentation'], $settings['appearance']);
+		self::assertSame('selection', $settings['delivery']['downloadScope']);
+		self::assertArrayNotHasKey('allowDownloads', $settings);
+		self::assertArrayNotHasKey('appearance', $settings);
+	}
+
+	public function testPublicPolicyTreatsLegacyAnnotationsWithoutCommentsAsPresentation(): void {
+		$policy = \OCA\ProofingGallery\Domain\PublicLinkPolicy::fromArray([
+			'comments' => false,
+			'annotations' => true,
+		]);
+		$settings = GallerySettings::fromArray([
+			'mode' => 'collaboration',
+			'review' => ['comments' => true, 'annotations' => true],
+		])->withPublicPolicy($policy)->jsonSerialize();
+
+		self::assertSame('presentation', $settings['mode']);
+		self::assertFalse($settings['review']['comments']);
+		self::assertFalse($settings['review']['annotations']);
 	}
 
 	public function testDeepMergesOneSettingsSection(): void {

@@ -105,13 +105,13 @@ final class UploadController extends ResolvedPublicShareController {
 		try {
 			$guest = $this->guests->authenticate(
 				$this->resolvedGallery(),
-				$this->request->getCookie(GuestService::COOKIE_NAME),
+				$this->guestSecret($this->resolvedGallery()),
 				$this->request->getHeader('X-Proofing-Nonce'),
 			);
 		} catch (DoesNotExistException) {
-			return new JSONResponse(['message' => 'Guest session required'], Http::STATUS_UNAUTHORIZED);
+			return new JSONResponse(['code' => 'guest_session_required', 'message' => 'Guest session required'], Http::STATUS_UNAUTHORIZED);
 		} catch (InvalidArgumentException) {
-			return new JSONResponse(['message' => 'Invalid request nonce'], Http::STATUS_FORBIDDEN);
+			return new JSONResponse(['code' => 'invalid_nonce', 'message' => 'Invalid request nonce'], Http::STATUS_FORBIDDEN);
 		}
 		try {
 			return new JSONResponse($callback($guest), $status);

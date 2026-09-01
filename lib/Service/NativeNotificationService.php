@@ -34,9 +34,23 @@ final class NativeNotificationService {
 	}
 
 	public function signal(int $galleryId, string $userUid, int $eventId, string $eventType): void {
+		$stateId = $this->stageSignal($galleryId, $userUid, $eventId, $eventType);
+		if ($stateId !== null) $this->publish($stateId);
+	}
+
+	public function stageSignal(int $galleryId, string $userUid, int $eventId, string $eventType): ?int {
 		$category = $this->category($eventType);
-		if ($category === null) return;
-		$this->signalCategory($galleryId, $userUid, $category, $eventId);
+		if ($category === null || !$this->available($userUid)) return null;
+		$state = $this->repository->signal($galleryId, $userUid, $category, $eventId, $this->clock->getTime());
+		return $state !== null && $state['dispatch'] ? $state['id'] : null;
+	}
+
+	public function publish(int $stateId): void {
+		try {
+			$this->dispatchState($stateId);
+		} catch (\Throwable $exception) {
+			$this->logger->warning('Native gallery notification dispatch failed', ['exception' => $exception, 'stateId' => $stateId]);
+		}
 	}
 
 	public function signalCategory(int $galleryId, string $userUid, string $category, ?int $eventId = null): void {

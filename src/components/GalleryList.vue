@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { t } from '@nextcloud/l10n'
+import CheckIcon from 'vue-material-design-icons/Check.vue'
+import ImageMultipleIcon from 'vue-material-design-icons/ImageMultiple.vue'
 import { ownerPreviewUrl } from '../services/galleryApi.ts'
 import type { GalleryListItem } from '../types.ts'
 import GalleryActionsMenu from './GalleryActionsMenu.vue'
@@ -31,7 +33,10 @@ function previewUrl(gallery: GalleryListItem): string {
 			<button class="gallery-row__main" type="button" @click="emit('select', gallery)">
 				<span class="gallery-row__cover" aria-hidden="true">
 					<img v-if="previewUrl(gallery)" :src="previewUrl(gallery)" alt="">
-					<span v-else>{{ gallery.mode === 'collaboration' ? '✓' : '▧' }}</span>
+					<span v-else class="gallery-row__fallback">
+						<CheckIcon v-if="gallery.mode === 'collaboration'" :size="26" />
+						<ImageMultipleIcon v-else :size="26" />
+					</span>
 				</span>
 				<span class="gallery-row__identity">
 					<strong>{{ gallery.title }}</strong>
