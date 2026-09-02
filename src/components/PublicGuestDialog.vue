@@ -70,5 +70,5 @@ defineEmits<{ dismiss: []; submit: [] }>()
 
 .guest-dialog__form ion-item { --background: var(--gallery-surface); --border-color: var(--gallery-border); --color: var(--gallery-text); --min-height: 62px; }
 
-.guest-dialog__form > ion-button { min-height: 46px; margin: 0; --border-radius: 9px; text-transform: none; }
+.guest-dialog__form > ion-button { min-height: 46px; margin: 0; --background: var(--gallery-accent); --border-radius: 9px; --color: var(--ion-color-primary-contrast, #fff); text-transform: none; }
 </style>

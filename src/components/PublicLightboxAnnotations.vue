@@ -120,9 +120,9 @@ function onComposerKeydown(event: KeyboardEvent) {
 
 .annotation-positioning { position: fixed; z-index: 100120; inset: auto 50% 24px auto; margin: 0; padding: 10px 16px; border-radius: 999px; background: rgb(24 24 27 / 96%); box-shadow: 0 8px 28px rgb(0 0 0 / 35%); color: #fff; font-size: 13px; pointer-events: none; transform: translateX(50%); }
 
-.annotation-composer { position: fixed; z-index: 100120; display: grid; width: min(360px, calc(100vw - 32px)); gap: 10px; padding: 16px; border: 1px solid rgb(255 255 255 / 16%); border-radius: 14px; background: rgb(24 24 27 / 98%); box-shadow: 0 18px 50px rgb(0 0 0 / 48%); color: #fff; pointer-events: auto; transform: translate(var(--annotation-composer-offset, 18px), -18px); }
+.annotation-composer { position: fixed; z-index: 100120; display: grid; box-sizing: border-box; width: min(360px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; gap: 10px; padding: 16px; border: 1px solid rgb(255 255 255 / 16%); border-radius: 14px; background: rgb(24 24 27 / 98%); box-shadow: 0 18px 50px rgb(0 0 0 / 48%); color: #fff; overscroll-behavior: contain; pointer-events: auto; transform: translate(var(--annotation-composer-offset, 18px), -18px); }
 
-.annotation-composer textarea { min-height: 96px; padding: 10px 12px; border: 1px solid rgb(255 255 255 / 24%); border-radius: 8px; background: #fff; color: #111; font: inherit; resize: vertical; }
+.annotation-composer textarea { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; min-height: 96px; padding: 10px 12px; border: 1px solid rgb(255 255 255 / 24%); border-radius: 8px; background: #fff; color: #111; font: inherit; resize: vertical; }
 
 .annotation-composer > div { display: flex; gap: 8px; }
 
