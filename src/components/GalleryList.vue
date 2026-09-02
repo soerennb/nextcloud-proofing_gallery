@@ -29,7 +29,7 @@ function previewUrl(gallery: GalleryListItem): string {
 
 <template>
 	<div class="gallery-list" :class="`gallery-list--${view}`">
-		<article v-for="gallery in galleries" :key="gallery.id" class="gallery-row">
+		<article v-for="(gallery, index) in galleries" :key="gallery.id" class="gallery-row">
 			<button class="gallery-row__main" type="button" @click="emit('select', gallery)">
 				<span class="gallery-row__cover" aria-hidden="true">
 					<img v-if="previewUrl(gallery)" :src="previewUrl(gallery)" alt="">
@@ -37,6 +37,7 @@ function previewUrl(gallery: GalleryListItem): string {
 						<CheckIcon v-if="gallery.mode === 'collaboration'" :size="26" />
 						<ImageMultipleIcon v-else :size="26" />
 					</span>
+					<span class="gallery-row__frame">{{ String(index + 1).padStart(2, '0') }} · {{ gallery.mediaSummary.total }}</span>
 				</span>
 				<span class="gallery-row__identity">
 					<strong>{{ gallery.title }}</strong>
@@ -90,7 +91,7 @@ function previewUrl(gallery: GalleryListItem): string {
 	width: 100%;
 	max-width: 100%;
 	min-width: 0;
-	border-top: 1px solid var(--color-border);
+	border-top: 1px solid var(--studio-line, var(--color-border));
 }
 
 .gallery-list--grid {
@@ -105,7 +106,7 @@ function previewUrl(gallery: GalleryListItem): string {
 	grid-template-columns: minmax(0, 1fr) auto;
 	align-items: center;
 	gap: 12px;
-	border-bottom: 1px solid var(--color-border);
+	border-bottom: 1px solid var(--studio-line, var(--color-border));
 }
 
 .gallery-row__main {
@@ -118,14 +119,14 @@ function previewUrl(gallery: GalleryListItem): string {
 	padding: 12px 8px;
 	border: 0;
 	background: transparent;
-	color: var(--color-main-text);
+	color: var(--studio-ink, var(--color-main-text));
 	text-align: start;
 	cursor: pointer;
 }
 
 .gallery-row:hover,
 .gallery-row:focus-within {
-	background: var(--color-background-hover);
+	background: var(--studio-surface-raised, var(--color-background-hover));
 }
 
 .gallery-row__main:focus-visible {
@@ -134,14 +135,29 @@ function previewUrl(gallery: GalleryListItem): string {
 }
 
 .gallery-row__cover {
+	position: relative;
 	display: grid;
 	overflow: hidden;
 	aspect-ratio: 16 / 9;
 	place-items: center;
-	border-radius: 4px;
-	background: var(--color-background-dark);
-	color: var(--color-text-maxcontrast);
+	border-radius: 6px;
+	background: var(--studio-surface-raised, var(--color-background-dark));
+	color: var(--studio-muted, var(--color-text-maxcontrast));
 	font-size: 22px;
+}
+
+.gallery-row__frame {
+	position: absolute;
+	inset: auto 8px 8px auto;
+	padding: 3px 6px;
+	border-radius: 4px;
+	background: rgb(10 12 14 / 76%);
+	color: #fff;
+	font-family: ui-monospace, SFMono-Regular, monospace;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: .06em;
+	backdrop-filter: blur(8px);
 }
 
 .gallery-row__cover img {
@@ -169,7 +185,7 @@ function previewUrl(gallery: GalleryListItem): string {
 .gallery-row__identity small,
 .gallery-row__date {
 	margin-top: 3px;
-	color: var(--color-text-maxcontrast);
+	color: var(--studio-muted, var(--color-text-maxcontrast));
 	font-size: 13px;
 }
 
@@ -182,17 +198,18 @@ function previewUrl(gallery: GalleryListItem): string {
 	display: block;
 	min-width: 0;
 	overflow: visible;
-	border: 1px solid var(--color-border);
-	border-top: 4px solid var(--color-primary-element);
-	border-radius: 9px;
-	background: var(--color-main-background);
-	transition: border-color 160ms ease, transform 220ms cubic-bezier(.2,.75,.25,1);
+	border: 1px solid var(--studio-line, var(--color-border));
+	border-radius: var(--studio-radius, 14px);
+	background: var(--studio-surface, var(--color-main-background));
+	box-shadow: 0 1px 0 color-mix(in srgb, var(--studio-ink) 5%, transparent);
+	transition: border-color 160ms ease, transform 220ms cubic-bezier(.2,.75,.25,1), box-shadow 220ms ease;
 }
 
 .gallery-list--grid .gallery-row:hover,
 .gallery-list--grid .gallery-row:focus-within {
-	border-color: var(--color-primary-element);
-	background: var(--color-main-background);
+	border-color: var(--studio-accent, var(--color-primary-element));
+	background: var(--studio-surface, var(--color-main-background));
+	box-shadow: var(--studio-shadow);
 	transform: translateY(-3px);
 }
 
@@ -206,7 +223,7 @@ function previewUrl(gallery: GalleryListItem): string {
 
 .gallery-list--grid .gallery-row__cover {
 	width: 100%;
-	border-radius: 0;
+	border-radius: calc(var(--studio-radius, 14px) - 1px) calc(var(--studio-radius, 14px) - 1px) 0 0;
 	font-size: 38px;
 }
 
@@ -215,7 +232,7 @@ function previewUrl(gallery: GalleryListItem): string {
 	padding-inline: 16px 54px;
 }
 
-.gallery-list--grid .gallery-row__identity strong { font-size: 18px; }
+.gallery-list--grid .gallery-row__identity strong { font-family: NewsreaderVariable, Newsreader, serif; font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
 
 .gallery-list--grid .gallery-row__date { margin-top: -8px; }
 

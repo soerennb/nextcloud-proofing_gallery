@@ -51,6 +51,8 @@ use OCP\DB\Types;
  * @method void setLifecycleNextAt(?int $lifecycleNextAt)
  * @method string getMode()
  * @method void setMode(string $mode)
+ * @method string getDeliveryMode()
+ * @method void setDeliveryMode(string $deliveryMode)
  * @method string getTitleSort()
  * @method void setTitleSort(string $titleSort)
  */
@@ -76,6 +78,7 @@ final class Gallery extends Entity implements \JsonSerializable {
 	protected ?int $lifecycleArchiveAt = null;
 	protected ?int $lifecycleNextAt = null;
 	protected string $mode = 'presentation';
+	protected string $deliveryMode = 'standard';
 	protected string $titleSort = '';
 
 	public function __construct() {
@@ -118,6 +121,7 @@ final class Gallery extends Entity implements \JsonSerializable {
 			'lifecycleRevokeAt' => $this->getLifecycleRevokeAt(),
 			'lifecycleArchiveAt' => $this->getLifecycleArchiveAt(),
 			'lifecycleNextAt' => $this->getLifecycleNextAt(),
+			'deliveryMode' => $this->getDeliveryMode(),
 		];
 	}
 }

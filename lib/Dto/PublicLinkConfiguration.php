@@ -14,6 +14,8 @@ final class PublicLinkConfiguration {
 		public readonly string $name,
 		public readonly PublicLinkPolicy $policy,
 		public readonly string $startPath,
+		/** @var list<string> */
+		public readonly array $allowedRoots,
 		public readonly string $viewMode,
 		public readonly int $groupDepth,
 		public readonly int $minOwnerRating,
@@ -22,6 +24,8 @@ final class PublicLinkConfiguration {
 		public readonly ?DateTime $expiresAt,
 		public readonly bool $reviewEnabled,
 		public readonly ?string $reviewDueDate,
+		public readonly ?int $reviewSelectionMinimum,
+		public readonly ?int $reviewSelectionMaximum,
 	) {
 	}
 
@@ -37,6 +41,12 @@ final class PublicLinkConfiguration {
 			throw new InvalidArgumentException('Image annotations require comments');
 		}
 		$startPath = self::string($input['startPath'] ?? '', 'Public link start path');
+		$allowedRoots = $input['allowedRoots'] ?? [];
+		if (!is_array($allowedRoots) || array_filter($allowedRoots, static fn (mixed $root): bool => !is_string($root)) !== []) {
+			throw new InvalidArgumentException('Public link allowed roots must be a list of paths');
+		}
+		$allowedRoots = array_values(array_unique($allowedRoots));
+		if (count($allowedRoots) > 32) throw new InvalidArgumentException('A public link may contain at most 32 allowed roots');
 		$viewMode = self::string($input['viewMode'] ?? 'folder', 'Public link view mode');
 		$groupDepth = self::int($input['groupDepth'] ?? 0, 'Public link group depth');
 		$minOwnerRating = self::int($input['minOwnerRating'] ?? 0, 'Minimum owner rating');
@@ -50,10 +60,17 @@ final class PublicLinkConfiguration {
 		$reviewEnabled = $input['reviewEnabled'] ?? false;
 		if (!is_bool($reviewEnabled)) throw new InvalidArgumentException('Review workflow setting must be a boolean');
 		$reviewDueDate = self::dateString($input['reviewDueDate'] ?? null, 'Review due date');
+		$reviewSelectionMinimum = self::nullableInt($input['reviewSelectionMinimum'] ?? null, 'Minimum selection count');
+		$reviewSelectionMaximum = self::nullableInt($input['reviewSelectionMaximum'] ?? null, 'Maximum selection count');
+		if (($reviewSelectionMinimum ?? 0) < 0 || ($reviewSelectionMaximum ?? 0) < 0
+			|| ($reviewSelectionMinimum ?? 0) > 1000 || ($reviewSelectionMaximum ?? 0) > 1000
+			|| ($reviewSelectionMaximum !== null && $reviewSelectionMaximum > 0 && ($reviewSelectionMinimum ?? 0) > $reviewSelectionMaximum)) {
+			throw new InvalidArgumentException('Invalid selection limits');
+		}
 		return new self(
 			$name,
 			$policy,
-			$startPath,
+			$startPath, $allowedRoots,
 			$viewMode,
 			$groupDepth,
 			$minOwnerRating,
@@ -62,14 +79,21 @@ final class PublicLinkConfiguration {
 			self::expirationDate($input['expiresAt'] ?? null),
 			$reviewEnabled,
 			$reviewDueDate,
+			$reviewSelectionMinimum,
+			$reviewSelectionMaximum,
 		);
 	}
 
 	public function withStartPath(string $startPath): self {
+		return $this->withScope($startPath, $this->allowedRoots);
+	}
+
+	/** @param list<string> $allowedRoots */
+	public function withScope(string $startPath, array $allowedRoots): self {
 		return new self(
-			$this->name, $this->policy, $startPath, $this->viewMode, $this->groupDepth,
+			$this->name, $this->policy, $startPath, $allowedRoots, $this->viewMode, $this->groupDepth,
 			$this->minOwnerRating, $this->publicLocale, $this->password, $this->expiresAt,
-			$this->reviewEnabled, $this->reviewDueDate,
+			$this->reviewEnabled, $this->reviewDueDate, $this->reviewSelectionMinimum, $this->reviewSelectionMaximum,
 		);
 	}
 
@@ -80,6 +104,12 @@ final class PublicLinkConfiguration {
 
 	private static function int(mixed $value, string $label): int {
 		if (!is_int($value)) throw new InvalidArgumentException($label . ' must be an integer');
+		return $value;
+	}
+
+	private static function nullableInt(mixed $value, string $label): ?int {
+		if ($value === null || $value === '') return null;
+		if (!is_int($value)) throw new InvalidArgumentException($label . ' must be an integer or null');
 		return $value;
 	}
 

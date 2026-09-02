@@ -32,6 +32,7 @@ export interface Gallery {
 	ownerUid: string
 	folderId: number
 	sourceType: 'folder' | 'collection'
+	deliveryMode: 'standard' | 'event'
 	title: string
 	slug: string
 	status: 'draft' | 'published' | 'archived'
@@ -267,12 +268,17 @@ export interface GalleryPublicLink {
 	primary: boolean
 	policy: PublicLinkPolicy
 	startPath: string
+	allowedRoots?: string[]
+	scopeMode?: 'legacy' | 'nodes' | 'empty'
+	scopeHealth?: { state: 'healthy' | 'degraded' | 'empty'; total: number; available: number; missing: number }
 	viewMode: 'folder' | 'recursive'
 	groupDepth: number
 	minOwnerRating: number
 	publicLocale: 'en' | 'de' | null
 	reviewEnabled: boolean
 	reviewDueDate: string | null
+	reviewSelectionMinimum: number | null
+	reviewSelectionMaximum: number | null
 	review: PublicReviewState
 	createdAt: number
 	updatedAt: number
@@ -287,6 +293,8 @@ export interface ReviewLinkOverview {
 	linkStatus: 'active' | 'revoked'
 	enabled: boolean
 	dueDate: string | null
+	rules: { minimum: number; maximum: number; dueDate: string | null }
+	progress: { count: number; status: 'open' | 'submitted' | 'completed' } | null
 	current: ReviewRound | null
 	history: ReviewRound[]
 }

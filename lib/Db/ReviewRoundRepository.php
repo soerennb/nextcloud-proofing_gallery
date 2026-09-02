@@ -80,6 +80,19 @@ final class ReviewRoundRepository {
 			->executeStatement() === 1;
 	}
 
+	public function reopen(int $id, string $from, int $now): bool {
+		$qb = $this->db->getQueryBuilder();
+		return $qb->update('proofing_review_rounds')
+			->set('status', $qb->createNamedParameter('awaiting_feedback'))
+			->set('submitted_by_guest_id', $qb->createNamedParameter(null))
+			->set('submitted_at', $qb->createNamedParameter(null))
+			->set('decided_at', $qb->createNamedParameter(null))
+			->set('updated_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT))
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('status', $qb->createNamedParameter($from)))
+			->executeStatement() === 1;
+	}
+
 	/** @return array{open: int, submitted: int, approved: int, overdue: int} */
 	public function health(string $today): array {
 		$counts = ['open' => 0, 'submitted' => 0, 'approved' => 0, 'overdue' => 0];

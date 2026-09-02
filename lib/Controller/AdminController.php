@@ -163,7 +163,7 @@ final class AdminController extends Controller {
 		int $metadataBatchSize = 100,
 		int $xmpWritingEnabled = 1,
 		int $maxIndexedMedia = 25000,
-		int $maxPublicLinks = 10,
+		int $maxPublicLinks = 500,
 		int $shareAuditRetentionDays = 90,
 		string $defaultPublicLocale = 'auto',
 		string $defaultTheme = 'dark',

@@ -4,16 +4,22 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 
 import type { GallerySettings } from '../../domain/gallerySettings.ts'
+import type { EventSetup } from '../../services/eventApi.ts'
 import type { Gallery } from '../../types.ts'
 import PublicLinkManager from '../PublicLinkManager.vue'
+import EventDeliveryWorkspace from '../EventDeliveryWorkspace.vue'
 
 defineProps<{ gallery: Gallery }>()
-const emit = defineEmits<{ 'open-sharing': []; updated: [gallery: Gallery] }>()
+const emit = defineEmits<{ 'open-sharing': []; updated: [gallery: Gallery]; 'event-setup-updated': [setup: EventSetup] }>()
 const settings = defineModel<GallerySettings>('settings', { required: true })
 </script>
 
 <template>
-	<section class="settings-section deliver-workspace">
+	<EventDeliveryWorkspace v-if="gallery.deliveryMode === 'event'"
+		:gallery="gallery"
+		@updated="emit('updated', $event)"
+		@setup-updated="emit('event-setup-updated', $event)" />
+	<section v-else class="settings-section deliver-workspace">
 		<div class="section-heading">
 			<h2>{{ t('proofing_gallery', 'Client links') }}</h2>
 			<p>{{ gallery.shareToken ? t('proofing_gallery', 'Manage who can open this gallery and what each link allows.') : t('proofing_gallery', 'Publish the gallery when it is ready for clients.') }}</p>

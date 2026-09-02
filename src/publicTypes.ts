@@ -18,7 +18,7 @@ export interface PublicGalleryPage {
 	path: string
 	groups: Record<string, number>
 	indexState: { indexed: number; limit: number; limitReached: boolean; complete: boolean; state?: 'unindexed' | 'limit_reached' | 'ready'; lastIndexedAt?: number | null }
-	scope: { startPath: string; viewMode: 'folder' | 'recursive' | 'collection'; groupDepth: number }
+	scope: { startPath: string; allowedRoots?: string[]; viewMode: 'folder' | 'recursive' | 'collection'; groupDepth: number }
 }
 
 export interface PublicGallery {
@@ -45,6 +45,8 @@ export interface ReviewRound {
 export interface PublicReviewState {
 	enabled: boolean
 	dueDate: string | null
+	rules: { minimum: number; maximum: number }
+	progress: { count: number; status: 'open' | 'submitted' | 'completed' } | null
 	current: ReviewRound | null
 }
 

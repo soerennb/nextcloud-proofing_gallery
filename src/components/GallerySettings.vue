@@ -17,6 +17,8 @@ import type { GalleryWorkspace } from '../domain/gallerySettingsOptions.ts'
 import { useGalleryPresets } from '../composables/useGalleryPresets.ts'
 import { completeGallery, fetchCollection, fetchDesignAssets, fetchGalleryMedia, fetchGalleryReadiness, fetchStoryMedia, updateGallery, updateGallerySource, uploadDesignAsset } from '../services/galleryApi.ts'
 import type { DesignAsset } from '../services/galleryApi.ts'
+import { fetchEventSetup } from '../services/eventApi.ts'
+import type { EventSetup } from '../services/eventApi.ts'
 import type { Gallery, GalleryReadiness, MediaItem } from '../types.ts'
 import CollectionContent from './CollectionContent.vue'
 import CullingWorkspace from './CullingWorkspace.vue'
@@ -60,6 +62,7 @@ const mediaTotal = ref(0)
 const mediaLoading = ref(true)
 const missingStoryMediaIds = ref<number[]>([])
 const serverReadiness = ref<GalleryReadiness | null>(null)
+const eventSetup = ref<EventSetup | null>(null)
 const baseline = ref('')
 const draft = reactive({
 	title: props.gallery.title,
@@ -84,7 +87,13 @@ const readinessLabels = computed<Record<GalleryReadiness['checks'][number]['code
 	collection_complete: t('proofing_gallery', 'All collection files are available'),
 	artwork_scoped: t('proofing_gallery', 'Gallery artwork is safely scoped'),
 }))
-const readiness = computed(() => [
+const eventReadinessLabels: Record<string, string> = {
+	folders_classified: t('proofing_gallery', 'Folder visibility is assigned'),
+	private_deliveries: t('proofing_gallery', 'Private folders have recipients'),
+	recipient_contacts: t('proofing_gallery', 'Required email addresses are present'),
+	privacy_scopes: t('proofing_gallery', 'Folder scopes do not overlap'),
+}
+const standardReadiness = computed(() => [
 	...(serverReadiness.value?.checks ?? [
 		{ code: 'source_readable', state: props.gallery.source.state === 'readable' ? 'ready' : 'blocked', action: 'overview' },
 		{ code: 'media_available', state: (mediaLoading.value ? props.gallery.mediaSummary.total : mediaTotal.value) > 0 ? 'ready' : 'blocked', action: 'content' },
@@ -96,10 +105,17 @@ const readiness = computed(() => [
 	})),
 	{ label: t('proofing_gallery', 'All changes are saved'), ready: !dirty.value && saveState.value === 'saved', warning: false, action: 'overview' as GalleryWorkspace },
 ])
+const readiness = computed(() => props.gallery.deliveryMode === 'event' && eventSetup.value
+	? [
+			...eventSetup.value.readiness.checks.map(check => ({ label: eventReadinessLabels[check.code] ?? check.code, ready: check.state !== 'blocked', warning: check.state === 'warning', action: 'share' as GalleryWorkspace })),
+			{ label: t('proofing_gallery', 'All changes are saved'), ready: !dirty.value && saveState.value === 'saved', warning: false, action: 'overview' as GalleryWorkspace },
+		]
+	: standardReadiness.value)
 const publishReady = computed(() => readiness.value.every(item => item.ready))
 const nextStep = computed(() => {
 	const missing = readiness.value.find(item => !item.ready)
 	if (missing) return { label: missing.label, tab: missing.action }
+	if (props.gallery.deliveryMode === 'event') return { label: t('proofing_gallery', 'Continue event delivery'), tab: 'share' as GalleryWorkspace }
 	if (!props.gallery.shareToken) return { label: t('proofing_gallery', 'Publish and send'), tab: 'share' as GalleryWorkspace }
 	if (['selection', 'proofing', 'uploads'].includes(props.gallery.purpose)) {
 		return { label: t('proofing_gallery', 'Review client results'), tab: 'review' as GalleryWorkspace }
@@ -240,9 +256,15 @@ async function searchDesignMedia(query: string): Promise<MediaItem[]> {
 
 async function loadReadiness() {
 	try {
-		serverReadiness.value = await fetchGalleryReadiness(props.gallery.id)
+		const [galleryReadiness, setup] = await Promise.all([
+			fetchGalleryReadiness(props.gallery.id),
+			props.gallery.deliveryMode === 'event' ? fetchEventSetup(props.gallery.id) : Promise.resolve(null),
+		])
+		serverReadiness.value = galleryReadiness
+		eventSetup.value = setup
 	} catch {
 		serverReadiness.value = null
+		eventSetup.value = null
 	}
 }
 
@@ -498,7 +520,7 @@ onBeforeUnmount(() => {
 					</span>
 					{{ saveStateLabel }}
 				</div>
-				<NcButton v-if="gallery.permissions.canManageAccess" @click="openSharing">
+				<NcButton v-if="gallery.permissions.canManageAccess && gallery.deliveryMode !== 'event'" @click="openSharing">
 					{{ t('proofing_gallery', 'Share') }}
 				</NcButton>
 				<NcButton variant="primary" @click="setTab(nextStep.tab)">
@@ -591,6 +613,7 @@ onBeforeUnmount(() => {
 					v-model:settings="draft.settings"
 					:gallery="gallery"
 					@open-sharing="openSharing"
+					@event-setup-updated="eventSetup = $event"
 					@updated="emit('updated', $event)" />
 
 				<GalleryTeamWorkspace v-else-if="activeTab === 'team'" :gallery="gallery" />

@@ -39,6 +39,7 @@ final class PublicShareService {
 		private PreviewWarmService $previewWarm,
 		private IDBConnection $db,
 		private LifecycleScheduleService $lifecycleSchedule,
+		private PublicLinkAnchorService $linkAnchors,
 	) {
 	}
 
@@ -59,9 +60,20 @@ final class PublicShareService {
 		}
 
 		$isNewShare = $gallery->getShareToken() === null;
+		$eventAnchor = null;
+		if ($gallery->getDeliveryMode() === 'event') {
+			if (!$isNewShare) {
+				$existingLink = $this->publicLinks->ensurePrimary($gallery);
+				if ($existingLink?->getScopeAnchorId() !== null) {
+					$eventAnchor = $this->linkAnchors->resolve($gallery->getOwnerUid(), $existingLink->getScopeAnchorId());
+				}
+			}
+			$eventAnchor ??= $this->linkAnchors->create($gallery->getOwnerUid());
+		}
 		$share = $isNewShare
-			? $this->createShare($gallery)
+			? $this->createShare($gallery, $eventAnchor)
 			: $this->shareManager->getShareByToken($gallery->getShareToken());
+		if ($eventAnchor !== null) $share->setNode($eventAnchor);
 
 		$share->setLabel($gallery->getTitle());
 		$share->setPermissions(Constants::PERMISSION_READ);
@@ -92,9 +104,9 @@ final class PublicShareService {
 		$this->lifecycleSchedule->project($gallery, $this->clock->getTime());
 
 		try {
-			$updated = $this->atomic(function () use ($gallery, $share): Gallery {
+			$updated = $this->atomic(function () use ($gallery, $share, $eventAnchor): Gallery {
 				$updated = $this->galleries->update($gallery);
-				$this->publicLinks->ensurePrimary($updated, (int)$share->getId());
+				$this->publicLinks->ensurePrimary($updated, (int)$share->getId(), $eventAnchor?->getId());
 				return $updated;
 			}, $this->db);
 		} catch (Throwable $exception) {
@@ -138,6 +150,15 @@ final class PublicShareService {
 		foreach ($this->publicLinks->list($gallery) as $link) {
 			if ($link->getStatus() !== 'active') continue;
 			$this->shareManager->deleteShare($this->shareManager->getShareByToken($link->getToken()));
+			if ($link->getScopeAnchorId() !== null) {
+				try {
+					$this->linkAnchors->delete($this->linkAnchors->resolve($gallery->getOwnerUid(), $link->getScopeAnchorId()));
+				} catch (\Throwable) {
+					// The native share is already gone. Orphan reconciliation can remove
+					// an anchor whose best-effort cleanup failed.
+				}
+				$link->setScopeAnchorId(null);
+			}
 			$this->publicLinks->markRevoked($link);
 		}
 		$gallery->setShareToken(null);
@@ -282,6 +303,9 @@ final class PublicShareService {
 	 * original share node is restored best-effort before the error is rethrown.
 	 */
 	public function rebindSource(Gallery $gallery, int $folderId): Gallery {
+		if ($gallery->getDeliveryMode() === 'event' && $gallery->getShareToken() !== null) {
+			throw new InvalidArgumentException('Revoke event links before changing the source folder');
+		}
 		$newFolder = $this->folders->resolveFolder($gallery->getOwnerUid(), $folderId);
 		$oldFolderId = $gallery->getFolderId();
 		$share = null;
@@ -321,10 +345,10 @@ final class PublicShareService {
 		}
 	}
 
-	private function createShare(Gallery $gallery): IShare {
+	private function createShare(Gallery $gallery, ?\OCP\Files\Folder $shareRoot = null): IShare {
 		$share = $this->shareManager->newShare();
 		$share->setShareType(IShare::TYPE_LINK);
-		$share->setNode($this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId()));
+		$share->setNode($shareRoot ?? $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId()));
 		$share->setSharedBy($gallery->getOwnerUid());
 		$share->setShareOwner($gallery->getOwnerUid());
 		return $share;

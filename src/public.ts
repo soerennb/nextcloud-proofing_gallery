@@ -1,7 +1,7 @@
 import { loadState } from '@nextcloud/initial-state'
 import { register, setLanguage, setLocale, unregister } from '@nextcloud/l10n'
 import { IonicVue } from '@ionic/vue'
-import { createApp } from 'vue'
+import { createApp, defineAsyncComponent } from 'vue'
 import '@ionic/vue/css/core.css'
 import '@ionic/vue/css/normalize.css'
 import '@ionic/vue/css/structure.css'
@@ -13,9 +13,12 @@ import '@fontsource-variable/manrope/wght.css'
 import '@fontsource-variable/newsreader/wght.css'
 import './public-shell.css'
 
-import PublicApp from './PublicApp.vue'
 import type { GallerySettings } from './domain/gallerySettings'
 import type { PublicGalleryPage, PublicReviewState } from './publicTypes.ts'
+
+// Keep the large public interaction coordinator outside the eager entry. The
+// server preview remains visible until this chunk has mounted.
+const PublicApp = defineAsyncComponent(() => import('./PublicApp.vue'))
 
 interface PublicGalleryState {
 	id: number

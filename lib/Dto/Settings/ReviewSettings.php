@@ -25,6 +25,9 @@ final class ReviewSettings implements JsonSerializable {
 		public readonly array $colorLabels,
 		public readonly array $colorEnabled,
 		public readonly int $selectionWarningThreshold,
+		public readonly int $selectionMinimum,
+		public readonly int $selectionMaximum,
+		public readonly ?string $selectionDueDate,
 	) {
 	}
 
@@ -35,6 +38,7 @@ final class ReviewSettings implements JsonSerializable {
 			'annotations' => true, 'selections' => true, 'ratings' => false, 'pick' => false,
 			'colorLabels' => ['Favorit', 'Auswahl', 'Überarbeiten', 'Ablehnen'],
 			'colorEnabled' => [true, true, true, true], 'selectionWarningThreshold' => 0,
+			'selectionMinimum' => 0, 'selectionMaximum' => 0, 'selectionDueDate' => null,
 		];
 	}
 
@@ -55,6 +59,15 @@ final class ReviewSettings implements JsonSerializable {
 		$enabled = array_map(static fn (mixed $entry): bool => SettingsInput::bool($entry, 'review.colorEnabled'), $enabled);
 		$threshold = SettingsInput::int($value['selectionWarningThreshold'], 'review.selectionWarningThreshold');
 		if ($threshold < 0 || $threshold > 1000) throw new InvalidArgumentException('Invalid selection warning threshold');
+		$minimum = SettingsInput::int($value['selectionMinimum'], 'review.selectionMinimum');
+		$maximum = SettingsInput::int($value['selectionMaximum'], 'review.selectionMaximum');
+		if ($minimum < 0 || $minimum > 1000 || $maximum < 0 || $maximum > 1000 || ($maximum > 0 && $minimum > $maximum)) {
+			throw new InvalidArgumentException('Invalid selection limits');
+		}
+		$dueDate = $value['selectionDueDate'];
+		if ($dueDate !== null && (!is_string($dueDate) || \DateTimeImmutable::createFromFormat('!Y-m-d', $dueDate)?->format('Y-m-d') !== $dueDate)) {
+			throw new InvalidArgumentException('Invalid selection due date');
+		}
 		return new self(
 			$visibility,
 			SettingsInput::bool($value['likes'], 'review.likes'),
@@ -64,7 +77,7 @@ final class ReviewSettings implements JsonSerializable {
 			SettingsInput::bool($value['selections'], 'review.selections'),
 			SettingsInput::bool($value['ratings'], 'review.ratings'),
 			SettingsInput::bool($value['pick'], 'review.pick'),
-			$labels, $enabled, $threshold,
+			$labels, $enabled, $threshold, $minimum, $maximum, $dueDate,
 		);
 	}
 
@@ -75,6 +88,8 @@ final class ReviewSettings implements JsonSerializable {
 			'comments' => $this->comments, 'annotations' => $this->annotations, 'selections' => $this->selections,
 			'ratings' => $this->ratings, 'pick' => $this->pick, 'colorLabels' => $this->colorLabels,
 			'colorEnabled' => $this->colorEnabled, 'selectionWarningThreshold' => $this->selectionWarningThreshold,
+			'selectionMinimum' => $this->selectionMinimum, 'selectionMaximum' => $this->selectionMaximum,
+			'selectionDueDate' => $this->selectionDueDate,
 		];
 	}
 

@@ -37,7 +37,7 @@ final class GallerySettingsTest extends TestCase {
 		self::assertTrue($settings['presentation']['showMediaCount']);
 		self::assertSame('medium', $settings['presentation']['titleSize']);
 		self::assertSame('auto', $settings['publicLocale']);
-		self::assertSame(11, $settings['schemaVersion']);
+		self::assertSame(12, $settings['schemaVersion']);
 		self::assertSame(['sections' => [], 'showAllMedia' => true], $settings['presentation']['story']);
 		self::assertSame('subtle', $settings['presentation']['motionPreset']);
 		self::assertSame('auto', $settings['presentation']['lightboxFilmstripPlacement']);
@@ -168,7 +168,7 @@ final class GallerySettingsTest extends TestCase {
 		$settings = GallerySettings::fromArray([
 			'mode' => 'collaboration',
 			'presentation' => ['theme' => 'light', 'layout' => 'masonry', 'tileGap' => 'tight'],
-			'review' => ['comments' => false, 'selectionWarningThreshold' => 12],
+			'review' => ['comments' => false, 'selectionWarningThreshold' => 12, 'selectionMinimum' => 4, 'selectionMaximum' => 20, 'selectionDueDate' => '2026-11-30'],
 			'delivery' => ['downloadScope' => 'selection'],
 			'navigation' => ['sortBy' => 'modified', 'sortDirection' => 'desc'],
 		])->jsonSerialize();
@@ -176,6 +176,9 @@ final class GallerySettingsTest extends TestCase {
 		self::assertSame('light', $settings['presentation']['theme']);
 		self::assertSame('masonry', $settings['presentation']['layout']);
 		self::assertFalse($settings['review']['comments']);
+		self::assertSame(4, $settings['review']['selectionMinimum']);
+		self::assertSame(20, $settings['review']['selectionMaximum']);
+		self::assertSame('2026-11-30', $settings['review']['selectionDueDate']);
 		self::assertSame('selection', $settings['delivery']['downloadScope']);
 		self::assertSame('selection', $settings['delivery']['downloadScope']);
 		self::assertArrayNotHasKey('allowDownloads', $settings);

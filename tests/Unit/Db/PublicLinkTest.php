@@ -16,4 +16,12 @@ final class PublicLinkTest extends TestCase {
 		self::assertArrayHasKey('startPath', $link->getUpdatedFields());
 		self::assertSame('', $link->getStartPath());
 	}
+
+	public function testAllowedRootsRoundTripAsAList(): void {
+		$link = new PublicLink();
+		$link->setAllowedRootList(['Allgemein', 'Anna']);
+
+		self::assertSame(['Allgemein', 'Anna'], $link->allowedRootList());
+		self::assertSame(['Allgemein', 'Anna'], $link->jsonSerialize()['allowedRoots']);
+	}
 }

@@ -114,14 +114,14 @@ function loadMore() {
 
 function created(gallery: Gallery) {
 	showCreate.value = false
-	selectGallery(gallery)
+	selectGallery(gallery, gallery.deliveryMode === 'event' ? 'share' : undefined)
 	load().catch(() => {})
 	notify('success', t('proofing_gallery', 'Project created. Add photos when you are ready.')).catch(() => {})
 }
 
-async function selectGallery(gallery: Gallery | GalleryListItem) {
+async function selectGallery(gallery: Gallery | GalleryListItem, workspace?: string) {
 	helpOpen.value = false
-	window.location.hash = `gallery/${gallery.id}`
+	window.location.hash = `gallery/${gallery.id}${workspace ? `/${workspace}` : ''}`
 	try {
 		selectedGallery.value = 'settings' in gallery ? gallery : await fetchGallery(gallery.id)
 	} catch {
@@ -225,6 +225,9 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 	<NcContent app-name="proofing_gallery" :class="{ 'app-content--immersive': immersiveWorkspace }">
 		<NcAppNavigation v-if="!immersiveWorkspace" :aria-label="t('proofing_gallery', 'Gallery navigation')">
 			<template #list>
+				<li class="studio-brand" aria-hidden="true">
+					<span>{{ t('proofing_gallery', 'Photographer workspace') }}</span><strong>{{ t('proofing_gallery', 'Proofing Gallery') }}</strong>
+				</li>
 				<li class="gallery-nav__entry">
 					<button
 						class="gallery-nav__item"
@@ -265,9 +268,11 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 				@updated="updateSelected" />
 			<section v-else class="gallery-page" aria-labelledby="gallery-page-title">
 				<header class="gallery-page__header">
-					<h1 id="gallery-page-title">
-						{{ archived ? t('proofing_gallery', 'Archive') : t('proofing_gallery', 'Galleries') }}
-					</h1>
+					<div class="gallery-page__title">
+						<span>{{ t('proofing_gallery', 'Studio contact sheet') }}</span><h1 id="gallery-page-title">
+							{{ archived ? t('proofing_gallery', 'Archive') : t('proofing_gallery', 'Galleries') }}
+						</h1><p>{{ archived ? t('proofing_gallery', 'Completed work kept safely out of the active studio.') : t('proofing_gallery', 'Prepare, review and deliver every client project from one workspace.') }}</p>
+					</div>
 					<div class="gallery-page__actions">
 						<div class="view-switch" :aria-label="t('proofing_gallery', 'Gallery view')">
 							<button type="button"
@@ -412,7 +417,7 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 	padding: 0 8px;
 }
 
-.gallery-nav__entry:first-child {
+.studio-brand + .gallery-nav__entry {
 	padding-top: 8px;
 }
 
@@ -423,7 +428,7 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 .gallery-nav__entry--help {
 	margin-top: 10px;
 	padding-top: 10px;
-	border-top: 1px solid var(--color-border);
+	border-top: 1px solid var(--studio-line);
 }
 
 .gallery-nav__item {
@@ -432,20 +437,21 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 	min-height: 44px;
 	padding: 11px 12px;
 	border: 0;
-	border-radius: 8px;
+	border-radius: 10px;
 	background: transparent;
-	color: var(--color-main-text);
+	color: var(--studio-ink);
 	text-align: start;
 	cursor: pointer;
 }
 
 .gallery-nav__item:hover,
 .gallery-nav__item:focus-visible {
-	background: var(--color-background-hover);
+	background: var(--studio-surface-raised);
 }
 
 .gallery-nav__item--active {
-	background: var(--color-primary-element-light);
+	background: var(--studio-accent-soft);
+	box-shadow: inset 3px 0 var(--studio-accent);
 	font-weight: 650;
 }
 
@@ -453,7 +459,7 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 	box-sizing: border-box;
 	width: 100%;
 	min-width: 0;
-	max-width: 1180px;
+	max-width: 1240px;
 	margin: 0 auto;
 	padding: 40px clamp(20px, 4vw, 56px) 80px;
 }
@@ -463,7 +469,7 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 	align-items: center;
 	justify-content: space-between;
 	gap: 24px;
-	margin-bottom: 36px;
+	margin-bottom: 30px;
 }
 
 .gallery-page__actions,
@@ -476,8 +482,9 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 .view-switch {
 	gap: 2px;
 	padding: 2px;
-	border: 1px solid var(--color-border-maxcontrast);
-	border-radius: 8px;
+	border: 1px solid var(--studio-line-strong);
+	border-radius: 10px;
+	background: var(--studio-surface);
 }
 
 .view-switch button {
@@ -494,8 +501,8 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 }
 
 .view-switch button[aria-pressed="true"] {
-	background: var(--color-primary-element);
-	color: var(--color-primary-element-text);
+	background: var(--studio-accent);
+	color: var(--studio-accent-ink);
 }
 
 .view-switch__grid {
@@ -512,19 +519,16 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 
 .view-switch__list i { height: 2px; border-radius: 2px; background: currentColor; }
 
-.gallery-page h1 {
-	margin: 0;
-	font-size: 30px;
-	font-weight: 600;
-	line-height: 1.2;
-}
-
 .gallery-toolbar {
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;
 	gap: 10px;
 	margin-bottom: 20px;
+	padding: 12px;
+	border: 1px solid var(--studio-line);
+	border-radius: var(--studio-radius);
+	background: var(--studio-surface);
 }
 
 .gallery-toolbar > :first-child {
@@ -546,17 +550,17 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 .gallery-toolbar label {
 	display: grid;
 	gap: 3px;
-	color: var(--color-text-maxcontrast);
+	color: var(--studio-muted);
 	font-size: 11px;
 }
 
 .gallery-toolbar select {
 	min-height: 36px;
 	padding: 0 8px;
-	border: 1px solid var(--color-border-maxcontrast);
-	border-radius: 6px;
-	background: var(--color-main-background);
-	color: var(--color-main-text);
+	border: 1px solid var(--studio-line-strong);
+	border-radius: 8px;
+	background: var(--studio-surface);
+	color: var(--studio-ink);
 }
 
 .gallery-toolbar p {

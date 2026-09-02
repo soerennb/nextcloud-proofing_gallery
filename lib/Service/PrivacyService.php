@@ -63,8 +63,8 @@ final class PrivacyService {
 		$tables = $this->repository->counts((int)$gallery->getId());
 		$categories = [
 			'feedback' => $this->sum($tables, ['proofing_feedback', 'proofing_comments', 'proofing_annotations', 'proofing_selections', 'proofing_selection_items', 'proofing_guest_ratings', 'proofing_review_rounds']),
-			'access' => $this->sum($tables, ['proofing_public_links', 'proofing_share_audit', 'proofing_domains', 'proofing_guests', 'proofing_managers']),
-			'operations' => $this->sum($tables, ['proofing_events', 'proofing_uploads', 'proofing_notify_queue', 'proofing_native_notify', 'proofing_notify_subs', 'proofing_int_outbox', 'proofing_live_push', 'proofing_retention_log']),
+			'access' => $this->sum($tables, ['proofing_public_links', 'proofing_link_roots', 'proofing_share_audit', 'proofing_domains', 'proofing_guests', 'proofing_managers']),
+			'operations' => $this->sum($tables, ['proofing_events', 'proofing_event_waves', 'proofing_event_recipients', 'proofing_event_setups', 'proofing_pin_handoffs', 'proofing_uploads', 'proofing_notify_queue', 'proofing_native_notify', 'proofing_notify_subs', 'proofing_int_outbox', 'proofing_live_push', 'proofing_retention_log']),
 			'processing' => $this->sum($tables, ['proofing_media_index', 'proofing_media_scan_queue', 'proofing_media_scans', 'proofing_semantic_idx', 'proofing_versions', 'proofing_ext_resources', 'proofing_summaries']),
 		];
 		return [
@@ -107,7 +107,7 @@ final class PrivacyService {
 					$rows = $this->repository->exportRows($table, (int)$gallery->getId(), $afterId, self::BATCH_SIZE);
 					foreach ($rows as $row) {
 						$afterId = max($afterId, (int)($row['__cursor'] ?? $row['id'] ?? 0));
-						unset($row['__cursor'], $row['session_hash'], $row['nonce_hash'], $row['email_cipher'], $row['secret_hash'], $row['token'], $row['verification_token'], $row['unsubscribe_token']);
+						unset($row['__cursor'], $row['session_hash'], $row['nonce_hash'], $row['email_cipher'], $row['pin_cipher'], $row['content_cipher'], $row['secret_hash'], $row['token'], $row['verification_token'], $row['unsubscribe_token']);
 						fwrite($stream, json_encode(['type' => $table, 'data' => $row], JSON_THROW_ON_ERROR) . "\n");
 					}
 				} while (count($rows) === self::BATCH_SIZE);

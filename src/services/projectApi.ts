@@ -3,6 +3,7 @@ import { generateOcsUrl } from '@nextcloud/router'
 
 import type { CanonicalGallerySettings, GallerySettings } from '../domain/gallerySettings.ts'
 import type { EffectiveCapabilities, Gallery, GalleryPreset, GalleryPurpose, UserPreferences } from '../types.ts'
+import type { ProjectCreationOptions } from '../domain/projectCreation.ts'
 
 const projectsUrl = generateOcsUrl('/apps/proofing_gallery/api/v1/projects')
 const preferencesUrl = generateOcsUrl('/apps/proofing_gallery/api/v1/user/preferences')
@@ -16,12 +17,13 @@ export async function createProject(payload: {
 	parentFolderId?: number | null
 	folderName?: string
 	designPreset?: { mode: 'inherit' | 'instance' } | { mode: 'preset'; id: number }
+	deliveryMode?: 'standard' | 'event'
 }): Promise<Gallery> {
 	return (await axios.post<Gallery>(projectsUrl, payload)).data
 }
 
-export async function fetchUserPreferences(): Promise<{ preferences: UserPreferences; effectiveCapabilities: EffectiveCapabilities; instanceDefaultPurpose: GalleryPurpose }> {
-	return (await axios.get<{ preferences: UserPreferences; effectiveCapabilities: EffectiveCapabilities; instanceDefaultPurpose: GalleryPurpose }>(preferencesUrl)).data
+export async function fetchUserPreferences(): Promise<{ preferences: UserPreferences; effectiveCapabilities: EffectiveCapabilities; instanceDefaultPurpose: GalleryPurpose; projectCreationOptions: ProjectCreationOptions }> {
+	return (await axios.get<{ preferences: UserPreferences; effectiveCapabilities: EffectiveCapabilities; instanceDefaultPurpose: GalleryPurpose; projectCreationOptions: ProjectCreationOptions }>(preferencesUrl)).data
 }
 
 export async function updateUserPreferences(preferences: Partial<UserPreferences>): Promise<UserPreferences> {

@@ -14,6 +14,7 @@ function gallery(overrides: Partial<Gallery> = {}): Gallery {
 		ownerUid: 'owner',
 		folderId: 10,
 		sourceType: 'folder',
+		deliveryMode: 'standard',
 		title: 'Gallery',
 		slug: 'gallery',
 		status: 'published',

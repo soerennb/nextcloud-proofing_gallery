@@ -25,7 +25,7 @@ final class PrimaryPublicLinkSynchronizer {
 		return $this->links->findForGallery($gallery->getId());
 	}
 
-	public function ensurePrimary(Gallery $gallery, ?int $coreShareId = null): ?PublicLink {
+	public function ensurePrimary(Gallery $gallery, ?int $coreShareId = null, ?int $scopeAnchorId = null): ?PublicLink {
 		try {
 			$link = $this->links->findPrimary($gallery->getId());
 			if ($gallery->getShareToken() !== null && $link->getToken() !== $gallery->getShareToken()) {
@@ -34,6 +34,10 @@ final class PrimaryPublicLinkSynchronizer {
 				$link->setRevokedAt(null);
 			}
 			if ($coreShareId !== null) $link->setCoreShareId($coreShareId);
+			if ($gallery->getDeliveryMode() === 'event') {
+				if ($scopeAnchorId !== null) $link->setScopeAnchorId($scopeAnchorId);
+				if ($link->getScopeMode() === 'legacy') $link->setScopeMode('empty');
+			}
 			$this->applyPrimaryNavigation($link, $gallery);
 			$link->setUpdatedAt($this->clock->getTime());
 			return $this->links->update($link);
@@ -49,6 +53,10 @@ final class PrimaryPublicLinkSynchronizer {
 			$link->setIsPrimary(true);
 			$link->setPolicy(json_encode($this->policies->presets()['presentation'], JSON_THROW_ON_ERROR));
 			$link->setStartPath('');
+			if ($gallery->getDeliveryMode() === 'event') {
+				$link->setScopeAnchorId($scopeAnchorId);
+				$link->setScopeMode('empty');
+			}
 			$this->applyPrimaryNavigation($link, $gallery);
 			$link->setMinOwnerRating(0);
 			$link->setCreatedAt($now);

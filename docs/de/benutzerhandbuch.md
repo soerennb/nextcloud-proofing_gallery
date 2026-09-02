@@ -6,16 +6,44 @@ Nextcloud-Administration einschränken.
 
 ## Galerie erstellen
 
-1. Lege die auszuliefernden Bilder und unterstützten Videos in einem
-   Nextcloud-Ordner ab.
-2. Öffne **Proofing Gallery** und wähle **Neues Projekt**.
-3. Wähle Ordnergalerie oder Sammlung, vergib einen Titel und entscheide dich
-   für Präsentation oder Abstimmung.
-4. Prüfe Quelle und Medienanzahl, bevor du die Auslieferung konfigurierst.
+1. Öffne **Proofing Gallery** und wähle **Neues Projekt**.
+2. Wähle die Aufgabe: Dateien ausliefern, eine Geschichte präsentieren, eine
+   Auswahl einsammeln, Korrekturen abstimmen oder Dateien empfangen.
+3. Vergib einen Titel und wähle anschließend nur aus den Empfänger- und
+   Quellenoptionen, die zu dieser Aufgabe passen. Vorhandene Ordner, neue Ordner
+   und kuratierte Sammlungen bleiben dort verfügbar, wo sie sinnvoll sind.
+   Auslieferung, Präsentation, Auswahl und Korrektur können außerdem private
+   Links aus Event-Ordnern erzeugen.
+4. Prüfe Quelle und Medienanzahl, bevor du die Auslieferung konfigurierst. Ein
+   Empfangsprojekt beginnt mit genau einer moderierten Upload-Inbox und kann
+   weder Sammlungen noch Event-Auslieferung verwenden.
 
 Eine Ordnergalerie verweist auf einen vorhandenen Ordner. Eine Sammlung fasst
 Dateien aus mehreren eigenen Ordnergalerien ohne Kopien zusammen. Sammlungen
 können keine Gast-Uploads empfangen.
+
+## Serien-Events privat ausliefern
+
+Für Einschulungen, Sportveranstaltungen und andere Aufträge mit vielen
+Empfängern liegen gemeinsame Fotos und die Fotos jedes Teilnehmers in getrennten
+Unterordnern eines Projektordners. Wähle beim Erstellen **Private Links aus
+Event-Ordnern**. Das Projekt öffnet direkt die Event-Auslieferung; eine
+separate Veröffentlichung ist nicht nötig.
+
+Arbeite die fünf Aufgaben **Fotos**, **Sichtbarkeit**, **Empfänger**,
+**Auslieferung** und **Prüfen** nacheinander ab. Du kannst einen vorhandenen
+Nextcloud-Ordner verwenden oder einen lokalen Event-Ordner samt Unterordnern
+auswählen oder hineinziehen. Weise jedem Ordner genau eine Rolle zu: für alle,
+für eine Gruppe, privat oder nicht ausliefern. Vor dem Erstellen zeigt Proofing
+Gallery für jeden Empfänger die gemeinsamen, gruppenbezogenen und privaten
+Ordner. Die abschließende Aktion veröffentlicht bei Bedarf automatisch die
+verborgene technische Basis und erstellt die Kundenlinks.
+
+Ordnernamen dienen als Empfängervorschlag. Für große Listen öffnest du beim
+Empfängerschritt den CSV-Import mit den Spalten `folder`, `name`, `email`,
+`locale`, `pin` und optional `groups`. Entwürfe, geplante Auslieferungen,
+einzelne Links, Exporte und Reparaturen findest du unter **Freigegebene Links
+und erweiterte Werkzeuge**. E-Mail-Adressen werden verschlüsselt gespeichert.
 
 ## Projekt bearbeiten
 
@@ -91,10 +119,11 @@ einer Vorschau bestätigen. XMP wird dadurch nie automatisch verändert.
 
 ## Prüfrunden und Nextcloud-Nachverfolgung
 
-Jeder aktive Kundenlink kann einen eigenen Prüfablauf mit optionaler Frist
-haben. Der Gast reicht die aktuelle Runde nach der Identifikation für Feedback
-ein. Der Eigentümer kann freigeben, Änderungen anfordern (dadurch beginnt die
-nächste Runde) oder eine Freigabe erneut öffnen. Dies ist eine
+Jeder aktive Kundenlink kann Mindestanzahl, Höchstanzahl und Frist der Galerie
+erben oder überschreiben. Gäste dürfen unvollständige Entwürfe speichern; bei
+der Abgabe werden die Regeln geprüft und die Auswahl gesperrt. Der Eigentümer
+kann freigeben, Änderungen anfordern oder die Freigabe in derselben Runde
+erneut öffnen. Dies ist eine
 Workflow-Entscheidung, keine elektronische Signatur oder rechtlich fixierte
 Momentaufnahme.
 
@@ -111,8 +140,10 @@ bleiben in der Oberfläche von Proofing Gallery.
 ## Downloads und Gast-Uploads
 
 Abhängig vom Link dürfen Gäste einzelne Originale, ein ZIP ihrer Auswahl oder
-einen Kontaktbogen aus Vorschauen laden. Administrationslimits begrenzen große
-Auslieferungen.
+einen Kontaktbogen aus Vorschauen laden. Für einzelne Dateien und Auswahl-ZIPs
+stehen außerdem metadatenfreie JPEGs mit 2048 px oder 1600 px bereit, optional
+mit dem Galerie-Wasserzeichen; kleinere Bilder werden nie hochskaliert.
+Administrationslimits begrenzen große Auslieferungen.
 
 Gast-Uploads sind fortsetzbar und landen zunächst in einem versteckten
 Prüfeingang. Eigentümer oder berechtigte Manager nehmen sie unter konfliktfreien

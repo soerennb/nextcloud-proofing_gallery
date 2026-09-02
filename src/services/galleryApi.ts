@@ -138,12 +138,15 @@ export async function savePublicLink(id: number, linkId: number | null, payload:
 	name: string
 	policy: PublicLinkPolicy
 	startPath: string
+	allowedRoots?: string[]
 	viewMode: 'folder' | 'recursive'
 	groupDepth: number
 	minOwnerRating: number
 	publicLocale: 'en' | 'de' | null
 	reviewEnabled: boolean
 	reviewDueDate: string | null
+	reviewSelectionMinimum: number | null
+	reviewSelectionMaximum: number | null
 	password?: string | null
 	expiresAt?: string | null
 }): Promise<GalleryPublicLink> {
@@ -385,6 +388,11 @@ export async function synchronizeCullingXmp(id: number, payload: {
 export async function createGalleryFolder(id: number, name: string, path = ''): Promise<MediaItem> {
 	const { data } = await axios.post<MediaItem>(`${galleriesUrl}/${id}/folders`, { name, path })
 	return data
+}
+
+export async function ensureGalleryFolders(id: number, paths: string[]): Promise<string[]> {
+	const { data } = await axios.post<{ paths: string[] }>(`${galleriesUrl}/${id}/folders/ensure`, { paths })
+	return data.paths
 }
 
 export async function renameGalleryMedia(id: number, fileId: number, name: string): Promise<MediaItem> {

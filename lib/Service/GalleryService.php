@@ -12,6 +12,7 @@ use OCA\ProofingGallery\Db\MediaSummaryRepository;
 use OCA\ProofingGallery\Db\CollectionRepository;
 use OCA\ProofingGallery\Domain\GalleryStatus;
 use OCA\ProofingGallery\Domain\GalleryPurpose;
+use OCA\ProofingGallery\Domain\ProjectCreationOptions;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
@@ -52,11 +53,15 @@ final class GalleryService {
 		array $settings = [],
 		string $sourceType = 'folder',
 		string $purpose = 'custom',
+		string $deliveryMode = 'standard',
 	): Gallery {
 		$this->capabilities->assertCanCreate($ownerUid);
 		$galleryPurpose = GalleryPurpose::tryFrom($purpose) ?? throw new InvalidArgumentException('Unknown gallery purpose');
 		if (!in_array($sourceType, ['folder', 'collection'], true)) {
 			throw new InvalidArgumentException('Unknown gallery source type');
+		}
+		if (!in_array($deliveryMode, ['standard', 'event'], true) || ($deliveryMode === 'event' && $sourceType !== 'folder')) {
+			throw new InvalidArgumentException('Unknown gallery delivery mode');
 		}
 		$anchor = null;
 		if ($sourceType === 'folder') {
@@ -81,6 +86,7 @@ final class GalleryService {
 		$gallery->setSlug($this->uniqueSlug($ownerUid, $title));
 		$gallery->setStatus(GalleryStatus::Draft->value);
 		$gallery->setPurpose($galleryPurpose->value);
+		$gallery->setDeliveryMode($deliveryMode);
 		$gallery->setWorkflowState('preparing');
 		$preferences = $this->preferences->get($ownerUid);
 		$personalDesign = [];
@@ -178,12 +184,14 @@ final class GalleryService {
 		?string $folderName,
 		array $settings = [],
 		array $designPreset = ['mode' => 'inherit'],
+		string $deliveryMode = 'standard',
 	): Gallery {
 		$preferences = $this->preferences->get($ownerUid);
 		$settings = array_replace_recursive($this->selectedDesign($ownerUid, $preferences, $designPreset), $settings);
 		if ($purpose === '') {
 			$purpose = (string)($preferences['defaultPurpose'] ?? $this->policies->instanceSettings()['workflow']['defaultPurpose']);
 		}
+		ProjectCreationOptions::assertValid($purpose, $deliveryMode, $sourceMode);
 		if ($sourceMode === 'new' && $parentFolderId === null && is_array($preferences['parentFolder'])) {
 			$parentFolderId = (int)$preferences['parentFolder']['id'];
 		}
@@ -205,6 +213,7 @@ final class GalleryService {
 				$settings,
 				$sourceMode === 'collection' ? 'collection' : 'folder',
 				$purpose,
+				$deliveryMode,
 			);
 		} catch (\Throwable $exception) {
 			if ($createdFolder !== null) {
