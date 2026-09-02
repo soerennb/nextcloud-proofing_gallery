@@ -1,0 +1,55 @@
+:root {
+	--studio-canvas: color-mix(in srgb, var(--color-main-background, #fff) 94%, var(--color-main-text, #171a1d) 6%);
+	--studio-surface: var(--color-main-background, #fff);
+	--studio-surface-raised: color-mix(in srgb, var(--color-main-background, #fff) 88%, var(--color-main-text, #171a1d) 12%);
+	--studio-ink: var(--color-main-text, #171a1d);
+	--studio-muted: var(--color-text-maxcontrast, #65707a);
+	--studio-line: color-mix(in srgb, var(--color-main-text, #171a1d) 14%, transparent);
+	--studio-line-strong: color-mix(in srgb, var(--color-main-text, #171a1d) 27%, transparent);
+	--studio-accent: var(--color-primary-element, #1676a3);
+	--studio-accent-ink: var(--color-primary-element-text, #fff);
+	--studio-accent-soft: color-mix(in srgb, var(--color-primary-element, #1676a3) 12%, var(--color-main-background, #fff));
+	--studio-shadow: 0 18px 60px color-mix(in srgb, var(--color-main-text, #171a1d) 12%, transparent);
+	--studio-radius: 14px;
+}
+
+#proofing_gallery {
+	min-width: 0;
+	height: 100%;
+	background: var(--studio-canvas);
+	color: var(--studio-ink);
+	font-family: ManropeVariable, Manrope, var(--font-face, system-ui), sans-serif;
+}
+
+#proofing_gallery .app-content { background: var(--studio-canvas); }
+
+#proofing_gallery .app-navigation {
+	border-inline-end: 1px solid var(--studio-line);
+	background: color-mix(in srgb, var(--studio-surface) 92%, transparent);
+	backdrop-filter: blur(18px) saturate(120%);
+}
+
+#proofing_gallery :is(button, a, input, select, summary):focus-visible {
+	outline: 2px solid var(--studio-accent);
+	outline-offset: 2px;
+}
+
+#proofing_gallery ::selection { background: var(--studio-accent-soft); color: var(--studio-ink); }
+
+#proofing_gallery .studio-brand { display: grid; gap: 3px; margin: 12px 12px 18px; padding: 4px 8px 17px; border-bottom: 1px solid var(--studio-line); }
+
+#proofing_gallery .studio-brand span { color: var(--studio-muted); font-size: 10px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+
+#proofing_gallery .studio-brand strong { font-family: NewsreaderVariable, Newsreader, serif; font-size: 22px; font-weight: 550; letter-spacing: -.02em; }
+
+#proofing_gallery .gallery-page__title { display: grid; max-width: 650px; gap: 4px; }
+
+#proofing_gallery .gallery-page__title > span { color: var(--studio-accent); font-size: 10px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; }
+
+#proofing_gallery .gallery-page__title p { margin: 0; color: var(--studio-muted); line-height: 1.45; }
+
+#proofing_gallery .gallery-page h1 { margin: 0; font-family: NewsreaderVariable, Newsreader, serif; font-size: clamp(38px, 5vw, 58px); font-weight: 520; letter-spacing: -.04em; line-height: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+	#proofing_gallery *, #proofing_gallery *::before, #proofing_gallery *::after { scroll-behavior: auto !important; }
+}

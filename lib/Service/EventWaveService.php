@@ -51,7 +51,7 @@ final class EventWaveService {
 		if ($releaseAt !== null && $releaseAt <= $now) $releaseNow = true;
 		$root = $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId());
 		$sharedRoots = $this->folderRecords($root, $sharedRoots);
-		$policy = $policy === [] ? $this->policies->presets()['delivery'] : $this->policies->validate($policy);
+		$policy = $policy === [] ? $this->policies->forGallery($gallery) : $this->policies->validate($policy);
 		$prepared = [];
 		foreach ($recipients as $recipient) $prepared[] = $this->prepareRecipient($root, array_column($sharedRoots, 'path'), $recipient);
 		$this->links->assertEventCapacity($gallery, count($prepared), $this->repository->reserved((int)$gallery->getId()));

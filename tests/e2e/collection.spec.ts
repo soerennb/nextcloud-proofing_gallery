@@ -163,7 +163,7 @@ test('owner creates and fills a collection through the content workspace', async
 		await page.getByRole('textbox', { name: 'Password' }).fill('admin')
 		await page.getByRole('button', { name: 'Log in', exact: true }).click()
 		await page.getByRole('button', { name: 'New project' }).click()
-		await page.getByRole('button', { name: 'Continue' }).click()
+		await page.getByRole('button', { name: /^Continue with/ }).click()
 		await page.getByRole('radio', { name: /Curated collection/ }).check()
 		await page.getByRole('textbox', { name: 'Project title' }).fill(title)
 		await page.getByRole('button', { name: 'Create project' }).click()

@@ -6,12 +6,17 @@ Nextcloud-Administration einschränken.
 
 ## Galerie erstellen
 
-1. Lege die auszuliefernden Bilder und unterstützten Videos in einem
-   Nextcloud-Ordner ab.
-2. Öffne **Proofing Gallery** und wähle **Neues Projekt**.
-3. Wähle Ordnergalerie oder Sammlung, vergib einen Titel und entscheide dich
-   für Präsentation oder Abstimmung.
-4. Prüfe Quelle und Medienanzahl, bevor du die Auslieferung konfigurierst.
+1. Öffne **Proofing Gallery** und wähle **Neues Projekt**.
+2. Wähle die Aufgabe: Dateien ausliefern, eine Geschichte präsentieren, eine
+   Auswahl einsammeln, Korrekturen abstimmen oder Dateien empfangen.
+3. Vergib einen Titel und wähle anschließend nur aus den Empfänger- und
+   Quellenoptionen, die zu dieser Aufgabe passen. Vorhandene Ordner, neue Ordner
+   und kuratierte Sammlungen bleiben dort verfügbar, wo sie sinnvoll sind.
+   Auslieferung, Präsentation, Auswahl und Korrektur können außerdem private
+   Links aus Event-Ordnern erzeugen.
+4. Prüfe Quelle und Medienanzahl, bevor du die Auslieferung konfigurierst. Ein
+   Empfangsprojekt beginnt mit genau einer moderierten Upload-Inbox und kann
+   weder Sammlungen noch Event-Auslieferung verwenden.
 
 Eine Ordnergalerie verweist auf einen vorhandenen Ordner. Eine Sammlung fasst
 Dateien aus mehreren eigenen Ordnergalerien ohne Kopien zusammen. Sammlungen

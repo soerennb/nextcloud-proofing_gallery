@@ -12,6 +12,7 @@ use OCA\ProofingGallery\Db\MediaSummaryRepository;
 use OCA\ProofingGallery\Db\CollectionRepository;
 use OCA\ProofingGallery\Domain\GalleryStatus;
 use OCA\ProofingGallery\Domain\GalleryPurpose;
+use OCA\ProofingGallery\Domain\ProjectCreationOptions;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
@@ -190,6 +191,7 @@ final class GalleryService {
 		if ($purpose === '') {
 			$purpose = (string)($preferences['defaultPurpose'] ?? $this->policies->instanceSettings()['workflow']['defaultPurpose']);
 		}
+		ProjectCreationOptions::assertValid($purpose, $deliveryMode, $sourceMode);
 		if ($sourceMode === 'new' && $parentFolderId === null && is_array($preferences['parentFolder'])) {
 			$parentFolderId = (int)$preferences['parentFolder']['id'];
 		}

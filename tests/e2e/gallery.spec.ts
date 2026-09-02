@@ -79,6 +79,38 @@ test('gallery action menus stay above cards in every overview', async ({ browser
 	await context.close()
 })
 
+test('project wizard adapts audience and sources to the selected job', async ({ page, request, baseURL }) => {
+	await page.setViewportSize({ width: 390, height: 844 })
+	await login(page, baseURL)
+	await page.getByRole('button', { name: 'New project' }).click()
+	let dialog = page.getByRole('dialog', { name: 'Create a project' })
+	await dialog.getByRole('radio', { name: /Receive files/ }).check()
+	await dialog.getByRole('button', { name: /Continue with Receive files/ }).click()
+	dialog = page.getByRole('dialog', { name: 'Receive files' })
+	await expect(dialog.locator('strong').filter({ hasText: 'One upload inbox' })).toBeVisible()
+	await expect(dialog.getByRole('radio', { name: /Curated collection/ })).toHaveCount(0)
+	await expect(dialog.getByText('Separate client deliveries')).toHaveCount(0)
+	await dialog.getByRole('textbox', { name: 'Project title' }).fill('Remember this title')
+	await dialog.getByRole('button', { name: 'Change' }).click()
+	dialog = page.getByRole('dialog', { name: 'Create a project' })
+	await dialog.getByRole('radio', { name: /Collect a selection/ }).check()
+	await dialog.getByRole('button', { name: /Continue with Collect a selection/ }).click()
+	dialog = page.getByRole('dialog', { name: 'Collect a selection' })
+	await expect(dialog.getByRole('textbox', { name: 'Project title' })).toHaveValue('Remember this title')
+	await expect(dialog.getByRole('radio', { name: /Curated collection/ })).toBeVisible()
+	await dialog.getByRole('radio', { name: /Separate private selections/ }).check()
+	await expect(dialog.getByRole('radio', { name: /Curated collection/ })).toHaveCount(0)
+	expect(await dialog.locator('.project-wizard').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+
+	const headers = { Authorization: `Basic ${Buffer.from('admin:admin').toString('base64')}`, 'OCS-APIRequest': 'true' }
+	const invalid = await request.post(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/projects?format=json`, {
+		headers,
+		data: { title: 'Invalid upload collection', purpose: 'uploads', sourceMode: 'collection', deliveryMode: 'standard' },
+	})
+	expect(invalid.status()).toBe(422)
+	expect((await invalid.json() as { code: string }).code).toBe('invalid_project_combination')
+})
+
 test('gallery archive paginates without losing mobile reachability', async ({ browser, baseURL }) => {
 	const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
 	const page = await context.newPage()

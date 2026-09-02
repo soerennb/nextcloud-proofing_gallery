@@ -2,10 +2,13 @@
 
 ## Create and publish a gallery
 
-1. Put the deliverable images and supported videos in a Nextcloud folder.
-2. Open **Proofing Gallery**, choose **Create gallery**, select **Folder
-   gallery**, select the folder, and choose Presentation or Proofing.
-3. Open the gallery and use the focused workspaces:
+1. Open **Proofing Gallery**, choose **New project**, and select the job:
+   delivery, presentation, selection, proofing, or receiving files.
+2. Enter a title and choose one of the audience and source combinations offered
+   for that job. Delivery, presentation, selection, and proofing also support
+   private event-folder links; receive-files projects use one upload inbox and
+   exclude collections and event delivery.
+3. Open the project and use the focused workspaces:
    - **Plan** shows the source folder, media count, gallery mode, and a
      preview of the files clients will see.
    - **Photos** manages files and folder-backed delivery content.

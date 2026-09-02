@@ -110,7 +110,7 @@ final class EventDeliveryService {
 		$sharedRoots = $this->folderPaths($root, $sharedRoots);
 		$this->links->assertEventCapacity($gallery, count($recipients));
 		$this->links->configureEventPrimary($gallery, $sharedRoots);
-		$policy = $policy === [] ? $this->policies->presets()['delivery'] : $this->policies->validate($policy);
+		$policy = $policy === [] ? $this->policies->forGallery($gallery) : $this->policies->validate($policy);
 		$created = 0;
 		$skipped = 0;
 		foreach ($recipients as $recipient) {

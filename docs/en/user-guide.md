@@ -5,11 +5,16 @@ The controls available to you can be restricted by your Nextcloud administrator.
 
 ## Create a gallery
 
-1. Store the deliverable images and supported videos in a Nextcloud folder.
-2. Open **Proofing Gallery** and choose **New project**.
-3. Select a folder gallery or a collection, enter a title, and choose the
-   presentation or proofing purpose.
-4. Review the source and media count before configuring delivery.
+1. Open **Proofing Gallery** and choose **New project**.
+2. Choose the job you want to complete: deliver files, present a story, collect
+   a selection, run proofing, or receive files.
+3. Enter a title, then choose from the audiences and sources that fit that job.
+   Existing folders, new folders, and curated collections remain available
+   where they make sense. Delivery, presentation, selection, and proofing jobs
+   can also create private links from event folders.
+4. Review the source and media count before configuring delivery. A receive-files
+   project starts with one moderated upload inbox and cannot use collections or
+   event delivery.
 
 A folder gallery references one existing folder. A collection combines files
 from several folder galleries without copying them. Collection sources must

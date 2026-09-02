@@ -7,6 +7,7 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcDialog from '@nextcloud/vue/components/NcDialog'
 import { computed, onMounted, ref } from 'vue'
 
+import { createStrongPin } from '../domain/randomPin.ts'
 import { bulkEventRecipients, cancelEventWave, createEventWave, downloadEventPins, downloadEventStatus, editEventRecipient, fetchEventOverview, fetchEventRecipients, operateEventRecipient, previewEventImport, reconcileEventRecipients, releaseEventWave, retryEventWave } from '../services/eventApi.ts'
 import type { EventImportPreview, EventOverview, EventRecipient, EventRecipientPage, EventWave } from '../services/eventApi.ts'
 import type { Gallery } from '../types.ts'
@@ -84,9 +85,7 @@ function togglePrivate(path: string, checked: boolean) {
 }
 
 function randomPin(): string {
-	const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%'
-	const bytes = crypto.getRandomValues(new Uint8Array(12))
-	return `Aa2!${[...bytes].map(value => alphabet[value % alphabet.length]).join('')}`
+	return createStrongPin()
 }
 
 function togglePins() {

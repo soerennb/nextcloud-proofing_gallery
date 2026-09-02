@@ -14,6 +14,7 @@
 	max-width: 1280px;
 	margin: 0 auto;
 	padding: 28px clamp(20px, 4vw, 48px) 100px;
+	color: var(--studio-ink, var(--color-main-text));
 }
 
 .settings-page--workspace {
@@ -35,6 +36,8 @@
 	align-items: center;
 	justify-content: space-between;
 	gap: 16px;
+	padding: 10px 0 24px;
+	border-bottom: 1px solid var(--studio-line, var(--color-border));
 }
 
 .settings-header__actions {
@@ -96,10 +99,11 @@
 
 .settings-header h1 {
 	margin: 0;
-	font-size: clamp(24px, 3vw, 34px);
-	font-weight: 650;
-	letter-spacing: -0.025em;
-	line-height: 1.2;
+	font-family: NewsreaderVariable, Newsreader, serif;
+	font-size: clamp(34px, 4vw, 52px);
+	font-weight: 540;
+	letter-spacing: -.04em;
+	line-height: 1.02;
 }
 
 .settings-header__identity { min-width: 0; }
@@ -107,7 +111,7 @@
 .project-meta { position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
 
 .project-status,
-.purpose-name { padding: 3px 7px; border-radius: 5px; background: var(--color-background-hover); color: var(--color-text-maxcontrast); font-size: 12px; font-weight: 600; }
+.purpose-name { padding: 4px 8px; border-radius: 6px; background: var(--studio-surface-raised, var(--color-background-hover)); color: var(--studio-muted, var(--color-text-maxcontrast)); font-size: 11px; font-weight: 700; letter-spacing: .025em; }
 
 .project-status { border-inline-start: 3px solid var(--color-primary-element); color: var(--color-main-text); }
 
@@ -154,8 +158,8 @@
 	overflow-x: auto;
 	gap: 24px;
 	margin-top: 28px;
-	border-bottom: 1px solid var(--color-border);
-	background: color-mix(in srgb, var(--color-main-background) 94%, transparent);
+	border-bottom: 1px solid var(--studio-line, var(--color-border));
+	background: color-mix(in srgb, var(--studio-canvas, var(--color-main-background)) 92%, transparent);
 	backdrop-filter: blur(16px);
 	scroll-snap-type: inline proximity;
 }
@@ -174,8 +178,8 @@
 }
 
 .settings-tabs button[aria-current="page"] {
-	border-bottom-color: var(--color-primary-element);
-	color: var(--color-main-text);
+	border-bottom-color: var(--studio-accent, var(--color-primary-element));
+	color: var(--studio-ink, var(--color-main-text));
 }
 
 .settings-more {
@@ -228,13 +232,18 @@
 .settings-more > div button[aria-current='page'] { background: var(--color-background-hover); }
 
 .settings-content {
-	padding-top: 28px;
+	padding-top: 32px;
 }
 
 .settings-section {
 	display: grid;
 	max-width: 820px;
 	gap: 20px;
+	padding: clamp(20px, 3vw, 30px);
+	border: 1px solid var(--studio-line, var(--color-border));
+	border-radius: var(--studio-radius, 14px);
+	background: var(--studio-surface, var(--color-main-background));
+	box-shadow: 0 1px 0 color-mix(in srgb, var(--studio-ink) 4%, transparent);
 }
 
 .deliver-workspace { max-width: 1040px; }
@@ -315,12 +324,15 @@
 }
 
 .section-heading h2 {
-	font-size: 20px;
+	font-family: NewsreaderVariable, Newsreader, serif;
+	font-size: 27px;
+	font-weight: 560;
+	letter-spacing: -.025em;
 }
 
 .section-heading p {
 	margin-top: 5px;
-	color: var(--color-text-maxcontrast);
+	color: var(--studio-muted, var(--color-text-maxcontrast));
 }
 
 .mode-field {
@@ -466,7 +478,7 @@
 	gap: 14px;
 	margin-top: 8px;
 	padding-top: 20px;
-	border-top: 1px solid var(--color-border);
+	border-top: 1px solid var(--studio-line, var(--color-border));
 }
 
 .settings-subsection h3 {
