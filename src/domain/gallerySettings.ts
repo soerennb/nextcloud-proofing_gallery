@@ -119,10 +119,10 @@ export function canonicalGallerySettings(settings: GallerySettings): CanonicalGa
 }
 
 const DEFAULT_COLOR_LABELS: GallerySettings['review']['colorLabels'] = [
-	'Favorit',
-	'Auswahl',
-	'Überarbeiten',
-	'Ablehnen',
+	'Favorite',
+	'Selected',
+	'Needs changes',
+	'Rejected',
 ]
 
 export function createDefaultGallerySettings(): GallerySettings {

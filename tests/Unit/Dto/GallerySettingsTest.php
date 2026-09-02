@@ -29,7 +29,7 @@ final class GallerySettingsTest extends TestCase {
 		self::assertSame('presentation', $settings['mode']);
 		self::assertSame('none', $settings['delivery']['downloadScope']);
 		self::assertFalse($settings['delivery']['guestUploads']);
-		self::assertCount(4, $settings['review']['colorLabels']);
+		self::assertSame(['Favorite', 'Selected', 'Needs changes', 'Rejected'], $settings['review']['colorLabels']);
 		self::assertSame(50, $settings['presentation']['heroFocusX']);
 		self::assertSame('modern', $settings['presentation']['fontPreset']);
 		self::assertSame('minimal', $settings['presentation']['openerStyle']);

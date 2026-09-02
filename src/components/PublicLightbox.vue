@@ -35,9 +35,10 @@ import StarOutlineIcon from 'vue-material-design-icons/StarOutline.vue'
 
 import { usePublicLightboxAnnotations } from '../composables/usePublicLightboxAnnotations.ts'
 import type { GallerySettings } from '../domain/gallerySettings.ts'
-import { annotationNumbersByComment, shouldAutoHideLightboxChrome } from '../domain/lightboxReview.ts'
+import { annotationNumbersByComment, findSelectedAnnotationComment, shouldAutoHideLightboxChrome } from '../domain/lightboxReview.ts'
 import type { CollaborationState, MediaItem } from '../publicTypes.ts'
 import PublicLightboxAnnotations from './PublicLightboxAnnotations.vue'
+import PublicLightboxComments from './PublicLightboxComments.vue'
 import PublicLightboxFilmstrip from './PublicLightboxFilmstrip.vue'
 import PublicLightboxHeader from './PublicLightboxHeader.vue'
 import PublicLightboxMetadata from './PublicLightboxMetadata.vue'
@@ -171,6 +172,11 @@ const {
 } = annotations
 
 const annotationNumbers = computed(() => annotationNumbersByComment(activeComments.value))
+const selectedAnnotationComment = computed(() => findSelectedAnnotationComment(activeComments.value, selectedCommentId.value))
+const visibleComments = computed(() => selectedAnnotationComment.value ? [selectedAnnotationComment.value] : activeComments.value)
+
+function showAllFeedback() { selectedCommentId.value = null }
+function openFeedback() { showAllFeedback(); feedbackOpen.value = true; metadataOpen.value = false }
 
 function bindPhotoSwipeEvents() {
 	if (!pswp) return
@@ -510,7 +516,7 @@ async function toggleLike() {
 	await props.mutate(`media/${item.id}/like`, 'POST')
 }
 
-async function openFeedbackAndLike() { feedbackOpen.value = true; await toggleLike() }
+async function openFeedbackAndLike() { openFeedback(); await toggleLike() }
 
 async function setColor(value: string) {
 	const item = activeItem.value
@@ -574,7 +580,7 @@ async function saveEditedComment(commentId: number) {
 			@close="close"
 			@zoom="zoom"
 			@like="openFeedbackAndLike"
-			@feedback="feedbackOpen = true; metadataOpen = false"
+			@feedback="openFeedback"
 			@info="metadataOpen = true; feedbackOpen = false"
 			@more="actionMenuOpen = true" />
 		<div v-if="slideshow && !slideshowSuspended"
@@ -686,7 +692,13 @@ async function saveEditedComment(commentId: number) {
 					<p class="lightbox-sheet__filename">
 						{{ activeItem.name }}
 					</p>
-					<div class="feedback-actions">
+					<section v-if="selectedAnnotationComment" class="annotation-feedback-filter" aria-live="polite">
+						<div><span>{{ t('proofing_gallery', 'Selected annotation') }}</span><strong>{{ t('proofing_gallery', 'Point comment {number}', { number: annotationNumbers.get(selectedAnnotationComment.id)?.[0] ?? 0 }) }}</strong></div>
+						<button type="button" @click="showAllFeedback">
+							{{ t('proofing_gallery', 'All feedback') }}
+						</button>
+					</section>
+					<div v-if="!selectedAnnotationComment" class="feedback-actions">
 						<button v-if="settings.review?.likes !== false" type="button" @click="toggleLike">
 							{{ collaboration?.likes[activeItem.id]?.mine ? '♥' : '♡' }} {{ t('proofing_gallery', 'Like') }} {{ collaboration?.likes[activeItem.id]?.count || '' }}
 						</button>
@@ -698,7 +710,7 @@ async function saveEditedComment(commentId: number) {
 							</select>
 						</label>
 					</div>
-					<div v-if="settings.review?.ratings || settings.review?.pick" class="guest-rating" aria-label="Private rating">
+					<div v-if="!selectedAnnotationComment && (settings.review?.ratings || settings.review?.pick)" class="guest-rating" aria-label="Private rating">
 						<div v-if="settings.review?.ratings" class="guest-rating__stars">
 							<span>{{ t('proofing_gallery', 'Your private rating') }}</span>
 							<button v-for="rating in 6"
@@ -722,7 +734,7 @@ async function saveEditedComment(commentId: number) {
 						</div>
 						<small>{{ t('proofing_gallery', 'Only you and the gallery owner can see this rating.') }}</small>
 					</div>
-					<form v-if="settings.review?.comments !== false" class="comment-form" @submit.prevent="addComment">
+					<form v-if="settings.review?.comments !== false && !selectedAnnotationComment" class="comment-form" @submit.prevent="addComment">
 						<button v-if="canAnnotate" type="button" @click="annotations.startKeyboard">
 							{{ t('proofing_gallery', 'Add point comment') }}
 						</button>
@@ -737,42 +749,18 @@ async function saveEditedComment(commentId: number) {
 							{{ t('proofing_gallery', 'Comment') }}
 						</button>
 					</form>
-					<ul v-if="settings.review?.comments !== false" class="comment-list">
-						<li v-for="comment in activeComments"
-							:id="`point-comment-${comment.id}`"
-							:key="comment.id"
-							:data-comment-id="comment.id"
-							:class="{ 'comment-list__item--selected': selectedCommentId === comment.id }">
-							<form v-if="editingCommentId === comment.id" class="comment-edit" @submit.prevent="saveEditedComment(comment.id)">
-								<textarea v-model="editingCommentBody" required maxlength="5000" />
-								<button type="submit">
-									{{ t('proofing_gallery', 'Save') }}
-								</button>
-								<button type="button" @click="editingCommentId = null">
-									{{ t('proofing_gallery', 'Cancel') }}
-								</button>
-							</form>
-							<p v-else>
-								{{ comment.body }}
-							</p>
-							<button v-if="annotationNumbers.get(comment.id)?.[0]"
-								type="button"
-								data-point-link
-								:aria-pressed="selectedCommentId === comment.id"
-								@click="selectedCommentId = comment.id">
-								{{ t('proofing_gallery', 'Point comment {number}', { number: annotationNumbers.get(comment.id)?.[0] ?? 0 }) }}
-							</button>
-							<small>{{ comment.author }} · {{ new Date(comment.createdAt * 1000).toLocaleString() }}</small>
-							<div v-if="comment.mine && editingCommentId !== comment.id" class="comment-actions">
-								<button type="button" @click="editComment(comment)">
-									{{ t('proofing_gallery', 'Edit') }}
-								</button>
-								<button type="button" @click="mutate(`comments/${comment.id}`, 'DELETE')">
-									{{ t('proofing_gallery', 'Delete') }}
-								</button>
-							</div>
-						</li>
-					</ul>
+					<PublicLightboxComments v-if="settings.review?.comments !== false"
+						:editing-comment-body="editingCommentBody"
+						:comments="visibleComments"
+						:annotation-numbers="annotationNumbers"
+						:selected-comment-id="selectedCommentId"
+						:editing-comment-id="editingCommentId"
+						@select="selectedCommentId = $event"
+						@edit="editComment"
+						@save="saveEditedComment"
+						@update:editing-comment-body="editingCommentBody = $event"
+						@cancel-edit="editingCommentId = null"
+						@delete="mutate(`comments/${$event}`, 'DELETE')" />
 					<section v-if="collaboration?.selections.length" class="saved-selections">
 						<h2>{{ t('proofing_gallery', 'Saved selections') }}</h2>
 						<article v-for="selection in collaboration.selections" :key="selection.id">

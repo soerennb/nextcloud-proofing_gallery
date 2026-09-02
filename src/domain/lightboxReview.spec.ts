@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { annotationAtImagePoint, annotationScreenPoint, moveAnnotationPoint, shouldAutoHideLightboxChrome } from './lightboxReview.ts'
+import { annotationAtImagePoint, annotationScreenPoint, findSelectedAnnotationComment, moveAnnotationPoint, shouldAutoHideLightboxChrome } from './lightboxReview.ts'
 
 describe('lightbox review interaction', () => {
 	it('keeps review chrome visible while respecting presentation behavior', () => {
@@ -22,5 +22,16 @@ describe('lightbox review interaction', () => {
 		const point = { x: 2500, y: 7500, width: 800, height: 800 }
 		expect(annotationScreenPoint(point, { left: 200, top: 100, width: 1200, height: 600 })).toEqual({ x: 500, y: 550 })
 		expect(moveAnnotationPoint({ ...point, x: 9900, y: 100 }, 500, -500)).toMatchObject({ x: 10000, y: 0 })
+	})
+
+	it('selects only a comment that belongs to an annotation pin', () => {
+		const comments = [
+			{ id: 1, annotations: [{ x: 1000, y: 1000, width: 800, height: 800 }] },
+			{ id: 2, annotations: [] },
+		]
+		expect(findSelectedAnnotationComment(comments, 1)).toBe(comments[0])
+		expect(findSelectedAnnotationComment(comments, 2)).toBeNull()
+		expect(findSelectedAnnotationComment(comments, 99)).toBeNull()
+		expect(findSelectedAnnotationComment(comments, null)).toBeNull()
 	})
 })

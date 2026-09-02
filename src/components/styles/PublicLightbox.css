@@ -169,14 +169,22 @@
 
 .lightbox-feedback { --color: var(--ion-text-color); }
 
-.lightbox-feedback__body { min-height: 100%; }
+.lightbox-feedback__body { box-sizing: border-box; width: 100%; min-height: 100%; }
+
+.annotation-feedback-filter { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; padding: 14px; border: 1px solid color-mix(in srgb, var(--gallery-accent) 42%, var(--ion-border-color)); border-radius: 14px; background: color-mix(in srgb, var(--gallery-accent) 12%, var(--ion-background-color)); }
+
+.annotation-feedback-filter div { display: grid; min-width: 0; gap: 3px; }
+
+.annotation-feedback-filter span { color: var(--ion-color-medium); font-size: 11px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
+
+.annotation-feedback-filter strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.annotation-feedback-filter button { min-height: 36px; flex: 0 0 auto; padding: 0 12px; border: 1px solid var(--ion-border-color); border-radius: 9px; background: var(--ion-color-light); color: var(--ion-text-color); font: inherit; font-size: 12px; font-weight: 650; }
 
 .feedback-actions { display: grid; gap: 12px; }
 
 .feedback-actions button,
 .comment-form button,
-.comment-actions button,
-.comment-edit button,
 .guest-rating button {
 	min-height: 42px;
 	padding: 0 14px;
@@ -209,11 +217,11 @@
 
 .guest-star--filled { color: #f1be3d; }
 
-.guest-rating small, .comment-list small, .saved-selections small { color: var(--ion-color-medium); }
+.guest-rating small, .saved-selections small { color: var(--ion-color-medium); }
 
 .feedback-actions label { display: grid; gap: 6px; color: var(--ion-color-medium); font-size: 12px; }
 
-.feedback-actions select, .comment-form textarea, .comment-edit textarea { width: 100%; padding: 12px; border: 1px solid var(--ion-border-color); border-radius: 10px; background: var(--ion-background-color); color: var(--ion-text-color); font: inherit; }
+.feedback-actions select, .comment-form textarea { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; padding: 12px; border: 1px solid var(--ion-border-color); border-radius: 10px; background: var(--ion-background-color); color: var(--ion-text-color); font: inherit; }
 
 .comment-form { display: grid; gap: 10px; margin-top: 20px; }
 
@@ -221,21 +229,7 @@
 
 .comment-form textarea { min-height: 104px; resize: vertical; }
 
-.comment-list { padding: 0; list-style: none; }
-
-.comment-list li { padding: 16px 0; border-bottom: 1px solid var(--ion-border-color); }
-
-.comment-list__item--selected { margin-inline: -10px; padding-inline: 10px !important; border-radius: 9px; background: color-mix(in srgb, var(--gallery-accent) 16%, transparent); }
-
-.comment-list p { margin: 0 0 7px; white-space: pre-wrap; }
-
-.comment-actions, .saved-selections article div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
-
-.comment-actions button { min-height: 34px; color: var(--ion-color-medium); font-size: 12px; }
-
-.comment-edit { display: grid; grid-template-columns: 1fr auto auto; gap: 7px; }
-
-.comment-edit textarea { grid-column: 1 / -1; min-height: 82px; resize: vertical; }
+.saved-selections article div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
 
 .saved-selections { margin-top: 28px; border-top: 1px solid var(--ion-border-color); }
 
@@ -261,6 +255,8 @@
 	.lightbox-nav--next, .lightbox-shell--filmstrip-side .lightbox-nav--next { inset-inline-end: 8px; }
 	.lightbox-touch-hint { bottom: calc(96px + env(safe-area-inset-bottom)); max-width: calc(100% - 32px); text-align: center; white-space: nowrap; }
 	:global(ion-modal.lightbox-sheet) { --width: 100%; --height: min(78dvh, 680px); --border-radius: 18px 18px 0 0; align-items: flex-end; }
+	.annotation-feedback-filter { align-items: stretch; flex-direction: column; }
+	.annotation-feedback-filter button { width: 100%; }
 	.guest-rating__stars { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
 	.guest-rating__stars span { grid-column: 1 / -1; margin-inline-end: 0; }
 	.guest-rating__stars button { width: 100%; min-width: 0; padding-inline: 0; }

@@ -112,7 +112,7 @@ function onComposerKeydown(event: KeyboardEvent) {
 </template>
 
 <style scoped>
-.annotation-marker { position: absolute; z-index: 2; display: grid; width: 28px; height: 28px; padding: 0; border: 2px solid #fff; border-radius: 50%; background: var(--gallery-accent); box-shadow: 0 0 0 3px rgb(0 0 0 / 66%); color: var(--ion-color-primary-contrast); font-size: 12px; font-weight: 750; line-height: 1; place-items: center; pointer-events: auto; transform: translate(-50%, -50%) scale(var(--annotation-marker-scale, 1)); transform-origin: center; }
+.annotation-marker { position: absolute; z-index: 2; display: grid; box-sizing: border-box; width: 28px; min-width: 28px; max-width: 28px; height: 28px; min-height: 28px; max-height: 28px; aspect-ratio: 1; padding: 0; border: 2px solid #fff; border-radius: 50%; background: var(--gallery-accent); box-shadow: 0 0 0 3px rgb(0 0 0 / 66%); color: var(--ion-color-primary-contrast); font-size: 12px; font-style: normal; font-weight: 750; line-height: 1; place-items: center; pointer-events: auto; transform: translate(-50%, -50%) scale(var(--annotation-marker-scale, 1)); transform-origin: center; }
 
 .annotation-marker--selected { box-shadow: 0 0 0 4px #fff, 0 0 0 7px var(--gallery-accent); }
 

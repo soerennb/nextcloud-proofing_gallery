@@ -53,3 +53,11 @@ export function annotationNumbersByComment(comments: Array<{
 	}
 	return result
 }
+
+export function findSelectedAnnotationComment<T extends { id: number; annotations: NormalizedAnnotation[] }>(
+	comments: T[],
+	selectedCommentId: number | null,
+): T | null {
+	if (selectedCommentId === null) return null
+	return comments.find(comment => comment.id === selectedCommentId && comment.annotations.length > 0) ?? null
+}
