@@ -12,11 +12,11 @@ final class PurgeRepository {
 	public const TABLES = [
 		'proofing_annotations', 'proofing_selection_items', 'proofing_feedback', 'proofing_comments',
 		'proofing_selections', 'proofing_guest_ratings', 'proofing_review_rounds', 'proofing_share_audit',
-		'proofing_domains', 'proofing_public_links', 'proofing_notify_queue', 'proofing_native_notify',
+		'proofing_domains', 'proofing_link_roots', 'proofing_public_links', 'proofing_notify_queue', 'proofing_native_notify',
 		'proofing_notify_subs', 'proofing_int_outbox', 'proofing_events', 'proofing_uploads',
 		'proofing_live_push', 'proofing_retention_log', 'proofing_media_scan_queue', 'proofing_media_scans', 'proofing_media_index',
 		'proofing_semantic_idx', 'proofing_versions', 'proofing_ext_resources',
-		'proofing_collection_items', 'proofing_collections', 'proofing_summaries', 'proofing_guests',
+		'proofing_collection_items', 'proofing_collections', 'proofing_pin_handoffs', 'proofing_event_audit', 'proofing_event_roots', 'proofing_event_recipients', 'proofing_event_waves', 'proofing_event_setups', 'proofing_summaries', 'proofing_guests',
 		'proofing_managers', 'proofing_galleries',
 	];
 
@@ -93,7 +93,8 @@ final class PurgeRepository {
 			$qb = $this->db->getQueryBuilder();
 			return $qb->delete($table)->where($qb->expr()->eq($table === 'proofing_galleries' ? 'id' : 'gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))->executeStatement();
 		}
-		if ($table === 'proofing_selection_items' || $table === 'proofing_collection_items') return $this->deleteJoinedBatch($table, $galleryId, $limit);
+		if ($table === 'proofing_event_audit') return $this->deleteDirectGalleryBatch($table, $galleryId, $limit);
+		if (in_array($table, ['proofing_selection_items', 'proofing_collection_items', 'proofing_link_roots', 'proofing_pin_handoffs', 'proofing_event_roots'], true)) return $this->deleteJoinedBatch($table, $galleryId, $limit);
 		if ($table === 'proofing_notify_queue') return $this->deleteJoinedBatch($table, $galleryId, $limit);
 		$qb = $this->db->getQueryBuilder();
 		$ids = array_map('intval', QueryResult::column($qb->select('id')->from($table)
@@ -116,10 +117,17 @@ final class PurgeRepository {
 			if (isset($rows[0])) $rows[0]['__cursor'] = 1;
 			return $rows;
 		}
-		if ($table === 'proofing_selection_items' || $table === 'proofing_collection_items') {
-			$parentTable = $table === 'proofing_selection_items' ? 'proofing_selections' : 'proofing_collections';
-			$foreign = $table === 'proofing_selection_items' ? 'selection_id' : 'collection_id';
-			$parentId = $table === 'proofing_selection_items' ? 'id' : 'gallery_id';
+		if (in_array($table, ['proofing_selection_items', 'proofing_collection_items', 'proofing_link_roots', 'proofing_pin_handoffs', 'proofing_event_audit', 'proofing_event_roots'], true)) {
+			if ($table === 'proofing_event_audit') {
+				$qb = $this->db->getQueryBuilder();
+				return QueryResult::rows($qb->select('*')->from($table)
+					->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+					->andWhere($qb->expr()->gt('id', $qb->createNamedParameter($afterId, IQueryBuilder::PARAM_INT)))
+					->orderBy('id', 'ASC')->setMaxResults($limit)->executeQuery());
+			}
+			$parentTable = match ($table) { 'proofing_selection_items' => 'proofing_selections', 'proofing_collection_items' => 'proofing_collections', 'proofing_pin_handoffs', 'proofing_event_roots' => 'proofing_event_waves', default => 'proofing_public_links' };
+			$foreign = match ($table) { 'proofing_selection_items' => 'selection_id', 'proofing_collection_items' => 'collection_id', 'proofing_pin_handoffs', 'proofing_event_roots' => 'wave_id', default => 'public_link_id' };
+			$parentId = $table === 'proofing_collection_items' ? 'gallery_id' : 'id';
 			$qb = $this->db->getQueryBuilder();
 			return QueryResult::rows($qb->select('child.*')->from($table, 'child')
 				->innerJoin('child', $parentTable, 'parent', $qb->expr()->eq('child.' . $foreign, 'parent.' . $parentId))
@@ -243,6 +251,12 @@ final class PurgeRepository {
 			$qb->select($qb->func()->count('child.id'))->from($table, 'child')->innerJoin('child', 'proofing_collections', 'parent', $qb->expr()->eq('child.collection_id', 'parent.gallery_id'));
 		} elseif ($table === 'proofing_notify_queue') {
 			$qb->select($qb->func()->count('child.id'))->from($table, 'child')->innerJoin('child', 'proofing_notify_subs', 'parent', $qb->expr()->eq('child.subscription_id', 'parent.id'));
+		} elseif ($table === 'proofing_link_roots') {
+			$qb->select($qb->func()->count('child.id'))->from($table, 'child')->innerJoin('child', 'proofing_public_links', 'parent', $qb->expr()->eq('child.public_link_id', 'parent.id'));
+		} elseif ($table === 'proofing_pin_handoffs') {
+			$qb->select($qb->func()->count('child.id'))->from($table, 'child')->innerJoin('child', 'proofing_event_waves', 'parent', $qb->expr()->eq('child.wave_id', 'parent.id'));
+		} elseif ($table === 'proofing_event_roots') {
+			$qb->select($qb->func()->count('child.id'))->from($table, 'child')->innerJoin('child', 'proofing_event_waves', 'parent', $qb->expr()->eq('child.wave_id', 'parent.id'));
 		} else {
 			$qb->select($qb->func()->count())->from($table, 'parent');
 		}
@@ -254,11 +268,17 @@ final class PurgeRepository {
 		$parentTable = match ($table) {
 			'proofing_selection_items' => 'proofing_selections',
 			'proofing_collection_items' => 'proofing_collections',
+			'proofing_link_roots' => 'proofing_public_links',
+			'proofing_pin_handoffs' => 'proofing_event_waves',
+			'proofing_event_roots' => 'proofing_event_waves',
 			default => 'proofing_notify_subs',
 		};
 		$foreign = match ($table) {
 			'proofing_selection_items' => 'selection_id',
 			'proofing_collection_items' => 'collection_id',
+			'proofing_link_roots' => 'public_link_id',
+			'proofing_pin_handoffs' => 'wave_id',
+			'proofing_event_roots' => 'wave_id',
 			default => 'subscription_id',
 		};
 		$parentId = $table === 'proofing_collection_items' ? 'gallery_id' : 'id';
@@ -267,6 +287,16 @@ final class PurgeRepository {
 			->innerJoin('child', $parentTable, 'parent', $qb->expr()->eq('child.' . $foreign, 'parent.' . $parentId))
 			->where($qb->expr()->eq('parent.gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->orderBy('child.id', 'ASC')->setMaxResults($limit)->executeQuery()));
+		if ($ids === []) return 0;
+		$delete = $this->db->getQueryBuilder();
+		return $delete->delete($table)->where($delete->expr()->in('id', $delete->createNamedParameter($ids, IQueryBuilder::PARAM_INT_ARRAY)))->executeStatement();
+	}
+
+	private function deleteDirectGalleryBatch(string $table, int $galleryId, int $limit): int {
+		$qb = $this->db->getQueryBuilder();
+		$ids = array_map('intval', QueryResult::column($qb->select('id')->from($table)
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->orderBy('id', 'ASC')->setMaxResults($limit)->executeQuery()));
 		if ($ids === []) return 0;
 		$delete = $this->db->getQueryBuilder();
 		return $delete->delete($table)->where($delete->expr()->in('id', $delete->createNamedParameter($ids, IQueryBuilder::PARAM_INT_ARRAY)))->executeStatement();

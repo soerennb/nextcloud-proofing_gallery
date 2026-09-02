@@ -244,6 +244,38 @@ final class FolderService {
 		return $this->mediaItem($target->newFolder($name));
 	}
 
+	/** @param list<string> $paths
+	 * @return list<string>
+	 */
+	public function ensureFolders(string $userId, int $folderId, array $paths): array {
+		if (count($paths) > 1000) throw new \InvalidArgumentException('Select no more than 1000 folders');
+		$root = $this->resolveFolder($userId, $folderId);
+		$normalized = [];
+		foreach ($paths as $path) {
+			if (!is_string($path)) throw new \InvalidArgumentException('Folder paths must be strings');
+			$segments = array_values(array_filter(explode('/', trim(str_replace('\\', '/', $path), '/')), static fn (string $part): bool => $part !== ''));
+			if ($segments === [] || count($segments) > 32) continue;
+			foreach ($segments as $segment) $this->safeName($segment);
+			$normalized[] = implode('/', $segments);
+		}
+		$normalized = array_values(array_unique($normalized));
+		usort($normalized, static fn (string $left, string $right): int => substr_count($left, '/') <=> substr_count($right, '/') ?: strnatcasecmp($left, $right));
+		foreach ($normalized as $path) {
+			$current = $root;
+			foreach (explode('/', $path) as $segment) {
+				if ($current->nodeExists($segment)) {
+					$node = $current->get($segment);
+					if (!$node instanceof Folder || !$node->isReadable()) throw new FolderAccessException('A folder upload path is unavailable');
+					$current = $node;
+					continue;
+				}
+				if (!$current->isUpdateable()) throw new FolderAccessException('A folder upload destination is not writable');
+				$current = $current->newFolder($segment);
+			}
+		}
+		return $normalized;
+	}
+
 	public function renameNode(string $userId, int $folderId, int $nodeId, string $name): MediaItem {
 		$root = $this->resolveFolder($userId, $folderId);
 		$node = $this->nodeInGallery($root, $nodeId);

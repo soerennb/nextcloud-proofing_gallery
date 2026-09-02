@@ -11,6 +11,8 @@ import { PUBLIC_GALLERY_PAGE_SIZE, readPublicGalleryLocation, writePublicGallery
 import { continuationStorageKey, layoutSessionStorageKey, loadPublicGalleryCompareIds, loadPublicGalleryContinuation, loadPublicGallerySavedView, loadPublicGallerySessionLayout, viewStorageKey } from './domain/publicGalleryPreferences.ts'
 import { serialTask } from './domain/serialTask.ts'
 import { galleryTitleMode } from './domain/galleryTitlePresentation.ts'
+import { downloadQuery } from './domain/publicDownloadOptions.ts'
+import type { PublicDownloadPreset } from './domain/publicDownloadOptions.ts'
 import type { CollaborationState, GuestIdentity, MediaItem, PublicGallery, PublicGalleryPage } from './publicTypes.ts'
 import { useDeferredMutation } from './composables/useDeferredMutation.ts'
 import { resumeGuestSession, useGuestRequest } from './composables/useGuestRequest.ts'
@@ -90,9 +92,10 @@ const collaborationError = ref('')
 const galleryDownloadBusy = ref(false)
 const galleryDownloadError = ref('')
 const [selectionName, selectionMessage] = [ref(''), ref('')]
+const [downloadPreset, downloadWatermark] = [ref<PublicDownloadPreset>('original'), ref(false)]
 const savingSelection = ref(false)
 const guestDialogOpen = ref(false)
-const review = ref(props.gallery.review ?? { enabled: false, dueDate: null, current: null })
+const review = ref(props.gallery.review ?? { enabled: false, dueDate: null, rules: { minimum: 0, maximum: 0 }, progress: null, current: null })
 const savedView = isStaticPreview ? null : loadPublicGallerySavedView(props.gallery.token)
 if (!isStaticPreview) localStorage.removeItem(`proofing-gallery-layout:${props.gallery.token}`)
 const fallbackLayout = (isStaticPreview ? null : loadPublicGallerySessionLayout(props.gallery.token))
@@ -616,13 +619,8 @@ function streamUrl(item: MediaItem): string {
 	return publicEndpoint(`media/${item.id}/stream`)
 }
 
-function downloadUrl(item: MediaItem): string {
-	return publicEndpoint(`media/${item.id}/download`)
-}
-
-function selectionUrl(kind: 'download/selection' | 'contact-sheet'): string {
-	return publicEndpoint(`${kind}?fileIds=${selectedIds.value.join(',')}`)
-}
+const downloadUrl = (item: MediaItem) => publicEndpoint(`media/${item.id}/download?${downloadQuery(downloadPreset.value, downloadWatermark.value)}`)
+const selectionUrl = (kind: 'download/selection' | 'contact-sheet') => publicEndpoint(`${kind}?${downloadQuery(kind === 'download/selection' ? downloadPreset.value : 'original', kind === 'download/selection' && downloadWatermark.value, selectedIds.value)}`)
 
 async function startDownload(url: string, newTab = false) {
 	const { triggerPublicDownload } = await import('./domain/publicGalleryActions.ts')
@@ -841,6 +839,8 @@ function upOneLevel() {
 							v-model:layout="layout"
 							v-model:selection-name="selectionName"
 							v-model:selection-message="selectionMessage"
+							v-model:download-preset="downloadPreset"
+							v-model:download-watermark="downloadWatermark"
 							v-bind="galleryControlProps()"
 							:hide-chrome="activeIndex !== null || compareOpen"
 							@apply="applyView"

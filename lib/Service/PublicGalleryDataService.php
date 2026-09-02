@@ -93,11 +93,15 @@ final class PublicGalleryDataService {
 				$focusIndex,
 			);
 		}
-		if (!$settings->navigation->folders && $path !== '') {
+		$multiRoot = $this->linkScopes->isMultiRoot($link);
+		if (!$multiRoot && !$settings->navigation->folders && $path !== '') {
 			throw new \OCP\Files\NotFoundException('Folder navigation is disabled');
 		}
 		$startPath = $this->linkScopes->normalize($link->getStartPath());
 		$scopedRoot = $root;
+		if ($multiRoot && !$this->linkScopes->visiblePath($link, $path)) {
+			throw new \OCP\Files\NotFoundException('Gallery folder not found');
+		}
 		$recursive = $link->getViewMode() === 'recursive';
 		$groupDepth = max(1, min(8, $link->getGroupDepth() ?: $settings->navigation->groupDepth));
 		if ($recursive) {
@@ -147,14 +151,15 @@ final class PublicGalleryDataService {
 			);
 		}
 		$currentFolder = $this->folderAt($scopedRoot, $path);
-		$nodes = array_values(array_filter(
-			$currentFolder->getDirectoryListing(),
-			fn (Node $node): bool => !str_starts_with($node->getName(), '.')
-				&& ($node instanceof Folder || ($node instanceof File && $this->mediaTypes->supports($node))),
+			$nodes = array_values(array_filter(
+				$currentFolder->getDirectoryListing(),
+				fn (Node $node): bool => !str_starts_with($node->getName(), '.')
+					&& ($node instanceof Folder || ($node instanceof File && $this->mediaTypes->supports($node)))
+					&& (!$multiRoot || $this->linkScopes->visiblePath($link, ltrim($path . '/' . $node->getName(), '/'))),
 		));
 		$nodes = array_values(array_filter(
 			$nodes,
-				static fn (Node $node): bool => ($settings->navigation->folders || !($node instanceof Folder))
+				static fn (Node $node): bool => ($multiRoot || $settings->navigation->folders || !($node instanceof Folder))
 				&& ($search === '' || mb_stripos($node->getName(), $search) !== false),
 		));
 		usort($nodes, static function (Node $left, Node $right) use ($sortBy, $sortDirection, $groupBy): int {
@@ -215,7 +220,7 @@ final class PublicGalleryDataService {
 			null,
 			$groups,
 			['indexed' => count($nodes), 'limit' => $this->policies->get('maxIndexedMedia'), 'limitReached' => false, 'complete' => true],
-			['startPath' => $startPath, 'viewMode' => 'folder', 'groupDepth' => $groupDepth],
+				['startPath' => $startPath, 'allowedRoots' => $this->linkScopes->roots($link), 'viewMode' => 'folder', 'groupDepth' => $groupDepth],
 			$focusIndex,
 		);
 	}

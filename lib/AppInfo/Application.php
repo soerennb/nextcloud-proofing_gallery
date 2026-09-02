@@ -12,6 +12,8 @@ use OCA\ProofingGallery\Listener\MediaIndexCacheListener;
 use OCA\ProofingGallery\Listener\FilesLoadAdditionalScriptsListener;
 use OCA\ProofingGallery\Listener\GalleryFilesMetadataProvider;
 use OCA\ProofingGallery\Service\CollectionAnchorReferences;
+use OCA\ProofingGallery\Service\PublicLinkAnchorReferences;
+use OCA\ProofingGallery\Db\PublicLinkRootRepository;
 use OCA\ProofingGallery\Capabilities;
 use OCA\ProofingGallery\Dashboard\GalleryAttentionWidget;
 use OCA\ProofingGallery\Reference\GalleryReferenceProvider;
@@ -60,6 +62,7 @@ final class Application extends App implements IBootstrap {
 		$context->registerSetupCheck(RuntimeDependenciesCheck::class);
 		$context->registerUserMigrator(ProofingGalleryMigrator::class);
 		$context->registerServiceAlias(CollectionAnchorReferences::class, GalleryMapper::class);
+		$context->registerServiceAlias(PublicLinkAnchorReferences::class, PublicLinkRootRepository::class);
 		$context->registerEventListener(FileCacheUpdated::class, MediaIndexCacheListener::class);
 		$context->registerEventListener(NodeAddedToCache::class, MediaIndexCacheListener::class);
 		$context->registerEventListener(NodeRemovedFromCache::class, MediaIndexCacheListener::class);

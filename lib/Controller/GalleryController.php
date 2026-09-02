@@ -151,11 +151,12 @@ final class GalleryController extends Controller {
 		?string $folderName = null,
 		array $settings = [],
 		array $designPreset = ['mode' => 'inherit'],
+		string $deliveryMode = 'standard',
 	): DataResponse {
 		try {
 			$userId = $this->userId();
 			$gallery = $this->galleries->createProject(
-				$userId, $title, $purpose, $sourceMode, $folderId, $parentFolderId, $folderName, $settings, $designPreset,
+				$userId, $title, $purpose, $sourceMode, $folderId, $parentFolderId, $folderName, $settings, $designPreset, $deliveryMode,
 			);
 			return new DataResponse($this->galleries->present($userId, $gallery), Http::STATUS_CREATED);
 		} catch (PolicyViolationException $exception) {
@@ -447,6 +448,18 @@ final class GalleryController extends Controller {
 		} catch (InvalidArgumentException|FolderAccessException $exception) {
 			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
+	}
+
+	/** @param list<string> $paths */
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'POST', url: '/api/v1/galleries/{id}/folders/ensure')]
+	public function ensureFolders(int $id, array $paths): DataResponse {
+		try {
+			$gallery = $this->galleries->get($this->userId(), $id);
+			if ($gallery->getSourceType() !== 'folder') throw new InvalidArgumentException('Folders are unavailable for collections');
+			return new DataResponse(['paths' => $this->folders->ensureFolders($gallery->getOwnerUid(), $gallery->getFolderId(), $paths)]);
+		} catch (DoesNotExistException|AuthorizationException) { return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND); }
+		catch (InvalidArgumentException|FolderAccessException $exception) { return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY); }
 	}
 
 	#[NoAdminRequired]

@@ -27,6 +27,7 @@ const purposes: Array<{ id: Exclude<GalleryPurpose, 'custom'>; title: string; de
 const step = ref<1 | 2>(1)
 const purpose = ref<Exclude<GalleryPurpose, 'custom'>>('delivery')
 const sourceMode = ref<'existing' | 'new' | 'collection'>('existing')
+const deliveryMode = ref<'standard' | 'event'>('standard')
 const title = ref('')
 const folderId = ref<number | null>(null)
 const folderName = ref('')
@@ -39,6 +40,7 @@ const presets = ref<GalleryPreset[]>([])
 const presetMode = ref<'inherit' | 'instance' | 'preset'>('inherit')
 const presetId = ref<number | null>(null)
 const rememberPreset = ref(false)
+const usesExistingFolder = computed(() => sourceMode.value === 'existing')
 
 onMounted(async () => {
 	try {
@@ -66,12 +68,16 @@ onMounted(async () => {
 const canSubmit = computed(() => title.value.trim() !== '' && !saving.value
 	&& (presetMode.value !== 'preset' || presetId.value !== null) && (
 	sourceMode.value === 'collection'
-		|| (sourceMode.value === 'existing' && folderId.value !== null)
+	|| (usesExistingFolder.value && folderId.value !== null)
 		|| (sourceMode.value === 'new' && parentFolderId.value !== null && newFolderName.value.trim() !== '')
 ))
 
 watch(title, value => {
 	if (sourceMode.value === 'new' && newFolderName.value === '') newFolderName.value = value
+})
+
+watch(deliveryMode, value => {
+	if (value === 'event' && sourceMode.value === 'collection') sourceMode.value = 'new'
 })
 
 async function chooseFolder(kind: 'source' | 'parent') {
@@ -125,9 +131,10 @@ async function submit() {
 			title: title.value.trim(),
 			purpose: purpose.value,
 			sourceMode: sourceMode.value,
-			folderId: sourceMode.value === 'existing' ? folderId.value : null,
+			folderId: usesExistingFolder.value ? folderId.value : null,
 			parentFolderId: sourceMode.value === 'new' ? parentFolderId.value : null,
 			folderName: sourceMode.value === 'new' ? newFolderName.value.trim() : undefined,
+			deliveryMode: deliveryMode.value,
 			designPreset: selectedDesignPreset(),
 		})
 		if (rememberPreset.value && presetMode.value !== 'inherit') {
@@ -157,6 +164,7 @@ function reset() {
 	step.value = 1
 	purpose.value = 'delivery'
 	sourceMode.value = 'existing'
+	deliveryMode.value = 'standard'
 	title.value = ''
 	folderId.value = null
 	folderName.value = ''
@@ -207,11 +215,19 @@ function updateOpen(open: boolean) {
 					:placeholder="t('proofing_gallery', 'Wedding, portrait session, event…')" />
 
 				<fieldset>
+					<legend>{{ t('proofing_gallery', 'How will clients receive the photos?') }}</legend>
+					<div class="delivery-options">
+						<label :class="{ selected: deliveryMode === 'standard' }"><input v-model="deliveryMode" type="radio" value="standard"><strong>{{ t('proofing_gallery', 'One gallery or client link') }}</strong><span>{{ t('proofing_gallery', 'For sessions and deliveries where clients may see the same photos.') }}</span></label>
+						<label :class="{ selected: deliveryMode === 'event' }"><input v-model="deliveryMode" type="radio" value="event"><strong>{{ t('proofing_gallery', 'Private links from event folders') }}</strong><span>{{ t('proofing_gallery', 'For schools, teams, and events with shared, group, and private photos.') }}</span></label>
+					</div>
+				</fieldset>
+
+				<fieldset>
 					<legend>{{ t('proofing_gallery', 'Where are the photos?') }}</legend>
 					<div class="source-options">
 						<label :class="{ selected: sourceMode === 'existing' }"><input v-model="sourceMode" type="radio" value="existing"><strong>{{ t('proofing_gallery', 'Existing folder') }}</strong><span>{{ t('proofing_gallery', 'Use photos already stored in Nextcloud.') }}</span></label>
 						<label :class="{ selected: sourceMode === 'new' }"><input v-model="sourceMode" type="radio" value="new"><strong>{{ t('proofing_gallery', 'New project folder') }}</strong><span>{{ t('proofing_gallery', 'Create the folder here and upload next.') }}</span></label>
-						<label :class="{ selected: sourceMode === 'collection' }"><input v-model="sourceMode" type="radio" value="collection"><strong>{{ t('proofing_gallery', 'Curated collection') }}</strong><span>{{ t('proofing_gallery', 'Combine files from several galleries.') }}</span></label>
+						<label v-if="deliveryMode === 'standard'" :class="{ selected: sourceMode === 'collection' }"><input v-model="sourceMode" type="radio" value="collection"><strong>{{ t('proofing_gallery', 'Curated collection') }}</strong><span>{{ t('proofing_gallery', 'Combine files from several galleries.') }}</span></label>
 					</div>
 				</fieldset>
 
@@ -313,7 +329,7 @@ function updateOpen(open: boolean) {
 
 .source-setup legend { margin-bottom: 10px; font-weight: 650; }
 
-.source-options { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--color-border); border-radius: 8px; overflow: hidden; }
+.source-options { display: grid; grid-template-columns: repeat(2, 1fr); border: 1px solid var(--color-border); border-radius: 8px; overflow: hidden; }
 
 .source-options label { display: grid; gap: 5px; min-height: 112px; padding: 16px; border-inline-end: 1px solid var(--color-border); cursor: pointer; }
 
@@ -322,6 +338,16 @@ function updateOpen(open: boolean) {
 .source-options label.selected { background: var(--color-background-hover); box-shadow: inset 0 -3px var(--color-primary-element); }
 
 .source-options input { width: 18px; height: 18px; }
+
+.delivery-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+.delivery-options label { display: grid; grid-template-columns: 24px 1fr; gap: 4px 10px; min-height: 84px; padding: 14px; border: 1px solid var(--color-border); border-radius: 8px; cursor: pointer; }
+
+.delivery-options label.selected { border-color: var(--color-primary-element); background: var(--color-background-hover); box-shadow: inset 0 -3px var(--color-primary-element); }
+
+.delivery-options input { grid-row: 1 / 3; width: 18px; height: 18px; }
+
+.delivery-options span { color: var(--color-text-maxcontrast); line-height: 1.35; }
 
 .source-options span, .folder-choice span { color: var(--color-text-maxcontrast); line-height: 1.35; }
 
@@ -346,7 +372,7 @@ function updateOpen(open: boolean) {
 footer { display: flex; justify-content: flex-end; gap: 8px; padding-top: 24px; }
 @media (max-width: 700px) {
 	.project-wizard { padding: 0 18px 20px; }
-	.source-options, .new-folder-fields, .design-choice { grid-template-columns: 1fr; }
+	.source-options, .delivery-options, .new-folder-fields, .design-choice { grid-template-columns: 1fr; }
 	.source-options label { min-height: 88px; border-inline-end: 0; border-bottom: 1px solid var(--color-border); }
 	.purpose-list label { grid-template-columns: 36px 1fr 24px; min-height: 88px; }
 }

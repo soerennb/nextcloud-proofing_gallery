@@ -50,6 +50,9 @@ guest feedback, selections, secure downloads, and an upload inbox.
   conflict-aware XMP synchronization, batch undo, and cross-device saved views
 - multiple independently scoped public links per gallery, each with its own
   start folder, presentation mode, language, download and feedback policy
+- volume-event deliveries that combine shared folders with exactly one private
+  participant folder per link, including CSV assignment, optional PINs and
+  encrypted recipient contact data without copying originals
 - private per-client star ratings and decisions, owner-side aggregates, and an
   explicit preview-before-promotion workflow that never writes XMP implicitly
 - a field-selectable, privacy-bounded UTF-8 CSV export composer with preview and

@@ -70,7 +70,7 @@ final class PublicShareTemplateProvider implements IPublicShareTemplateProvider 
 			'token' => $token,
 			'path' => $path,
 			'initialPage' => $initialPage,
-			'review' => $this->reviews->publicState($context->link),
+			'review' => $this->reviews->publicState($context->gallery, $context->link),
 		]);
 		Util::addScript(Application::APP_ID, 'proofing_gallery-public');
 		Util::addStyle(Application::APP_ID, 'proofing_gallery-public');

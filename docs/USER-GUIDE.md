@@ -59,6 +59,22 @@ among paths, culling values, client aggregates, selection names, and comments.
 Guests can export only filenames and their own rating/decision. Inspect the
 RFC 4180 UTF-8 preview before copying or downloading it.
 
+## Deliver a volume event privately
+
+For schools, sports events, and other jobs with many recipients, keep shared
+photos and each participant's photos in separate subfolders of one project
+folder. Choose **Private links from event folders** when creating the project.
+The project opens directly in Event delivery; there is no separate publish step.
+
+Work through **Photos**, **Visibility**, **Recipients**, **Delivery**, and
+**Review**. Use an existing Nextcloud folder, or choose or drop a local event
+folder while retaining its subfolders. Assign each folder exactly one role:
+everyone, group, private, or not delivered. Before link creation, Proofing
+Gallery shows the exact shared, group, and private scope for every recipient.
+The final action publishes the hidden technical base when needed and creates
+the client links. Folder names provide recipient suggestions; a reviewed CSV
+import and all post-release operations remain available as advanced tools.
+
 ## Build a collection across galleries
 
 1. Create the folder galleries that contain the source files. They must belong
@@ -125,8 +141,10 @@ reported per-file conflicts before repeating the export.
 ## Downloads and uploads
 
 Depending on gallery settings, guests can download one original, a ZIP of their
-selection, or a printable preview contact sheet. Contact sheets contain
-previews, not original files.
+selection, or a printable preview contact sheet. For individual and selection
+downloads they can keep the original or choose a metadata-free 2048 px or
+1600 px JPEG, optionally with the configured gallery watermark. Web JPEGs are
+never enlarged. Contact sheets contain previews, not original files.
 
 Guest uploads are resumable. Completed uploads first enter the hidden moderation
 inbox. A gallery owner or manager can accept an upload with a conflict-free

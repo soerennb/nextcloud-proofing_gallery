@@ -114,14 +114,14 @@ function loadMore() {
 
 function created(gallery: Gallery) {
 	showCreate.value = false
-	selectGallery(gallery)
+	selectGallery(gallery, gallery.deliveryMode === 'event' ? 'share' : undefined)
 	load().catch(() => {})
 	notify('success', t('proofing_gallery', 'Project created. Add photos when you are ready.')).catch(() => {})
 }
 
-async function selectGallery(gallery: Gallery | GalleryListItem) {
+async function selectGallery(gallery: Gallery | GalleryListItem, workspace?: string) {
 	helpOpen.value = false
-	window.location.hash = `gallery/${gallery.id}`
+	window.location.hash = `gallery/${gallery.id}${workspace ? `/${workspace}` : ''}`
 	try {
 		selectedGallery.value = 'settings' in gallery ? gallery : await fetchGallery(gallery.id)
 	} catch {

@@ -15,4 +15,11 @@ final class PurgeRepositoryContractTest extends TestCase {
 	public function testFolderScopedOwnerCullingDataIsNotDeletedWithOneGallery(): void {
 		self::assertNotContains('proofing_media_cull', PurgeRepository::TABLES);
 	}
+
+	public function testEncryptedPinHandoffsArePurgedBeforeTheirWaves(): void {
+		self::assertLessThan(
+			array_search('proofing_event_waves', PurgeRepository::TABLES, true),
+			array_search('proofing_pin_handoffs', PurgeRepository::TABLES, true),
+		);
+	}
 }

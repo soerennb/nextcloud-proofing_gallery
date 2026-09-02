@@ -206,6 +206,7 @@ final class CollaborationController extends ResolvedPublicShareController {
 		return $this->mutation('selections', fn (Guest $guest): array => [
 			'id' => $this->collaboration->saveSelection(
 				$this->resolvedGallery(),
+				$this->resolvedPublicLink(),
 				$guest,
 				$name,
 				$message,

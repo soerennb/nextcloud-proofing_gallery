@@ -33,7 +33,8 @@ final class PublicReviewController extends ResolvedPublicShareController {
 	#[NoCSRFRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/review')]
 	public function state(): JSONResponse {
-		return new JSONResponse($this->reviews->publicState($this->publicContext()->link));
+		$context = $this->publicContext();
+		return new JSONResponse($this->reviews->publicState($context->gallery, $context->link));
 	}
 
 	#[PublicPage]

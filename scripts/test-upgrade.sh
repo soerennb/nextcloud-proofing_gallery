@@ -196,7 +196,7 @@ run_upgrade
 compose exec -T --user www-data "${service}" php -r '
 	require "/var/www/html/lib/base.php";
 	$db = \OC::$server->get(\OCP\IDBConnection::class);
-	foreach (["proofing_presets", "proofing_inv_templates", "proofing_notify_subs", "proofing_notify_queue", "proofing_media_index", "proofing_media_cull", "proofing_public_links", "proofing_review_rounds", "proofing_ext_resources", "proofing_guest_ratings", "proofing_share_audit", "proofing_video_deriv", "proofing_semantic_idx", "proofing_live_push", "proofing_domains", "proofing_media_scans", "proofing_media_scan_queue", "proofing_purge_requests", "proofing_retention_log"] as $table) {
+	foreach (["proofing_presets", "proofing_inv_templates", "proofing_notify_subs", "proofing_notify_queue", "proofing_media_index", "proofing_media_cull", "proofing_public_links", "proofing_link_roots", "proofing_review_rounds", "proofing_ext_resources", "proofing_guest_ratings", "proofing_share_audit", "proofing_video_deriv", "proofing_semantic_idx", "proofing_live_push", "proofing_domains", "proofing_media_scans", "proofing_media_scan_queue", "proofing_purge_requests", "proofing_retention_log", "proofing_event_recipients", "proofing_event_waves", "proofing_pin_handoffs", "proofing_event_roots", "proofing_event_audit"] as $table) {
 		$q = $db->getQueryBuilder();
 		$q->select($q->func()->count())->from($table)->executeQuery()->fetchOne();
 	}
@@ -204,7 +204,7 @@ compose exec -T --user www-data "${service}" php -r '
 	$q->select("generation")->from("proofing_semantic_idx")->setMaxResults(1)->executeQuery();
 	$assertGallery = static function (string $slug) use ($db): void {
 		$q = $db->getQueryBuilder();
-		$result = $q->select("settings")->from("proofing_galleries")
+		$result = $q->select("settings", "delivery_mode")->from("proofing_galleries")
 			->where($q->expr()->eq("slug", $q->createNamedParameter($slug)))
 			->executeQuery();
 		$rows = $result->fetchAllAssociative();
@@ -212,10 +212,11 @@ compose exec -T --user www-data "${service}" php -r '
 		if (count($rows) !== 1) throw new \RuntimeException("Upgrade scenario {$slug}: expected one gallery, found " . count($rows));
 		$settings = json_decode((string)$rows[0]["settings"], true, flags: JSON_THROW_ON_ERROR);
 		if (($settings["presentation"]["accentColor"] ?? null) !== "#E85D4A") throw new \RuntimeException("Upgrade scenario {$slug}: legacy default accent was not migrated");
+		if ((string)$rows[0]["delivery_mode"] !== "standard") throw new \RuntimeException("Upgrade scenario {$slug}: legacy gallery delivery mode changed");
 	};
 	$assertLink = static function (string $token, string $status, string $name) use ($db): void {
 		$q = $db->getQueryBuilder();
-		$result = $q->select("status", "is_primary", "name", "review_enabled", "review_due_date")->from("proofing_public_links")
+		$result = $q->select("status", "is_primary", "name", "review_enabled", "review_due_date", "scope_mode")->from("proofing_public_links")
 			->where($q->expr()->eq("token", $q->createNamedParameter($token)))
 			->executeQuery();
 		$rows = $result->fetchAllAssociative();
@@ -226,6 +227,7 @@ compose exec -T --user www-data "${service}" php -r '
 		if (!(bool)$row["is_primary"]) throw new \RuntimeException("Upgrade scenario {$token}: primary flag was not preserved");
 		if ((string)$row["name"] !== $name) throw new \RuntimeException("Upgrade scenario {$token}: expected name {$name}, found " . (string)$row["name"]);
 		if ((bool)$row["review_enabled"] || $row["review_due_date"] !== null) throw new \RuntimeException("Upgrade scenario {$token}: existing links must keep review workflow disabled");
+		if ((string)$row["scope_mode"] !== "legacy") throw new \RuntimeException("Upgrade scenario {$token}: legacy scope mode changed");
 	};
 	$assertGallery("upgrade-active");
 	$assertGallery("upgrade-archived");

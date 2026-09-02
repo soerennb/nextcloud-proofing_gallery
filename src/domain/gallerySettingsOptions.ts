@@ -45,7 +45,9 @@ export function galleryWorkspaceFromReadinessAction(action: string): GalleryWork
 }
 
 export function availableGalleryWorkspaces(gallery: Gallery): GalleryWorkspaceItem[] {
-	return galleryWorkspaces.filter(item => galleryWorkspaceVisible(item.id, gallery))
+	return galleryWorkspaces.filter(item => galleryWorkspaceVisible(item.id, gallery)).map(item => item.id === 'share' && gallery.deliveryMode === 'event'
+		? { ...item, label: t('proofing_gallery', 'Event delivery') }
+		: item)
 }
 
 export function galleryWorkspaceVisible(workspace: GalleryWorkspace, gallery: Gallery): boolean {

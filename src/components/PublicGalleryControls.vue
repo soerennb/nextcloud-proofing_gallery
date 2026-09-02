@@ -58,6 +58,8 @@ const groupBy = defineModel<'none' | 'type' | 'folder'>('groupBy', { required: t
 const layout = defineModel<Layout>('layout', { required: true })
 const selectionName = defineModel<string>('selectionName', { required: true })
 const selectionMessage = defineModel<string>('selectionMessage', { required: true })
+const downloadPreset = defineModel<'original' | 'web-2048' | 'web-1600'>('downloadPreset', { required: true })
+const downloadWatermark = defineModel<boolean>('downloadWatermark', { required: true })
 
 const emit = defineEmits<{
 	apply: []
@@ -247,6 +249,22 @@ function dismissMenu() {
 			</div>
 
 			<IonList v-else inset class="gallery-sheet__downloads">
+				<IonItem lines="full">
+					<IonSelect v-model="downloadPreset" :label="t('proofing_gallery', 'File size')" label-placement="stacked">
+						<IonSelectOption value="original">
+							{{ t('proofing_gallery', 'Original file') }}
+						</IonSelectOption>
+						<IonSelectOption value="web-2048">
+							{{ t('proofing_gallery', 'Web JPEG · 2048 px') }}
+						</IonSelectOption>
+						<IonSelectOption value="web-1600">
+							{{ t('proofing_gallery', 'Web JPEG · 1600 px') }}
+						</IonSelectOption>
+					</IonSelect>
+				</IonItem>
+				<IonItem v-if="downloadPreset !== 'original'" lines="full">
+					<label><input v-model="downloadWatermark" type="checkbox"> {{ t('proofing_gallery', 'Apply gallery watermark') }}</label>
+				</IonItem>
 				<IonItem v-if="downloadScope === 'all'" button @click="emit('download-gallery')">
 					<IonIcon slot="start" :icon="downloadOutline" /><IonLabel><strong>{{ t('proofing_gallery', 'Download entire gallery') }}</strong><p>{{ t('proofing_gallery', 'Original files in one ZIP archive') }}</p></IonLabel>
 				</IonItem>

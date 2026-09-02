@@ -16,6 +16,7 @@ export async function createProject(payload: {
 	parentFolderId?: number | null
 	folderName?: string
 	designPreset?: { mode: 'inherit' | 'instance' } | { mode: 'preset'; id: number }
+	deliveryMode?: 'standard' | 'event'
 }): Promise<Gallery> {
 	return (await axios.post<Gallery>(projectsUrl, payload)).data
 }

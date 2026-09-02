@@ -26,6 +26,8 @@ final class PublicShareContextResolver {
 		private PublicLinkMapper $links,
 		private FolderService $folders,
 		private CapabilityPolicyService $capabilities,
+		private PublicLinkScopeService $scopes,
+		private PublicLinkAnchorService $anchors,
 	) {
 	}
 
@@ -50,7 +52,12 @@ final class PublicShareContextResolver {
 		if (!$policy->allows($permission)) throw new \InvalidArgumentException('Public link permission is disabled');
 		$galleryRoot = $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId());
 		$expected = $link->getStartPath() === '' ? $galleryRoot : $galleryRoot->get($link->getStartPath());
-		if (!$expected instanceof Folder || $share->getNodeId() !== $expected->getId()) throw new \InvalidArgumentException('Public link scope does not match its share');
+		$shareRoot = $expected;
+		if ($this->scopes->isMultiRoot($link)) {
+			if ($link->getScopeAnchorId() === null) throw new \InvalidArgumentException('Public link scope anchor is missing');
+			$shareRoot = $this->anchors->resolve($gallery->getOwnerUid(), $link->getScopeAnchorId());
+		}
+		if (!$expected instanceof Folder || $share->getNodeId() !== $shareRoot->getId()) throw new \InvalidArgumentException('Public link scope does not match its share');
 		$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
 		return new PublicShareContext($share, $gallery, $settings, $link, $policy, $expected);
 	}

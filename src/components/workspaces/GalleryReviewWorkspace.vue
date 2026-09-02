@@ -13,6 +13,11 @@ import SelectionManager from '../SelectionManager.vue'
 defineProps<{ gallery: Gallery }>()
 const emit = defineEmits<{ complete: [] }>()
 const settings = defineModel<GallerySettings>('settings', { required: true })
+
+function updateSelectionDueDate(event: Event) {
+	const value = (event.target as HTMLInputElement).value
+	settings.value.review.selectionDueDate = value || null
+}
 </script>
 
 <template>
@@ -36,6 +41,19 @@ const settings = defineModel<GallerySettings>('settings', { required: true })
 				<NcCheckboxRadioSwitch v-if="gallery.sourceType === 'folder'" v-model="settings.delivery.guestUploads" type="switch">
 					{{ t('proofing_gallery', 'Allow guest uploads to an inbox') }}
 				</NcCheckboxRadioSwitch>
+				<div class="selection-rules">
+					<NcTextField v-model.number="settings.review.selectionMinimum"
+						type="number"
+						min="0"
+						max="1000"
+						:label="t('proofing_gallery', 'Minimum photos before submission')" />
+					<NcTextField v-model.number="settings.review.selectionMaximum"
+						type="number"
+						min="0"
+						max="1000"
+						:label="t('proofing_gallery', 'Maximum photos (0 means unlimited)')" />
+					<label><span>{{ t('proofing_gallery', 'Default selection due date') }}</span><input :value="settings.review.selectionDueDate ?? ''" type="date" @input="updateSelectionDueDate"></label>
+				</div>
 				<div v-if="settings.mode === 'collaboration'" class="feedback-switches">
 					<NcCheckboxRadioSwitch v-model="settings.review.likes" type="switch">
 						{{ t('proofing_gallery', 'Likes') }}
