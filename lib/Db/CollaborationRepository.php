@@ -524,7 +524,7 @@ final class CollaborationRepository {
 	 */
 	private function authorName(array $row, array $guestNames, array $userNames): string {
 		if ($row['actor_uid'] !== null && (string)$row['actor_uid'] !== '') {
-			return $userNames[(string)$row['actor_uid']] ?? (string)$row['actor_uid'];
+			return $userNames[(string)$row['actor_uid']] ?? '';
 		}
 		return $row['guest_id'] === null ? 'Deleted user' : ($guestNames[(int)$row['guest_id']] ?? 'Deleted guest');
 	}

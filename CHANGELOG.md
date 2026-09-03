@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.3 — 2026-09-03
+
+- make signed-in Nextcloud accounts and public guests first-class collaboration
+  actors across comments, selections, private ratings, picks, and review rounds
+- preserve account UIDs in storage while displaying current Nextcloud names,
+  enforce actor-specific uniqueness, and purge account-authored collaboration
+  data when its Nextcloud account is deleted
+- retain the existing guest session, export, rating, and review behavior for
+  backward compatibility
+
 ## 0.8.2 — 2026-08-19
 
 - rebuild public galleries as platform-adaptive Ionic apps with Geist typography,

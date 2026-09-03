@@ -9,10 +9,10 @@ use OCA\ProofingGallery\Db\GuestRating;
 final class GuestRatingAggregator {
 	/**
 	 * @param list<GuestRating> $values
-	 * @param array<int, string> $guestNames
+	 * @param array<string, string> $actorNames
 	 * @return array<string, mixed>
 	 */
-	public function summarize(int $fileId, array $values, array $guestNames): array {
+	public function summarize(int $fileId, array $values, array $actorNames): array {
 		if ($values === []) throw new \InvalidArgumentException('Cannot summarize an empty guest rating set');
 		$distribution = array_fill(0, 6, 0);
 		$picks = ['none' => 0, 'pick' => 0, 'reject' => 0];
@@ -26,7 +26,9 @@ final class GuestRatingAggregator {
 			$updatedAt = max($updatedAt, $value->getUpdatedAt());
 			$individuals[] = [
 				'guestId' => $value->getGuestId(),
-				'name' => ($guestNames[$value->getGuestId()] ?? '') ?: 'Guest',
+				'actorUid' => $value->getActorUid(),
+				'actorKind' => $value->getGuestId() === null ? 'user' : 'guest',
+				'name' => ($actorNames[$value->actorKey()] ?? '') ?: ($value->getGuestId() === null ? 'Account' : 'Guest'),
 				...$value->jsonSerialize(),
 			];
 		}

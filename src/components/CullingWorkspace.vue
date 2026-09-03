@@ -460,7 +460,7 @@ onBeforeUnmount(() => {
 			</div>
 		</header>
 
-		<div class="culling-toolbar" aria-label="Culling tools">
+		<div class="culling-toolbar" :aria-label="t('proofing_gallery', 'Culling tools')">
 			<div class="culling-toolbar__primary">
 				<NcButton variant="tertiary" :disabled="!undoStack.length || saving" @click="undo">
 					{{ t('proofing_gallery', 'Undo') }}
@@ -604,7 +604,7 @@ onBeforeUnmount(() => {
 						<button type="button" :aria-pressed="selectedIds.includes(aggregate.fileId)" @click="toggleSelected(aggregate.fileId)">
 							<span><strong>{{ items.find(item => item.id === aggregate.fileId)?.name || `#${aggregate.fileId}` }}</strong><small>{{ aggregate.count }} · Ø {{ aggregate.average.toFixed(1) }} <StarIcon :size="11" class="inline-star" /> · {{ aggregate.picks.pick }} <CheckIcon :size="11" class="inline-pick" /> · {{ aggregate.picks.reject }} <CloseIcon :size="11" class="inline-reject" /></small></span><b>{{ Math.round(aggregate.average) }}<StarIcon :size="11" class="inline-star" /></b>
 						</button>
-						<details><summary>{{ t('proofing_gallery', 'Show individual ratings') }}</summary><span v-for="individual in aggregate.individuals" :key="individual.guestId">{{ individual.name }} · {{ individual.rating }} <StarIcon :size="10" class="inline-star" /> · {{ individual.pick }}</span></details>
+						<details><summary>{{ t('proofing_gallery', 'Show individual ratings') }}</summary><span v-for="individual in aggregate.individuals" :key="`${individual.actorKind}:${individual.actorUid ?? individual.guestId ?? 'unknown'}`">{{ individual.name }} · {{ individual.rating }} <StarIcon :size="10" class="inline-star" /> · {{ individual.pick }}</span></details>
 					</li>
 				</ul>
 				<NcButton v-if="guestRatingsCursor"

@@ -6,11 +6,11 @@ namespace OCA\ProofingGallery\Service;
 
 use OCA\ProofingGallery\Db\CollaborationRepository;
 use OCA\ProofingGallery\Db\Gallery;
-use OCA\ProofingGallery\Db\Guest;
 use OCA\ProofingGallery\Db\PublicLink;
 use OCA\ProofingGallery\Db\PublicLinkMapper;
 use OCA\ProofingGallery\Db\ReviewRoundRepository;
 use OCA\ProofingGallery\Exception\ReviewConflictException;
+use OCA\ProofingGallery\Domain\CollaborationActor;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Db\TTransactional;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -65,16 +65,16 @@ final class ReviewWorkflowService {
 	}
 
 	/** @return array<string, mixed> */
-	public function submit(Gallery $gallery, PublicLink $link, Guest $guest): array {
+	public function submit(Gallery $gallery, PublicLink $link, CollaborationActor $actor): array {
 		$this->assertLink($gallery, $link);
 		if (!$link->getReviewEnabled()) throw new \InvalidArgumentException('Review submission is disabled for this link');
 		$current = $this->ensure($link);
 		$now = $this->clock->getTime();
-		if (!$this->rounds->submit((int)$current['id'], (int)$guest->getId(), $now)) {
+		if (!$this->rounds->submit((int)$current['id'], $actor->guestId(), $actor->userUid(), $now)) {
 			throw new ReviewConflictException('This review round is no longer open');
 		}
 		$this->collaboration->markResponseReceived((int)$gallery->getId(), $now);
-		$this->activity->record($gallery, $guest, 'review.submitted', ['publicLinkId' => (int)$link->getId(), 'round' => (int)$current['round_number']]);
+		$this->activity->recordActor($gallery, $actor, 'review.submitted', ['publicLinkId' => (int)$link->getId(), 'round' => (int)$current['round_number']]);
 		$this->integrations->emit('review.submitted', (int)$gallery->getId(), ['publicLinkId' => (int)$link->getId(), 'round' => (int)$current['round_number']]);
 		return $this->publicState($link);
 	}

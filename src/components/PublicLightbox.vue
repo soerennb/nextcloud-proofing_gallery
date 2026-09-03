@@ -711,7 +711,7 @@ async function saveEditedComment(commentId: number) {
 							</select>
 						</label>
 					</div>
-					<div v-if="!selectedAnnotationComment && collaboration?.guest?.kind !== 'user' && (settings.review?.ratings || settings.review?.pick)" class="guest-rating" :aria-label="t('proofing_gallery', 'Private rating')">
+					<div v-if="!selectedAnnotationComment && collaboration?.guest && (settings.review?.ratings || settings.review?.pick)" class="guest-rating" :aria-label="t('proofing_gallery', 'Private rating')">
 						<div v-if="settings.review?.ratings" class="guest-rating__stars">
 							<span>{{ t('proofing_gallery', 'Your private rating') }}</span>
 							<button v-for="rating in 6"
@@ -774,8 +774,8 @@ async function saveEditedComment(commentId: number) {
 								<details class="guest-export-composer">
 									<summary>{{ t('proofing_gallery', 'Customize CSV') }}</summary>
 									<label><input checked disabled type="checkbox"> {{ t('proofing_gallery', 'Filename') }}</label>
-									<label v-if="collaboration.guest?.kind !== 'user'"><input v-model="guestExportFields" type="checkbox" value="rating"> {{ t('proofing_gallery', 'My rating') }}</label>
-									<label v-if="collaboration.guest?.kind !== 'user'"><input v-model="guestExportFields" type="checkbox" value="pick"> {{ t('proofing_gallery', 'My pick') }}</label>
+									<label><input v-model="guestExportFields" type="checkbox" value="rating"> {{ t('proofing_gallery', 'My rating') }}</label>
+									<label><input v-model="guestExportFields" type="checkbox" value="pick"> {{ t('proofing_gallery', 'My pick') }}</label>
 									<a :href="selectionExportUrl(selection.id, 'csv', ['filename', ...guestExportFields.filter(field => field !== 'filename')])">{{ t('proofing_gallery', 'Download UTF-8 CSV') }}</a>
 								</details>
 								<a :href="selectionExportUrl(selection.id, 'plain')">{{ t('proofing_gallery', 'List') }}</a>

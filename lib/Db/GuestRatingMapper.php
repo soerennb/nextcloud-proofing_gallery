@@ -18,21 +18,31 @@ final class GuestRatingMapper extends QBMapper {
 
 	/** @throws DoesNotExistException|MultipleObjectsReturnedException */
 	public function findGuestFile(int $galleryId, int $guestId, int $fileId): GuestRating {
+		return $this->findActorFile($galleryId, $guestId, null, $fileId);
+	}
+
+	/** @throws DoesNotExistException|MultipleObjectsReturnedException */
+	public function findActorFile(int $galleryId, ?int $guestId, ?string $actorUid, int $fileId): GuestRating {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')->from($this->tableName)
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
-			->andWhere($qb->expr()->eq('guest_id', $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)));
+		$this->actorWhere($qb, $guestId, $actorUid);
 		return $this->findEntity($qb);
 	}
 
 	/** @return list<GuestRating> */
 	public function findForGuest(int $galleryId, int $guestId): array {
+		return $this->findForActor($galleryId, $guestId, null);
+	}
+
+	/** @return list<GuestRating> */
+	public function findForActor(int $galleryId, ?int $guestId, ?string $actorUid): array {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')->from($this->tableName)
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
-			->andWhere($qb->expr()->eq('guest_id', $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT)))
 			->orderBy('file_id', 'ASC');
+		$this->actorWhere($qb, $guestId, $actorUid);
 		return $this->findEntities($qb);
 	}
 
@@ -40,14 +50,21 @@ final class GuestRatingMapper extends QBMapper {
 	 * @return list<GuestRating>
 	 */
 	public function findForGuestFiles(int $galleryId, int $guestId, array $fileIds): array {
+		return $this->findForActorFiles($galleryId, $guestId, null, $fileIds);
+	}
+
+	/** @param list<int> $fileIds
+	 * @return list<GuestRating>
+	 */
+	public function findForActorFiles(int $galleryId, ?int $guestId, ?string $actorUid, array $fileIds): array {
 		$fileIds = array_values(array_unique(array_filter(array_map('intval', $fileIds), static fn (int $id): bool => $id > 0)));
 		if ($fileIds === []) return [];
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')->from($this->tableName)
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
-			->andWhere($qb->expr()->eq('guest_id', $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->in('file_id', $qb->createNamedParameter($fileIds, IQueryBuilder::PARAM_INT_ARRAY)))
 			->orderBy('file_id', 'ASC');
+		$this->actorWhere($qb, $guestId, $actorUid);
 		return $this->findEntities($qb);
 	}
 
@@ -56,7 +73,7 @@ final class GuestRatingMapper extends QBMapper {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')->from($this->tableName)
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
-			->orderBy('file_id', 'ASC')->addOrderBy('guest_id', 'ASC');
+			->orderBy('file_id', 'ASC')->addOrderBy('guest_id', 'ASC')->addOrderBy('actor_uid', 'ASC');
 		return $this->findEntities($qb);
 	}
 
@@ -90,9 +107,20 @@ final class GuestRatingMapper extends QBMapper {
 			$qb->select('*')->from($this->tableName)
 				->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 				->andWhere($qb->expr()->in('file_id', $qb->createNamedParameter($chunk, IQueryBuilder::PARAM_INT_ARRAY)))
-				->orderBy('file_id', 'ASC')->addOrderBy('guest_id', 'ASC');
+				->orderBy('file_id', 'ASC')->addOrderBy('guest_id', 'ASC')->addOrderBy('actor_uid', 'ASC');
 			array_push($result, ...$this->findEntities($qb));
 		}
 		return $result;
+	}
+
+	private function actorWhere(IQueryBuilder $qb, ?int $guestId, ?string $actorUid): void {
+		if (($guestId === null) === ($actorUid === null)) {
+			throw new \InvalidArgumentException('Rating actor must be either a guest or a user');
+		}
+		if ($guestId !== null) {
+			$qb->andWhere($qb->expr()->eq('guest_id', $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT)));
+			return;
+		}
+		$qb->andWhere($qb->expr()->eq('actor_uid', $qb->createNamedParameter($actorUid)));
 	}
 }

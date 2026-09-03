@@ -36,7 +36,7 @@ final class CollaborationActor implements \JsonSerializable {
 	}
 
 	public static function user(IUser $user): self {
-		return new self(null, $user->getUID(), 'account', $user->getDisplayName(), 0);
+		return new self(null, $user->getUID(), $user->getUID(), $user->getDisplayName(), 0);
 	}
 
 	public function guestId(): ?int {

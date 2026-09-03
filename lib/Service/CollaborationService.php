@@ -171,10 +171,11 @@ final class CollaborationService {
 		});
 	}
 
-	public function saveRating(PublicLink $link, Gallery $gallery, Guest $guest, int $fileId, int $rating, string $pick): GuestRating {
-		return $this->atomic(function () use ($link, $gallery, $guest, $fileId, $rating, $pick): GuestRating {
-			$value = $this->guestRatings->save($link, $guest, $fileId, $rating, $pick);
-			$this->event($gallery, CollaborationActor::guest($guest), 'rating.changed', ['fileId' => $fileId]);
+	public function saveRating(PublicLink $link, Gallery $gallery, CollaborationActor $actor, int $fileId, int $rating, string $pick): GuestRating {
+		if ($link->getGalleryId() !== $gallery->getId()) throw new InvalidArgumentException('Public link does not belong to this gallery');
+		return $this->atomic(function () use ($link, $gallery, $actor, $fileId, $rating, $pick): GuestRating {
+			$value = $this->guestRatings->saveForActor($link, $actor, $fileId, $rating, $pick);
+			$this->event($gallery, $actor, 'rating.changed', ['fileId' => $fileId]);
 			return $value;
 		});
 	}
@@ -387,13 +388,23 @@ final class CollaborationService {
 		if ($row === null || ($this->settings($gallery)->review->visibility === FeedbackVisibility::Private && !$actor->owns($row))) {
 			throw new InvalidArgumentException('Selection not found');
 		}
+		$fileIds = [];
 		$names = [];
 		foreach ($this->repository->selectionFileIds((int)$row['id']) as $fileId) {
-			try { $names[] = $this->resolveMedia($gallery, $fileId)->getName(); } catch (\Throwable) {}
+			try {
+				$fileIds[] = $fileId;
+				$names[] = $this->resolveMedia($gallery, $fileId)->getName();
+			} catch (\Throwable) {}
 		}
 		$base = preg_replace('/[^a-z0-9._-]+/i', '-', (string)$row['name']) ?: 'selection';
 		if ($format === 'csv' || $format === 'preview') {
-			$content = "\xEF\xBB\xBF" . $this->csv->encode([['filename'], ...array_map(static fn (string $name): array => [$name], $names)]);
+			$fields = array_values(array_unique(array_intersect(['filename', 'rating', 'pick'], array_map('strval', $requestedFields))));
+			if ($fields === []) $fields = ['filename'];
+			$rows = $this->composeExportRows($gallery, null, $fileIds, $fields, (string)$row['name'], $actor);
+			$content = "\xEF\xBB\xBF" . $this->csv->encode([$fields, ...array_map(
+				static fn (array $values): array => array_map(static fn (string $field): string => (string)($values[$field] ?? ''), $fields),
+				$rows,
+			)]);
 			return ['content' => $content, 'filename' => $base . ($format === 'preview' ? '-preview.csv' : '.csv'), 'mimeType' => 'text/csv; charset=utf-8'];
 		}
 		return match ($format) {
@@ -408,13 +419,17 @@ final class CollaborationService {
 	 * @param list<string> $fields
 	 * @return list<array<string, int|float|string>>
 	 */
-	private function composeExportRows(Gallery $gallery, ?Guest $guest, array $fileIds, array $fields, string $selectionName): array {
+	private function composeExportRows(Gallery $gallery, ?Guest $guest, array $fileIds, array $fields, string $selectionName, ?CollaborationActor $actor = null): array {
 		if ($fileIds === []) return [];
-		$culls = $guest === null ? $this->culling->forFiles($gallery->getOwnerUid(), $fileIds) : [];
-		$aggregates = $guest === null ? array_column($this->guestRatings->aggregate($gallery, $fileIds)['items'], null, 'fileId') : [];
-		$guestValues = $guest === null ? [] : array_column(array_map(static fn (\OCA\ProofingGallery\Db\GuestRating $value): array => $value->jsonSerialize(), $this->guestRatings->forGuest($guest)), null, 'fileId');
+		$isOwner = $guest === null && $actor === null;
+		$culls = $isOwner ? $this->culling->forFiles($gallery->getOwnerUid(), $fileIds) : [];
+		$aggregates = $isOwner ? array_column($this->guestRatings->aggregate($gallery, $fileIds)['items'], null, 'fileId') : [];
+		$ratingValues = $guest !== null
+			? $this->guestRatings->forGuestFiles($guest, $fileIds)
+			: ($actor === null ? [] : $this->guestRatings->forActorFiles($gallery->getId(), $actor, $fileIds));
+		$guestValues = array_column(array_map(static fn (\OCA\ProofingGallery\Db\GuestRating $value): array => $value->jsonSerialize(), $ratingValues), null, 'fileId');
 		$comments = [];
-		if ($guest === null && in_array('comments', $fields, true)) {
+		if ($isOwner && in_array('comments', $fields, true)) {
 			$comments = $this->repository->commentsByFileIds($gallery->getId(), $fileIds);
 		}
 		$root = $gallery->getSourceType() === 'folder' ? $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId()) : null;

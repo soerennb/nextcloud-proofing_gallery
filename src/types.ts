@@ -151,7 +151,7 @@ export interface GuestRatingAggregate {
 	distribution: [number, number, number, number, number, number]
 	picks: Record<CullPick, number>
 	updatedAt: number
-	individuals: Array<GuestRatingValue & { guestId: number; name: string }>
+	individuals: Array<GuestRatingValue & { guestId: number | null; actorUid: string | null; actorKind: 'guest' | 'user'; name: string }>
 }
 
 export interface GuestRatingPromotion {

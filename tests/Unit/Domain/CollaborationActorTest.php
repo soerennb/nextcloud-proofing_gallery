@@ -20,6 +20,7 @@ final class CollaborationActorTest extends TestCase {
 		self::assertFalse($actor->owns(['guest_id' => 7, 'actor_uid' => null]));
 		self::assertFalse($actor->owns(['guest_id' => null, 'actor_uid' => 'other-user']));
 		self::assertSame('user', $actor->jsonSerialize()['kind']);
+		self::assertSame('ncadmin', $actor->jsonSerialize()['id']);
 	}
 
 	public function testGuestOwnsOnlyRowsWithTheSameGuestId(): void {

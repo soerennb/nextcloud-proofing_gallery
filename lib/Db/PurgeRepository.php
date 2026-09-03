@@ -157,24 +157,43 @@ final class PurgeRepository {
 	}
 
 	public function deletePrincipal(string $type, string $id): int {
-		$qb = $this->db->getQueryBuilder();
-		$deleted = $qb->delete('proofing_managers')
-			->where($qb->expr()->eq('principal_type', $qb->createNamedParameter($type)))
-			->andWhere($qb->expr()->eq('user_uid', $qb->createNamedParameter($id)))->executeStatement();
-		if ($type !== 'user') return $deleted;
-		foreach ([
-			['proofing_presets', 'owner_uid'],
-			['proofing_inv_templates', 'owner_uid'],
-			['proofing_media_cull', 'owner_uid'],
-			['proofing_agent_requests', 'user_uid'],
-			['proofing_notify_subs', 'user_uid'],
-			['proofing_native_notify', 'user_uid'],
-			['proofing_ext_resources', 'user_uid'],
-		] as [$table, $column]) {
+		$this->db->beginTransaction();
+		try {
 			$qb = $this->db->getQueryBuilder();
-			$deleted += $qb->delete($table)->where($qb->expr()->eq($column, $qb->createNamedParameter($id)))->executeStatement();
+			$deleted = $qb->delete('proofing_managers')
+				->where($qb->expr()->eq('principal_type', $qb->createNamedParameter($type)))
+				->andWhere($qb->expr()->eq('user_uid', $qb->createNamedParameter($id)))->executeStatement();
+			if ($type === 'user') {
+				$comments = $this->actorParentIds('proofing_comments', $id);
+				$selections = $this->actorParentIds('proofing_selections', $id);
+				$deleted += $this->deleteIds('proofing_annotations', 'comment_id', $comments)
+					+ $this->deleteIds('proofing_selection_items', 'selection_id', $selections);
+				foreach (['proofing_feedback', 'proofing_comments', 'proofing_selections', 'proofing_guest_ratings', 'proofing_events', 'proofing_share_audit'] as $table) {
+					$qb = $this->db->getQueryBuilder();
+					$deleted += $qb->delete($table)->where($qb->expr()->eq('actor_uid', $qb->createNamedParameter($id)))->executeStatement();
+				}
+				$qb = $this->db->getQueryBuilder();
+				$qb->update('proofing_review_rounds')->set('submitted_by_actor_uid', $qb->createNamedParameter(null))
+					->where($qb->expr()->eq('submitted_by_actor_uid', $qb->createNamedParameter($id)))->executeStatement();
+				foreach ([
+					['proofing_presets', 'owner_uid'],
+					['proofing_inv_templates', 'owner_uid'],
+					['proofing_media_cull', 'owner_uid'],
+					['proofing_agent_requests', 'user_uid'],
+					['proofing_notify_subs', 'user_uid'],
+					['proofing_native_notify', 'user_uid'],
+					['proofing_ext_resources', 'user_uid'],
+				] as [$table, $column]) {
+					$qb = $this->db->getQueryBuilder();
+					$deleted += $qb->delete($table)->where($qb->expr()->eq($column, $qb->createNamedParameter($id)))->executeStatement();
+				}
+			}
+			$this->db->commit();
+			return $deleted;
+		} catch (\Throwable $exception) {
+			$this->db->rollBack();
+			throw $exception;
 		}
-		return $deleted;
 	}
 
 	/** @return array<string, list<array<string, mixed>>> */
@@ -222,6 +241,13 @@ final class PurgeRepository {
 		$qb = $this->db->getQueryBuilder();
 		return array_map('intval', QueryResult::column($qb->select('id')->from($table)
 			->where($qb->expr()->eq('guest_id', $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT)))->executeQuery()));
+	}
+
+	/** @return list<int> */
+	private function actorParentIds(string $table, string $actorUid): array {
+		$qb = $this->db->getQueryBuilder();
+		return array_map('intval', QueryResult::column($qb->select('id')->from($table)
+			->where($qb->expr()->eq('actor_uid', $qb->createNamedParameter($actorUid)))->executeQuery()));
 	}
 
 	/** @param list<int> $ids */

@@ -36,6 +36,10 @@ function formatCommentDateTime(createdAt: number): string {
 		year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit',
 	}).format(new Date(createdAt * 1000))
 }
+
+function authorName(author: string): string {
+	return author.trim() || t('proofing_gallery', 'Former user')
+}
 </script>
 
 <template>
@@ -54,10 +58,10 @@ function formatCommentDateTime(createdAt: number): string {
 					{{ t('proofing_gallery', 'Point comment {number}', { number: annotationNumbers.get(comment.id)?.[0] ?? 0 }) }}
 				</button>
 				<span v-else-if="!annotationNumbers.get(comment.id)?.[0] && selectedCommentId === null">{{ t('proofing_gallery', 'General comment') }}</span>
-				<i class="comment-list__avatar" aria-hidden="true">{{ comment.author.trim().charAt(0).toUpperCase() || '?' }}</i>
+				<i class="comment-list__avatar" aria-hidden="true">{{ authorName(comment.author).charAt(0).toUpperCase() || '?' }}</i>
 				<div>
 					<span class="comment-list__identity">
-						<strong>{{ comment.author }}</strong>
+						<strong>{{ authorName(comment.author) }}</strong>
 						<span v-if="comment.mine && editingCommentId !== comment.id" class="comment-actions">
 							<button type="button"
 								:aria-label="t('proofing_gallery', 'Edit')"

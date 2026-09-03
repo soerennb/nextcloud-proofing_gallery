@@ -6,30 +6,31 @@ namespace OCA\ProofingGallery\Db;
 
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
+use OCP\IUserManager;
 
 final class ReviewRoundRepository {
-	public function __construct(private IDBConnection $db) {
+	public function __construct(private IDBConnection $db, private IUserManager $users) {
 	}
 
 	/** @return array<string, mixed>|null */
 	public function current(int $publicLinkId): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$row = QueryResult::row($qb->select('r.*', 'g.display_name AS submitted_by')
+		$row = QueryResult::row($qb->select('r.*', 'g.display_name AS submitted_by_guest')
 			->from('proofing_review_rounds', 'r')
 			->leftJoin('r', 'proofing_guests', 'g', $qb->expr()->eq('g.id', 'r.submitted_by_guest_id'))
 			->where($qb->expr()->eq('r.public_link_id', $qb->createNamedParameter($publicLinkId, IQueryBuilder::PARAM_INT)))
 			->orderBy('r.round_number', 'DESC')->setMaxResults(1)->executeQuery());
-		return $row === false ? null : $row;
+		return $row === false ? null : $this->withSubmitter($row);
 	}
 
 	/** @return list<array<string, mixed>> */
 	public function history(int $publicLinkId): array {
 		$qb = $this->db->getQueryBuilder();
-		return QueryResult::rows($qb->select('r.*', 'g.display_name AS submitted_by')
+		return array_map($this->withSubmitter(...), QueryResult::rows($qb->select('r.*', 'g.display_name AS submitted_by_guest')
 			->from('proofing_review_rounds', 'r')
 			->leftJoin('r', 'proofing_guests', 'g', $qb->expr()->eq('g.id', 'r.submitted_by_guest_id'))
 			->where($qb->expr()->eq('r.public_link_id', $qb->createNamedParameter($publicLinkId, IQueryBuilder::PARAM_INT)))
-			->orderBy('r.round_number', 'DESC')->executeQuery());
+			->orderBy('r.round_number', 'DESC')->executeQuery()));
 	}
 
 	public function create(int $galleryId, int $publicLinkId, int $number, ?string $dueDate, int $now): void {
@@ -41,6 +42,7 @@ final class ReviewRoundRepository {
 			'status' => $qb->createNamedParameter('awaiting_feedback'),
 			'due_date' => $qb->createNamedParameter($dueDate),
 			'submitted_by_guest_id' => $qb->createNamedParameter(null),
+			'submitted_by_actor_uid' => $qb->createNamedParameter(null),
 			'submitted_at' => $qb->createNamedParameter(null),
 			'decided_at' => $qb->createNamedParameter(null),
 			'created_at' => $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT),
@@ -57,16 +59,31 @@ final class ReviewRoundRepository {
 			->executeStatement();
 	}
 
-	public function submit(int $id, int $guestId, int $now): bool {
+	public function submit(int $id, ?int $guestId, ?string $actorUid, int $now): bool {
+		if (($guestId === null) === ($actorUid === null)) throw new \InvalidArgumentException('Review actor must be either a guest or a user');
 		$qb = $this->db->getQueryBuilder();
 		return $qb->update('proofing_review_rounds')
 			->set('status', $qb->createNamedParameter('submitted'))
 			->set('submitted_by_guest_id', $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT))
+			->set('submitted_by_actor_uid', $qb->createNamedParameter($actorUid))
 			->set('submitted_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT))
 			->set('updated_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT))
 			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('status', $qb->createNamedParameter('awaiting_feedback')))
 			->executeStatement() === 1;
+	}
+
+	/** @param array<string, mixed> $row
+	 * @return array<string, mixed>
+	 */
+	private function withSubmitter(array $row): array {
+		$guestName = $row['submitted_by_guest'] ?? null;
+		$uid = $row['submitted_by_actor_uid'] ?? null;
+		$row['submitted_by'] = is_string($guestName) && $guestName !== ''
+			? $guestName
+			: (is_string($uid) && $uid !== '' ? $this->users->get($uid)?->getDisplayName() : null);
+		unset($row['submitted_by_guest']);
+		return $row;
 	}
 
 	public function decide(int $id, string $from, string $to, int $now): bool {

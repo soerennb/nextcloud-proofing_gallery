@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Controller;
 
+use OCA\ProofingGallery\Domain\CollaborationActor;
 use OCA\ProofingGallery\Exception\ReviewConflictException;
+use OCA\ProofingGallery\Service\AuthenticatedCollaborationSession;
 use OCA\ProofingGallery\Service\GuestService;
 use OCA\ProofingGallery\Service\PublicShareContextResolver;
 use OCA\ProofingGallery\Service\ReviewWorkflowService;
@@ -25,6 +27,7 @@ final class PublicReviewController extends ResolvedPublicShareController {
 		PublicShareContextResolver $contextResolver,
 		private ReviewWorkflowService $reviews,
 		private GuestService $guests,
+		private AuthenticatedCollaborationSession $authenticated,
 	) {
 		parent::__construct($request, $session, $contextResolver);
 	}
@@ -43,14 +46,10 @@ final class PublicReviewController extends ResolvedPublicShareController {
 	public function submit(): JSONResponse {
 		try {
 			$context = $this->publicContext();
-			$guest = $this->guests->authenticate(
-				$context->gallery,
-				$this->guestSecret($context->gallery),
-				$this->request->getHeader('X-Proofing-Nonce'),
-			);
-			return new JSONResponse($this->reviews->submit($context->gallery, $context->link, $guest));
+			$actor = $this->authenticateActor($context->gallery);
+			return new JSONResponse($this->reviews->submit($context->gallery, $context->link, $actor));
 		} catch (DoesNotExistException) {
-			return new JSONResponse(['code' => 'guest_session_required', 'message' => 'Guest session required'], Http::STATUS_UNAUTHORIZED);
+			return new JSONResponse(['code' => 'guest_session_required', 'message' => 'Collaboration identity required'], Http::STATUS_UNAUTHORIZED);
 		} catch (ReviewConflictException $exception) {
 			return new JSONResponse(['code' => 'review_conflict', 'message' => $exception->getMessage()], Http::STATUS_CONFLICT);
 		} catch (\InvalidArgumentException $exception) {
@@ -59,5 +58,15 @@ final class PublicReviewController extends ResolvedPublicShareController {
 			}
 			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
+	}
+
+	private function authenticateActor(\OCA\ProofingGallery\Db\Gallery $gallery): CollaborationActor {
+		$actor = $this->authenticated->authenticate($gallery, $this->request->getHeader('X-Proofing-Nonce'));
+		if ($actor !== null) return $actor;
+		return CollaborationActor::guest($this->guests->authenticate(
+			$gallery,
+			$this->guestSecret($gallery),
+			$this->request->getHeader('X-Proofing-Nonce'),
+		));
 	}
 }

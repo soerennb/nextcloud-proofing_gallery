@@ -21,6 +21,37 @@ const editingId = ref<number | null | 'new'>(null)
 const qrUrl = ref('')
 const qrData = ref('')
 const permissionKeys: Array<Exclude<keyof PublicLinkPolicy, 'view' | 'downloadScope'>> = ['likes', 'colors', 'comments', 'annotations', 'selections', 'ratings', 'pick', 'upload', 'export', 'metadata']
+const permissionLabels: Record<(typeof permissionKeys)[number], string> = {
+	likes: t('proofing_gallery', 'Likes'),
+	colors: t('proofing_gallery', 'Color workflow'),
+	comments: t('proofing_gallery', 'Comments'),
+	annotations: t('proofing_gallery', 'Image annotations'),
+	selections: t('proofing_gallery', 'Client selections'),
+	ratings: t('proofing_gallery', 'Client ratings'),
+	pick: t('proofing_gallery', 'Pick'),
+	upload: t('proofing_gallery', 'Upload'),
+	export: t('proofing_gallery', 'Export'),
+	metadata: t('proofing_gallery', 'Metadata'),
+}
+const downloadScopeLabels: Record<PublicLinkPolicy['downloadScope'], string> = {
+	none: t('proofing_gallery', 'Disabled'),
+	individual: t('proofing_gallery', 'Individual files'),
+	selection: t('proofing_gallery', 'Saved selections'),
+	all: t('proofing_gallery', 'Files and selections'),
+}
+const presetLabels: Record<string, string> = {
+	presentation: t('proofing_gallery', 'Presentation'),
+	selection: t('proofing_gallery', 'Selection'),
+	proofing: t('proofing_gallery', 'Proofing'),
+	delivery: t('proofing_gallery', 'Delivery'),
+	upload: t('proofing_gallery', 'Upload'),
+}
+const reviewStatusLabels: Record<string, string> = {
+	awaiting_feedback: t('proofing_gallery', 'Review open'),
+	submitted: t('proofing_gallery', 'Submitted for approval'),
+	changes_requested: t('proofing_gallery', 'Changes requested'),
+	approved: t('proofing_gallery', 'Approved'),
+}
 const draft = ref(createDraft())
 
 function createDraft() {
@@ -175,9 +206,9 @@ onMounted(load)
 				<div class="link-card__top">
 					<div><strong>{{ link.name }}</strong><span v-if="link.primary">{{ t('proofing_gallery', 'PRIMARY') }}</span></div><small>{{ link.status === 'active' ? t('proofing_gallery', 'Active') : t('proofing_gallery', 'Revoked') }}</small>
 				</div>
-				<p>{{ link.viewMode === 'recursive' ? t('proofing_gallery', 'Recursive') : t('proofing_gallery', 'Folder view') }} · {{ link.startPath || t('proofing_gallery', 'Gallery root') }} · {{ link.policy.downloadScope }}</p>
+				<p>{{ link.viewMode === 'recursive' ? t('proofing_gallery', 'Recursive') : t('proofing_gallery', 'Folder view') }} · {{ link.startPath || t('proofing_gallery', 'Gallery root') }} · {{ downloadScopeLabels[link.policy.downloadScope] }}</p>
 				<p v-if="link.reviewEnabled" class="link-card__review">
-					{{ t('proofing_gallery', 'Review round {round}: {status}', { round: link.review.current?.round ?? 1, status: link.review.current?.status ?? 'awaiting_feedback' }) }}<template v-if="link.reviewDueDate">
+					{{ t('proofing_gallery', 'Review round {round}: {status}', { round: link.review.current?.round ?? 1, status: reviewStatusLabels[link.review.current?.status ?? 'awaiting_feedback'] ?? link.review.current?.status ?? '' }) }}<template v-if="link.reviewDueDate">
 						· {{ link.reviewDueDate }}
 					</template>
 				</p>
@@ -222,8 +253,8 @@ onMounted(load)
 					name="linkName"
 					required
 					maxlength="120"></label>
-				<label><span>{{ t('proofing_gallery', 'Permission preset') }}</span><select v-model="draft.preset" name="linkPreset" @change="applyPreset(draft.preset)"><option v-for="(_, name) in presets" :key="name" :value="name">{{ name }}</option></select></label>
-				<label><span>{{ t('proofing_gallery', 'Start folder') }}</span><input v-model="draft.startPath" name="linkStartPath" placeholder="Client / Finals"></label>
+				<label><span>{{ t('proofing_gallery', 'Permission preset') }}</span><select v-model="draft.preset" name="linkPreset" @change="applyPreset(draft.preset)"><option v-for="(_, name) in presets" :key="name" :value="name">{{ presetLabels[name] ?? name }}</option></select></label>
+				<label><span>{{ t('proofing_gallery', 'Start folder') }}</span><input v-model="draft.startPath" name="linkStartPath" :placeholder="t('proofing_gallery', 'Client / Finals')"></label>
 				<label><span>{{ t('proofing_gallery', 'View mode') }}</span><select v-model="draft.viewMode" name="linkViewMode"><option value="folder">{{ t('proofing_gallery', 'Folder view') }}</option><option value="recursive">{{ t('proofing_gallery', 'Recursive') }}</option></select></label>
 				<label><span>{{ t('proofing_gallery', 'Minimum owner rating') }}</span><select v-model.number="draft.minOwnerRating" name="linkMinRating"><option v-for="rating in 6" :key="rating - 1" :value="rating - 1">{{ rating - 1 }} ★</option></select></label>
 				<label><span>{{ t('proofing_gallery', 'Public language') }}</span><select v-model="draft.publicLocale" name="linkLocale"><option :value="null">{{ t('proofing_gallery', 'Gallery default') }}</option><option value="de">Deutsch</option><option value="en">English</option></select></label>
@@ -240,7 +271,7 @@ onMounted(load)
 					type="checkbox"
 					:name="`policy-${key}`"
 					:disabled="key === 'annotations' && !draft.policy.comments"
-					@change="updatePermission(key, ($event.target as HTMLInputElement).checked)">{{ key }}</label><label><span>{{ t('proofing_gallery', 'Downloads') }}</span><select v-model="draft.policy.downloadScope" name="linkDownloads"><option value="none">none</option><option value="individual">individual</option><option value="selection">selection</option><option value="all">all</option></select></label>
+					@change="updatePermission(key, ($event.target as HTMLInputElement).checked)">{{ permissionLabels[key] }}</label><label><span>{{ t('proofing_gallery', 'Downloads') }}</span><select v-model="draft.policy.downloadScope" name="linkDownloads"><option v-for="(label, scope) in downloadScopeLabels" :key="scope" :value="scope">{{ label }}</option></select></label>
 			</fieldset>
 			<div class="link-editor__actions">
 				<NcButton type="submit" variant="primary" :disabled="saving">

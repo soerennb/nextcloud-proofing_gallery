@@ -10,8 +10,10 @@ use OCA\ProofingGallery\Db\Guest;
 use OCA\ProofingGallery\Db\GuestRating;
 use OCA\ProofingGallery\Db\GuestRatingMapper;
 use OCA\ProofingGallery\Db\PublicLink;
+use OCA\ProofingGallery\Domain\CollaborationActor;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\IUserManager;
 
 final class GuestRatingService {
 	public function __construct(
@@ -21,19 +23,27 @@ final class GuestRatingService {
 		private \OCP\IDBConnection $db,
 		private GuestRatingAggregator $aggregator,
 		private CapabilityPolicyService $capabilities,
+		private IUserManager $users,
 	) {
 	}
 
 	public function save(PublicLink $link, Guest $guest, int $fileId, int $rating, string $pick = 'none'): GuestRating {
-		$this->capabilities->assertFeature('guestRatings');
-		if ($rating < 0 || $rating > 5 || !in_array($pick, ['none', 'pick', 'reject'], true)) {
-			throw new \InvalidArgumentException('Invalid guest rating');
-		}
-		if ($guest->getGalleryId() !== $link->getGalleryId() || $link->getStatus() !== 'active') {
+		if ($guest->getGalleryId() !== $link->getGalleryId()) {
 			throw new \InvalidArgumentException('Guest and public link do not belong to the same active gallery');
 		}
+		return $this->saveForActor($link, CollaborationActor::guest($guest), $fileId, $rating, $pick);
+	}
+
+	public function saveForActor(PublicLink $link, CollaborationActor $actor, int $fileId, int $rating, string $pick = 'none'): GuestRating {
+		$this->capabilities->assertFeature('guestRatings');
+		if ($rating < 0 || $rating > 5 || !in_array($pick, ['none', 'pick', 'reject'], true)) {
+			throw new \InvalidArgumentException('Invalid reviewer rating');
+		}
+		if ($link->getStatus() !== 'active') {
+			throw new \InvalidArgumentException('Public link is not active');
+		}
 		try {
-			$value = $this->ratings->findGuestFile($link->getGalleryId(), $guest->getId(), $fileId);
+			$value = $this->ratings->findActorFile($link->getGalleryId(), $actor->guestId(), $actor->userUid(), $fileId);
 			$value->setPublicLinkId($link->getId());
 			$value->setRating($rating);
 			$value->setPickState($pick);
@@ -43,7 +53,8 @@ final class GuestRatingService {
 			$value = new GuestRating();
 			$value->setGalleryId($link->getGalleryId());
 			$value->setPublicLinkId($link->getId());
-			$value->setGuestId($guest->getId());
+			$value->setGuestId($actor->guestId());
+			$value->setActorUid($actor->userUid());
 			$value->setFileId($fileId);
 			$value->setRating($rating);
 			$value->setPickState($pick);
@@ -54,16 +65,28 @@ final class GuestRatingService {
 
 	/** @return list<GuestRating> */
 	public function forGuest(Guest $guest): array {
+		return $this->forActor($guest->getGalleryId(), CollaborationActor::guest($guest));
+	}
+
+	/** @return list<GuestRating> */
+	public function forActor(int $galleryId, CollaborationActor $actor): array {
 		$this->capabilities->assertFeature('guestRatings');
-		return $this->ratings->findForGuest($guest->getGalleryId(), $guest->getId());
+		return $this->ratings->findForActor($galleryId, $actor->guestId(), $actor->userUid());
 	}
 
 	/** @param list<int> $fileIds
 	 * @return list<GuestRating>
 	 */
 	public function forGuestFiles(Guest $guest, array $fileIds): array {
+		return $this->forActorFiles($guest->getGalleryId(), CollaborationActor::guest($guest), $fileIds);
+	}
+
+	/** @param list<int> $fileIds
+	 * @return list<GuestRating>
+	 */
+	public function forActorFiles(int $galleryId, CollaborationActor $actor, array $fileIds): array {
 		$this->capabilities->assertFeature('guestRatings');
-		return $this->ratings->findForGuestFiles($guest->getGalleryId(), $guest->getId(), $fileIds);
+		return $this->ratings->findForActorFiles($galleryId, $actor->guestId(), $actor->userUid(), $fileIds);
 	}
 
 	/**
@@ -74,22 +97,32 @@ final class GuestRatingService {
 		$this->capabilities->assertFeature('guestRatings');
 		$grouped = [];
 		$guests = [];
+		$actorNames = [];
 		$values = $fileIds === [] ? $this->ratings->findForGallery($gallery->getId()) : $this->ratings->findForGalleryFiles($gallery->getId(), $fileIds);
 		foreach ($values as $value) {
 			$grouped[$value->getFileId()][] = $value;
-			$guests[$value->getGuestId()] = '';
+			if ($value->getGuestId() !== null) {
+				$guests[$value->getGuestId()] = '';
+				$actorNames[$value->actorKey()] = '';
+			} elseif ($value->getActorUid() !== null) {
+				$user = $this->users->get($value->getActorUid());
+				$actorNames[$value->actorKey()] = $user?->getDisplayName() ?? '';
+			}
 		}
 		if ($guests !== []) {
 			foreach (array_chunk(array_keys($guests), 500) as $guestIds) {
 				$qb = $this->db->getQueryBuilder();
 				$qb->select('id', 'display_name')->from('proofing_guests')
 					->where($qb->expr()->in('id', $qb->createNamedParameter($guestIds, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT_ARRAY)));
-				foreach (QueryResult::rows($qb->executeQuery()) as $row) $guests[(int)$row['id']] = (string)$row['display_name'];
+				foreach (QueryResult::rows($qb->executeQuery()) as $row) {
+					$guests[(int)$row['id']] = (string)$row['display_name'];
+					$actorNames['guest:' . (int)$row['id']] = (string)$row['display_name'];
+				}
 			}
 		}
 		$items = [];
 		foreach ($grouped as $fileId => $values) {
-			$items[] = $this->aggregator->summarize((int)$fileId, $values, $guests);
+			$items[] = $this->aggregator->summarize((int)$fileId, $values, $actorNames);
 		}
 		return ['items' => $items, 'guests' => $guests];
 	}

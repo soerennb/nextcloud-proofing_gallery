@@ -97,12 +97,16 @@ final class CollaborationController extends ResolvedPublicShareController {
 			return true;
 		}));
 		$actor = $this->optionalActor();
-		$guest = $actor?->isGuest() ? $this->optionalGuest() : null;
-		$state['ratings'] = $guest === null || !$ratingEnabled
+		$state['ratings'] = $actor === null || !$ratingEnabled
 			? []
 			: array_values(array_map(
 				static fn ($rating): array => $rating->jsonSerialize(),
-				array_filter($visibleFileIds === [] ? $this->guestRatings->forGuest($guest) : $this->guestRatings->forGuestFiles($guest, $visibleFileIds), fn ($rating): bool => $this->allowsFile($rating->getFileId())),
+				array_filter(
+					$visibleFileIds === []
+						? $this->guestRatings->forActor($this->resolvedGallery()->getId(), $actor)
+						: $this->guestRatings->forActorFiles($this->resolvedGallery()->getId(), $actor, $visibleFileIds),
+					fn ($rating): bool => $this->allowsFile($rating->getFileId()),
+				),
 			));
 		return new JSONResponse($state);
 	}
@@ -115,20 +119,23 @@ final class CollaborationController extends ResolvedPublicShareController {
 		if (!$this->ratingEnabled()) return new JSONResponse(['code' => 'policy_denied', 'message' => 'Guest ratings are disabled for this link'], Http::STATUS_FORBIDDEN);
 		if (!$this->allowsFile($fileId)) return new JSONResponse(['message' => 'Media not found'], Http::STATUS_NOT_FOUND);
 		try {
-			if ($this->authenticated->actor() !== null) {
-				return new JSONResponse(['code' => 'policy_denied', 'message' => 'Ratings are currently available to guest reviewers only'], Http::STATUS_FORBIDDEN);
-			}
-			$guest = $this->guests->authenticate($this->resolvedGallery(), $this->guestSecret($this->resolvedGallery()), $this->request->getHeader('X-Proofing-Nonce'));
+			$actor = $this->authenticateActor();
 			$permissions = $this->ratingPermissions();
 			$current = null;
-			foreach ($this->guestRatings->forGuest($guest) as $saved) if ($saved->getFileId() === $fileId) { $current = $saved; break; }
+			foreach ($this->guestRatings->forActor($this->resolvedGallery()->getId(), $actor) as $saved) if ($saved->getFileId() === $fileId) { $current = $saved; break; }
 			$rating = $permissions['ratings'] ? $rating : ($current?->getRating() ?? 0);
 			$pick = $permissions['pick'] ? $pick : ($current?->getPickState() ?? 'none');
-			$value = $this->collaboration->saveRating($this->resolvedPublicLink(), $this->resolvedGallery(), $guest, $fileId, $rating, $pick);
-			$this->shareAudit->record($this->resolvedPublicLink(), 'feedback', $guest->getId(), fileId: $fileId);
+			$value = $this->collaboration->saveRating($this->resolvedPublicLink(), $this->resolvedGallery(), $actor, $fileId, $rating, $pick);
+			$this->shareAudit->record(
+				$this->resolvedPublicLink(),
+				'feedback',
+				guestId: $actor->guestId(),
+				actorUid: $actor->userUid(),
+				fileId: $fileId,
+			);
 			return new JSONResponse($value);
 		} catch (DoesNotExistException) {
-			return new JSONResponse(['code' => 'guest_session_required', 'message' => 'Guest session required'], Http::STATUS_UNAUTHORIZED);
+			return new JSONResponse(['code' => 'guest_session_required', 'message' => 'Collaboration identity required'], Http::STATUS_UNAUTHORIZED);
 		} catch (InvalidArgumentException $exception) {
 			if ($exception->getMessage() === 'Invalid request nonce') {
 				return new JSONResponse(['code' => 'invalid_nonce', 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
