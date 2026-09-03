@@ -1,29 +1,8 @@
 <script setup lang="ts">
 /* eslint-disable vue/no-deprecated-slot-attribute -- Ionic Vue maps Web Component slots through the slot attribute. */
-import {
-	IonActionSheet,
-	IonButton,
-	IonButtons,
-	IonContent,
-	IonHeader,
-	IonIcon,
-	IonModal,
-	IonTitle,
-	IonToolbar,
-} from '@ionic/vue'
+import { IonActionSheet, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar } from '@ionic/vue'
 import { n, t } from '@nextcloud/l10n'
-import {
-	chevronBackOutline,
-	chevronForwardOutline,
-	closeOutline,
-	contractOutline,
-	downloadOutline,
-	expandOutline,
-	gridOutline,
-	helpCircleOutline,
-	pauseOutline,
-	playOutline,
-} from 'ionicons/icons'
+import { chevronBackOutline, chevronForwardOutline, closeOutline, contractOutline, downloadOutline, expandOutline, gridOutline, helpCircleOutline, pauseOutline, playOutline } from 'ionicons/icons'
 import { useReducedMotion } from 'motion-v'
 import type PhotoSwipe from 'photoswipe'
 import type { SlideData } from 'photoswipe'
@@ -35,7 +14,7 @@ import StarOutlineIcon from 'vue-material-design-icons/StarOutline.vue'
 
 import { usePublicLightboxAnnotations } from '../composables/usePublicLightboxAnnotations.ts'
 import type { GallerySettings } from '../domain/gallerySettings.ts'
-import { annotationNumbersByComment, findSelectedAnnotationComment, shouldAutoHideLightboxChrome } from '../domain/lightboxReview.ts'
+import { annotationNumbersByComment, annotationScreenPoint, annotationThreadPanelLayout, commentsForAnnotationThread, findSelectedAnnotationComment, hasReadyPublicMetadata, resolvedFilmstripPlacement, shouldAutoHideLightboxChrome } from '../domain/lightboxReview.ts'
 import type { CollaborationState, MediaItem } from '../publicTypes.ts'
 import PublicLightboxAnnotations from './PublicLightboxAnnotations.vue'
 import PublicLightboxComments from './PublicLightboxComments.vue'
@@ -62,8 +41,7 @@ const emit = defineEmits<{ close: []; 'active-change': [item: MediaItem] }>()
 const activeIndex = ref(props.initialIndex)
 const activeItem = computed(() => props.mediaItems[activeIndex.value] ?? null)
 const activeComments = computed(() => props.collaboration?.comments.filter(comment => comment.fileId === activeItem.value?.id && comment.deletedAt === null) ?? [])
-const canDownloadIndividual = computed(() => ['individual', 'all'].includes(props.settings.delivery.downloadScope))
-const enabledColorLabels = computed(() => props.settings.review.colorLabels.filter((_, index) => props.settings.review.colorEnabled[index]))
+const canDownloadIndividual = computed(() => ['individual', 'all'].includes(props.settings.delivery.downloadScope)), enabledColorLabels = computed(() => props.settings.review.colorLabels.filter((_, index) => props.settings.review.colorEnabled[index]))
 const activeGuestRating = computed(() => props.collaboration?.ratings?.find(value => value.fileId === activeItem.value?.id)
 	?? { rating: 0, pick: 'none' as const })
 
@@ -73,19 +51,12 @@ const touchHint = ref(false), chromeVisible = ref(true), fullscreen = ref(Boolea
 const filmstripSessionKey = `proofing-gallery-filmstrip:${window.location.pathname}`
 const guestFilmstripHidden = ref(sessionStorage.getItem(filmstripSessionKey) === 'hidden')
 const viewportWidth = ref(window.innerWidth), viewportHeight = ref(window.innerHeight)
-const commentBody = ref('')
-const editingCommentId = ref<number | null>(null)
-const editingCommentBody = ref('')
+const commentBody = ref(''), annotationReplyBody = ref('')
+const editingCommentId = ref<number | null>(null), editingCommentBody = ref('')
 const guestExportFields = ref(['filename', 'rating', 'pick'])
 const reduceMotion = useReducedMotion()
 const motionPreset = computed(() => reduceMotion.value ? 'off' : props.settings.presentation?.motionPreset ?? 'expressive')
-const configuredFilmstripPlacement = computed<'side' | 'bottom' | 'hidden'>(() => {
-	const configured = props.settings.presentation?.lightboxFilmstripPlacement ?? 'auto'
-	if (configured === 'hidden') return 'hidden'
-	if (configured === 'side') return viewportWidth.value > 900 ? 'side' : 'bottom'
-	if (configured === 'bottom') return 'bottom'
-	return viewportWidth.value >= 1180 ? 'side' : 'bottom'
-})
+const configuredFilmstripPlacement = computed(() => resolvedFilmstripPlacement(props.settings.presentation?.lightboxFilmstripPlacement ?? 'auto', viewportWidth.value))
 const filmstripAllowed = computed(() => props.mediaItems.length > 1 && configuredFilmstripPlacement.value !== 'hidden')
 const filmstripPlacement = computed<'side' | 'bottom' | 'hidden'>(() => guestFilmstripHidden.value
 	? 'hidden'
@@ -95,15 +66,10 @@ const autoHideChrome = computed(() => shouldAutoHideLightboxChrome(
 	props.settings.presentation?.lightboxChromeBehavior ?? 'autoHide',
 ))
 const chromeAutoHideDelay = computed(() => viewportWidth.value <= 760 ? 4500 : 2200)
-const loop = computed(() => props.mediaItems.length > 2)
-const canStepPrevious = computed(() => loop.value || activeIndex.value > 0)
-const canStepNext = computed(() => loop.value || activeIndex.value < props.mediaItems.length - 1)
+const loop = computed(() => props.mediaItems.length > 2), canStepPrevious = computed(() => loop.value || activeIndex.value > 0), canStepNext = computed(() => loop.value || activeIndex.value < props.mediaItems.length - 1)
 const slideshowDuration = computed(() => Math.max(3, Math.min(15, props.settings.presentation?.slideshowInterval ?? 5)) * 1000)
 const actionSheetClass = computed(() => ['lightbox-action-sheet', `proofing-action-sheet--${props.settings.presentation?.theme ?? 'auto'}`])
-const hasPublicMetadata = computed(() => {
-	const metadata = activeItem.value?.metadata
-	return metadata?.state === 'ready' && Object.keys(metadata).some(key => key !== 'state')
-})
+const hasPublicMetadata = computed(() => hasReadyPublicMetadata(activeItem.value?.metadata))
 const actionSheetButtons = computed(() => [
 	...(canDownloadIndividual.value
 		? [{
@@ -160,6 +126,7 @@ const annotations = usePublicLightboxAnnotations({
 })
 const {
 	host: annotationHost,
+	imageBounds: annotationImageBounds,
 	draft: annotationDraft,
 	anchor: annotationAnchor,
 	body: annotationBody,
@@ -173,7 +140,23 @@ const {
 
 const annotationNumbers = computed(() => annotationNumbersByComment(activeComments.value))
 const selectedAnnotationComment = computed(() => findSelectedAnnotationComment(activeComments.value, selectedCommentId.value))
-const visibleComments = computed(() => selectedAnnotationComment.value ? [selectedAnnotationComment.value] : activeComments.value)
+const visibleComments = computed(() => selectedAnnotationComment.value
+	? commentsForAnnotationThread(activeComments.value, selectedCommentId.value)
+	: activeComments.value)
+const selectedAnnotationPoint = computed(() => {
+	const annotation = selectedAnnotationComment.value?.annotations[0]
+	return feedbackOpen.value && annotation && annotationImageBounds.value
+		? annotationScreenPoint(annotation, annotationImageBounds.value)
+		: null
+})
+const feedbackPanelLayout = computed(() => annotationThreadPanelLayout({
+	viewportWidth: viewportWidth.value,
+	viewportHeight: viewportHeight.value,
+	annotationPoint: selectedAnnotationPoint.value,
+	filmstripSide: filmstripPlacement.value === 'side',
+}))
+const feedbackPanelClass = computed(() => `lightbox-sheet lightbox-feedback-sheet lightbox-feedback-sheet--${feedbackPanelLayout.value.placement}`)
+const feedbackPanelStyle = computed(() => ({ '--feedback-panel-edge-inset': `${feedbackPanelLayout.value.modalEdgeInset}px` }))
 
 function showAllFeedback() { selectedCommentId.value = null }
 function openFeedback() { showAllFeedback(); feedbackOpen.value = true; metadataOpen.value = false }
@@ -279,7 +262,9 @@ onMounted(async () => {
 			top: 64,
 			bottom: window.innerWidth <= 760 ? (props.mediaItems.length > 1 && filmstripPlacement.value === 'bottom' ? 154 : 70) : props.mediaItems.length > 1 && filmstripPlacement.value === 'bottom' ? 108 : 18,
 			left: window.innerWidth <= 640 ? 8 : 72,
-			right: window.innerWidth > 760 && (feedbackOpen.value || metadataOpen.value) ? 392 : filmstripPlacement.value === 'side' ? 104 : window.innerWidth <= 640 ? 8 : 72,
+			right: window.innerWidth > 760 && metadataOpen.value
+				? 392
+				: filmstripPlacement.value === 'side' ? 104 : window.innerWidth <= 640 ? 8 : 72,
 		}),
 	})
 	bindPhotoSwipeEvents()
@@ -299,10 +284,11 @@ onBeforeUnmount(() => {
 	previouslyFocused?.focus()
 })
 
-watch(feedbackOpen, () => { wakeChrome(); nextTick(() => pswp?.updateSize(true)) })
+watch(feedbackOpen, wakeChrome)
 watch(metadataOpen, () => { wakeChrome(); nextTick(() => pswp?.updateSize(true)) })
 watch(shortcutsOpen, wakeChrome)
 watch(actionMenuOpen, wakeChrome)
+watch(selectedCommentId, () => { annotationReplyBody.value = '' })
 watch(autoHideChrome, value => {
 	if (value) wakeChrome()
 	else {
@@ -541,6 +527,18 @@ async function addComment() {
 	}
 }
 
+async function addAnnotationReply() {
+	const item = activeItem.value
+	const annotation = selectedAnnotationComment.value?.annotations[0]
+	if (!item || !annotation || !annotationReplyBody.value.trim()) return
+	if (await props.mutate(`media/${item.id}/comments`, 'POST', {
+		body: annotationReplyBody.value,
+		annotation,
+	})) {
+		annotationReplyBody.value = ''
+	}
+}
+
 function editComment(comment: CollaborationState['comments'][number]) {
 	editingCommentId.value = comment.id
 	editingCommentBody.value = comment.body
@@ -638,6 +636,7 @@ async function saveEditedComment(commentId: number) {
 
 		<PublicLightboxAnnotations
 			:host="annotationHost"
+			:image-bounds="annotationImageBounds"
 			:comments="activeComments"
 			:draft="annotationDraft"
 			:body="annotationBody"
@@ -676,10 +675,18 @@ async function saveEditedComment(commentId: number) {
 			</IonContent>
 		</IonModal>
 		<PublicLightboxMetadata :open="metadataOpen" :item="activeItem" @close="metadataOpen = false" />
-		<IonModal :is-open="settings.mode === 'collaboration' && feedbackOpen" css-class="lightbox-sheet lightbox-feedback-sheet" @did-dismiss="feedbackOpen = false">
+		<IonModal :is-open="settings.mode === 'collaboration' && feedbackOpen"
+			:animated="false"
+			:css-class="feedbackPanelClass"
+			:style="feedbackPanelStyle"
+			@did-dismiss="feedbackOpen = false">
 			<IonHeader>
 				<IonToolbar>
-					<IonTitle>{{ t('proofing_gallery', 'Feedback') }}</IonTitle>
+					<IonTitle>
+						{{ selectedAnnotationComment
+							? t('proofing_gallery', 'Point comment {number}', { number: annotationNumbers.get(selectedAnnotationComment.id)?.[0] ?? 0 })
+							: t('proofing_gallery', 'All feedback') }}
+					</IonTitle>
 					<IonButtons slot="end">
 						<IonButton :aria-label="t('proofing_gallery', 'Close feedback')" @click="feedbackOpen = false">
 							<IonIcon slot="icon-only" :icon="closeOutline" aria-hidden="true" />
@@ -689,15 +696,9 @@ async function saveEditedComment(commentId: number) {
 			</IonHeader>
 			<IonContent class="lightbox-feedback">
 				<div class="lightbox-feedback__body ion-padding">
-					<p class="lightbox-sheet__filename">
+					<p v-if="!selectedAnnotationComment" class="lightbox-sheet__filename">
 						{{ activeItem.name }}
 					</p>
-					<section v-if="selectedAnnotationComment" class="annotation-feedback-filter" aria-live="polite">
-						<div><span>{{ t('proofing_gallery', 'Selected annotation') }}</span><strong>{{ t('proofing_gallery', 'Point comment {number}', { number: annotationNumbers.get(selectedAnnotationComment.id)?.[0] ?? 0 }) }}</strong></div>
-						<button type="button" @click="showAllFeedback">
-							{{ t('proofing_gallery', 'All feedback') }}
-						</button>
-					</section>
 					<div v-if="!selectedAnnotationComment" class="feedback-actions">
 						<button v-if="settings.review?.likes !== false" type="button" @click="toggleLike">
 							{{ collaboration?.likes[activeItem.id]?.mine ? '♥' : '♡' }} {{ t('proofing_gallery', 'Like') }} {{ collaboration?.likes[activeItem.id]?.count || '' }}
@@ -710,7 +711,7 @@ async function saveEditedComment(commentId: number) {
 							</select>
 						</label>
 					</div>
-					<div v-if="!selectedAnnotationComment && (settings.review?.ratings || settings.review?.pick)" class="guest-rating" aria-label="Private rating">
+					<div v-if="!selectedAnnotationComment && collaboration?.guest?.kind !== 'user' && (settings.review?.ratings || settings.review?.pick)" class="guest-rating" aria-label="Private rating">
 						<div v-if="settings.review?.ratings" class="guest-rating__stars">
 							<span>{{ t('proofing_gallery', 'Your private rating') }}</span>
 							<button v-for="rating in 6"
@@ -761,7 +762,7 @@ async function saveEditedComment(commentId: number) {
 						@update:editing-comment-body="editingCommentBody = $event"
 						@cancel-edit="editingCommentId = null"
 						@delete="mutate(`comments/${$event}`, 'DELETE')" />
-					<section v-if="collaboration?.selections.length" class="saved-selections">
+					<section v-if="!selectedAnnotationComment && collaboration?.selections.length" class="saved-selections">
 						<h2>{{ t('proofing_gallery', 'Saved selections') }}</h2>
 						<article v-for="selection in collaboration.selections" :key="selection.id">
 							<strong>{{ selection.name }}</strong>
@@ -773,8 +774,8 @@ async function saveEditedComment(commentId: number) {
 								<details class="guest-export-composer">
 									<summary>{{ t('proofing_gallery', 'Customize CSV') }}</summary>
 									<label><input checked disabled type="checkbox"> {{ t('proofing_gallery', 'Filename') }}</label>
-									<label><input v-model="guestExportFields" type="checkbox" value="rating"> {{ t('proofing_gallery', 'My rating') }}</label>
-									<label><input v-model="guestExportFields" type="checkbox" value="pick"> {{ t('proofing_gallery', 'My pick') }}</label>
+									<label v-if="collaboration.guest?.kind !== 'user'"><input v-model="guestExportFields" type="checkbox" value="rating"> {{ t('proofing_gallery', 'My rating') }}</label>
+									<label v-if="collaboration.guest?.kind !== 'user'"><input v-model="guestExportFields" type="checkbox" value="pick"> {{ t('proofing_gallery', 'My pick') }}</label>
 									<a :href="selectionExportUrl(selection.id, 'csv', ['filename', ...guestExportFields.filter(field => field !== 'filename')])">{{ t('proofing_gallery', 'Download UTF-8 CSV') }}</a>
 								</details>
 								<a :href="selectionExportUrl(selection.id, 'plain')">{{ t('proofing_gallery', 'List') }}</a>
@@ -784,6 +785,17 @@ async function saveEditedComment(commentId: number) {
 					</section>
 				</div>
 			</IonContent>
+			<form v-if="selectedAnnotationComment && settings.review?.comments !== false" class="annotation-reply-form" @submit.prevent="addAnnotationReply">
+				<textarea v-model="annotationReplyBody"
+					name="annotationReply"
+					required
+					maxlength="5000"
+					:placeholder="t('proofing_gallery', 'Write a comment…')"
+					:aria-label="t('proofing_gallery', 'Comment')" />
+				<button type="submit" :disabled="!annotationReplyBody.trim()">
+					{{ t('proofing_gallery', 'Comment') }}
+				</button>
+			</form>
 		</IonModal>
 	</div>
 </template>

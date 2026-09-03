@@ -9,7 +9,7 @@ vi.mock('@nextcloud/l10n', () => ({ t: (_app: string, message: string, values?: 
 describe('PublicLightboxAnnotations', () => {
 	function props(overrides: Record<string, unknown> = {}) {
 		return {
-			host: null, comments: [], draft: null, body: '', anchor: null, composerOpen: false,
+			host: null, imageBounds: { left: 100, top: 50, width: 800, height: 400 }, comments: [], draft: null, body: '', anchor: null, composerOpen: false,
 			keyboardPositioning: false, submitting: false, error: '', selectedCommentId: null,
 			viewportWidth: 1200, viewportHeight: 800, ...overrides,
 		}
@@ -21,9 +21,11 @@ describe('PublicLightboxAnnotations', () => {
 		const wrapper = mount(PublicLightboxAnnotations, {
 			props: {
 				host,
+				imageBounds: { left: 100, top: 50, width: 800, height: 400 },
 				comments: [
 					{ id: 13, fileId: 7, body: 'Second', author: 'B', mine: false, createdAt: 2, deletedAt: null, annotations: [{ x: 3000, y: 4000, width: 800, height: 800 }] },
 					{ id: 12, fileId: 7, body: 'First', author: 'A', mine: false, createdAt: 1, deletedAt: null, annotations: [{ x: 1000, y: 2000, width: 800, height: 800 }] },
+					{ id: 14, fileId: 7, body: 'Reply', author: 'C', mine: false, createdAt: 3, deletedAt: null, annotations: [{ x: 1000, y: 2000, width: 800, height: 800 }] },
 				],
 				draft: null, body: '', anchor: null, composerOpen: false, keyboardPositioning: false,
 				submitting: false, error: '', selectedCommentId: 13, viewportWidth: 1200, viewportHeight: 800,
@@ -36,6 +38,26 @@ describe('PublicLightboxAnnotations', () => {
 		expect(markers[0].hasAttribute('aria-controls')).toBe(false)
 		await markers[0].click()
 		expect(wrapper.emitted('select')).toEqual([[12]])
+		wrapper.unmount()
+		host.remove()
+	})
+
+	it('projects pins from the current on-screen image bounds after zoom and pan', async () => {
+		const host = document.createElement('div')
+		document.body.append(host)
+		const wrapper = mount(PublicLightboxAnnotations, {
+			props: props({
+				host,
+				comments: [{ id: 12, fileId: 7, body: 'Point', author: 'A', mine: false, createdAt: 1, deletedAt: null, annotations: [{ x: 1000, y: 2000, width: 800, height: 800 }] }],
+			}),
+		})
+		await nextTick()
+		const marker = host.querySelector<HTMLElement>('.annotation-marker')!
+		expect(marker.style.left).toBe('180px')
+		expect(marker.style.top).toBe('130px')
+		await wrapper.setProps({ imageBounds: { left: -100, top: -50, width: 1600, height: 800 } })
+		expect(marker.style.left).toBe('60px')
+		expect(marker.style.top).toBe('110px')
 		wrapper.unmount()
 		host.remove()
 	})
@@ -65,6 +87,21 @@ describe('PublicLightboxAnnotations', () => {
 		await wrapper.setProps({ composerOpen: true })
 		await new Promise(resolve => requestAnimationFrame(resolve))
 		expect(document.activeElement).toBe(wrapper.find('textarea').element)
+		wrapper.unmount()
+	})
+
+	it('keeps the floating composer inside desktop chrome reserves', async () => {
+		const wrapper = mount(PublicLightboxAnnotations, {
+			props: props({
+				draft: { x: 9800, y: 9800, width: 800, height: 800 },
+				anchor: { x: 1190, y: 790 },
+				composerOpen: true,
+			}),
+		})
+		const style = wrapper.find('form').attributes('style')
+		expect(style).toContain('left: 752px')
+		expect(style).toContain('top: 524px')
+		expect(style).toContain('max-height: 712px')
 		wrapper.unmount()
 	})
 })

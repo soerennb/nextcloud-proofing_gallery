@@ -6,7 +6,7 @@ import { computed, nextTick, ref } from 'vue'
 import type { NormalizedAnnotation } from '../domain/collaboration.ts'
 import type { GallerySettings } from '../domain/gallerySettings.ts'
 import { annotationAtImagePoint, annotationScreenPoint, moveAnnotationPoint } from '../domain/lightboxReview.ts'
-import type { ScreenPoint } from '../domain/lightboxReview.ts'
+import type { ScreenBounds, ScreenPoint } from '../domain/lightboxReview.ts'
 import type { CollaborationState, MediaItem } from '../publicTypes.ts'
 
 interface Options {
@@ -23,6 +23,7 @@ interface Options {
 
 interface AnnotationState {
 	host: Ref<HTMLElement | null>
+	imageBounds: Ref<ScreenBounds | null>
 	draft: Ref<NormalizedAnnotation | null>
 	anchor: Ref<ScreenPoint | null>
 	body: Ref<string>
@@ -40,7 +41,7 @@ function createOverlay(options: Options, state: AnnotationState) {
 		return image instanceof HTMLImageElement ? image : null
 	}
 
-	function updateAnchor(bounds = activeImage()?.getBoundingClientRect() ?? null) {
+	function updateAnchor(bounds: ScreenBounds | null = activeImage()?.getBoundingClientRect() ?? null) {
 		state.anchor.value = state.draft.value && bounds ? annotationScreenPoint(state.draft.value, bounds) : null
 	}
 
@@ -48,11 +49,19 @@ function createOverlay(options: Options, state: AnnotationState) {
 		const slide = options.photoSwipe()?.currSlide
 		const image = activeImage()
 		if (!image || !state.host.value || !slide) return
-		state.host.value.style.width = `${image.offsetWidth}px`
-		state.host.value.style.height = `${image.offsetHeight}px`
-		const transformScale = slide.currZoomLevel / (slide.currentResolution || slide.zoomLevels.initial || 1)
-		state.host.value.style.setProperty('--annotation-marker-scale', `${1 / Math.max(0.01, transformScale)}`)
-		updateAnchor(image.getBoundingClientRect())
+		if (!slide.pan) {
+			const bounds = image.getBoundingClientRect()
+			state.imageBounds.value = { left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height }
+			updateAnchor(state.imageBounds.value)
+			return
+		}
+		const left = slide.pan.x
+		const top = slide.pan.y
+		const width = slide.width * slide.currZoomLevel
+		const height = slide.height * slide.currZoomLevel
+		if (width <= 0 || height <= 0) return
+		state.imageBounds.value = { left, top, width, height }
+		updateAnchor(state.imageBounds.value)
 	}
 
 	function syncHost() {
@@ -62,7 +71,7 @@ function createOverlay(options: Options, state: AnnotationState) {
 		if (!pswp?.currSlide || !options.activeItem.value?.mimeType.startsWith('image/')) return
 		const element = document.createElement('div')
 		element.className = 'proofing-annotation-layer'
-		pswp.currSlide.container.append(element)
+		pswp.element?.append(element)
 		state.host.value = element
 		syncGeometry()
 	}
@@ -159,7 +168,7 @@ function createDraftActions(options: Options, state: AnnotationState, overlay: R
 
 export function usePublicLightboxAnnotations(options: Options) {
 	const state: AnnotationState = {
-		host: ref(null), draft: ref(null), anchor: ref(null), body: ref(''), error: ref(''),
+		host: ref(null), imageBounds: ref(null), draft: ref(null), anchor: ref(null), body: ref(''), error: ref(''),
 		composerOpen: ref(false), keyboardPositioning: ref(false), submitting: ref(false), selectedCommentId: ref(null),
 		returnFocus: ref(null),
 	}
@@ -198,6 +207,7 @@ export function usePublicLightboxAnnotations(options: Options) {
 	function destroy() {
 		state.host.value?.remove()
 		state.host.value = null
+		state.imageBounds.value = null
 		actions.cancel(false)
 	}
 

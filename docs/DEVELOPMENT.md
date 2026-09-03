@@ -22,6 +22,47 @@ PHP routes, templates, or controller constructors, run
 `docker compose restart nextcloud` to clear PHP OPcache before validating the
 change.
 
+## Persistent remote test tenant
+
+A Docker-capable Linux VM can be used as a persistent manual-QA tenant when
+Docker is not installed on the editing workstation. Keep source and build
+dependencies in a staging directory outside the live Nextcloud Compose tree.
+Build and test in disposable containers, then copy only a successful runtime
+tree into the tenant's `custom_apps/proofing_gallery` directory.
+
+Before deployment, record `occ status`, the enabled-app list, migration state,
+and container health. Keep the previous app directory only during the immediate
+HTTP, `occ`, log, and browser checks. Restore it only if that deployment fails;
+delete it as soon as the replacement passes so the development tenant retains
+only the latest verified app build. Never reset the tenant's Compose volumes as
+part of an app deployment.
+
+Keep rollback copies outside `custom_apps`; Nextcloud scans every directory in
+that path and a backup containing the same app ID can cause duplicate-app
+discovery. App Store packages intentionally omit development-only `scripts/`,
+so run migration diagnostics from the source staging tree rather than assuming
+they are installed with the runtime package.
+
+The persistent tenant is for manual integration and browser QA only. Do not
+run this repository's Playwright global setup against it: the current E2E
+fixtures assume the disposable `admin` / `admin` tenant, rewrite that user's
+preferences, and remove prior `E2E` fixtures. Use `npm run test:e2e` only with
+the repository's isolated loopback Compose stack, or refactor the harness for
+a dedicated test identity before targeting another tenant.
+
+For frontend-only UI work, a persistent pinned Node container may run
+`npm run watch` against the staging checkout. Run the affected Vitest files
+during each small iteration and copy only generated `build`, `css`, and `js`
+assets into the installed development app. Stable entry assets must be served
+without long-lived caching on that development host so a refresh discovers
+new content-hashed chunks. Run the complete lint, unit, build, package, PHP,
+and compatibility gates at milestones and before publication. Never use the
+frontend-only path for PHP, routes, migrations, or dependency changes.
+
+Machine-specific addresses, SSH key locations, credentials, and deployment
+commands belong in an ignored local runbook under `.local/`, never in tracked
+documentation.
+
 ## Persistent demo studio
 
 The regular E2E tenant is disposable test infrastructure. For visual QA,
@@ -91,6 +132,13 @@ original configuration afterward. For public-gallery or culling changes,
 verify desktop and 390 px mobile layouts, scroll reachability, horizontal
 overflow, media hit testing, rows below the hero, and side and bottom filmstrip
 placement inside the viewport.
+
+For feedback panels, test the overflow model rather than requiring every item
+to fit at once. A history of 20 or more comments must scroll inside the panel;
+headers, comment text, identity labels, edit controls, and the composer must not
+be clipped, overlapped, or made unreachable at short viewport heights. Selecting
+an image annotation may keep its marker visible for context, but the comment
+workflow must remain usable without relying on the marker staying on screen.
 
 Playwright global setup creates and later supersedes its own E2E gallery.
 Snapshots are intentionally versioned. Update them only after reviewing the

@@ -15,6 +15,7 @@ function setup(mutate = vi.fn().mockResolvedValue(true), hasIdentity = true) {
 	Object.defineProperties(image, { offsetWidth: { value: 1600 }, offsetHeight: { value: 800 } })
 	const container = document.createElement('div')
 	const photoSwipe = {
+		element: container,
 		currSlide: { content: { element: image }, container, currZoomLevel: 2, currentResolution: 1, zoomLevels: { initial: 1 } },
 	} as unknown as PhotoSwipe
 	const item: MediaItem = { id: 7, name: 'sheet.png', mimeType: 'image/png', size: 1, modifiedAt: 1, etag: 'a', folder: false }

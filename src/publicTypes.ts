@@ -28,6 +28,7 @@ export interface PublicGallery {
 	settings: GallerySettings
 	initialPage?: PublicGalleryPage
 	review?: PublicReviewState
+	viewer?: { displayName: string; email: string | null } | null
 }
 
 export type ReviewStatus = 'awaiting_feedback' | 'submitted' | 'changes_requested' | 'approved'
@@ -50,6 +51,7 @@ export interface PublicReviewState {
 
 export interface GuestIdentity {
 	id: string
+	kind?: 'guest' | 'user'
 	displayName: string
 	createdAt: number
 }

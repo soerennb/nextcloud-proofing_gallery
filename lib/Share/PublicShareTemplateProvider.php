@@ -11,6 +11,7 @@ use OCP\AppFramework\Http\Template\PublicTemplateResponse;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
 use OCP\IURLGenerator;
+use OCP\IUserSession;
 use OCP\Share\IPublicShareTemplateProvider;
 use OCP\Share\IShare;
 use OCP\Util;
@@ -22,6 +23,7 @@ final class PublicShareTemplateProvider implements IPublicShareTemplateProvider 
 		private IURLGenerator $urlGenerator,
 		private \OCA\ProofingGallery\Service\PublicShareContextResolver $contexts,
 		private \OCA\ProofingGallery\Service\ReviewWorkflowService $reviews,
+		private IUserSession $userSession,
 	) {
 	}
 
@@ -42,6 +44,7 @@ final class PublicShareTemplateProvider implements IPublicShareTemplateProvider 
 			return $response;
 		}
 		$gallery = $context->gallery;
+		$user = $this->userSession->getUser();
 		$initialPage = $this->galleryData->page($context, new PublicGalleryQuery(path: $path));
 		$firstImage = null;
 		foreach ($initialPage['items'] as $item) {
@@ -71,11 +74,16 @@ final class PublicShareTemplateProvider implements IPublicShareTemplateProvider 
 			'path' => $path,
 			'initialPage' => $initialPage,
 			'review' => $this->reviews->publicState($context->link),
+			'viewer' => $user === null ? null : [
+				'displayName' => $user->getDisplayName(),
+				'email' => $user->getEMailAddress(),
+			],
 		]);
-		Util::addScript(Application::APP_ID, 'proofing_gallery-public');
+		Util::addScript(Application::APP_ID, $this->publicScriptName());
 		Util::addStyle(Application::APP_ID, 'proofing_gallery-public');
 
 		$response = new PublicTemplateResponse(Application::APP_ID, 'public');
+		$response->addHeader('Cache-Control', 'private, no-store');
 		if ($firstPaintImage !== null) {
 			$response->addHeader('Link', sprintf('<%s>; rel=preload; as=image', $firstPaintImage));
 		}
@@ -85,5 +93,18 @@ final class PublicShareTemplateProvider implements IPublicShareTemplateProvider 
 			'lcpPreviewUrl' => $firstPaintImage,
 		]);
 		return $response;
+	}
+
+	private function publicScriptName(): string {
+		$directory = dirname(__DIR__, 2) . '/js';
+		$pointer = $directory . '/proofing_gallery-public.current';
+		if (!is_readable($pointer)) {
+			return 'proofing_gallery-public';
+		}
+		$candidate = trim((string)file_get_contents($pointer));
+		if (!preg_match('/^proofing_gallery-public-[a-f0-9]{12}$/', $candidate)) {
+			return 'proofing_gallery-public';
+		}
+		return is_file($directory . '/' . $candidate . '.mjs') ? $candidate : 'proofing_gallery-public';
 	}
 }

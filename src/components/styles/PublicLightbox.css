@@ -96,7 +96,7 @@
 
 .touch-hint-enter-from, .touch-hint-leave-to { opacity: 0; transform: translate(50%, 6px); }
 
-:global(.proofing-annotation-layer) { position: absolute; z-index: 2; inset-block-start: 0; inset-inline-start: 0; pointer-events: none; }
+:global(.proofing-annotation-layer) { position: absolute; z-index: 2; inset: 0; pointer-events: none; }
 
 :global(ion-action-sheet.lightbox-action-sheet),
 :global(ion-modal.lightbox-sheet),
@@ -132,7 +132,23 @@
 	to { transform: scaleX(1); }
 }
 
-:global(ion-modal.lightbox-sheet) { --width: min(440px, calc(100% - 32px)); --height: min(720px, calc(100% - 48px)); --border-radius: 16px; }
+:global(ion-modal.lightbox-sheet) { --width: min(440px, calc(100% - 32px)); --height: auto; --border-radius: 16px; }
+
+:global(ion-modal.lightbox-sheet::part(content)) { max-height: min(720px, calc(100dvh - 48px)); }
+
+:global(ion-modal.lightbox-sheet .ion-page) { position: relative; contain: content; max-height: min(720px, calc(100dvh - 48px)); }
+
+:global(ion-modal.lightbox-sheet.lightbox-feedback-sheet) { --width: min(400px, calc(100% - 32px)); --height: min(680px, calc(100dvh - 48px)); --border-radius: 18px; align-items: center; justify-content: center; }
+
+:global(ion-modal.lightbox-sheet.lightbox-feedback-sheet--left) { box-sizing: border-box; justify-content: flex-start; padding-inline-start: var(--feedback-panel-edge-inset, 16px); }
+
+:global(ion-modal.lightbox-sheet.lightbox-feedback-sheet--right) { box-sizing: border-box; justify-content: flex-end; padding-inline-end: var(--feedback-panel-edge-inset, 16px); }
+
+:global(ion-modal.lightbox-sheet.lightbox-feedback-sheet--center) { justify-content: center; }
+
+:global(ion-modal.lightbox-sheet.lightbox-feedback-sheet::part(content)) { max-height: min(680px, calc(100dvh - 48px)); box-shadow: 0 24px 64px rgb(0 0 0 / 48%); }
+
+:global(ion-modal.lightbox-sheet.lightbox-feedback-sheet .ion-page) { height: 100%; max-height: none; contain: size layout style; }
 
 :global(ion-modal.lightbox-dialog) { --width: min(430px, calc(100% - 32px)); --height: auto; --border-radius: 16px; }
 
@@ -169,17 +185,7 @@
 
 .lightbox-feedback { --color: var(--ion-text-color); }
 
-.lightbox-feedback__body { box-sizing: border-box; width: 100%; min-height: 100%; }
-
-.annotation-feedback-filter { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; padding: 14px; border: 1px solid color-mix(in srgb, var(--gallery-accent) 42%, var(--ion-border-color)); border-radius: 14px; background: color-mix(in srgb, var(--gallery-accent) 12%, var(--ion-background-color)); }
-
-.annotation-feedback-filter div { display: grid; min-width: 0; gap: 3px; }
-
-.annotation-feedback-filter span { color: var(--ion-color-medium); font-size: 11px; font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
-
-.annotation-feedback-filter strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.annotation-feedback-filter button { min-height: 36px; flex: 0 0 auto; padding: 0 12px; border: 1px solid var(--ion-border-color); border-radius: 9px; background: var(--ion-color-light); color: var(--ion-text-color); font: inherit; font-size: 12px; font-weight: 650; }
+.lightbox-feedback__body { box-sizing: border-box; width: 100%; min-height: 100%; padding: 16px; }
 
 .feedback-actions { display: grid; gap: 12px; }
 
@@ -229,6 +235,16 @@
 
 .comment-form textarea { min-height: 104px; resize: vertical; }
 
+.annotation-reply-form { position: relative; z-index: 2; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 10px; padding: 12px 16px max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--ion-border-color); background: color-mix(in srgb, var(--ion-background-color) 94%, transparent); box-shadow: 0 -12px 30px rgb(0 0 0 / 12%); }
+
+.annotation-reply-form textarea { box-sizing: border-box; width: 100%; min-width: 0; min-height: 72px; max-height: 160px; padding: 11px 13px; border: 1px solid var(--ion-border-color); border-radius: 12px; outline: none; background: var(--ion-color-light); color: var(--ion-text-color); font: inherit; line-height: 1.4; resize: vertical; }
+
+.annotation-reply-form textarea:focus { border-color: var(--gallery-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gallery-accent) 22%, transparent); }
+
+.annotation-reply-form button { min-height: 42px; padding: 0 16px; border: 0; border-radius: 10px; background: var(--gallery-accent); color: #fff; font: inherit; font-size: 13px; font-weight: 750; }
+
+.annotation-reply-form button:disabled { cursor: not-allowed; opacity: .48; }
+
 .saved-selections article div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
 
 .saved-selections { margin-top: 28px; border-top: 1px solid var(--ion-border-color); }
@@ -254,12 +270,19 @@
 	.lightbox-nav--previous { inset-inline-start: 8px; }
 	.lightbox-nav--next, .lightbox-shell--filmstrip-side .lightbox-nav--next { inset-inline-end: 8px; }
 	.lightbox-touch-hint { bottom: calc(96px + env(safe-area-inset-bottom)); max-width: calc(100% - 32px); text-align: center; white-space: nowrap; }
-	:global(ion-modal.lightbox-sheet) { --width: 100%; --height: min(78dvh, 680px); --border-radius: 18px 18px 0 0; align-items: flex-end; }
-	.annotation-feedback-filter { align-items: stretch; flex-direction: column; }
-	.annotation-feedback-filter button { width: 100%; }
 	.guest-rating__stars { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
 	.guest-rating__stars span { grid-column: 1 / -1; margin-inline-end: 0; }
 	.guest-rating__stars button { width: 100%; min-width: 0; padding-inline: 0; }
+}
+
+@media (max-width: 520px) {
+	:global(ion-modal.lightbox-sheet) { --width: 100%; --height: auto; --border-radius: 18px 18px 0 0; align-items: flex-end; }
+	:global(ion-modal.lightbox-sheet::part(content)),
+	:global(ion-modal.lightbox-sheet .ion-page) { max-height: min(78dvh, 680px); }
+	:global(ion-modal.lightbox-sheet.lightbox-feedback-sheet) { --width: 100%; --height: min(78dvh, 680px); --border-radius: 18px 18px 0 0; align-items: flex-end; justify-content: center; }
+	:global(ion-modal.lightbox-sheet.lightbox-feedback-sheet::part(content)) { max-height: min(78dvh, 680px); box-shadow: 0 -18px 54px rgb(0 0 0 / 42%); }
+	.annotation-reply-form { grid-template-columns: 1fr; }
+	.annotation-reply-form button { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

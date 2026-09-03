@@ -7,6 +7,7 @@ namespace OCA\ProofingGallery\Controller;
 use InvalidArgumentException;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Service\GuestService;
+use OCA\ProofingGallery\Service\AuthenticatedCollaborationSession;
 use OCA\ProofingGallery\Service\PublicShareContextResolver;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
@@ -24,6 +25,7 @@ final class GuestController extends ResolvedPublicShareController {
 		ISession $session,
 		PublicShareContextResolver $contextResolver,
 		private GuestService $guests,
+		private AuthenticatedCollaborationSession $authenticated,
 	) {
 		parent::__construct($request, $session, $contextResolver);
 	}
@@ -34,6 +36,16 @@ final class GuestController extends ResolvedPublicShareController {
 	#[FrontpageRoute(verb: 'POST', url: '/public/{token}/session')]
 	public function create(string $displayName = '', ?string $email = null): JSONResponse {
 		try {
+			$authenticated = $this->authenticated->current($this->gallery());
+			if ($authenticated !== null) {
+				$response = new JSONResponse([
+					'guest' => $authenticated['actor'],
+					'nonce' => $authenticated['nonce'],
+					'expiresIn' => null,
+				]);
+				$response->addHeader('Cache-Control', 'private, no-store');
+				return $response;
+			}
 			$session = $this->guests->create($this->gallery(), $displayName, $email);
 			$response = new JSONResponse([
 				'guest' => $session['guest'],
@@ -53,6 +65,16 @@ final class GuestController extends ResolvedPublicShareController {
 	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/session')]
 	public function current(): JSONResponse {
 		try {
+			$authenticated = $this->authenticated->current($this->gallery());
+			if ($authenticated !== null) {
+				$response = new JSONResponse([
+					'guest' => $authenticated['actor'],
+					'nonce' => $authenticated['nonce'],
+					'expiresIn' => null,
+				]);
+				$response->addHeader('Cache-Control', 'private, no-store');
+				return $response;
+			}
 			$secret = $this->guestSecret($this->gallery());
 			$session = $this->guests->resume($this->gallery(), $secret);
 			$response = new JSONResponse(['guest' => $session['guest'], 'nonce' => $session['nonce'], 'expiresIn' => 2592000]);

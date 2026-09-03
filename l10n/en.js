@@ -1061,7 +1061,6 @@ OC.L10N.register("proofing_gallery", {
   "Select all visible files": "Select all visible files",
   "Select photos across pages, then download them together.": "Select photos across pages, then download them together.",
   "Select public image information to make this panel available to guests.": "Select public image information to make this panel available to guests.",
-  "Selected annotation": "Selected annotation",
   "Selected file actions": "Selected file actions",
   "Selected files": "Selected files",
   "Selected information appears in the photo viewer. Changing this selection opens that preview scene.": "Selected information appears in the photo viewer. Changing this selection opens that preview scene.",

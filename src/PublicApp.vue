@@ -6,7 +6,7 @@ import { IonAlert, IonApp, IonContent, IonLoading, IonPage } from '@ionic/vue'
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { calculateMediaLayout } from './domain/mediaGridLayout.ts'
-import { contrastRgb, hexRgb, mixHex, readableText } from './domain/galleryTheme.ts'
+import { publicGalleryThemeStyle } from './domain/publicGalleryThemeStyle.ts'
 import { PUBLIC_GALLERY_PAGE_SIZE, readPublicGalleryLocation, writePublicGalleryLocation } from './domain/publicGalleryNavigation.ts'
 import { continuationStorageKey, layoutSessionStorageKey, loadPublicGalleryCompareIds, loadPublicGalleryContinuation, loadPublicGallerySavedView, loadPublicGallerySessionLayout, viewStorageKey } from './domain/publicGalleryPreferences.ts'
 import { serialTask } from './domain/serialTask.ts'
@@ -50,21 +50,7 @@ const indexState = ref(props.gallery.initialPage?.indexState ?? null)
 const scope = ref(props.gallery.initialPage?.scope ?? null)
 const settings = ref(props.gallery.initialPage?.gallery.settings ?? props.gallery.settings)
 const title = ref(props.gallery.initialPage?.gallery.title ?? props.gallery.title)
-const pageStyle = computed(() => {
-	const accent = settings.value.presentation.accentColor || '#E85D4A'
-	const rgb = hexRgb(accent)
-	const contrast = readableText(rgb)
-	return {
-		'--gallery-accent': accent,
-		'--ion-color-primary': accent,
-		'--ion-color-primary-rgb': rgb.join(', '),
-		'--ion-color-primary-contrast': contrast,
-		'--ion-color-primary-contrast-rgb': contrastRgb(contrast),
-		'--ion-color-primary-shade': mixHex(rgb, [0, 0, 0], 0.12),
-		'--ion-color-primary-tint': mixHex(rgb, [255, 255, 255], 0.14),
-		'--hero-focus': `${settings.value.presentation.heroFocusX}% ${settings.value.presentation.heroFocusY}%`,
-	}
-})
+const pageStyle = computed(() => publicGalleryThemeStyle(settings.value))
 
 const mediaItems = computed(() => items.value.filter(item => !item.folder))
 const headerHeroUrl = computed(() => settings.value.presentation.heroFileId ? assetUrl('hero') : null)
@@ -84,7 +70,6 @@ const compareOpen = ref(false)
 const compareItems = computed(() => compareIds.value.map(id => mediaItems.value.find(item => item.id === id)).filter((item): item is MediaItem => !!item))
 let collaborationTimer: number | undefined
 const { guest, collaboration, hydratedIds: collaborationHydratedIds, nonce, restoreIdentity, clearIdentity } = usePublicCollaborationIdentity(props.gallery.token)
-const [guestName, guestEmail] = [ref(''), ref('')]
 const joining = ref(false)
 const collaborationError = ref('')
 const galleryDownloadBusy = ref(false)
@@ -120,7 +105,9 @@ const activePanel = ref<'menu' | 'search' | 'view' | 'pages' | 'download' | 'sel
 const searchOpen = ref(false)
 const collaborationSheetOpen = ref(false)
 const mediaDimensions = ref<Record<number, { width: number; height: number }>>({})
-const mobileViewportQuery = window.matchMedia('(max-width: 640px)')
+// Panel mode changes only on phone-sized viewports. Narrow desktop windows keep
+// centered dialogs and floating annotation controls instead of mobile sheets.
+const mobileViewportQuery = window.matchMedia('(max-width: 520px)')
 const mobileViewport = ref(mobileViewportQuery.matches)
 const viewportWidth = ref(window.innerWidth)
 let searchTimer: number | undefined
@@ -433,7 +420,7 @@ function onVisibilityChange() {
 	startCollaborationPolling()
 }
 
-async function joinCollaboration() {
+async function joinCollaboration(identity: { displayName: string; email: string }) {
 	joining.value = true
 	collaborationError.value = ''
 	try {
@@ -441,7 +428,7 @@ async function joinCollaboration() {
 			method: 'POST',
 			credentials: 'same-origin',
 			headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-			body: JSON.stringify({ displayName: guestName.value, email: guestEmail.value || null }),
+			body: JSON.stringify({ displayName: identity.displayName, email: identity.email || null }),
 		})
 		const payload = await response.json() as { guest?: GuestIdentity, nonce?: string, message?: string }
 		if (!response.ok || !payload.guest || !payload.nonce) {
@@ -968,6 +955,7 @@ function upOneLevel() {
 
 					<PublicCollaborationSheet v-if="settings.mode === 'collaboration'"
 						:open="collaborationSheetOpen"
+						:mobile="mobileViewport"
 						:guest="guest"
 						:review="review"
 						:nonce="nonce"
@@ -982,10 +970,9 @@ function upOneLevel() {
 						@updated="review = $event"
 						@error="collaborationError = $event" />
 
-					<PublicGuestDialog v-model:name="guestName"
-						v-model:email="guestEmail"
-						:open="guestDialogOpen"
+					<PublicGuestDialog :open="guestDialogOpen"
 						:joining="joining"
+						:viewer="gallery.viewer"
 						@dismiss="cancelPendingMutation"
 						@submit="joinCollaboration" />
 
