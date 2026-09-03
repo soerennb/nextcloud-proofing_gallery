@@ -16,6 +16,8 @@ interface Options {
 	hasIdentity(): boolean
 	mutate(path: string, method: 'POST', body: unknown): Promise<boolean>
 	photoSwipe(): PhotoSwipe | null
+	zoomSurfaceImage?(): HTMLImageElement | null
+	markerScale?(): number
 	feedbackOpen: Ref<boolean>
 	metadataOpen: Ref<boolean>
 	shell: Ref<HTMLElement | null>
@@ -37,9 +39,12 @@ interface AnnotationState {
 
 function createOverlay(options: Options, state: AnnotationState) {
 	let geometryFrame: number | null = null
+	let contentWidth: number | null = null
+	let contentHeight: number | null = null
+	let markerScale: number | null = null
 
 	function activeImage(): HTMLImageElement | null {
-		const image = options.photoSwipe()?.currSlide?.content.element
+		const image = options.zoomSurfaceImage?.() ?? options.photoSwipe()?.currSlide?.content.element
 		return image instanceof HTMLImageElement ? image : null
 	}
 
@@ -47,36 +52,56 @@ function createOverlay(options: Options, state: AnnotationState) {
 		state.anchor.value = state.draft.value && bounds ? annotationScreenPoint(state.draft.value, bounds) : null
 	}
 
-	function syncContentSize(width?: number, height?: number) {
-		const slide = options.photoSwipe()?.currSlide
-		const image = activeImage()
+	function syncMarkerScale() {
 		const host = state.host.value
-		if (!slide || !image || !host) return
-		const contentWidth = width ?? Number.parseFloat(image.style.width)
-		const contentHeight = height ?? Number.parseFloat(image.style.height)
-		if (Number.isFinite(contentWidth) && contentWidth > 0) host.style.width = `${contentWidth}px`
-		if (Number.isFinite(contentHeight) && contentHeight > 0) host.style.height = `${contentHeight}px`
-		const renderedScale = slide.currZoomLevel / (slide.currentResolution || slide.zoomLevels.initial)
-		if (Number.isFinite(renderedScale) && renderedScale > 0) {
-			host.style.setProperty('--annotation-marker-scale', String(1 / renderedScale))
-		}
+		if (!host) return
+		const nextMarkerScale = options.markerScale?.() ?? 1
+		if (!Number.isFinite(nextMarkerScale) || nextMarkerScale <= 0 || nextMarkerScale === markerScale) return
+		markerScale = nextMarkerScale
+		host.style.setProperty('--annotation-marker-scale', String(nextMarkerScale))
 	}
 
-	function syncGeometry() {
+	function syncContentSize(width?: number, height?: number) {
+		const image = activeImage()
+		const host = state.host.value
+		if (!image || !host) return
+		const nextWidth = width ?? image.offsetWidth
+		const nextHeight = height ?? image.offsetHeight
+		if (Number.isFinite(nextWidth) && nextWidth > 0 && nextWidth !== contentWidth) {
+			contentWidth = nextWidth
+			host.style.width = `${nextWidth}px`
+		}
+		if (Number.isFinite(nextHeight) && nextHeight > 0 && nextHeight !== contentHeight) {
+			contentHeight = nextHeight
+			host.style.height = `${nextHeight}px`
+		}
+		syncMarkerScale()
+	}
+
+	function needsScreenGeometry() {
+		return state.draft.value !== null || (state.selectedCommentId.value !== null && options.feedbackOpen.value)
+	}
+
+	function syncGeometry(force = false) {
+		if (!force && !needsScreenGeometry()) return
 		const image = activeImage()
 		if (!image || !state.host.value) return
-		syncContentSize()
 		const bounds = image.getBoundingClientRect()
 		if (bounds.width <= 0 || bounds.height <= 0) return
-		state.imageBounds.value = { left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height }
+		const nextBounds = { left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height }
+		const previousBounds = state.imageBounds.value
+		if (previousBounds?.left === nextBounds.left && previousBounds.top === nextBounds.top
+			&& previousBounds.width === nextBounds.width && previousBounds.height === nextBounds.height) return
+		state.imageBounds.value = nextBounds
 		updateAnchor(state.imageBounds.value)
 	}
 
-	function scheduleGeometry() {
+	function scheduleGeometry(force = false) {
+		if (!force && !needsScreenGeometry()) return
 		if (geometryFrame !== null) return
 		geometryFrame = window.requestAnimationFrame(() => {
 			geometryFrame = null
-			syncGeometry()
+			syncGeometry(force)
 		})
 	}
 
@@ -89,16 +114,21 @@ function createOverlay(options: Options, state: AnnotationState) {
 	function syncHost() {
 		state.host.value?.remove()
 		state.host.value = null
+		contentWidth = null
+		contentHeight = null
+		markerScale = null
 		const pswp = options.photoSwipe()
 		if (!pswp?.currSlide || !options.activeItem.value?.mimeType.startsWith('image/')) return
 		const element = document.createElement('div')
 		element.className = 'proofing-annotation-layer'
-		pswp.currSlide.container.append(element)
+		const target = activeImage()?.parentElement ?? pswp.currSlide.container
+		target.append(element)
 		state.host.value = element
-		syncGeometry()
+		syncContentSize()
+		syncGeometry(true)
 	}
 
-	return { activeImage, updateAnchor, syncContentSize, syncGeometry, scheduleGeometry, cancelScheduledGeometry, syncHost }
+	return { activeImage, updateAnchor, syncMarkerScale, syncContentSize, syncGeometry, scheduleGeometry, cancelScheduledGeometry, syncHost }
 }
 
 function createDraftActions(options: Options, state: AnnotationState, overlay: ReturnType<typeof createOverlay>) {
@@ -151,7 +181,7 @@ function createDraftActions(options: Options, state: AnnotationState, overlay: R
 	): boolean {
 		event.preventDefault()
 		const target = event.originalEvent.target as HTMLElement | null
-		return canTargetImage && target?.classList.contains('pswp__img') === true && startAt({
+		return canTargetImage && (target?.classList.contains('pswp__img') === true || target?.classList.contains('proofing-zoom-image') === true) && startAt({
 			x: event.point.x ?? event.originalEvent.clientX,
 			y: event.point.y ?? event.originalEvent.clientY,
 		}, options.shell.value)
@@ -205,6 +235,7 @@ export function usePublicLightboxAnnotations(options: Options) {
 		state.selectedCommentId.value = commentId
 		options.feedbackOpen.value = true
 		options.metadataOpen.value = false
+		overlay.syncGeometry(true)
 		window.setTimeout(() => options.shell.value
 			?.querySelector<HTMLElement>(`[data-comment-id="${commentId}"] button[data-point-link]`)
 			?.focus(), 250)

@@ -74,6 +74,16 @@ describe('public lightbox annotation state', () => {
 		shell.remove()
 	})
 
+	it('does not read or publish screen geometry on zoom frames without an active composer or thread', async () => {
+		const { annotations, image, shell } = setup()
+		annotations.syncHost()
+		const readsAfterHostSync = vi.mocked(image.getBoundingClientRect).mock.calls.length
+		annotations.scheduleGeometry(false)
+		await new Promise(resolve => requestAnimationFrame(resolve))
+		expect(vi.mocked(image.getBoundingClientRect).mock.calls).toHaveLength(readsAfterHostSync)
+		shell.remove()
+	})
+
 	it('restores focus after cancelling from the keyboard composer', async () => {
 		const trigger = document.createElement('button')
 		document.body.append(trigger)

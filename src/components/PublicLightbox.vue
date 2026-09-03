@@ -10,6 +10,7 @@ import 'photoswipe/style.css'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { usePublicLightboxAnnotations } from '../composables/usePublicLightboxAnnotations.ts'
+import { usePublicLightboxZoomSurface } from '../composables/usePublicLightboxZoomSurface.ts'
 import type { GallerySettings } from '../domain/gallerySettings.ts'
 import { annotationNumbersByComment, annotationScreenPoint, annotationThreadPanelLayout, commentsForAnnotationThread, findSelectedAnnotationComment, hasReadyPublicMetadata, resolvedFilmstripPlacement, shouldAutoHideLightboxChrome } from '../domain/lightboxReview.ts'
 import type { CollaborationState, MediaItem } from '../publicTypes.ts'
@@ -107,6 +108,8 @@ const actionSheetButtons = computed(() => [
 ])
 
 let pswp: PhotoSwipe | null = null
+let unbindZoomSurface: (() => void) | null = null
+let zoomSurface: ReturnType<typeof usePublicLightboxZoomSurface> | null = null
 let slideshowTimer: number | undefined, hintTimer: number | undefined, chromeTimer: number | undefined
 let lastTouchPointerUpAt = 0, lastChromeToggleAt = 0
 let previousBodyOverflow = ''
@@ -120,9 +123,15 @@ const annotations = usePublicLightboxAnnotations({
 	hasIdentity: () => props.collaboration?.guest !== null,
 	mutate: props.mutate,
 	photoSwipe: () => pswp,
+	zoomSurfaceImage: () => zoomSurface?.activeImage() ?? null,
+	markerScale: () => zoomSurface?.markerScale() ?? 1,
 	feedbackOpen,
 	metadataOpen,
 	shell,
+})
+zoomSurface = usePublicLightboxZoomSurface(() => pswp, () => {
+	annotations.syncMarkerScale()
+	annotations.scheduleGeometry(false)
 })
 const {
 	host: annotationHost,
@@ -172,7 +181,7 @@ function bindPhotoSwipeEvents() {
 		selectedCommentId.value = null
 		if (slideshow.value) scheduleSlideshow()
 		wakeChrome()
-		nextTick(annotations.syncHost)
+		nextTick(() => { zoomSurface?.mount(); annotations.syncHost() })
 	})
 	pswp.on('pointerMove', ({ originalEvent }) => {
 		if (originalEvent.pointerType === 'mouse' || originalEvent.pointerType === 'pen') wakeChrome()
@@ -194,18 +203,16 @@ function bindPhotoSwipeEvents() {
 			if (props.settings.mode === 'presentation') toggleChrome()
 		}
 	})
-	pswp.on('imageSizeChange', ({ slide, width, height }) => {
-		if (slide !== pswp?.currSlide) return
-		annotations.syncContentSize(width, height)
-		annotations.scheduleGeometry()
+	pswp.on('afterSetContent', ({ slide }) => {
+		if (slide === pswp?.currSlide) nextTick(() => { zoomSurface?.mount(); annotations.syncHost() })
 	})
-	pswp.on('zoomPanUpdate', ({ slide }) => { if (slide === pswp?.currSlide) annotations.scheduleGeometry() })
-	pswp.on('resize', annotations.scheduleGeometry)
+	pswp.on('resize', () => { zoomSurface?.refresh(); annotations.scheduleGeometry(true) })
 	pswp.on('afterInit', () => {
 		pswp?.element?.removeAttribute('role')
 		pswp?.element?.removeAttribute('aria-modal')
 		pswp?.element?.removeAttribute('aria-label')
-		nextTick(annotations.syncHost)
+		unbindZoomSurface = zoomSurface?.bind() ?? (() => {})
+		nextTick(() => { zoomSurface?.mount(); annotations.syncHost() })
 		if (window.matchMedia('(pointer: coarse)').matches
 			&& localStorage.getItem('proofing-gallery-touch-hint') !== 'seen') {
 			touchHint.value = true
@@ -214,6 +221,8 @@ function bindPhotoSwipeEvents() {
 		}
 	})
 	pswp.on('destroy', () => {
+		unbindZoomSurface?.()
+		unbindZoomSurface = null
 		pswp = null
 		if (!unmounting) emit('close')
 	})
@@ -239,14 +248,14 @@ onMounted(async () => {
 		appendToEl: shell.value,
 		bgOpacity: 0.97,
 		loop: loop.value,
-		wheelToZoom: true,
+		wheelToZoom: false,
 		pinchToClose: false,
 		closeOnVerticalDrag: true,
 		clickToCloseNonZoomable: false,
 		imageClickAction: false,
 		bgClickAction: false,
 		tapAction: false,
-		doubleTapAction: 'zoom',
+		doubleTapAction: false,
 		showHideAnimationType: motionPreset.value === 'off' ? 'none' : 'zoom',
 		showAnimationDuration: motionPreset.value === 'off' ? 0 : motionPreset.value === 'subtle' ? 180 : 360,
 		hideAnimationDuration: motionPreset.value === 'off' ? 0 : motionPreset.value === 'subtle' ? 150 : 260,
@@ -281,7 +290,7 @@ onBeforeUnmount(() => {
 	window.removeEventListener('keydown', onKeydown, true); window.removeEventListener('resize', updateViewport)
 	document.removeEventListener('visibilitychange', onSlideshowVisibility); document.removeEventListener('fullscreenchange', onFullscreenChange)
 	window.clearTimeout(slideshowTimer); window.clearTimeout(hintTimer); window.clearTimeout(chromeTimer)
-	annotations.destroy(); releaseWakeLock(); pswp?.destroy()
+	annotations.destroy(); releaseWakeLock(); unbindZoomSurface?.(); unbindZoomSurface = null; pswp?.destroy()
 	pswp = null
 	document.body.style.overflow = previousBodyOverflow
 	previouslyFocused?.focus()
@@ -332,16 +341,11 @@ function toSlideData(item: MediaItem, index: number): SlideData {
 		: 3 / 2
 	const width = ratio >= 1 ? 2400 : Math.max(1, Math.round(2400 * ratio))
 	const height = ratio >= 1 ? Math.max(1, Math.round(2400 / ratio)) : 2400
+	const src = escapeHtml(props.previewUrl(item, 2400, 2400, 'fit'))
 	return {
-		src: props.previewUrl(item, 2400, 2400, 'fit'),
-		srcset: [960, 1600, 2400]
-			.map(size => `${props.previewUrl(item, size, size, 'fit')} ${size}w`)
-			.join(', '),
+		html: `<div class="proofing-zoom-surface"><img class="pswp__img proofing-zoom-image" src="${src}" alt="${escapeHtml(item.name)}"></div>`,
 		width,
 		height,
-		alt: item.name,
-		msrc: props.previewUrl(item, 320, 320, 'fit'),
-		thumbCropped: true,
 		element: index === props.initialIndex ? props.initialElement ?? undefined : undefined,
 	}
 }
@@ -400,14 +404,7 @@ function goTo(index: number) {
 }
 
 function zoom(direction: number) {
-	const slide = pswp?.currSlide
-	if (!slide?.isZoomable()) return
-	const increment = Math.max(0.25, slide.zoomLevels.initial * 0.55)
-	const target = Math.min(
-		slide.zoomLevels.max,
-		Math.max(slide.zoomLevels.initial, slide.currZoomLevel + increment * direction),
-	)
-	slide.zoomTo(target, undefined, 0)
+	zoomSurface?.zoom(direction)
 }
 
 function setSlideshow(enabled: boolean) {

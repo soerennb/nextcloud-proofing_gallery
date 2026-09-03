@@ -15,11 +15,15 @@
 
 :global(.lightbox-shell .pswp__bg) { background: #050506; }
 
-:global(.lightbox-shell .pswp__img) { cursor: zoom-in; }
+:global(.lightbox-shell .proofing-zoom-image) { cursor: zoom-in; }
 
-:global(.lightbox-shell--annotatable .pswp__img) { cursor: crosshair; }
+:global(.lightbox-shell--annotatable .proofing-zoom-image) { cursor: crosshair; }
 
 :global(.lightbox-shell .pswp__content) { display: grid; place-items: center; }
+
+:global(.lightbox-shell .proofing-zoom-surface) { position: relative; width: 100%; height: 100%; transform-origin: 0 0; will-change: transform; }
+
+:global(.lightbox-shell .proofing-zoom-image) { display: block; width: 100%; height: 100%; max-width: none; max-height: none; touch-action: none; user-select: none; -webkit-user-drag: none; }
 
 :global(.proofing-pswp-video) { width: min(100%, 1400px); height: min(100%, 900px); object-fit: contain; }
 
