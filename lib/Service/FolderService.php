@@ -437,6 +437,55 @@ final class FolderService {
 		return new MediaPage($items, count($nodes), $limit, $offset);
 	}
 
+	/**
+	 * @param list<string> $paths
+	 */
+	public function listScopedMedia(
+		string $userId,
+		int $folderId,
+		array $paths,
+		int $limit = 60,
+		int $offset = 0,
+		string $search = '',
+	): MediaPage {
+		$limit = max(1, min(100, $limit));
+		$offset = max(0, $offset);
+		$search = mb_substr(trim($search), 0, 120);
+		$root = $this->resolveFolder($userId, $folderId);
+		$files = [];
+		$seen = [];
+		foreach (array_values(array_unique($paths)) as $path) {
+			$current = $this->folderAt($root, trim($path, '/'));
+			$this->appendScopedMedia($current, $search, $files, $seen);
+		}
+		usort($files, static function (File $left, File $right): int {
+			$result = strnatcasecmp($left->getName(), $right->getName());
+			return $result === 0 ? $left->getId() <=> $right->getId() : $result;
+		});
+		return new MediaPage(array_map(
+			fn (File $file): MediaItem => $this->mediaItem($file),
+			array_slice($files, $offset, $limit),
+		), count($files), $limit, $offset);
+	}
+
+	/** @param list<File> $files
+	 * @param array<int, true> $seen
+	 */
+	private function appendScopedMedia(Folder $folder, string $search, array &$files, array &$seen): void {
+		foreach ($folder->getDirectoryListing() as $node) {
+			if (str_starts_with($node->getName(), '.')) continue;
+			if ($node instanceof Folder) {
+				$this->appendScopedMedia($node, $search, $files, $seen);
+				continue;
+			}
+			if (!$node instanceof File || !$node->isReadable() || !$this->isSupported($node)) continue;
+			$id = (int)$node->getId();
+			if (isset($seen[$id]) || ($search !== '' && mb_stripos($node->getName(), $search) === false)) continue;
+			$seen[$id] = true;
+			$files[] = $node;
+		}
+	}
+
 	private function folderAt(Folder $root, string $path): Folder {
 		if ($path === '') {
 			return $root;

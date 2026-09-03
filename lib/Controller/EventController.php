@@ -38,6 +38,16 @@ final class EventController extends Controller {
 	#[ApiRoute(verb: 'GET', url: '/api/v2/galleries/{id}/event/setup')]
 	public function setup(int $id): DataResponse { return $this->respond(fn () => $this->setups->get($this->gallery($id))); }
 
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/v2/galleries/{id}/event/design-media')]
+	public function designMedia(int $id, string $scope = 'shared', string $query = '', int $limit = 60, int $offset = 0): DataResponse {
+		return $this->respond(fn () => $this->setups->designMedia($this->gallery($id), $scope, $query, $limit, $offset));
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/v2/galleries/{id}/event/operations')]
+	public function operations(int $id): DataResponse { return $this->respond(fn () => $this->waves->operations($this->gallery($id))); }
+
 	/** @param array<string, mixed> $setup */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'PUT', url: '/api/v2/galleries/{id}/event/setup')]
@@ -138,8 +148,14 @@ final class EventController extends Controller {
 
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'GET', url: '/api/v2/galleries/{id}/event/recipients')]
-	public function recipientPage(int $id, int $limit = 50, ?string $cursor = null, ?string $status = null, string $query = ''): DataResponse {
-		return $this->respond(fn () => $this->recipients->page($this->gallery($id), $limit, $cursor, $status, $query));
+	public function recipientPage(int $id, int $limit = 50, ?string $cursor = null, ?string $status = null, string $query = '', ?string $setupKey = null): DataResponse {
+		return $this->respond(fn () => $this->recipients->page($this->gallery($id), $limit, $cursor, $status, $query, $setupKey));
+	}
+
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'GET', url: '/api/v2/galleries/{id}/event/recipient-links')]
+	public function recipientLinks(int $id, string $keys = ''): DataResponse {
+		return $this->respond(fn () => $this->recipients->latestForSetupKeys($this->gallery($id), $keys === '' ? [] : explode(',', $keys)));
 	}
 
 	/** @param list<string> $groupRoots */

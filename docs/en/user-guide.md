@@ -27,19 +27,19 @@ photos and each participant's photos in separate subfolders of one project
 folder. Choose **Private links from event folders** when creating the project.
 The project opens directly in Event delivery; there is no separate publish step.
 
-Work through **Photos**, **Visibility**, **Recipients**, **Delivery**, and
-**Review**. Use an existing Nextcloud folder, or choose or drop a local event
-folder while retaining its subfolders. Assign each folder exactly one role:
-everyone, group, private, or not delivered. Before link creation, Proofing
-Gallery shows the exact shared, group, and private scope for every recipient.
-The final action publishes the hidden technical base when needed and creates
-the client links.
+Work through **Photos**, **Access**, **Recipients**, and **Release**. Use an
+existing Nextcloud folder, or choose or drop a local event folder while
+retaining its subfolders. Assign each folder exactly one role: everyone, group,
+private, or not delivered. The recipient ledger combines contact editing, exact
+shared/group/private scope, current link, and link history in one row per
+recipient. The final action publishes the hidden technical base when needed and
+creates the client links.
 
 Folder names provide initial recipient names. For large lists, expand the CSV
 import in the recipient step and use `folder`, `name`, `email`, `locale`, `pin`,
 and optional `groups` columns. Drafts, schedules, individual links, exports,
-and repairs remain under **Released links and advanced tools**. Email addresses
-are encrypted at rest.
+retries, repairs, and link rotation remain in the recipient and release areas.
+Email addresses are encrypted at rest.
 
 ## Work through a project
 

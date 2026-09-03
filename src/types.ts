@@ -328,6 +328,7 @@ export interface GalleryListItem {
 	status: 'draft' | 'published' | 'archived'
 	mode: 'presentation' | 'collaboration'
 	sourceType: 'folder' | 'collection'
+	deliveryMode: 'standard' | 'event'
 	purpose: GalleryPurpose
 	workflowState: Gallery['workflowState']
 	createdAt: number

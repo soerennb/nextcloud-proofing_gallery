@@ -129,16 +129,20 @@ test('event delivery exposes shared and assigned folders but rejects siblings', 
 	await page.getByRole('textbox', { name: /Account name/ }).fill('admin')
 	await page.getByRole('textbox', { name: 'Password' }).fill('admin')
 	await page.getByRole('button', { name: 'Log in', exact: true }).click()
+	await page.getByRole('button', { name: 'Use dark appearance' }).click()
+	await expect(page.locator('#proofing_gallery')).toHaveAttribute('data-studio-theme', 'dark')
 	await page.goto(`${baseURL}/apps/proofing_gallery/#gallery/${gallery.id}/share`)
-	await expect(page.getByRole('heading', { name: 'From event folders to private client links' })).toBeVisible()
-	await page.getByText('Released links and advanced tools').click()
-	await expect(page.getByText(/Anna-Renamed · Link ready · Healthy/)).toBeVisible()
-	await expect(page.getByRole('heading', { name: 'Recipient operations' })).toBeVisible()
+	await expect(page.locator('.event-workflow')).toBeVisible()
+	await expect(page.locator('.event-workflow__hero')).toHaveCount(0)
+	await expect(page.locator('#proofing_gallery')).toHaveAttribute('data-studio-theme', 'dark')
+	await page.getByRole('button', { name: /Recipients & links/ }).click()
+	await expect(page.getByRole('heading', { name: 'Recipients & links' })).toBeVisible()
+	await expect(page.getByText(/Anna-Renamed/).first()).toBeVisible()
 	await page.setViewportSize({ width: 390, height: 844 })
 	const workflow = page.locator('.event-workflow')
 	expect(await workflow.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
-	const manager = page.locator('.event-manager')
-	expect(await manager.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+	const ledger = page.locator('.recipient-ledger')
+	expect(await ledger.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
 
 	const annaRecipient = (await request.get(`${recipientsV2}/recipients?format=json&query=Anna`, { headers }).then((response) => response.json()) as { items: Array<{ id: number }> }).items[0]
 	const pinRotation = await request.post(`${recipientsV2}/recipients/${annaRecipient.id}/rotate?format=json`, { headers, data: { mode: 'pin' } })
@@ -156,7 +160,7 @@ test('event delivery exposes shared and assigned folders but rejects siblings', 
 	const degraded = await request.get(`${galleries}/${gallery.id}/event?format=json`, { headers }).then((response) => response.json()) as { items: Array<{ folderState: string }> }
 	expect(degraded.items[0].folderState).toBe('missing')
 	await page.reload()
-	await page.getByText('Released links and advanced tools').click()
+	await expect(page.getByRole('heading', { name: 'Recipients & links' })).toBeVisible()
 	await expect(page.getByText('Folder unavailable')).toBeVisible()
 })
 
@@ -178,9 +182,9 @@ test('guided event setup persists and delivery retries are idempotent', async ({
 	expect(ensured.status()).toBe(200)
 	expect(await ensured.json()).toEqual({ paths: ['Import', 'Import/Unterordner'] })
 	const event = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v2/galleries/${gallery.id}/event`
-	const initial = await request.get(`${event}/setup?format=json`, { headers }).then(response => response.json()) as { revision: number, folders: Array<{ id: number, path: string }> }
-	expect(initial.folders.map(folder => folder.path)).toEqual(expect.arrayContaining(['Import', 'Import/Unterordner']))
-	const idFor = (path: string) => initial.folders.find(folder => folder.path === path)!.id
+	const initial = await request.get(`${event}/setup?format=json`, { headers }).then((response) => response.json()) as { revision: number, folders: Array<{ id: number, path: string }> }
+	expect(initial.folders.map((folder) => folder.path)).toEqual(expect.arrayContaining(['Import', 'Import/Unterordner']))
+	const idFor = (path: string) => initial.folders.find((folder) => folder.path === path)!.id
 	const setup = {
 		currentStep: 'review',
 		folderAssignments: [
@@ -195,8 +199,16 @@ test('guided event setup persists and delivery retries are idempotent', async ({
 	expect(savedResponse.status()).toBe(200)
 	const saved = await savedResponse.json() as { revision: number, readiness: { ready: boolean } }
 	expect(saved.readiness.ready).toBe(true)
-	const reloaded = await request.get(`${event}/setup?format=json`, { headers }).then(response => response.json()) as { revision: number, currentStep: string }
-	expect(reloaded).toMatchObject({ revision: saved.revision, currentStep: 'review' })
+	const reloaded = await request.get(`${event}/setup?format=json`, { headers }).then((response) => response.json()) as { revision: number, currentStep: string }
+	expect(reloaded).toMatchObject({ revision: saved.revision, currentStep: 'delivery' })
+	const sharedDesign = await request.get(`${event}/design-media?format=json&scope=shared`, { headers }).then((response) => response.json()) as { activeScope: string, items: Array<{ name: string }>, scopes: Array<{ id: string }> }
+	expect(sharedDesign.activeScope).toBe('shared')
+	expect(sharedDesign.items.map((item) => item.name)).toEqual(['photo.png'])
+	const recipientScope = sharedDesign.scopes.find((scope) => scope.id.startsWith('recipient:'))
+	expect(recipientScope).toBeTruthy()
+	const recipientDesign = await request.get(`${event}/design-media?format=json&scope=${encodeURIComponent(recipientScope!.id)}`, { headers }).then((response) => response.json()) as { activeScope: string, items: Array<{ name: string }> }
+	expect(recipientDesign.activeScope).toBe(recipientScope!.id)
+	expect(recipientDesign.items.map((item) => item.name)).toEqual(['photo.png', 'photo.png'])
 	const requestKey = `guided_${Date.now()}`
 	const first = await request.post(`${event}/deliver?format=json`, { headers, data: { setupRevision: saved.revision, requestKey } })
 	const second = await request.post(`${event}/deliver?format=json`, { headers, data: { setupRevision: saved.revision, requestKey } })
@@ -207,12 +219,18 @@ test('guided event setup persists and delivery retries are idempotent', async ({
 	expect(firstDelivery.gallery.shareToken).toBeNull()
 	expect(firstDelivery.wave.status).toBe('draft')
 	expect(secondDelivery.wave.id).toBe(firstDelivery.wave.id)
+	const configuredLinks = await request.get(`${event}/recipient-links?format=json&keys=guidedrecipient1`, { headers })
+	expect(configuredLinks.status()).toBe(200)
+	expect(await configuredLinks.json()).toMatchObject({ items: [{ setupKey: 'guidedrecipient1', waveId: firstDelivery.wave.id }] })
 	const released = await request.post(`${event}/waves/${firstDelivery.wave.id}/release?format=json`, { headers })
 	expect(released.status()).toBe(202)
 	const releasedDelivery = await released.json() as { gallery: { shareToken: string | null }, wave: { status: string } }
 	expect(releasedDelivery.gallery.shareToken).toBeTruthy()
 	expect(releasedDelivery.wave.status).toBe('releasing')
-	const technicalBase = await request.get(`${baseURL}/index.php/apps/proofing_gallery/public/${releasedDelivery.gallery.shareToken}/gallery`).then(response => response.json()) as { items: unknown[] }
+	const operations = await request.get(`${event}/operations?format=json`, { headers }).then((response) => response.json()) as { summary: { total: number }, waves: Array<{ id: number, status: string }> }
+	expect(operations.summary.total).toBeGreaterThanOrEqual(1)
+	expect(operations.waves).toContainEqual(expect.objectContaining({ id: firstDelivery.wave.id }))
+	const technicalBase = await request.get(`${baseURL}/index.php/apps/proofing_gallery/public/${releasedDelivery.gallery.shareToken}/gallery`).then((response) => response.json()) as { items: unknown[] }
 	expect(technicalBase.items).toEqual([])
 	const legacyDraftResponse = await request.post(`${event}/deliver?format=json`, { headers, data: { setupRevision: saved.revision, requestKey: `guided_legacy_${Date.now()}` } })
 	const legacyDraft = await legacyDraftResponse.json() as { wave: { id: number } }

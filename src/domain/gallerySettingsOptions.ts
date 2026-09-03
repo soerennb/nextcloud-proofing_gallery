@@ -56,7 +56,8 @@ export function galleryWorkspaceVisible(workspace: GalleryWorkspace, gallery: Ga
 	if (workspace === 'privacy') return gallery.permissions.role === 'owner' && gallery.status === 'archived'
 	if (workspace === 'team' || workspace === 'automation' || workspace === 'share') return gallery.permissions.canManageAccess
 	if (workspace === 'review') {
-		return gallery.permissions.canEdit || ['selection', 'proofing', 'uploads'].includes(gallery.purpose)
+		return gallery.settings.mode === 'collaboration'
+			&& (gallery.permissions.canEdit || ['selection', 'proofing', 'uploads'].includes(gallery.purpose))
 	}
 	if (workspace === 'design') return gallery.permissions.canEdit
 	if (workspace === 'history') return true

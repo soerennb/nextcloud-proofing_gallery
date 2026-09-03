@@ -18,7 +18,7 @@ function gallery(overrides: Partial<Gallery> = {}): Gallery {
 		title: 'Gallery',
 		slug: 'gallery',
 		status: 'published',
-		settings: {} as Gallery['settings'],
+		settings: { mode: 'collaboration' } as Gallery['settings'],
 		shareToken: 'token',
 		createdAt: 1,
 		updatedAt: 1,
@@ -71,5 +71,12 @@ describe('gallery workspace routing', () => {
 	it('shows privacy only for archived owner galleries', () => {
 		const archived = availableGalleryWorkspaces(gallery({ status: 'archived', archivedAt: 2 })).map(item => item.id)
 		expect(archived).toContain('privacy')
+	})
+
+	it('hides review outside proofing mode', () => {
+		const workspaces = availableGalleryWorkspaces(gallery({
+			settings: { mode: 'presentation' } as Gallery['settings'],
+		})).map(item => item.id)
+		expect(workspaces).not.toContain('review')
 	})
 })

@@ -1,13 +1,13 @@
 import axios from '@nextcloud/axios'
 import { generateOcsUrl } from '@nextcloud/router'
 
-import type { Gallery, GalleryPublicLink, PublicLinkPolicy } from '../types.ts'
+import type { Gallery, GalleryPublicLink, MediaItem, PublicLinkPolicy } from '../types.ts'
 
 const galleriesUrl = generateOcsUrl('/apps/proofing_gallery/api/v1/galleries')
 const galleriesV2Url = generateOcsUrl('/apps/proofing_gallery/api/v2/galleries')
 
 export type EventFolderRole = 'shared' | 'group' | 'private' | 'ignored'
-export type EventSetupStep = 'photos' | 'visibility' | 'recipients' | 'delivery' | 'review'
+export type EventSetupStep = 'photos' | 'visibility' | 'recipients' | 'delivery'
 export interface EventFolderPreview {
 	id: number
 	parentId: number | null
@@ -47,8 +47,22 @@ export interface EventSetup {
 	readiness: { ready: boolean; checks: Array<{ code: string; state: 'ready' | 'warning' | 'blocked' }> }
 	capacity: number
 }
+export interface EventDesignScope {
+	id: string
+	kind: 'shared' | 'recipient'
+	label: string
+}
+export interface EventDesignMediaPage {
+	scopes: EventDesignScope[]
+	activeScope: string | null
+	items: MediaItem[]
+	total: number
+	limit: number
+	offset: number
+}
 export interface EventRecipient {
 	id: number
+	setupKey: string | null
 	folderPath: string
 	folderState: 'readable' | 'missing'
 	name: string
@@ -75,8 +89,12 @@ export interface EventRecipientPage {
 	health: { healthy: number; degraded: number; revoked: number; unpublished: number }
 }
 
-export async function fetchEventRecipients(id: number, params: { limit?: number; cursor?: string | null; status?: string; query?: string } = {}): Promise<EventRecipientPage> {
+export async function fetchEventRecipients(id: number, params: { limit?: number; cursor?: string | null; status?: string; query?: string; setupKey?: string } = {}): Promise<EventRecipientPage> {
 	return (await axios.get<EventRecipientPage>(`${galleriesV2Url}/${id}/event/recipients`, { params })).data
+}
+
+export async function fetchLatestEventRecipientLinks(id: number, setupKeys: string[]): Promise<EventRecipient[]> {
+	return (await axios.get<{ items: EventRecipient[] }>(`${galleriesV2Url}/${id}/event/recipient-links`, { params: { keys: setupKeys.join(',') } })).data.items
 }
 
 export async function editEventRecipient(id: number, recipientId: number, payload: { folderPath: string; groupRoots: string[]; name: string; email: string; locale: 'de' | 'en' | null }): Promise<EventRecipient> {
@@ -119,6 +137,11 @@ export interface EventOverview {
 	suggested: boolean
 	items: EventRecipient[]
 	summary: { total: number; draft: number; published: number; invited: number; failed: number }
+	waves: EventWave[]
+}
+
+export interface EventOperations {
+	summary: { total: number; draft: number; published: number; invited: number; failed: number; revoked: number }
 	waves: EventWave[]
 }
 
@@ -176,8 +199,16 @@ export async function fetchEventOverview(id: number): Promise<EventOverview> {
 	return (await axios.get<EventOverview>(`${galleriesUrl}/${id}/event`)).data
 }
 
+export async function fetchEventOperations(id: number): Promise<EventOperations> {
+	return (await axios.get<EventOperations>(`${galleriesV2Url}/${id}/event/operations`)).data
+}
+
 export async function fetchEventSetup(id: number): Promise<EventSetup> {
 	return (await axios.get<EventSetup>(`${galleriesV2Url}/${id}/event/setup`)).data
+}
+
+export async function fetchEventDesignMedia(id: number, scope = 'shared', query = '', limit = 60, offset = 0): Promise<EventDesignMediaPage> {
+	return (await axios.get<EventDesignMediaPage>(`${galleriesV2Url}/${id}/event/design-media`, { params: { scope, query, limit, offset } })).data
 }
 
 export async function saveEventSetup(id: number, setup: Pick<EventSetup, 'currentStep' | 'folderAssignments' | 'recipients' | 'delivery'>, expectedRevision: number): Promise<EventSetup> {

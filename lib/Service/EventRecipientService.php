@@ -26,18 +26,31 @@ final class EventRecipientService {
 	}
 
 	/** @return array{items: list<array<string, mixed>>, total: int, nextCursor: ?string, health: array<string, int>} */
-	public function page(Gallery $gallery, int $limit = 50, ?string $cursor = null, ?string $status = null, string $query = ''): array {
+	public function page(Gallery $gallery, int $limit = 50, ?string $cursor = null, ?string $status = null, string $query = '', ?string $setupKey = null): array {
 		$this->assertEvent($gallery);
 		$query = mb_substr(trim($query), 0, 120);
+		$setupKey = $setupKey === null || trim($setupKey) === '' ? null : trim($setupKey);
+		if ($setupKey !== null && preg_match('/^[A-Za-z0-9_-]{8,64}$/', $setupKey) !== 1) throw new \InvalidArgumentException('Invalid recipient setup key');
 		$status = $status === null || trim($status) === '' ? null : trim($status);
 		if ($status !== null && !in_array($status, ['draft', 'published', 'invited', 'failed', 'revoked'], true)) throw new \InvalidArgumentException('Invalid recipient status filter');
-		$scope = 'event-recipients:' . $gallery->getId() . ':' . ($status ?? '') . ':' . hash('sha256', $query);
-		$page = $this->repository->recipientPage((int)$gallery->getId(), $limit, $this->cursors->decode($cursor, $scope), $status, $query);
+		$scope = 'event-recipients:' . $gallery->getId() . ':' . ($status ?? '') . ':' . ($setupKey ?? '') . ':' . hash('sha256', $query);
+		$page = $this->repository->recipientPage((int)$gallery->getId(), $limit, $this->cursors->decode($cursor, $scope), $status, $query, $setupKey);
 		$linkMap = $this->linkMap($gallery);
 		$items = array_map(fn (array $row): array => $this->present($gallery, $row, $linkMap), $page['items']);
 		$health = ['healthy' => 0, 'degraded' => 0, 'revoked' => 0, 'unpublished' => 0];
 		foreach ($items as $item) $health[$item['health']]++;
 		return ['items' => $items, 'total' => $page['total'], 'nextCursor' => $page['nextId'] === null ? null : $this->cursors->encode($scope, $page['nextId']), 'health' => $health];
+	}
+
+	/** @param list<string> $setupKeys
+	 * @return array{items: list<array<string, mixed>>}
+	 */
+	public function latestForSetupKeys(Gallery $gallery, array $setupKeys): array {
+		$this->assertEvent($gallery);
+		$setupKeys = array_values(array_unique(array_filter($setupKeys, static fn (mixed $key): bool => is_string($key) && preg_match('/^[A-Za-z0-9_-]{8,64}$/', $key) === 1)));
+		if (count($setupKeys) > 50) throw new \InvalidArgumentException('At most 50 recipient setup keys may be requested');
+		$linkMap = $this->linkMap($gallery);
+		return ['items' => array_map(fn (array $row): array => $this->present($gallery, $row, $linkMap), $this->repository->latestRecipientsForSetupKeys((int)$gallery->getId(), $setupKeys))];
 	}
 
 	/**
@@ -273,10 +286,10 @@ final class EventRecipientService {
 		$link = $row['public_link_id'] === null ? null : ($links[(int)$row['public_link_id']] ?? null);
 		$folder = $this->resolvedFolder($gallery, $row);
 		$health = $link === null ? ($row['public_link_id'] === null ? 'unpublished' : 'degraded') : ($link['status'] === 'active' && ($link['scopeHealth']['state'] ?? '') === 'healthy' ? 'healthy' : ($link['status'] === 'revoked' ? 'revoked' : 'degraded'));
-		return ['id' => (int)$row['id'], 'folderPath' => $folder['path'], 'folderState' => $folder['state'], 'groupRoots' => is_string($row['group_roots'] ?? null) ? json_decode($row['group_roots'], true, flags: JSON_THROW_ON_ERROR) : [],
+		return ['id' => (int)$row['id'], 'setupKey' => is_string($row['setup_key'] ?? null) ? $row['setup_key'] : null, 'folderPath' => $folder['path'], 'folderState' => $folder['state'], 'groupRoots' => is_string($row['group_roots'] ?? null) ? json_decode($row['group_roots'], true, flags: JSON_THROW_ON_ERROR) : [],
 			'name' => (string)$row['display_name'], 'email' => $row['email_cipher'] === null ? null : $this->crypto->decrypt((string)$row['email_cipher']), 'locale' => $row['locale'],
 			'status' => (string)$row['delivery_status'], 'publicationStatus' => (string)$row['publication_status'], 'invitationStatus' => (string)$row['invitation_status'],
-			'invitedAt' => $row['invited_at'] === null ? null : (int)$row['invited_at'], 'errorCode' => $row['error_code'], 'attempts' => (int)$row['attempts'], 'link' => $link, 'health' => $health,
+			'invitedAt' => $row['invited_at'] === null ? null : (int)$row['invited_at'], 'waveId' => $row['wave_id'] === null ? null : (int)$row['wave_id'], 'errorCode' => $row['error_code'], 'attempts' => (int)$row['attempts'], 'link' => $link, 'health' => $health,
 			'allowedActions' => $this->actions($row, $link), 'updatedAt' => (int)$row['updated_at']];
 	}
 
