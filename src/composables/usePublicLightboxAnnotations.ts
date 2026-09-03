@@ -36,6 +36,8 @@ interface AnnotationState {
 }
 
 function createOverlay(options: Options, state: AnnotationState) {
+	let geometryFrame: number | null = null
+
 	function activeImage(): HTMLImageElement | null {
 		const image = options.photoSwipe()?.currSlide?.content.element
 		return image instanceof HTMLImageElement ? image : null
@@ -45,23 +47,43 @@ function createOverlay(options: Options, state: AnnotationState) {
 		state.anchor.value = state.draft.value && bounds ? annotationScreenPoint(state.draft.value, bounds) : null
 	}
 
-	function syncGeometry() {
+	function syncContentSize(width?: number, height?: number) {
 		const slide = options.photoSwipe()?.currSlide
 		const image = activeImage()
-		if (!image || !state.host.value || !slide) return
-		if (!slide.pan) {
-			const bounds = image.getBoundingClientRect()
-			state.imageBounds.value = { left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height }
-			updateAnchor(state.imageBounds.value)
-			return
+		const host = state.host.value
+		if (!slide || !image || !host) return
+		const contentWidth = width ?? Number.parseFloat(image.style.width)
+		const contentHeight = height ?? Number.parseFloat(image.style.height)
+		if (Number.isFinite(contentWidth) && contentWidth > 0) host.style.width = `${contentWidth}px`
+		if (Number.isFinite(contentHeight) && contentHeight > 0) host.style.height = `${contentHeight}px`
+		const renderedScale = slide.currZoomLevel / (slide.currentResolution || slide.zoomLevels.initial)
+		if (Number.isFinite(renderedScale) && renderedScale > 0) {
+			host.style.setProperty('--annotation-marker-scale', String(1 / renderedScale))
 		}
-		const left = slide.pan.x
-		const top = slide.pan.y
-		const width = slide.width * slide.currZoomLevel
-		const height = slide.height * slide.currZoomLevel
-		if (width <= 0 || height <= 0) return
-		state.imageBounds.value = { left, top, width, height }
+	}
+
+	function syncGeometry() {
+		const image = activeImage()
+		if (!image || !state.host.value) return
+		syncContentSize()
+		const bounds = image.getBoundingClientRect()
+		if (bounds.width <= 0 || bounds.height <= 0) return
+		state.imageBounds.value = { left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height }
 		updateAnchor(state.imageBounds.value)
+	}
+
+	function scheduleGeometry() {
+		if (geometryFrame !== null) return
+		geometryFrame = window.requestAnimationFrame(() => {
+			geometryFrame = null
+			syncGeometry()
+		})
+	}
+
+	function cancelScheduledGeometry() {
+		if (geometryFrame === null) return
+		window.cancelAnimationFrame(geometryFrame)
+		geometryFrame = null
 	}
 
 	function syncHost() {
@@ -71,12 +93,12 @@ function createOverlay(options: Options, state: AnnotationState) {
 		if (!pswp?.currSlide || !options.activeItem.value?.mimeType.startsWith('image/')) return
 		const element = document.createElement('div')
 		element.className = 'proofing-annotation-layer'
-		pswp.element?.append(element)
+		pswp.currSlide.container.append(element)
 		state.host.value = element
 		syncGeometry()
 	}
 
-	return { activeImage, updateAnchor, syncGeometry, syncHost }
+	return { activeImage, updateAnchor, syncContentSize, syncGeometry, scheduleGeometry, cancelScheduledGeometry, syncHost }
 }
 
 function createDraftActions(options: Options, state: AnnotationState, overlay: ReturnType<typeof createOverlay>) {
@@ -205,6 +227,7 @@ export function usePublicLightboxAnnotations(options: Options) {
 	}
 
 	function destroy() {
+		overlay.cancelScheduledGeometry()
 		state.host.value?.remove()
 		state.host.value = null
 		state.imageBounds.value = null

@@ -536,7 +536,7 @@ onBeforeUnmount(() => {
 			</div>
 		</div>
 		<div v-if="showShortcuts" class="shortcut-sheet">
-			<span><kbd>←</kbd><kbd>→</kbd> {{ t('proofing_gallery', 'Navigate') }}</span><span><kbd>0–5</kbd> {{ t('proofing_gallery', 'Rate') }}</span><span><kbd>P</kbd> {{ t('proofing_gallery', 'Pick') }}</span><span><kbd>X</kbd> {{ t('proofing_gallery', 'Reject') }}</span><span><kbd>F</kbd> {{ t('proofing_gallery', 'Focus') }}</span><span><kbd>Space</kbd> {{ t('proofing_gallery', 'Select') }}</span><span><kbd>Ctrl/⌘ Z</kbd> {{ t('proofing_gallery', 'Undo') }}</span>
+			<span><kbd>←</kbd><kbd>→</kbd> {{ t('proofing_gallery', 'Navigate') }}</span><span><kbd>0–5</kbd> {{ t('proofing_gallery', 'Rate') }}</span><span><kbd>P</kbd> {{ t('proofing_gallery', 'Pick') }}</span><span><kbd>X</kbd> {{ t('proofing_gallery', 'Reject') }}</span><span><kbd>F</kbd> {{ t('proofing_gallery', 'Focus') }}</span><span><kbd>{{ t('proofing_gallery', 'Space') }}</kbd> {{ t('proofing_gallery', 'Select') }}</span><span><kbd>{{ t('proofing_gallery', 'Ctrl/⌘ Z') }}</kbd> {{ t('proofing_gallery', 'Undo') }}</span>
 		</div>
 		<section v-if="xmpOpen" class="xmp-sync" aria-labelledby="xmp-sync-title">
 			<header>
@@ -562,7 +562,7 @@ onBeforeUnmount(() => {
 					</li>
 				</ul>
 				<div class="xmp-sync__merge">
-					<p>{{ t('proofing_gallery', 'For a field-wise merge, choose the source of truth for each value.') }}</p><label>{{ t('proofing_gallery', 'Rating') }}<select v-model="xmpChoices.rating" name="xmpRatingSource"><option value="app">App</option><option value="xmp">XMP</option></select></label><label>{{ t('proofing_gallery', 'Color') }}<select v-model="xmpChoices.color" name="xmpColorSource"><option value="app">App</option><option value="xmp">XMP</option></select></label><label>{{ t('proofing_gallery', 'Decision') }}<select v-model="xmpChoices.pick" name="xmpPickSource"><option value="app">App</option><option value="xmp">XMP</option></select></label>
+					<p>{{ t('proofing_gallery', 'For a field-wise merge, choose the source of truth for each value.') }}</p><label>{{ t('proofing_gallery', 'Rating') }}<select v-model="xmpChoices.rating" name="xmpRatingSource"><option value="app">{{ t('proofing_gallery', 'App') }}</option><option value="xmp">{{ t('proofing_gallery', 'XMP') }}</option></select></label><label>{{ t('proofing_gallery', 'Color') }}<select v-model="xmpChoices.color" name="xmpColorSource"><option value="app">{{ t('proofing_gallery', 'App') }}</option><option value="xmp">{{ t('proofing_gallery', 'XMP') }}</option></select></label><label>{{ t('proofing_gallery', 'Decision') }}<select v-model="xmpChoices.pick" name="xmpPickSource"><option value="app">{{ t('proofing_gallery', 'App') }}</option><option value="xmp">{{ t('proofing_gallery', 'XMP') }}</option></select></label>
 				</div>
 				<div class="xmp-sync__actions">
 					<NcButton :disabled="xmpWorking" @click="runXmp('app', false)">

@@ -2,9 +2,9 @@
 import { t } from '@nextcloud/l10n'
 import { computed, nextTick, ref, watch } from 'vue'
 
+import { ANNOTATION_COORDINATE_SCALE } from '../domain/collaboration.ts'
 import type { NormalizedAnnotation } from '../domain/collaboration.ts'
 import { annotationThreadKey } from '../domain/lightboxReview.ts'
-import { annotationScreenPoint } from '../domain/lightboxReview.ts'
 import type { ScreenBounds, ScreenPoint } from '../domain/lightboxReview.ts'
 import type { CollaborationState } from '../publicTypes.ts'
 
@@ -57,8 +57,8 @@ const selectedThreadKey = computed(() => {
 })
 function markerStyle(annotation: NormalizedAnnotation) {
 	if (!props.imageBounds) return { display: 'none' }
-	const point = annotationScreenPoint(annotation, props.imageBounds)
-	return { left: `${point.x}px`, top: `${point.y}px` }
+	const percent = (value: number) => `${(value / ANNOTATION_COORDINATE_SCALE * 100).toFixed(2)}%`
+	return { left: percent(annotation.x), top: percent(annotation.y) }
 }
 const composerStyle = computed(() => {
 	if (!props.anchor || props.viewportWidth <= 520) return undefined
@@ -169,7 +169,7 @@ function onComposerKeydown(event: KeyboardEvent) {
 </template>
 
 <style scoped>
-.annotation-marker { position: absolute; z-index: 2; display: grid; box-sizing: border-box; width: 28px; min-width: 28px; max-width: 28px; height: 28px; min-height: 28px; max-height: 28px; aspect-ratio: 1; padding: 0; border: 2px dashed #fff; border-radius: 50%; background: #18212b; box-shadow: 0 2px 6px rgb(0 0 0 / 42%); color: #fff; font-size: 11px; font-style: normal; font-weight: 750; line-height: 1; place-items: center; pointer-events: auto; transform: translate(-50%, -50%); transform-origin: center; transition: background-color 120ms ease, box-shadow 120ms ease, filter 120ms ease; }
+.annotation-marker { position: absolute; z-index: 2; display: grid; box-sizing: border-box; width: 28px; min-width: 28px; max-width: 28px; height: 28px; min-height: 28px; max-height: 28px; aspect-ratio: 1; margin: 0 !important; padding: 0; border: 2px dashed #fff; border-radius: 50%; background: #18212b; box-shadow: 0 2px 6px rgb(0 0 0 / 42%); color: #fff; font-size: 11px; font-style: normal; font-weight: 750; line-height: 1; place-items: center; pointer-events: auto; transform: scale(var(--annotation-marker-scale, 1)) translate(-50%, -50%); transform-origin: 0 0; transition: background-color 120ms ease, box-shadow 120ms ease, filter 120ms ease; }
 
 .annotation-marker:hover { filter: brightness(1.08); }
 

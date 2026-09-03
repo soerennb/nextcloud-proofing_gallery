@@ -57,7 +57,7 @@ function previewUrl(fileId: number): string {
 				type="radio"
 				value="collaboration"><span><strong>{{ t('proofing_gallery', 'Proofing') }}</strong><small>{{ t('proofing_gallery', 'Collect selections, likes, colors and comments.') }}</small></span></label>
 		</fieldset>
-		<label v-if="gallery.permissions.canEdit" class="select-field"><span>{{ t('proofing_gallery', 'Public gallery language') }}</span><select v-model="settings.publicLocale" name="publicLocale"><option value="auto">{{ t('proofing_gallery', 'Automatic') }}</option><option value="en">English</option><option value="de">Deutsch</option></select></label>
+		<label v-if="gallery.permissions.canEdit" class="select-field"><span>{{ t('proofing_gallery', 'Public gallery language') }}</span><select v-model="settings.publicLocale" name="publicLocale"><option value="auto">{{ t('proofing_gallery', 'Automatic') }}</option><option value="en">{{ t('proofing_gallery', 'English') }}</option><option value="de">{{ t('proofing_gallery', 'German') }}</option></select></label>
 
 		<details v-if="gallery.permissions.role === 'owner'" class="preset-panel">
 			<summary role="button">

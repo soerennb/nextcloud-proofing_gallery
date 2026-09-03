@@ -257,7 +257,7 @@ onMounted(load)
 				<label><span>{{ t('proofing_gallery', 'Start folder') }}</span><input v-model="draft.startPath" name="linkStartPath" :placeholder="t('proofing_gallery', 'Client / Finals')"></label>
 				<label><span>{{ t('proofing_gallery', 'View mode') }}</span><select v-model="draft.viewMode" name="linkViewMode"><option value="folder">{{ t('proofing_gallery', 'Folder view') }}</option><option value="recursive">{{ t('proofing_gallery', 'Recursive') }}</option></select></label>
 				<label><span>{{ t('proofing_gallery', 'Minimum owner rating') }}</span><select v-model.number="draft.minOwnerRating" name="linkMinRating"><option v-for="rating in 6" :key="rating - 1" :value="rating - 1">{{ rating - 1 }} ★</option></select></label>
-				<label><span>{{ t('proofing_gallery', 'Public language') }}</span><select v-model="draft.publicLocale" name="linkLocale"><option :value="null">{{ t('proofing_gallery', 'Gallery default') }}</option><option value="de">Deutsch</option><option value="en">English</option></select></label>
+				<label><span>{{ t('proofing_gallery', 'Public language') }}</span><select v-model="draft.publicLocale" name="linkLocale"><option :value="null">{{ t('proofing_gallery', 'Gallery default') }}</option><option value="de">{{ t('proofing_gallery', 'German') }}</option><option value="en">{{ t('proofing_gallery', 'English') }}</option></select></label>
 				<label><span>{{ t('proofing_gallery', 'Password') }}</span><input v-model="draft.password"
 					name="linkPassword"
 					type="password"

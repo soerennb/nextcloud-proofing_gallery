@@ -1,4 +1,4 @@
-import { normalizeAnnotationPoint } from './collaboration.ts'
+import { ANNOTATION_COORDINATE_SCALE, normalizeAnnotationPoint } from './collaboration.ts'
 import type { NormalizedAnnotation } from './collaboration.ts'
 import type { GalleryMode, GalleryPresentation } from './gallerySettings.ts'
 
@@ -97,16 +97,16 @@ export function annotationAtImagePoint(clientX: number, clientY: number, bounds:
 
 export function annotationScreenPoint(annotation: NormalizedAnnotation, bounds: ScreenBounds): ScreenPoint {
 	return {
-		x: bounds.left + bounds.width * annotation.x / 10000,
-		y: bounds.top + bounds.height * annotation.y / 10000,
+		x: bounds.left + bounds.width * annotation.x / ANNOTATION_COORDINATE_SCALE,
+		y: bounds.top + bounds.height * annotation.y / ANNOTATION_COORDINATE_SCALE,
 	}
 }
 
 export function moveAnnotationPoint(annotation: NormalizedAnnotation, deltaX: number, deltaY: number): NormalizedAnnotation {
 	return {
 		...annotation,
-		x: Math.max(0, Math.min(10000, annotation.x + deltaX)),
-		y: Math.max(0, Math.min(10000, annotation.y + deltaY)),
+		x: Math.max(0, Math.min(ANNOTATION_COORDINATE_SCALE, annotation.x + deltaX)),
+		y: Math.max(0, Math.min(ANNOTATION_COORDINATE_SCALE, annotation.y + deltaY)),
 	}
 }
 

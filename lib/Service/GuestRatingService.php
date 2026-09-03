@@ -98,6 +98,7 @@ final class GuestRatingService {
 		$grouped = [];
 		$guests = [];
 		$actorNames = [];
+		$actorUids = [];
 		$values = $fileIds === [] ? $this->ratings->findForGallery($gallery->getId()) : $this->ratings->findForGalleryFiles($gallery->getId(), $fileIds);
 		foreach ($values as $value) {
 			$grouped[$value->getFileId()][] = $value;
@@ -105,9 +106,11 @@ final class GuestRatingService {
 				$guests[$value->getGuestId()] = '';
 				$actorNames[$value->actorKey()] = '';
 			} elseif ($value->getActorUid() !== null) {
-				$user = $this->users->get($value->getActorUid());
-				$actorNames[$value->actorKey()] = $user?->getDisplayName() ?? '';
+				$actorUids[$value->getActorUid()] = '';
 			}
+		}
+		foreach (array_keys($actorUids) as $actorUid) {
+			$actorNames['user:' . $actorUid] = $this->users->get($actorUid)?->getDisplayName() ?? '';
 		}
 		if ($guests !== []) {
 			foreach (array_chunk(array_keys($guests), 500) as $guestIds) {

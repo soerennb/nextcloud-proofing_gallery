@@ -432,7 +432,7 @@ async function joinCollaboration(identity: { displayName: string; email: string 
 		})
 		const payload = await response.json() as { guest?: GuestIdentity, nonce?: string, message?: string }
 		if (!response.ok || !payload.guest || !payload.nonce) {
-			throw new Error(payload.message || t('proofing_gallery', 'Could not start review session'))
+			throw new Error(t('proofing_gallery', 'Could not start review session'))
 		}
 		restoreIdentity(payload.guest, payload.nonce)
 		await loadCollaboration()
@@ -497,7 +497,7 @@ async function performMutation(path: string, method: 'POST' | 'PUT' | 'DELETE', 
 			if (response.status === 401 || payload.code === 'invalid_nonce') {
 				if (!deferredMutation.isCompleting()) return deferredMutation.defer(path, method, body)
 			}
-			collaborationError.value = payload.message || t('proofing_gallery', 'The review change could not be saved.')
+			collaborationError.value = t('proofing_gallery', 'The review change could not be saved.')
 			return false
 		}
 		await loadCollaboration()

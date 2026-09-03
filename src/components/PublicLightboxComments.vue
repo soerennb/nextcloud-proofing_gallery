@@ -57,7 +57,6 @@ function authorName(author: string): string {
 					@click="emit('select', comment.id)">
 					{{ t('proofing_gallery', 'Point comment {number}', { number: annotationNumbers.get(comment.id)?.[0] ?? 0 }) }}
 				</button>
-				<span v-else-if="!annotationNumbers.get(comment.id)?.[0] && selectedCommentId === null">{{ t('proofing_gallery', 'General comment') }}</span>
 				<i class="comment-list__avatar" aria-hidden="true">{{ authorName(comment.author).charAt(0).toUpperCase() || '?' }}</i>
 				<div>
 					<span class="comment-list__identity">

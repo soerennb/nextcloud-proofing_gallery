@@ -11,6 +11,7 @@ use OCP\IDBConnection;
 use OCP\IUserManager;
 
 final class CollaborationRepository {
+	private const ANNOTATION_COORDINATE_SCALE = 10000;
 	private const COLLABORATION_EVENT_TYPES = [
 		'like.changed', 'color.changed', 'comment.created', 'comment.updated', 'comment.deleted',
 		'rating.changed', 'selection.created', 'selection.updated', 'selection.deleted',
@@ -540,8 +541,8 @@ final class CollaborationRepository {
 	/** @param array<string, int> $annotation */
 	private function insertAnnotation(int $galleryId, int $fileId, int $commentId, array $annotation): void {
 		foreach (['x', 'y', 'width', 'height'] as $key) {
-			if (!isset($annotation[$key]) || !is_int($annotation[$key]) || $annotation[$key] < 0 || $annotation[$key] > 10000) {
-				throw new InvalidArgumentException('Annotation coordinates must be normalized integers');
+			if (!isset($annotation[$key]) || !is_int($annotation[$key]) || $annotation[$key] < 0 || $annotation[$key] > self::ANNOTATION_COORDINATE_SCALE) {
+				throw new InvalidArgumentException('Annotation coordinates must be hundredths-of-a-percent integers between 0 and 10000');
 			}
 		}
 		$qb = $this->db->getQueryBuilder();

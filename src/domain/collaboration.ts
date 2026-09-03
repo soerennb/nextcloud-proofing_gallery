@@ -10,6 +10,9 @@ export interface NormalizedAnnotation {
 	height: number
 }
 
+/** Annotation coordinates are stored as hundredths of one percent: 10000 = 100.00%. */
+export const ANNOTATION_COORDINATE_SCALE = 10_000
+
 export function toggleOptimisticLike(current?: LikeState): LikeState {
 	const state = current ?? { count: 0, mine: false }
 	return {
@@ -25,13 +28,13 @@ export function normalizeAnnotationPoint(
 	size = 800,
 ): NormalizedAnnotation {
 	const normalize = (value: number, start: number, length: number) => Math.round(
-		Math.max(0, Math.min(10000, ((value - start) / Math.max(1, length)) * 10000)),
+		Math.max(0, Math.min(ANNOTATION_COORDINATE_SCALE, ((value - start) / Math.max(1, length)) * ANNOTATION_COORDINATE_SCALE)),
 	)
 	return {
 		x: normalize(clientX, bounds.left, bounds.width),
 		y: normalize(clientY, bounds.top, bounds.height),
-		width: Math.max(0, Math.min(10000, size)),
-		height: Math.max(0, Math.min(10000, size)),
+		width: Math.max(0, Math.min(ANNOTATION_COORDINATE_SCALE, size)),
+		height: Math.max(0, Math.min(ANNOTATION_COORDINATE_SCALE, size)),
 	}
 }
 

@@ -211,12 +211,9 @@ final class CollaborationService {
 	/** @param array<string, int>|null $annotation */
 	public function addComment(Gallery $gallery, CollaborationActor $actor, int $fileId, string $body, ?array $annotation): int {
 		return $this->atomic(function () use ($gallery, $actor, $fileId, $body, $annotation): int {
-			$this->capabilities->assertFeature('comments');
+			$settings = $this->assertCommentingEnabled($gallery);
 			if ($annotation !== null) $this->capabilities->assertFeature('annotations');
-			$settings = $this->assertCollaboration($gallery, $fileId);
-			if (!$settings->review->comments) {
-				throw new InvalidArgumentException('Comments are disabled');
-			}
+			$this->resolveMedia($gallery, $fileId);
 			if ($annotation !== null && !$settings->review->annotations) {
 				throw new InvalidArgumentException('Image annotations are disabled');
 			}
@@ -238,7 +235,7 @@ final class CollaborationService {
 
 	public function deleteComment(Gallery $gallery, CollaborationActor $actor, int $commentId): void {
 		$this->atomic(function () use ($gallery, $actor, $commentId): void {
-			$this->capabilities->assertFeature('comments');
+			$this->assertCommentingEnabled($gallery);
 			$fileId = $this->ownedCommentFileId($gallery, $actor, $commentId);
 			if (!$this->repository->deleteComment($gallery->getId(), $actor->guestId(), $actor->userUid(), $commentId, $this->clock->getTime())) {
 				throw new InvalidArgumentException('Comment cannot be deleted');
@@ -255,7 +252,7 @@ final class CollaborationService {
 
 	public function updateComment(Gallery $gallery, CollaborationActor $actor, int $commentId, string $body): void {
 		$this->atomic(function () use ($gallery, $actor, $commentId, $body): void {
-			$this->capabilities->assertFeature('comments');
+			$this->assertCommentingEnabled($gallery);
 			$fileId = $this->ownedCommentFileId($gallery, $actor, $commentId);
 			$body = trim($body);
 			if ($body === '' || mb_strlen($body) > 5000) {
@@ -517,6 +514,15 @@ final class CollaborationService {
 	private function assertCollaboration(Gallery $gallery, int $fileId): GallerySettings {
 		$settings = $this->assertCollaborationMode($gallery);
 		$this->resolveMedia($gallery, $fileId);
+		return $settings;
+	}
+
+	private function assertCommentingEnabled(Gallery $gallery): GallerySettings {
+		$this->capabilities->assertFeature('comments');
+		$settings = $this->assertCollaborationMode($gallery);
+		if (!$settings->review->comments) {
+			throw new InvalidArgumentException('Comments are disabled');
+		}
 		return $settings;
 	}
 

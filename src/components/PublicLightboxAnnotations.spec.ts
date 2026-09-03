@@ -42,22 +42,22 @@ describe('PublicLightboxAnnotations', () => {
 		host.remove()
 	})
 
-	it('projects pins from the current on-screen image bounds after zoom and pan', async () => {
+	it('anchors pins directly to normalized image percentages through zoom and pan', async () => {
 		const host = document.createElement('div')
 		document.body.append(host)
 		const wrapper = mount(PublicLightboxAnnotations, {
 			props: props({
 				host,
-				comments: [{ id: 12, fileId: 7, body: 'Point', author: 'A', mine: false, createdAt: 1, deletedAt: null, annotations: [{ x: 1000, y: 2000, width: 800, height: 800 }] }],
+				comments: [{ id: 12, fileId: 7, body: 'Point', author: 'A', mine: false, createdAt: 1, deletedAt: null, annotations: [{ x: 1234, y: 5678, width: 800, height: 800 }] }],
 			}),
 		})
 		await nextTick()
 		const marker = host.querySelector<HTMLElement>('.annotation-marker')!
-		expect(marker.style.left).toBe('180px')
-		expect(marker.style.top).toBe('130px')
+		expect(marker.style.left).toBe('12.34%')
+		expect(marker.style.top).toBe('56.78%')
 		await wrapper.setProps({ imageBounds: { left: -100, top: -50, width: 1600, height: 800 } })
-		expect(marker.style.left).toBe('60px')
-		expect(marker.style.top).toBe('110px')
+		expect(marker.style.left).toBe('12.34%')
+		expect(marker.style.top).toBe('56.78%')
 		wrapper.unmount()
 		host.remove()
 	})

@@ -1,16 +1,13 @@
 <script setup lang="ts">
 /* eslint-disable vue/no-deprecated-slot-attribute -- Ionic Vue maps Web Component slots through the slot attribute. */
 import { IonActionSheet, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar } from '@ionic/vue'
-import { n, t } from '@nextcloud/l10n'
-import { chevronBackOutline, chevronForwardOutline, closeOutline, contractOutline, downloadOutline, expandOutline, gridOutline, helpCircleOutline, pauseOutline, playOutline } from 'ionicons/icons'
+import { t } from '@nextcloud/l10n'
+import { chevronBackOutline, chevronForwardOutline, closeOutline, contractOutline, downloadOutline, expandOutline, gridOutline, heart, heartOutline, helpCircleOutline, pauseOutline, playOutline } from 'ionicons/icons'
 import { useReducedMotion } from 'motion-v'
 import type PhotoSwipe from 'photoswipe'
 import type { SlideData } from 'photoswipe'
 import 'photoswipe/style.css'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import CloseIcon from 'vue-material-design-icons/Close.vue'
-import StarIcon from 'vue-material-design-icons/Star.vue'
-import StarOutlineIcon from 'vue-material-design-icons/StarOutline.vue'
 
 import { usePublicLightboxAnnotations } from '../composables/usePublicLightboxAnnotations.ts'
 import type { GallerySettings } from '../domain/gallerySettings.ts'
@@ -19,6 +16,8 @@ import type { CollaborationState, MediaItem } from '../publicTypes.ts'
 import PublicLightboxAnnotations from './PublicLightboxAnnotations.vue'
 import PublicLightboxComments from './PublicLightboxComments.vue'
 import PublicLightboxFilmstrip from './PublicLightboxFilmstrip.vue'
+import PublicLightboxFeedbackTabs from './PublicLightboxFeedbackTabs.vue'
+import PublicLightboxGeneralFeedback from './PublicLightboxGeneralFeedback.vue'
 import PublicLightboxHeader from './PublicLightboxHeader.vue'
 import PublicLightboxMetadata from './PublicLightboxMetadata.vue'
 
@@ -41,7 +40,7 @@ const emit = defineEmits<{ close: []; 'active-change': [item: MediaItem] }>()
 const activeIndex = ref(props.initialIndex)
 const activeItem = computed(() => props.mediaItems[activeIndex.value] ?? null)
 const activeComments = computed(() => props.collaboration?.comments.filter(comment => comment.fileId === activeItem.value?.id && comment.deletedAt === null) ?? [])
-const canDownloadIndividual = computed(() => ['individual', 'all'].includes(props.settings.delivery.downloadScope)), enabledColorLabels = computed(() => props.settings.review.colorLabels.filter((_, index) => props.settings.review.colorEnabled[index]))
+const canDownloadIndividual = computed(() => ['individual', 'all'].includes(props.settings.delivery.downloadScope))
 const activeGuestRating = computed(() => props.collaboration?.ratings?.find(value => value.fileId === activeItem.value?.id)
 	?? { rating: 0, pick: 'none' as const })
 
@@ -52,6 +51,7 @@ const filmstripSessionKey = `proofing-gallery-filmstrip:${window.location.pathna
 const guestFilmstripHidden = ref(sessionStorage.getItem(filmstripSessionKey) === 'hidden')
 const viewportWidth = ref(window.innerWidth), viewportHeight = ref(window.innerHeight)
 const commentBody = ref(''), annotationReplyBody = ref('')
+const feedbackTab = ref<'comments' | 'pins'>('comments')
 const editingCommentId = ref<number | null>(null), editingCommentBody = ref('')
 const guestExportFields = ref(['filename', 'rating', 'pick'])
 const reduceMotion = useReducedMotion()
@@ -140,9 +140,8 @@ const {
 
 const annotationNumbers = computed(() => annotationNumbersByComment(activeComments.value))
 const selectedAnnotationComment = computed(() => findSelectedAnnotationComment(activeComments.value, selectedCommentId.value))
-const visibleComments = computed(() => selectedAnnotationComment.value
-	? commentsForAnnotationThread(activeComments.value, selectedCommentId.value)
-	: activeComments.value)
+const visibleComments = computed(() => commentsForAnnotationThread(activeComments.value, selectedCommentId.value))
+const generalComments = computed(() => activeComments.value.filter(comment => comment.annotations.length === 0))
 const selectedAnnotationPoint = computed(() => {
 	const annotation = selectedAnnotationComment.value?.annotations[0]
 	return feedbackOpen.value && annotation && annotationImageBounds.value
@@ -158,7 +157,7 @@ const feedbackPanelLayout = computed(() => annotationThreadPanelLayout({
 const feedbackPanelClass = computed(() => `lightbox-sheet lightbox-feedback-sheet lightbox-feedback-sheet--${feedbackPanelLayout.value.placement}`)
 const feedbackPanelStyle = computed(() => ({ '--feedback-panel-edge-inset': `${feedbackPanelLayout.value.modalEdgeInset}px` }))
 
-function showAllFeedback() { selectedCommentId.value = null }
+function showAllFeedback() { selectedCommentId.value = null; feedbackTab.value = 'comments' }
 function openFeedback() { showAllFeedback(); feedbackOpen.value = true; metadataOpen.value = false }
 
 function bindPhotoSwipeEvents() {
@@ -195,9 +194,13 @@ function bindPhotoSwipeEvents() {
 			if (props.settings.mode === 'presentation') toggleChrome()
 		}
 	})
-	pswp.on('imageSizeChange', ({ slide }) => { if (slide === pswp?.currSlide) annotations.syncGeometry() })
-	pswp.on('zoomPanUpdate', ({ slide }) => { if (slide === pswp?.currSlide) annotations.syncGeometry() })
-	pswp.on('resize', annotations.syncGeometry)
+	pswp.on('imageSizeChange', ({ slide, width, height }) => {
+		if (slide !== pswp?.currSlide) return
+		annotations.syncContentSize(width, height)
+		annotations.scheduleGeometry()
+	})
+	pswp.on('zoomPanUpdate', ({ slide }) => { if (slide === pswp?.currSlide) annotations.scheduleGeometry() })
+	pswp.on('resize', annotations.scheduleGeometry)
 	pswp.on('afterInit', () => {
 		pswp?.element?.removeAttribute('role')
 		pswp?.element?.removeAttribute('aria-modal')
@@ -404,7 +407,7 @@ function zoom(direction: number) {
 		slide.zoomLevels.max,
 		Math.max(slide.zoomLevels.initial, slide.currZoomLevel + increment * direction),
 	)
-	slide.zoomTo(target, undefined, reduceMotion.value ? 0 : 180)
+	slide.zoomTo(target, undefined, 0)
 }
 
 function setSlideshow(enabled: boolean) {
@@ -667,8 +670,8 @@ async function saveEditedComment(commentId: number) {
 			<IonContent class="ion-padding lightbox-shortcuts">
 				<dl>
 					<div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>{{ t('proofing_gallery', 'Previous or next photograph') }}</dd></div>
-					<div><dt><kbd>Space</kbd></dt><dd>{{ t('proofing_gallery', 'Start or pause slideshow') }}</dd></div>
-					<div><dt><kbd>Esc</kbd></dt><dd>{{ t('proofing_gallery', 'Close panel or lightbox') }}</dd></div>
+					<div><dt><kbd>{{ t('proofing_gallery', 'Space') }}</kbd></dt><dd>{{ t('proofing_gallery', 'Start or pause slideshow') }}</dd></div>
+					<div><dt><kbd>{{ t('proofing_gallery', 'Esc') }}</kbd></dt><dd>{{ t('proofing_gallery', 'Close panel or lightbox') }}</dd></div>
 					<div><dt><kbd>?</kbd></dt><dd>{{ t('proofing_gallery', 'Show this help') }}</dd></div>
 				</dl>
 				<small>{{ t('proofing_gallery', 'Slideshow interval: {seconds} seconds', { seconds: settings.presentation?.slideshowInterval ?? 5 }) }}</small>
@@ -685,9 +688,17 @@ async function saveEditedComment(commentId: number) {
 					<IonTitle>
 						{{ selectedAnnotationComment
 							? t('proofing_gallery', 'Point comment {number}', { number: annotationNumbers.get(selectedAnnotationComment.id)?.[0] ?? 0 })
-							: t('proofing_gallery', 'All feedback') }}
+							: t('proofing_gallery', 'Feedback') }}
 					</IonTitle>
 					<IonButtons slot="end">
+						<IonButton v-if="!selectedAnnotationComment && settings.review.likes"
+							:aria-label="t('proofing_gallery', 'Like')"
+							:aria-pressed="collaboration?.likes[activeItem.id]?.mine ?? false"
+							@click="toggleLike">
+							<IonIcon slot="icon-only"
+								:icon="collaboration?.likes[activeItem.id]?.mine ? heart : heartOutline"
+								aria-hidden="true" />
+						</IonButton>
 						<IonButton :aria-label="t('proofing_gallery', 'Close feedback')" @click="feedbackOpen = false">
 							<IonIcon slot="icon-only" :icon="closeOutline" aria-hidden="true" />
 						</IonButton>
@@ -696,93 +707,57 @@ async function saveEditedComment(commentId: number) {
 			</IonHeader>
 			<IonContent class="lightbox-feedback">
 				<div class="lightbox-feedback__body ion-padding">
-					<p v-if="!selectedAnnotationComment" class="lightbox-sheet__filename">
+					<p v-if="!selectedAnnotationComment" class="lightbox-sheet__filename lightbox-sheet__filename--feedback">
 						{{ activeItem.name }}
 					</p>
-					<div v-if="!selectedAnnotationComment" class="feedback-actions">
-						<button v-if="settings.review?.likes !== false" type="button" @click="toggleLike">
-							{{ collaboration?.likes[activeItem.id]?.mine ? '♥' : '♡' }} {{ t('proofing_gallery', 'Like') }} {{ collaboration?.likes[activeItem.id]?.count || '' }}
-						</button>
-						<label v-if="settings.review?.colors !== false">
-							<span>{{ t('proofing_gallery', 'Color state') }}</span>
-							<select name="colorState" :value="collaboration?.colors[activeItem.id] || ''" @change="setColor(($event.target as HTMLSelectElement).value)">
-								<option value="">{{ t('proofing_gallery', 'No state') }}</option>
-								<option v-for="label in enabledColorLabels" :key="label" :value="label">{{ label }}</option>
-							</select>
-						</label>
-					</div>
-					<div v-if="!selectedAnnotationComment && collaboration?.guest && (settings.review?.ratings || settings.review?.pick)" class="guest-rating" :aria-label="t('proofing_gallery', 'Private rating')">
-						<div v-if="settings.review?.ratings" class="guest-rating__stars">
-							<span>{{ t('proofing_gallery', 'Your private rating') }}</span>
-							<button v-for="rating in 6"
-								:key="rating - 1"
-								type="button"
-								:aria-pressed="activeGuestRating.rating === rating - 1"
-								:aria-label="n('proofing_gallery', '%n star', '%n stars', rating - 1)"
-								@click="setGuestRating(rating - 1)">
-								<CloseIcon v-if="rating === 1" :size="16" />
-								<StarIcon v-else-if="activeGuestRating.rating >= rating - 1" class="guest-star--filled" :size="18" />
-								<StarOutlineIcon v-else :size="18" />
-							</button>
-						</div>
-						<div v-if="settings.review?.pick" class="guest-rating__decision">
-							<button type="button" :aria-pressed="activeGuestRating.pick === 'pick'" @click="setGuestRating(activeGuestRating.rating, activeGuestRating.pick === 'pick' ? 'none' : 'pick')">
-								{{ t('proofing_gallery', 'Pick') }}
-							</button>
-							<button type="button" :aria-pressed="activeGuestRating.pick === 'reject'" @click="setGuestRating(activeGuestRating.rating, activeGuestRating.pick === 'reject' ? 'none' : 'reject')">
-								{{ t('proofing_gallery', 'Reject') }}
-							</button>
-						</div>
-						<small>{{ t('proofing_gallery', 'Only you and the gallery owner can see this rating.') }}</small>
-					</div>
-					<form v-if="settings.review?.comments !== false && !selectedAnnotationComment" class="comment-form" @submit.prevent="addComment">
-						<button v-if="canAnnotate" type="button" @click="annotations.startKeyboard">
-							{{ t('proofing_gallery', 'Add point comment') }}
-						</button>
-						<small v-if="canAnnotate">{{ t('proofing_gallery', 'Click the image anywhere to add a point comment.') }}</small>
-						<textarea v-model="commentBody"
-							name="comment"
-							required
-							maxlength="5000"
-							:placeholder="t('proofing_gallery', 'Write a comment…')"
-							:aria-label="t('proofing_gallery', 'Comment')" />
-						<button type="submit">
-							{{ t('proofing_gallery', 'Comment') }}
-						</button>
-					</form>
-					<PublicLightboxComments v-if="settings.review?.comments !== false"
+					<PublicLightboxFeedbackTabs v-if="!selectedAnnotationComment"
+						v-model="feedbackTab"
+						:can-annotate="canAnnotate"
+						:comments="activeComments"
+						:annotation-numbers="annotationNumbers"
+						:editing-comment-id="editingCommentId"
+						:editing-comment-body="editingCommentBody"
+						@start-annotation="annotations.startKeyboard"
+						@open-thread="selectedCommentId = $event"
+						@edit="editComment"
+						@save="saveEditedComment"
+						@update:editing-comment-body="editingCommentBody = $event"
+						@cancel-edit="editingCommentId = null"
+						@delete="mutate(`comments/${$event}`, 'DELETE')">
+						<template #comments>
+							<PublicLightboxGeneralFeedback
+								v-model:comment-body="commentBody"
+								v-model:guest-export-fields="guestExportFields"
+								:item="activeItem"
+								:settings="settings"
+								:collaboration="collaboration"
+								:active-guest-rating="activeGuestRating"
+								:comments="generalComments"
+								:annotation-numbers="annotationNumbers"
+								:editing-comment-id="editingCommentId"
+								:editing-comment-body="editingCommentBody"
+								:selection-export-url="selectionExportUrl"
+								@set-color="setColor"
+								@set-rating="setGuestRating"
+								@submit-comment="addComment"
+								@edit="editComment"
+								@save="saveEditedComment"
+								@update:editing-comment-body="editingCommentBody = $event"
+								@cancel-edit="editingCommentId = null"
+								@delete="mutate(`comments/${$event}`, 'DELETE')" />
+						</template>
+					</PublicLightboxFeedbackTabs>
+					<PublicLightboxComments v-else-if="settings.review?.comments !== false"
 						:editing-comment-body="editingCommentBody"
 						:comments="visibleComments"
 						:annotation-numbers="annotationNumbers"
 						:selected-comment-id="selectedCommentId"
 						:editing-comment-id="editingCommentId"
-						@select="selectedCommentId = $event"
 						@edit="editComment"
 						@save="saveEditedComment"
 						@update:editing-comment-body="editingCommentBody = $event"
 						@cancel-edit="editingCommentId = null"
 						@delete="mutate(`comments/${$event}`, 'DELETE')" />
-					<section v-if="!selectedAnnotationComment && collaboration?.selections.length" class="saved-selections">
-						<h2>{{ t('proofing_gallery', 'Saved selections') }}</h2>
-						<article v-for="selection in collaboration.selections" :key="selection.id">
-							<strong>{{ selection.name }}</strong>
-							<small>{{ selection.author }} · {{ n('proofing_gallery', '%n image', '%n images', selection.fileIds.length) }}</small>
-							<p v-if="selection.message">
-								{{ selection.message }}
-							</p>
-							<div>
-								<details class="guest-export-composer">
-									<summary>{{ t('proofing_gallery', 'Customize CSV') }}</summary>
-									<label><input checked disabled type="checkbox"> {{ t('proofing_gallery', 'Filename') }}</label>
-									<label><input v-model="guestExportFields" type="checkbox" value="rating"> {{ t('proofing_gallery', 'My rating') }}</label>
-									<label><input v-model="guestExportFields" type="checkbox" value="pick"> {{ t('proofing_gallery', 'My pick') }}</label>
-									<a :href="selectionExportUrl(selection.id, 'csv', ['filename', ...guestExportFields.filter(field => field !== 'filename')])">{{ t('proofing_gallery', 'Download UTF-8 CSV') }}</a>
-								</details>
-								<a :href="selectionExportUrl(selection.id, 'plain')">{{ t('proofing_gallery', 'List') }}</a>
-								<a :href="selectionExportUrl(selection.id, 'search')">{{ t('proofing_gallery', 'Search') }}</a>
-							</div>
-						</article>
-					</section>
 				</div>
 			</IonContent>
 			<form v-if="selectedAnnotationComment && settings.review?.comments !== false" class="annotation-reply-form" @submit.prevent="addAnnotationReply">

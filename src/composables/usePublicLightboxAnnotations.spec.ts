@@ -33,7 +33,7 @@ function setup(mutate = vi.fn().mockResolvedValue(true), hasIdentity = true) {
 		metadataOpen,
 		shell: ref(shell),
 	})
-	return { annotations, container, mutate, shell }
+	return { annotations, container, mutate, shell, image }
 }
 
 describe('public lightbox annotation state', () => {
@@ -50,6 +50,27 @@ describe('public lightbox annotation state', () => {
 		expect(annotations.draft.value).toBeNull()
 		annotations.destroy()
 		expect(container.querySelector('.proofing-annotation-layer')).toBeNull()
+		shell.remove()
+	})
+
+	it('tracks the rendered image rectangle through native zoom and pan', async () => {
+		const { annotations, image, shell } = setup()
+		vi.spyOn(image, 'getBoundingClientRect').mockReturnValue({
+			left: -140, top: -90, width: 1600, height: 800, right: 1460, bottom: 710, x: -140, y: -90, toJSON: () => ({}),
+		})
+		annotations.syncHost()
+		expect(annotations.imageBounds.value).toEqual({ left: -140, top: -90, width: 1600, height: 800 })
+		expect(annotations.startAt({ x: 660, y: 310 })).toBe(true)
+		expect(annotations.draft.value).toMatchObject({ x: 5000, y: 5000 })
+
+		vi.mocked(image.getBoundingClientRect).mockReturnValue({
+			left: -340, top: -190, width: 2400, height: 1200, right: 2060, bottom: 1010, x: -340, y: -190, toJSON: () => ({}),
+		})
+		annotations.scheduleGeometry()
+		annotations.scheduleGeometry()
+		await new Promise(resolve => requestAnimationFrame(resolve))
+		expect(annotations.imageBounds.value).toEqual({ left: -340, top: -190, width: 2400, height: 1200 })
+		expect(annotations.anchor.value).toEqual({ x: 860, y: 410 })
 		shell.remove()
 	})
 
