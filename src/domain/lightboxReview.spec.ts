@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { annotationAtImagePoint, annotationNumbersByComment, annotationScreenPoint, annotationThreadPanelLayout, commentsForAnnotationThread, findSelectedAnnotationComment, moveAnnotationPoint, shouldAutoHideLightboxChrome } from './lightboxReview.ts'
+import { annotationAtImagePoint, annotationNumbersByComment, annotationScreenPoint, annotationThreadLeaderLine, annotationThreadPanelLayout, commentsForAnnotationThread, findSelectedAnnotationComment, moveAnnotationPoint, shouldAutoHideLightboxChrome } from './lightboxReview.ts'
 
 describe('lightbox review interaction', () => {
 	it('keeps review chrome visible while respecting presentation behavior', () => {
@@ -74,5 +74,13 @@ describe('lightbox review interaction', () => {
 	it('centers the thread when its annotation is outside the viewport', () => {
 		expect(annotationThreadPanelLayout({ viewportWidth: 1280, viewportHeight: 800, annotationPoint: { x: -1, y: 300 }, filmstripSide: true }).placement).toBe('center')
 		expect(annotationThreadPanelLayout({ viewportWidth: 1280, viewportHeight: 800, annotationPoint: { x: 400, y: 801 }, filmstripSide: true }).placement).toBe('center')
+	})
+
+	it('connects an edge-docked selected thread without drawing through centered or mobile sheets', () => {
+		expect(annotationThreadLeaderLine({ viewportWidth: 1280, viewportHeight: 800, annotationPoint: { x: 320, y: 300 }, filmstripSide: true })).toEqual({
+			x1: 320, y1: 300, x2: 772, y2: 300,
+		})
+		expect(annotationThreadLeaderLine({ viewportWidth: 390, viewportHeight: 700, annotationPoint: { x: 100, y: 300 }, filmstripSide: false })).toBeNull()
+		expect(annotationThreadLeaderLine({ viewportWidth: 1280, viewportHeight: 800, annotationPoint: { x: -1, y: 300 }, filmstripSide: true })).toBeNull()
 	})
 })

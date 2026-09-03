@@ -16,6 +16,13 @@ export interface AnnotationThreadPanelLayout {
 	modalEdgeInset: number
 }
 
+export interface AnnotationThreadLeaderLine {
+	x1: number
+	y1: number
+	x2: number
+	y2: number
+}
+
 function annotationPointIsOnScreen(point: ScreenPoint | null, viewportWidth: number, viewportHeight: number): point is ScreenPoint {
 	return point !== null
 		&& point.x >= 0 && point.x <= viewportWidth
@@ -68,6 +75,34 @@ export function annotationThreadPanelLayout({
 	if (annotationPoint.x > viewportWidth / 2) return preferredPanel(left, leftFits, right, rightFits, centered)
 	if (leftFits && rightFits) return right
 	return preferredPanel(left, leftFits, right, rightFits, centered)
+}
+
+/** A visual connection for an edge-docked point thread; centered sheets stay unconnected. */
+export function annotationThreadLeaderLine({
+	viewportWidth,
+	viewportHeight,
+	annotationPoint,
+	filmstripSide,
+}: {
+	viewportWidth: number
+	viewportHeight: number
+	annotationPoint: ScreenPoint | null
+	filmstripSide: boolean
+}): AnnotationThreadLeaderLine | null {
+	const layout = annotationThreadPanelLayout({ viewportWidth, viewportHeight, annotationPoint, filmstripSide })
+	if (layout.placement === 'center' || !annotationPointIsOnScreen(annotationPoint, viewportWidth, viewportHeight)) return null
+	const panelWidth = Math.min(400, Math.max(0, viewportWidth - 32))
+	const panelHeight = Math.min(680, Math.max(0, viewportHeight - 48))
+	const panelTop = (viewportHeight - panelHeight) / 2
+	const panelBottom = panelTop + panelHeight
+	return {
+		x1: annotationPoint.x,
+		y1: annotationPoint.y,
+		x2: layout.placement === 'left'
+			? layout.modalEdgeInset + panelWidth
+			: viewportWidth - layout.modalEdgeInset - panelWidth,
+		y2: Math.max(panelTop + 24, Math.min(panelBottom - 24, annotationPoint.y)),
+	}
 }
 
 export function shouldAutoHideLightboxChrome(

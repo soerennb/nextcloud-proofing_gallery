@@ -102,6 +102,12 @@
 
 :global(.proofing-annotation-layer) { position: absolute; z-index: 2; inset: 0 auto auto 0; pointer-events: none; transform-origin: 0 0; }
 
+.annotation-thread-leader { position: fixed; z-index: 100149; inset: 0; width: 100vw; height: 100vh; overflow: visible; pointer-events: none; }
+
+.annotation-thread-leader__outline { stroke: rgb(0 0 0 / 82%); stroke-linecap: round; stroke-width: 5; }
+
+.annotation-thread-leader__line { stroke: #fff; stroke-linecap: round; stroke-width: 2; }
+
 :global(ion-action-sheet.lightbox-action-sheet),
 :global(ion-modal.lightbox-sheet),
 :global(ion-modal.lightbox-dialog) { z-index: 100150; --ion-font-family: var(--gallery-font-family); --ion-color-primary: var(--gallery-accent); }
