@@ -711,7 +711,7 @@ async function saveEditedComment(commentId: number) {
 							</select>
 						</label>
 					</div>
-					<div v-if="!selectedAnnotationComment && collaboration?.guest?.kind !== 'user' && (settings.review?.ratings || settings.review?.pick)" class="guest-rating" aria-label="Private rating">
+					<div v-if="!selectedAnnotationComment && collaboration?.guest?.kind !== 'user' && (settings.review?.ratings || settings.review?.pick)" class="guest-rating" :aria-label="t('proofing_gallery', 'Private rating')">
 						<div v-if="settings.review?.ratings" class="guest-rating__stars">
 							<span>{{ t('proofing_gallery', 'Your private rating') }}</span>
 							<button v-for="rating in 6"

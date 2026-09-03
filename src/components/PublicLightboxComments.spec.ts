@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import PublicLightboxComments from './PublicLightboxComments.vue'
 
-vi.mock('@nextcloud/l10n', () => ({ t: (_app: string, message: string, values?: Record<string, number>) => values ? message.replace('{number}', String(values.number)) : message }))
+vi.mock('@nextcloud/l10n', () => ({ getLocale: () => 'en_US', t: (_app: string, message: string, values?: Record<string, number>) => values ? message.replace('{number}', String(values.number)) : message }))
 
 const pointComment = {
 	id: 12, fileId: 7, body: 'Tighten this detail', author: 'Reviewer', mine: true,
@@ -54,7 +54,7 @@ describe('PublicLightboxComments', () => {
 		})
 		const timestamps = wrapper.findAll('small.comment-list__timestamp')
 		expect(timestamps).toHaveLength(1)
-		expect(timestamps[0].text()).toMatch(/\d.+, \d{1,2}:\d{2} (?:am|pm)$/)
+		expect(timestamps[0].text()).toMatch(/\d.+, \d{1,2}:\d{2}\s(?:AM|PM)$/)
 	})
 
 	it('offers point navigation only outside the focused thread', async () => {

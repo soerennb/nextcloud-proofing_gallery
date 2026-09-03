@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { t } from '@nextcloud/l10n'
+import { getLocale, t } from '@nextcloud/l10n'
 import { computed } from 'vue'
 import DeleteOutlineIcon from 'vue-material-design-icons/DeleteOutline.vue'
 import PencilOutlineIcon from 'vue-material-design-icons/PencilOutline.vue'
@@ -32,10 +32,9 @@ function isSelectedThread(commentId: number): boolean {
 }
 
 function formatCommentDateTime(createdAt: number): string {
-	const date = new Date(createdAt * 1000)
-	const hours = date.getHours() % 12 || 12
-	const minutes = String(date.getMinutes()).padStart(2, '0')
-	return `${date.toLocaleDateString()}, ${hours}:${minutes} ${date.getHours() < 12 ? 'am' : 'pm'}`
+	return new Intl.DateTimeFormat(getLocale().replace('_', '-'), {
+		year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit',
+	}).format(new Date(createdAt * 1000))
 }
 </script>
 

@@ -861,7 +861,7 @@ function upOneLevel() {
 						<p v-else-if="scope?.viewMode === 'recursive' && indexState?.state === 'unindexed'" class="gallery-index-warning" role="status">
 							{{ t('proofing_gallery', 'This recursive gallery is still being indexed. Reload shortly or ask the gallery owner to rebuild the media index.') }}
 						</p>
-						<div v-if="loading" class="public-gallery__skeleton" aria-label="Loading gallery">
+						<div v-if="loading" class="public-gallery__skeleton" :aria-label="t('proofing_gallery', 'Loading gallery')">
 							<span v-for="index in 12" :key="index" />
 						</div>
 

@@ -25,6 +25,7 @@ interface PublicGalleryState {
 	settings: GallerySettings
 	initialPage: PublicGalleryPage
 	review?: PublicReviewState
+	viewer?: { displayName: string; email: string | null } | null
 }
 
 const state = loadState<PublicGalleryState>('proofing_gallery', 'public-gallery')

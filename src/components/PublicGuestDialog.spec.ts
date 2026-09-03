@@ -1,4 +1,4 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 
 import PublicGuestDialog from './PublicGuestDialog.vue'
@@ -40,28 +40,12 @@ describe('PublicGuestDialog', () => {
 		expect(wrapper.get('.guest-dialog__submit').attributes('disabled')).toBeDefined()
 	})
 
-	it('loads the signed-in Nextcloud profile when public-share state has no viewer', async () => {
-		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-			ok: true,
-			json: async () => ({ ocs: { data: { 'display-name': 'ncadmin', email: 'nc@example.test' } } }),
-		}))
+	it('keeps guest fields blank when server state has no signed-in viewer', () => {
 		const wrapper = mount(PublicGuestDialog, {
 			props: { open: true, joining: false, viewer: null },
 			global: { stubs: ionicStubs },
 		})
-		await flushPromises()
-		expect(wrapper.get<HTMLInputElement>('#proofing-gallery-guest-name').element.value).toBe('ncadmin')
-		expect(wrapper.get<HTMLInputElement>('#proofing-gallery-guest-email').element.value).toBe('nc@example.test')
-		vi.unstubAllGlobals()
-	})
-
-	it('uses Nextcloud’s signed-in display name synchronously', () => {
-		document.head.setAttribute('data-user-displayname', 'ncadmin')
-		const wrapper = mount(PublicGuestDialog, {
-			props: { open: true, joining: false, viewer: null },
-			global: { stubs: ionicStubs },
-		})
-		expect(wrapper.get<HTMLInputElement>('#proofing-gallery-guest-name').element.value).toBe('ncadmin')
-		document.head.removeAttribute('data-user-displayname')
+		expect(wrapper.get<HTMLInputElement>('#proofing-gallery-guest-name').element.value).toBe('')
+		expect(wrapper.get<HTMLInputElement>('#proofing-gallery-guest-email').element.value).toBe('')
 	})
 })

@@ -4,23 +4,12 @@ import { t } from '@nextcloud/l10n'
 import { closeOutline } from 'ionicons/icons'
 
 import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar } from '@ionic/vue'
-import { onMounted, ref } from 'vue'
-
-import { fetchCurrentViewer } from '../services/currentViewerApi.ts'
+import { ref } from 'vue'
 
 const props = defineProps<{ open: boolean; joining: boolean; viewer?: { displayName: string; email: string | null } | null }>()
-const name = ref(props.viewer?.displayName ?? document.head.getAttribute('data-user-displayname') ?? '')
+const name = ref(props.viewer?.displayName ?? '')
 const email = ref(props.viewer?.email ?? '')
 defineEmits<{ dismiss: []; submit: [identity: { displayName: string; email: string }] }>()
-
-onMounted(async () => {
-	try {
-		const viewer = await fetchCurrentViewer()
-		if (viewer) [name.value, email.value] = [name.value || viewer.displayName, email.value || viewer.email]
-	} catch {
-		// Anonymous public shares and unavailable profile APIs keep editable blank fields.
-	}
-})
 </script>
 
 <template>
