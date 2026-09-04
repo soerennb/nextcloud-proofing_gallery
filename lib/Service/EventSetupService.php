@@ -12,7 +12,7 @@ use OCP\Security\ICrypto;
 use OCP\Security\ISecureRandom;
 
 final class EventSetupService {
-	private const STEPS = ['photos', 'visibility', 'recipients', 'delivery', 'review'];
+	private const STEPS = ['photos', 'visibility', 'recipients', 'delivery'];
 	private const ROLES = ['shared', 'group', 'private', 'ignored'];
 
 	public function __construct(
@@ -41,7 +41,7 @@ final class EventSetupService {
 			$pin = (string)$recipient['pin'];
 			if ($setup['delivery']['pinMode'] === 'generated') $pin = $this->random->generate(16, ISecureRandom::CHAR_ALPHANUMERIC);
 			if ($setup['delivery']['pinMode'] === 'none') $pin = '';
-			$recipients[] = ['folderPath' => $pathById[$id], 'groupRoots' => $groupRoots, 'name' => $recipient['name'], 'email' => $recipient['email'], 'locale' => $recipient['locale'], 'pin' => $pin];
+			$recipients[] = ['setupKey' => $recipient['key'], 'folderPath' => $pathById[$id], 'groupRoots' => $groupRoots, 'name' => $recipient['name'], 'email' => $recipient['email'], 'locale' => $recipient['locale'], 'pin' => $pin];
 		}
 		if (count($recipients) > (int)$setup['capacity']) throw new \InvalidArgumentException('The event does not have enough public link capacity');
 		return ['sharedRoots' => $sharedRoots, 'recipients' => $recipients, 'delivery' => $setup['delivery']];
@@ -66,6 +66,39 @@ final class EventSetupService {
 	}
 
 	/** @return array<string, mixed> */
+	public function designMedia(Gallery $gallery, string $scope, string $query, int $limit, int $offset): array {
+		$setup = $this->get($gallery);
+		$roles = [];
+		$paths = [];
+		foreach ($setup['folders'] as $folder) $paths[(int)$folder['id']] = (string)$folder['path'];
+		foreach ($setup['folderAssignments'] as $assignment) $roles[(int)$assignment['folderId']] = (string)$assignment['role'];
+		$shared = [];
+		foreach ($roles as $id => $role) if ($role === 'shared' && isset($paths[$id])) $shared[] = $paths[$id];
+		$scopes = [];
+		if ($shared !== []) $scopes[] = ['id' => 'shared', 'kind' => 'shared', 'label' => 'Shared content'];
+		$recipientRoots = [];
+		foreach ($setup['recipients'] as $recipient) {
+			$folderId = (int)$recipient['folderId'];
+			if (($roles[$folderId] ?? null) !== 'private' || !isset($paths[$folderId]) || trim((string)$recipient['name']) === '') continue;
+			$id = 'recipient:' . (string)$recipient['key'];
+			$roots = $shared;
+			foreach ($recipient['groupFolderIds'] as $groupId) {
+				$groupId = (int)$groupId;
+				if (($roles[$groupId] ?? null) === 'group' && isset($paths[$groupId])) $roots[] = $paths[$groupId];
+			}
+			$roots[] = $paths[$folderId];
+			$recipientRoots[$id] = array_values(array_unique($roots));
+			$scopes[] = ['id' => $id, 'kind' => 'recipient', 'label' => (string)$recipient['name']];
+		}
+		if ($scopes === []) return ['scopes' => [], 'activeScope' => null, 'items' => [], 'total' => 0, 'limit' => max(1, min(100, $limit)), 'offset' => max(0, $offset)];
+		$available = array_column($scopes, 'id');
+		if (!in_array($scope, $available, true)) $scope = in_array('shared', $available, true) ? 'shared' : (string)$available[0];
+		$roots = $scope === 'shared' ? $shared : ($recipientRoots[$scope] ?? []);
+		$page = $this->folders->listScopedMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $roots, $limit, $offset, $query);
+		return ['scopes' => $scopes, 'activeScope' => $scope, ...$page->jsonSerialize()];
+	}
+
+	/** @return array<string, mixed> */
 	private function defaults(): array {
 		return [
 			'currentStep' => 'photos', 'folderAssignments' => [], 'recipients' => [],
@@ -78,7 +111,8 @@ final class EventSetupService {
 	 */
 	private function normalize(Gallery $gallery, array $setup): array {
 		$root = $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId());
-		$step = is_string($setup['currentStep'] ?? null) && in_array($setup['currentStep'], self::STEPS, true) ? $setup['currentStep'] : 'photos';
+		$requestedStep = is_string($setup['currentStep'] ?? null) ? $setup['currentStep'] : 'photos';
+		$step = $requestedStep === 'review' ? 'delivery' : (in_array($requestedStep, self::STEPS, true) ? $requestedStep : 'photos');
 		$assignments = [];
 		$seen = [];
 		foreach (is_array($setup['folderAssignments'] ?? null) ? $setup['folderAssignments'] : [] as $assignment) {
@@ -120,6 +154,7 @@ final class EventSetupService {
 	 * @return array<string, mixed>
 	 */
 	private function present(Gallery $gallery, array $payload, int $revision): array {
+		if (($payload['currentStep'] ?? null) === 'review') $payload['currentStep'] = 'delivery';
 		$preview = $this->events->preview($gallery); $folders = $preview['folders'];
 		$pathById = []; foreach ($folders as $folder) $pathById[(int)$folder['id']] = (string)$folder['path'];
 		$roles = []; foreach ($payload['folderAssignments'] as $assignment) $roles[(int)$assignment['folderId']] = (string)$assignment['role'];

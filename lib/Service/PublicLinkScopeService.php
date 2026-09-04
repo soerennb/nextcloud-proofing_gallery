@@ -43,6 +43,23 @@ final class PublicLinkScopeService {
 		return [$this->normalize($link->getStartPath())];
 	}
 
+	/** @return list<array{path: string, name: string, role: string}> */
+	public function rootDetails(PublicLink $link): array {
+		if ($link->getScopeMode() === 'empty') return [];
+		if ($link->getScopeMode() === 'nodes') {
+			return array_map(static fn (array $entry): array => [
+				'path' => $entry['path'],
+				'name' => basename($entry['path']),
+				'role' => in_array($entry['role'], ['shared', 'group', 'private'], true) ? $entry['role'] : 'shared',
+			], $this->nodeRoots($link)['entries']);
+		}
+		return array_map(static fn (string $path): array => [
+			'path' => $path,
+			'name' => basename($path),
+			'role' => 'shared',
+		], $this->roots($link));
+	}
+
 	public function isMultiRoot(PublicLink $link): bool {
 		return in_array($link->getScopeMode(), ['nodes', 'empty'], true) || $link->allowedRootList() !== [];
 	}
@@ -87,7 +104,7 @@ final class PublicLinkScopeService {
 		return trim(dirname($relativeFilePath), './') === $matchedRoot;
 	}
 
-	/** @return array{paths: list<string>, total: int, missing: int} */
+	/** @return array{paths: list<string>, entries: list<array{path: string, role: string}>, total: int, missing: int} */
 	private function nodeRoots(PublicLink $link): array {
 		if ($this->rootRows === null || $this->galleries === null || $this->folders === null) {
 			throw new \LogicException('Stable public link scopes are not configured');
@@ -96,6 +113,7 @@ final class PublicLinkScopeService {
 		$gallery = $this->galleries->find($link->getGalleryId());
 		$root = $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId());
 		$paths = [];
+		$entries = [];
 		$missing = 0;
 		$prefix = rtrim($root->getPath(), '/') . '/';
 		foreach ($rows as $row) {
@@ -106,8 +124,11 @@ final class PublicLinkScopeService {
 			if ($node === null) { $missing++; continue; }
 			$path = str_starts_with($node->getPath(), $prefix) ? substr($node->getPath(), strlen($prefix)) : '';
 			if ($path === '') { $missing++; continue; }
-			$paths[] = $this->normalize($path);
+			$path = $this->normalize($path);
+			if (in_array($path, $paths, true)) continue;
+			$paths[] = $path;
+			$entries[] = ['path' => $path, 'role' => (string)$row['role']];
 		}
-		return ['paths' => array_values(array_unique($paths)), 'total' => count($rows), 'missing' => $missing];
+		return ['paths' => $paths, 'entries' => $entries, 'total' => count($rows), 'missing' => $missing];
 	}
 }

@@ -105,7 +105,7 @@ final class EventDeliveryService {
 	 */
 	public function create(Gallery $gallery, array $sharedRoots, array $recipients, array $policy = [], ?string $expiresAt = null): array {
 		$this->assertEventGallery($gallery);
-		if ($recipients === [] || count($recipients) > 500) throw new \InvalidArgumentException('Select between 1 and 500 event recipients');
+		if ($recipients === []) throw new \InvalidArgumentException('Select at least one event recipient');
 		$root = $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId());
 		$sharedRoots = $this->folderPaths($root, $sharedRoots);
 		$this->links->assertEventCapacity($gallery, count($recipients));

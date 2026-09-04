@@ -150,19 +150,37 @@ final class PublicGalleryDataService {
 				$focusIndex,
 			);
 		}
-		$currentFolder = $this->folderAt($scopedRoot, $path);
+		$eventAlbums = $gallery->getDeliveryMode() === 'event' && $path === '' && $multiRoot;
+		$rootDetails = $gallery->getDeliveryMode() === 'event' && $multiRoot ? $this->linkScopes->rootDetails($link) : [];
+		$eventRoots = [];
+		if ($eventAlbums) {
+			$nodes = [];
+			foreach ($rootDetails as $detail) {
+				try { $node = $scopedRoot->get($detail['path']); } catch (\Throwable) { continue; }
+				if (!$node instanceof Folder || !$scopedRoot->isSubNode($node)) continue;
+				$nodes[] = $node;
+				$eventRoots[$node->getId()] = $detail;
+			}
+		} else {
+			$currentFolder = $this->folderAt($scopedRoot, $path);
 			$nodes = array_values(array_filter(
 				$currentFolder->getDirectoryListing(),
 				fn (Node $node): bool => !str_starts_with($node->getName(), '.')
 					&& ($node instanceof Folder || ($node instanceof File && $this->mediaTypes->supports($node)))
 					&& (!$multiRoot || $this->linkScopes->visiblePath($link, ltrim($path . '/' . $node->getName(), '/'))),
-		));
+			));
+		}
 		$nodes = array_values(array_filter(
 			$nodes,
-				static fn (Node $node): bool => ($multiRoot || $settings->navigation->folders || !($node instanceof Folder))
+			static fn (Node $node): bool => ($multiRoot || $settings->navigation->folders || !($node instanceof Folder))
 				&& ($search === '' || mb_stripos($node->getName(), $search) !== false),
 		));
-		usort($nodes, static function (Node $left, Node $right) use ($sortBy, $sortDirection, $groupBy): int {
+		usort($nodes, static function (Node $left, Node $right) use ($sortBy, $sortDirection, $groupBy, $eventAlbums, $eventRoots): int {
+			if ($eventAlbums) {
+				$order = ['shared' => 0, 'group' => 1, 'private' => 2];
+				$roleOrder = ($order[$eventRoots[$left->getId()]['role'] ?? 'shared'] ?? 3) <=> ($order[$eventRoots[$right->getId()]['role'] ?? 'shared'] ?? 3);
+				if ($roleOrder !== 0) return $roleOrder;
+			}
 			if ($groupBy === 'type') {
 				$group = self::group($left) <=> self::group($right);
 				if ($group !== 0) return $group;
@@ -183,7 +201,8 @@ final class PublicGalleryDataService {
 		if ($focusId !== null && $focusIndex === null) throw new \OCP\Files\NotFoundException('Gallery media not found');
 		$offset = $this->pageOffset(count($nodes), $limit, $offset, $focusIndex);
 
-		$items = array_map(function (Node $node) use ($settings): array {
+		$items = array_map(function (Node $node) use ($settings, $gallery, $eventAlbums, $eventRoots): array {
+			$eventRoot = $eventRoots[$node->getId()] ?? null;
 			$item = [
 				'id' => $node->getId(),
 				'name' => $node->getName(),
@@ -197,6 +216,10 @@ final class PublicGalleryDataService {
 					? $this->metadata->publicSummary($node, $settings->metadata->publicFields)
 					: ['state' => 'unavailable'],
 			];
+			if ($eventRoot !== null) $item['relativePath'] = $eventRoot['path'];
+			if ($eventAlbums && $node instanceof Folder) {
+				$item['album'] = $this->eventAlbumSummary($gallery, $node, (string)$eventRoot['path'], (string)$eventRoot['role']);
+			}
 			return $node instanceof File ? [...$item, ...$this->publicGeometry($node)] : $item;
 		}, array_slice($nodes, $offset, $limit));
 
@@ -220,9 +243,57 @@ final class PublicGalleryDataService {
 			null,
 			$groups,
 			['indexed' => count($nodes), 'limit' => $this->policies->get('maxIndexedMedia'), 'limitReached' => false, 'complete' => true],
-				['startPath' => $startPath, 'allowedRoots' => $this->linkScopes->roots($link), 'viewMode' => 'folder', 'groupDepth' => $groupDepth],
+				['startPath' => $startPath, 'allowedRoots' => $this->linkScopes->roots($link), 'roots' => $rootDetails, 'viewMode' => 'folder', 'groupDepth' => $groupDepth],
 			$focusIndex,
 		);
+	}
+
+	/** @return array{role: string, mediaCount: int, folderCount: int, covers: list<array{id: int, name: string, mimeType: string, etag: string}>} */
+	private function eventAlbumSummary(Gallery $gallery, Folder $folder, string $path, string $role): array {
+		$page = $this->mediaIndex->page($gallery, 3, null, $path, '', 'name', 'asc');
+		$covers = [];
+		foreach ($page['items'] as $item) {
+			if (count($covers) >= 3) break;
+			$covers[] = [
+				'id' => (int)$item['id'], 'name' => (string)$item['name'],
+				'mimeType' => (string)$item['mimeType'], 'etag' => (string)$item['etag'],
+			];
+		}
+		$mediaCount = (int)$page['total'];
+		if ($mediaCount === 0) {
+			$fallback = $this->unindexedAlbumMedia($folder, $this->policies->get('maxIndexedMedia'));
+			$mediaCount = $fallback['count'];
+			$covers = $fallback['covers'];
+		}
+		$folderCount = count(array_filter(
+			$folder->getDirectoryListing(),
+			static fn (Node $node): bool => $node instanceof Folder && !str_starts_with($node->getName(), '.'),
+		));
+		return ['role' => $role, 'mediaCount' => $mediaCount, 'folderCount' => $folderCount, 'covers' => $covers];
+	}
+
+	/** @return array{count: int, covers: list<array{id: int, name: string, mimeType: string, etag: string}>} */
+	private function unindexedAlbumMedia(Folder $folder, int $remaining): array {
+		$count = 0;
+		$covers = [];
+		foreach ($folder->getDirectoryListing() as $node) {
+			if ($count >= $remaining || str_starts_with($node->getName(), '.')) continue;
+			if ($node instanceof File && $this->mediaTypes->supports($node)) {
+				$count++;
+				if (count($covers) < 3) $covers[] = [
+					'id' => $node->getId(), 'name' => $node->getName(),
+					'mimeType' => $node->getMimeType(), 'etag' => $node->getEtag(),
+				];
+			} elseif ($node instanceof Folder) {
+				$nested = $this->unindexedAlbumMedia($node, $remaining - $count);
+				$count += $nested['count'];
+				foreach ($nested['covers'] as $cover) {
+					if (count($covers) >= 3) break;
+					$covers[] = $cover;
+				}
+			}
+		}
+		return ['count' => $count, 'covers' => $covers];
 	}
 
 	/**
@@ -280,6 +351,7 @@ final class PublicGalleryDataService {
 			'gallery' => [
 				'id' => $gallery->getId(),
 				'title' => $gallery->getTitle(),
+				'deliveryMode' => $gallery->getDeliveryMode(),
 				'settings' => $serialized,
 				'effectiveCapabilities' => $effective,
 			],

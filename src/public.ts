@@ -24,6 +24,7 @@ interface PublicGalleryState {
 	id: number
 	title: string
 	token: string
+	deliveryMode: 'standard' | 'event'
 	path: string
 	settings: GallerySettings
 	initialPage: PublicGalleryPage

@@ -100,9 +100,7 @@
 
 :global(ion-action-sheet.lightbox-action-sheet),
 :global(ion-modal.lightbox-sheet),
-:global(ion-modal.lightbox-dialog) { z-index: 100150; --ion-font-family: var(--gallery-font-family); --ion-color-primary: var(--gallery-accent); }
-
-:global(ion-action-sheet.lightbox-action-sheet) { --background: var(--ion-background-color); }
+:global(ion-modal.lightbox-dialog) { z-index: 100150; --ion-font-family: var(--gallery-font-family, "Geist Variable", sans-serif); --ion-color-primary: var(--gallery-accent); }
 
 .lightbox-slideshow-progress {
 	position: absolute;

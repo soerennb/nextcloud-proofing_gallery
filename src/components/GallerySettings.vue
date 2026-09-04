@@ -17,8 +17,8 @@ import type { GalleryWorkspace } from '../domain/gallerySettingsOptions.ts'
 import { useGalleryPresets } from '../composables/useGalleryPresets.ts'
 import { completeGallery, fetchCollection, fetchDesignAssets, fetchGalleryMedia, fetchGalleryReadiness, fetchStoryMedia, updateGallery, updateGallerySource, uploadDesignAsset } from '../services/galleryApi.ts'
 import type { DesignAsset } from '../services/galleryApi.ts'
-import { fetchEventSetup } from '../services/eventApi.ts'
-import type { EventSetup } from '../services/eventApi.ts'
+import { fetchEventDesignMedia, fetchEventSetup } from '../services/eventApi.ts'
+import type { EventDesignScope, EventSetup } from '../services/eventApi.ts'
 import type { Gallery, GalleryReadiness, MediaItem } from '../types.ts'
 import CollectionContent from './CollectionContent.vue'
 import CullingWorkspace from './CullingWorkspace.vue'
@@ -63,6 +63,8 @@ const mediaLoading = ref(true)
 const missingStoryMediaIds = ref<number[]>([])
 const serverReadiness = ref<GalleryReadiness | null>(null)
 const eventSetup = ref<EventSetup | null>(null)
+const eventDesignScopes = ref<EventDesignScope[]>([])
+const eventDesignScope = ref('shared')
 const baseline = ref('')
 const draft = reactive({
 	title: props.gallery.title,
@@ -149,6 +151,10 @@ watch(() => props.gallery, gallery => {
 	loadMedia()
 })
 
+watch(availableTabs, tabs => {
+	if (!tabs.some(tab => tab.id === activeTab.value)) setTab('overview', 'replace')
+})
+
 watch(serializedDraft, () => {
 	if (!props.gallery.permissions.canEdit) return
 	if (!dirty.value) {
@@ -199,6 +205,16 @@ function beforeUnload(event: BeforeUnloadEvent) {
 async function loadMedia() {
 	mediaLoading.value = true
 	try {
+		if (props.gallery.deliveryMode === 'event') {
+			const page = await fetchEventDesignMedia(props.gallery.id, eventDesignScope.value)
+			eventDesignScopes.value = page.scopes
+			eventDesignScope.value = page.activeScope ?? 'shared'
+			media.value = page.items
+			mediaTotal.value = page.total
+			const loaded = new Set(page.items.map(item => item.id))
+			missingStoryMediaIds.value = [...new Set(draft.settings.presentation.story.sections.flatMap(section => section.mediaIds))].filter(id => !loaded.has(id))
+			return
+		}
 		if (props.gallery.sourceType === 'collection') {
 			const collection = await fetchCollection(props.gallery.id)
 			media.value = collection.items.filter(item => item.state === 'available').map(item => ({
@@ -246,12 +262,23 @@ async function loadStoryReferences() {
 
 async function searchDesignMedia(query: string): Promise<MediaItem[]> {
 	const normalized = query.trim().toLocaleLowerCase()
+	if (props.gallery.deliveryMode === 'event') {
+		const page = await fetchEventDesignMedia(props.gallery.id, eventDesignScope.value, query)
+		eventDesignScopes.value = page.scopes
+		mediaTotal.value = page.total
+		return page.items
+	}
 	if (props.gallery.sourceType === 'collection') return storyMedia.value.filter(item => item.name.toLocaleLowerCase().includes(normalized)).slice(0, 60)
 	const page = await fetchGalleryMedia(props.gallery.id, 60, 0, '', query)
 	const byId = new Map(media.value.map(item => [item.id, item]))
 	for (const item of page.items) byId.set(item.id, item)
 	media.value = [...byId.values()]
 	return page.items.filter(item => !item.folder)
+}
+
+async function selectEventDesignScope(scope: string) {
+	eventDesignScope.value = scope
+	await loadMedia()
 }
 
 async function loadReadiness() {
@@ -601,10 +628,13 @@ onBeforeUnmount(() => {
 					:gallery="gallery"
 					:media="storyMedia"
 					:missing-story-media-ids="missingStoryMediaIds"
+					:event-scopes="eventDesignScopes"
+					:event-scope="eventDesignScope"
 					:search-media="searchDesignMedia"
 					:preview-open="designPreviewOpen"
 					:asset-uploading="designAssetUploading"
 					:assets="designAssets"
+					@select-event-scope="selectEventDesignScope"
 					@upload-asset="uploadAsset"
 					@update:preview-open="designPreviewOpen = $event" />
 

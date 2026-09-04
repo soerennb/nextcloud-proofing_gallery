@@ -98,7 +98,7 @@ const loop = computed(() => props.mediaItems.length > 2)
 const canStepPrevious = computed(() => loop.value || activeIndex.value > 0)
 const canStepNext = computed(() => loop.value || activeIndex.value < props.mediaItems.length - 1)
 const slideshowDuration = computed(() => Math.max(3, Math.min(15, props.settings.presentation?.slideshowInterval ?? 5)) * 1000)
-const actionSheetClass = computed(() => ['lightbox-action-sheet', `proofing-action-sheet--${props.settings.presentation?.theme ?? 'auto'}`])
+const actionSheetClass = computed(() => ['proofing-public-overlay', 'lightbox-action-sheet'])
 const hasPublicMetadata = computed(() => {
 	const metadata = activeItem.value?.metadata
 	return metadata?.state === 'ready' && Object.keys(metadata).some(key => key !== 'state')
@@ -648,7 +648,7 @@ async function saveEditedComment(commentId: number) {
 			@cancel="annotations.cancel"
 			@select="annotations.select" />
 
-		<IonModal :is-open="shortcutsOpen" css-class="lightbox-dialog lightbox-shortcuts-dialog" @did-dismiss="shortcutsOpen = false">
+		<IonModal :is-open="shortcutsOpen" css-class="proofing-public-overlay lightbox-dialog lightbox-shortcuts-dialog" @did-dismiss="shortcutsOpen = false">
 			<IonHeader>
 				<IonToolbar>
 					<IonTitle>{{ t('proofing_gallery', 'Keyboard shortcuts') }}</IonTitle>
@@ -670,7 +670,7 @@ async function saveEditedComment(commentId: number) {
 			</IonContent>
 		</IonModal>
 		<PublicLightboxMetadata :open="metadataOpen" :item="activeItem" @close="metadataOpen = false" />
-		<IonModal :is-open="settings.mode === 'collaboration' && feedbackOpen" css-class="lightbox-sheet lightbox-feedback-sheet" @did-dismiss="feedbackOpen = false">
+		<IonModal :is-open="settings.mode === 'collaboration' && feedbackOpen" css-class="proofing-public-overlay lightbox-sheet lightbox-feedback-sheet" @did-dismiss="feedbackOpen = false">
 			<IonHeader>
 				<IonToolbar>
 					<IonTitle>{{ t('proofing_gallery', 'Feedback') }}</IonTitle>

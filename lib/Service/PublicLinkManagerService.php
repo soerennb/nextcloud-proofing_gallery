@@ -59,8 +59,10 @@ final class PublicLinkManagerService {
 		];
 	}
 
-	/** @return array<string, mixed> */
-	public function create(Gallery $gallery, PublicLinkConfiguration $config, bool $eventOperation = false, ?string $privateRoot = null): array {
+	/** @param list<string> $groupRoots
+	 * @return array<string, mixed>
+	 */
+	public function create(Gallery $gallery, PublicLinkConfiguration $config, bool $eventOperation = false, ?string $privateRoot = null, array $groupRoots = []): array {
 		if ($gallery->getDeliveryMode() === 'event' && !$eventOperation) {
 			throw new \InvalidArgumentException('Event links are managed by event delivery');
 		}
@@ -101,7 +103,7 @@ final class PublicLinkManagerService {
 		$link->setUpdatedAt($now);
 		try {
 			$link = $this->links->insert($link);
-			$this->rootRows->replace((int)$link->getId(), $this->stableRoots($gallery, $config->allowedRoots, $privateRoot));
+			$this->rootRows->replace((int)$link->getId(), $this->stableRoots($gallery, $config->allowedRoots, $privateRoot, $groupRoots));
 			$this->reviews->synchronize($gallery, $link);
 			return $this->present($gallery, $link);
 		} catch (\Throwable $exception) {
@@ -123,34 +125,39 @@ final class PublicLinkManagerService {
 
 	/**
 	 * Update an event-managed link while retaining its private-root classification.
+	 * @param list<string> $groupRoots
 	 * @return array<string, mixed>
 	 */
-	public function updateEvent(Gallery $gallery, int $linkId, PublicLinkConfiguration $config, string $privateRoot): array {
+	public function updateEvent(Gallery $gallery, int $linkId, PublicLinkConfiguration $config, string $privateRoot, array $groupRoots = []): array {
 		if ($gallery->getDeliveryMode() !== 'event') throw new \InvalidArgumentException('Event link operation requires an event project');
-		return $this->updateInternal($gallery, $linkId, $config, $privateRoot);
+		return $this->updateInternal($gallery, $linkId, $config, $privateRoot, $groupRoots);
 	}
 
 	/**
 	 * @param list<string> $allowedRoots
+	 * @param list<string> $groupRoots
 	 * @return array<string, mixed>
 	 */
-	public function updateEventRecipient(Gallery $gallery, int $linkId, string $name, array $allowedRoots, string $privateRoot, ?string $locale, ?string $password = null): array {
+	public function updateEventRecipient(Gallery $gallery, int $linkId, string $name, array $allowedRoots, string $privateRoot, ?string $locale, ?string $password = null, array $groupRoots = []): array {
 		$link = $this->owned($gallery, $linkId);
-		return $this->updateEvent($gallery, $linkId, $this->eventConfiguration($link, $name, $allowedRoots, $locale, $password), $privateRoot);
+		return $this->updateEvent($gallery, $linkId, $this->eventConfiguration($link, $name, $allowedRoots, $locale, $password), $privateRoot, $groupRoots);
 	}
 
 	/**
 	 * Create an event replacement link. The caller switches its recipient reference before revoking the old link.
 	 * @param list<string> $allowedRoots
+	 * @param list<string> $groupRoots
 	 * @return array<string, mixed>
 	 */
-	public function createEventRecipientReplacement(Gallery $gallery, int $linkId, string $name, array $allowedRoots, string $privateRoot, ?string $locale, string $password): array {
+	public function createEventRecipientReplacement(Gallery $gallery, int $linkId, string $name, array $allowedRoots, string $privateRoot, ?string $locale, string $password, array $groupRoots = []): array {
 		$old = $this->owned($gallery, $linkId);
-		return $this->create($gallery, $this->eventConfiguration($old, $name, $allowedRoots, $locale, $password), true, $privateRoot);
+		return $this->create($gallery, $this->eventConfiguration($old, $name, $allowedRoots, $locale, $password), true, $privateRoot, $groupRoots);
 	}
 
-	/** @return array<string, mixed> */
-	private function updateInternal(Gallery $gallery, int $linkId, PublicLinkConfiguration $config, ?string $privateRoot = null): array {
+	/** @param list<string> $groupRoots
+	 * @return array<string, mixed>
+	 */
+	private function updateInternal(Gallery $gallery, int $linkId, PublicLinkConfiguration $config, ?string $privateRoot = null, array $groupRoots = []): array {
 		$link = $this->owned($gallery, $linkId);
 		$this->assertLinkManagementAllowed($gallery, $config, false);
 		if (!$link->getIsPrimary()) $this->capabilities->assertFeature('multiplePublicLinks');
@@ -184,7 +191,7 @@ final class PublicLinkManagerService {
 		$link->setUpdatedAt($this->clock->getTime());
 		try {
 			$link = $this->links->update($link);
-			$this->rootRows->replace((int)$link->getId(), $this->stableRoots($gallery, $config->allowedRoots, $privateRoot));
+			$this->rootRows->replace((int)$link->getId(), $this->stableRoots($gallery, $config->allowedRoots, $privateRoot, $groupRoots));
 			$this->reviews->synchronize($gallery, $link);
 		} catch (\Throwable $exception) {
 			$this->compensateShare($share, $snapshot, $exception);
@@ -316,15 +323,17 @@ final class PublicLinkManagerService {
 
 	/**
 	 * @param list<string> $paths
+	 * @param list<string> $groupRoots
 	 * @return list<array{folder: Folder, path: string, role: string}>
 	 */
-	private function stableRoots(Gallery $gallery, array $paths, ?string $privateRoot = null): array {
+	private function stableRoots(Gallery $gallery, array $paths, ?string $privateRoot = null, array $groupRoots = []): array {
 		$root = $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId());
 		$result = [];
 		foreach ($paths as $path) {
 			$node = $root->get($path);
 			if (!$node instanceof Folder || !$root->isSubNode($node)) throw new \InvalidArgumentException('Allowed event folder not found');
-			$result[] = ['folder' => $node, 'path' => $path, 'role' => $path === $privateRoot ? 'private' : 'shared'];
+			$role = $path === $privateRoot ? 'private' : (in_array($path, $groupRoots, true) ? 'group' : 'shared');
+			$result[] = ['folder' => $node, 'path' => $path, 'role' => $role];
 		}
 		return $result;
 	}

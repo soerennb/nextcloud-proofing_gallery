@@ -31,7 +31,7 @@ const emit = defineEmits<{
 
 <template>
 	<IonModal :is-open="open"
-		class="collaboration-sheet"
+		class="proofing-public-overlay collaboration-sheet"
 		:initial-breakpoint="0.72"
 		:breakpoints="[0, 0.45, 0.72, 1]"
 		@did-dismiss="emit('dismiss')">

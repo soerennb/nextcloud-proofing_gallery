@@ -3,7 +3,7 @@ import type { MediaItem } from './types.ts'
 export type { MediaItem } from './types.ts'
 
 export interface PublicGalleryPage {
-	gallery: { id: number; title: string; settings: GallerySettings }
+	gallery: { id: number; title: string; deliveryMode: 'standard' | 'event'; settings: GallerySettings }
 	items: MediaItem[]
 	s: MediaItem[]
 	total: number
@@ -18,13 +18,20 @@ export interface PublicGalleryPage {
 	path: string
 	groups: Record<string, number>
 	indexState: { indexed: number; limit: number; limitReached: boolean; complete: boolean; state?: 'unindexed' | 'limit_reached' | 'ready'; lastIndexedAt?: number | null }
-	scope: { startPath: string; allowedRoots?: string[]; viewMode: 'folder' | 'recursive' | 'collection'; groupDepth: number }
+	scope: { startPath: string; allowedRoots?: string[]; roots?: PublicGalleryRoot[]; viewMode: 'folder' | 'recursive' | 'collection'; groupDepth: number }
+}
+
+export interface PublicGalleryRoot {
+	path: string
+	name: string
+	role: 'shared' | 'group' | 'private'
 }
 
 export interface PublicGallery {
 	id: number
 	title: string
 	token: string
+	deliveryMode: 'standard' | 'event'
 	settings: GallerySettings
 	initialPage?: PublicGalleryPage
 	review?: PublicReviewState

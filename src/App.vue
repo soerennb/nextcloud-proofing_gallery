@@ -9,8 +9,9 @@ import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-
 import GalleryList from './components/GalleryList.vue'
+import StudioThemeSwitch from './components/StudioThemeSwitch.vue'
+import { useStudioTheme } from './composables/useStudioTheme.ts'
 import { toGalleryListItem } from './domain/galleryListItem.ts'
 import { galleryWorkspacePath, normalizeGalleryWorkspace } from './domain/gallerySettingsOptions.ts'
 import { archiveGallery, fetchGallery, fetchGalleryPage, restoreGallery } from './services/galleryApi.ts'
@@ -20,6 +21,7 @@ const CreateGalleryModal = defineAsyncComponent(() => import('./components/Creat
 const GallerySettings = defineAsyncComponent(() => import('./components/GallerySettings.vue'))
 const HelpView = defineAsyncComponent(() => import('./components/HelpView.vue'))
 const SharingModal = defineAsyncComponent(() => import('./components/SharingModal.vue'))
+const { preference: studioTheme } = useStudioTheme()
 
 const initialGalleryRoute = window.location.hash.match(/^#gallery\/(\d+)(?:\/([^/]+))?/)
 if (initialGalleryRoute) {
@@ -225,8 +227,9 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 	<NcContent app-name="proofing_gallery" :class="{ 'app-content--immersive': immersiveWorkspace }">
 		<NcAppNavigation v-if="!immersiveWorkspace" :aria-label="t('proofing_gallery', 'Gallery navigation')">
 			<template #list>
-				<li class="studio-brand" aria-hidden="true">
-					<span>{{ t('proofing_gallery', 'Photographer workspace') }}</span><strong>{{ t('proofing_gallery', 'Proofing Gallery') }}</strong>
+				<li class="studio-brand">
+					<div><span>{{ t('proofing_gallery', 'Photographer workspace') }}</span><strong>{{ t('proofing_gallery', 'Proofing Gallery') }}</strong></div>
+					<StudioThemeSwitch v-model="studioTheme" />
 				</li>
 				<li class="gallery-nav__entry">
 					<button

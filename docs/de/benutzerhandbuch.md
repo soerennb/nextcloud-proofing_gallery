@@ -30,20 +30,22 @@ Unterordnern eines Projektordners. Wähle beim Erstellen **Private Links aus
 Event-Ordnern**. Das Projekt öffnet direkt die Event-Auslieferung; eine
 separate Veröffentlichung ist nicht nötig.
 
-Arbeite die fünf Aufgaben **Fotos**, **Sichtbarkeit**, **Empfänger**,
-**Auslieferung** und **Prüfen** nacheinander ab. Du kannst einen vorhandenen
-Nextcloud-Ordner verwenden oder einen lokalen Event-Ordner samt Unterordnern
-auswählen oder hineinziehen. Weise jedem Ordner genau eine Rolle zu: für alle,
-für eine Gruppe, privat oder nicht ausliefern. Vor dem Erstellen zeigt Proofing
-Gallery für jeden Empfänger die gemeinsamen, gruppenbezogenen und privaten
-Ordner. Die abschließende Aktion veröffentlicht bei Bedarf automatisch die
-verborgene technische Basis und erstellt die Kundenlinks.
+Arbeite die vier Aufgaben **Fotos**, **Zugriff**, **Empfänger** und
+**Freigabe** nacheinander ab. Du kannst einen vorhandenen Nextcloud-Ordner
+verwenden oder einen lokalen Event-Ordner samt Unterordnern auswählen oder
+hineinziehen. Weise jedem Ordner genau eine Rolle zu: für alle, für eine Gruppe,
+privat oder nicht ausliefern. Die Empfängerliste bündelt Kontaktdaten, den
+exakten gemeinsamen, gruppenbezogenen und privaten Umfang, den aktuellen Link
+und den Linkverlauf in einer Zeile je Empfänger. Die abschließende Aktion
+veröffentlicht bei Bedarf automatisch die verborgene technische Basis und
+erstellt die Kundenlinks.
 
 Ordnernamen dienen als Empfängervorschlag. Für große Listen öffnest du beim
 Empfängerschritt den CSV-Import mit den Spalten `folder`, `name`, `email`,
 `locale`, `pin` und optional `groups`. Entwürfe, geplante Auslieferungen,
-einzelne Links, Exporte und Reparaturen findest du unter **Freigegebene Links
-und erweiterte Werkzeuge**. E-Mail-Adressen werden verschlüsselt gespeichert.
+einzelne Links, Exporte, Wiederholungen, Reparaturen und Linkwechsel bleiben in
+den Empfänger- und Freigabebereichen verfügbar. E-Mail-Adressen werden
+verschlüsselt gespeichert.
 
 ## Projekt bearbeiten
 

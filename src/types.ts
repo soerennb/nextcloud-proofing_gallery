@@ -115,6 +115,12 @@ export interface MediaItem {
 	sourceGalleryTitle?: string
 	metadata?: MediaMetadata
 	playback?: { state: 'source' | 'disabled' | 'pending' | 'processing' | 'ready' | 'failed' | 'unavailable'; playable: boolean }
+	album?: {
+		role: 'shared' | 'group' | 'private'
+		mediaCount: number
+		folderCount: number
+		covers: Array<Pick<MediaItem, 'id' | 'name' | 'mimeType' | 'etag'>>
+	}
 }
 
 export interface IndexedMediaItem extends MediaItem {
@@ -328,6 +334,7 @@ export interface GalleryListItem {
 	status: 'draft' | 'published' | 'archived'
 	mode: 'presentation' | 'collaboration'
 	sourceType: 'folder' | 'collection'
+	deliveryMode: 'standard' | 'event'
 	purpose: GalleryPurpose
 	workflowState: Gallery['workflowState']
 	createdAt: number

@@ -45,7 +45,7 @@ final class EventWaveService {
 			$existing = $this->repository->findByRequestKey((int)$gallery->getId(), $requestKey);
 			if ($existing !== false) return $this->present($existing);
 		}
-		if ($recipients === [] || count($recipients) > 500) throw new \InvalidArgumentException('Select between 1 and 500 event recipients');
+		if ($recipients === []) throw new \InvalidArgumentException('Select at least one event recipient');
 		if ($expiresAt !== null && preg_match('/^\d{4}-\d{2}-\d{2}$/', $expiresAt) !== 1) throw new \InvalidArgumentException('Invalid expiration date');
 		$now = $this->clock->getTime();
 		if ($releaseAt !== null && $releaseAt <= $now) $releaseNow = true;
@@ -77,6 +77,15 @@ final class EventWaveService {
 	public function list(Gallery $gallery): array {
 		$this->assertEventGallery($gallery);
 		return array_map(fn (array $row): array => $this->present($row), $this->repository->gallery((int)$gallery->getId()));
+	}
+
+	/** @return array{summary: array<string, int>, waves: list<array<string, mixed>>} */
+	public function operations(Gallery $gallery): array {
+		$this->assertEventGallery($gallery);
+		return [
+			'summary' => $this->repository->recipientSummary((int)$gallery->getId()),
+			'waves' => $this->list($gallery),
+		];
 	}
 
 	/** @return array<string, mixed> */
@@ -161,12 +170,13 @@ final class EventWaveService {
 		try {
 			$pin = $recipient['pin_cipher'] === null ? '' : $this->crypto->decrypt((string)$recipient['pin_cipher']);
 			$privateRoot = $this->resolvedPrivateRoot($gallery, (int)$wave['id'], $recipient);
+			$groupRoots = $this->resolvedRoots($gallery, (int)$wave['id'], (int)$recipient['id'], 'group');
 			$link = $this->links->create($gallery, PublicLinkConfiguration::fromArray([
 				'name' => (string)$recipient['display_name'], 'policy' => $policy, 'startPath' => '',
-				'allowedRoots' => [...$sharedRoots, ...$this->resolvedRoots($gallery, (int)$wave['id'], (int)$recipient['id'], 'group'), $privateRoot], 'viewMode' => 'folder', 'groupDepth' => 1,
+				'allowedRoots' => [...$sharedRoots, ...$groupRoots, $privateRoot], 'viewMode' => 'folder', 'groupDepth' => 1,
 				'publicLocale' => $recipient['locale'], 'password' => $pin, 'expiresAt' => $wave['expires_at'],
 				'reviewEnabled' => in_array($gallery->getPurpose(), ['selection', 'proofing'], true),
-			]), true, $privateRoot);
+			]), true, $privateRoot, $groupRoots);
 			$invitationStatus = (bool)$wave['send_invitations'] ? 'pending' : 'not_requested';
 			$invitedAt = null;
 			if ((bool)$wave['send_invitations'] && $recipient['email_cipher'] !== null) {
@@ -210,9 +220,10 @@ final class EventWaveService {
 	/**
 	 * @param list<string> $sharedRoots
 	 * @param array<string, mixed> $recipient
-	 * @return array{folderId: int, folderPath: string, groupRoots: list<array{folderId: int, path: string, name: string}>, name: string, emailCipher: ?string, locale: ?string, pinCipher: ?string}
+	 * @return array{setupKey: ?string, folderId: int, folderPath: string, groupRoots: list<array{folderId: int, path: string, name: string}>, name: string, emailCipher: ?string, locale: ?string, pinCipher: ?string}
 	 */
 	private function prepareRecipient(Folder $root, array $sharedRoots, array $recipient): array {
+		$setupKey = is_string($recipient['setupKey'] ?? null) && preg_match('/^[A-Za-z0-9_-]{8,64}$/', $recipient['setupKey']) === 1 ? $recipient['setupKey'] : null;
 		$folderPath = is_string($recipient['folderPath'] ?? null) ? trim($recipient['folderPath'], '/') : '';
 		$name = is_string($recipient['name'] ?? null) ? trim($recipient['name']) : '';
 		$email = is_string($recipient['email'] ?? null) ? mb_strtolower(trim($recipient['email'])) : '';
@@ -232,7 +243,7 @@ final class EventWaveService {
 		if (array_intersect($groupRootPaths, $sharedRoots) !== [] || in_array($privatePath, $groupRootPaths, true)) throw new \InvalidArgumentException('Shared, group, and private folders must be distinct');
 		$privateFolder = $root->get($privatePath);
 		if (!$privateFolder instanceof Folder) throw new \InvalidArgumentException('Event folder not found');
-		return ['folderId' => (int)$privateFolder->getId(), 'folderPath' => $privatePath, 'groupRoots' => $groupRoots, 'name' => $name,
+		return ['setupKey' => $setupKey, 'folderId' => (int)$privateFolder->getId(), 'folderPath' => $privatePath, 'groupRoots' => $groupRoots, 'name' => $name,
 			'emailCipher' => $email === '' ? null : $this->crypto->encrypt($email), 'locale' => $locale,
 			'pinCipher' => $pin === '' ? null : $this->crypto->encrypt($pin)];
 	}

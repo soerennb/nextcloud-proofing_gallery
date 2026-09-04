@@ -7,6 +7,7 @@ export function toGalleryListItem(gallery: Gallery): GalleryListItem {
 		status: gallery.status,
 		mode: gallery.settings.mode,
 		sourceType: gallery.sourceType,
+		deliveryMode: gallery.deliveryMode,
 		purpose: gallery.purpose,
 		workflowState: gallery.workflowState,
 		createdAt: gallery.createdAt,

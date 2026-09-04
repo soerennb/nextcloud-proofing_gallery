@@ -11,7 +11,7 @@ const emit = defineEmits<{ close: [] }>()
 </script>
 
 <template>
-	<IonModal :is-open="open && item.metadata?.state === 'ready'" css-class="lightbox-sheet" @did-dismiss="emit('close')">
+	<IonModal :is-open="open && item.metadata?.state === 'ready'" css-class="proofing-public-overlay lightbox-sheet" @did-dismiss="emit('close')">
 		<IonHeader>
 			<IonToolbar>
 				<IonTitle>{{ t('proofing_gallery', 'Image information') }}</IonTitle>

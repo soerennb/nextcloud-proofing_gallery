@@ -326,6 +326,7 @@ final class GalleryService {
 				'status' => $gallery->getStatus(),
 				'mode' => $gallery->getMode(),
 				'sourceType' => $gallery->getSourceType(),
+				'deliveryMode' => $gallery->getDeliveryMode(),
 				'purpose' => $gallery->getPurpose(),
 				'workflowState' => $gallery->getWorkflowState(),
 				'createdAt' => $gallery->getCreatedAt(),

@@ -296,6 +296,15 @@ kbd { padding: 2px 6px; border: 1px solid var(--color-border-maxcontrast); borde
 	--cull-gold: #f1be3d;
 	--cull-green: #28d18b;
 	--cull-red: #ff6174;
+	--color-main-background: #090a0c;
+	--color-main-text: #f5f7fa;
+	--color-text-maxcontrast: #b7bbc5;
+	--color-background-hover: #202329;
+	--color-background-dark: #17191f;
+	--color-border: #30333b;
+	--color-border-maxcontrast: #3c404a;
+	--color-primary-element: #6bd6e5;
+	--color-primary-element-text: #071114;
 	position: relative;
 	display: grid;
 	height: 100%;

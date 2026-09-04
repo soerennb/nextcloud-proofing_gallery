@@ -6,17 +6,18 @@ import { IonAlert, IonApp, IonContent, IonLoading, IonPage } from '@ionic/vue'
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { calculateMediaLayout } from './domain/mediaGridLayout.ts'
-import { contrastRgb, hexRgb, mixHex, readableText } from './domain/galleryTheme.ts'
+import { publicGalleryCssVariables } from './domain/galleryTheme.ts'
 import { PUBLIC_GALLERY_PAGE_SIZE, readPublicGalleryLocation, writePublicGalleryLocation } from './domain/publicGalleryNavigation.ts'
 import { continuationStorageKey, layoutSessionStorageKey, loadPublicGalleryCompareIds, loadPublicGalleryContinuation, loadPublicGallerySavedView, loadPublicGallerySessionLayout, viewStorageKey } from './domain/publicGalleryPreferences.ts'
 import { serialTask } from './domain/serialTask.ts'
-import { galleryTitleMode } from './domain/galleryTitlePresentation.ts'
+import { galleryHasLogo, galleryTitleMode } from './domain/galleryTitlePresentation.ts'
 import { downloadQuery } from './domain/publicDownloadOptions.ts'
 import type { PublicDownloadPreset } from './domain/publicDownloadOptions.ts'
 import type { CollaborationState, GuestIdentity, MediaItem, PublicGallery, PublicGalleryPage } from './publicTypes.ts'
 import { useDeferredMutation } from './composables/useDeferredMutation.ts'
 import { resumeGuestSession, useGuestRequest } from './composables/useGuestRequest.ts'
 import { usePublicCollaborationIdentity } from './composables/usePublicCollaborationIdentity.ts'
+import { usePublicAppearance } from './composables/usePublicAppearance.ts'
 const PublicGalleryControls = defineAsyncComponent(() => import('./components/PublicGalleryControls.vue'))
 const PublicLightbox = defineAsyncComponent(() => import('./components/PublicLightbox.vue'))
 const PublicGalleryHeader = defineAsyncComponent(() => import('./components/PublicGalleryHeader.vue'))
@@ -27,7 +28,7 @@ const PublicGuestDialog = defineAsyncComponent(() => import('./components/Public
 const PublicCollaborationSheet = defineAsyncComponent(() => import('./components/PublicCollaborationSheet.vue'))
 const ProgressiveImage = defineAsyncComponent(() => import('./components/ProgressiveImage.vue'))
 const PublicMediaListDetails = defineAsyncComponent(() => import('./components/PublicMediaListDetails.vue'))
-const virtualGridResolved = ref(false)
+const PublicEventAlbumGrid = defineAsyncComponent(() => import('./components/PublicEventAlbumGrid.vue')), virtualGridResolved = ref(false)
 const VirtualMediaGrid = defineAsyncComponent(() => import('./components/VirtualMediaGrid.vue').then(module => {
 	virtualGridResolved.value = true
 	return module
@@ -52,31 +53,15 @@ const indexState = ref(props.gallery.initialPage?.indexState ?? null)
 const scope = ref(props.gallery.initialPage?.scope ?? null)
 const settings = ref(props.gallery.initialPage?.gallery.settings ?? props.gallery.settings)
 const title = ref(props.gallery.initialPage?.gallery.title ?? props.gallery.title)
-const pageStyle = computed(() => {
-	const accent = settings.value.presentation.accentColor || '#E85D4A'
-	const rgb = hexRgb(accent)
-	const contrast = readableText(rgb)
-	return {
-		'--gallery-accent': accent,
-		'--ion-color-primary': accent,
-		'--ion-color-primary-rgb': rgb.join(', '),
-		'--ion-color-primary-contrast': contrast,
-		'--ion-color-primary-contrast-rgb': contrastRgb(contrast),
-		'--ion-color-primary-shade': mixHex(rgb, [0, 0, 0], 0.12),
-		'--ion-color-primary-tint': mixHex(rgb, [255, 255, 255], 0.14),
-		'--hero-focus': `${settings.value.presentation.heroFocusX}% ${settings.value.presentation.heroFocusY}%`,
-	}
-})
+const deliveryMode = ref(props.gallery.initialPage?.gallery.deliveryMode ?? props.gallery.deliveryMode ?? 'standard'), accentColor = computed(() => settings.value.presentation.accentColor || '#E85D4A')
+const { visitorPreference, effectiveTheme, setVisitorPreference } = usePublicAppearance(computed(() => settings.value.presentation.theme), accentColor)
+const appearancePreference = computed({ get: () => visitorPreference.value, set: setVisitorPreference })
+const pageStyle = computed(() => publicGalleryCssVariables(accentColor.value, settings.value.presentation.heroFocusX, settings.value.presentation.heroFocusY))
 
 const mediaItems = computed(() => items.value.filter(item => !item.folder))
+const eventAlbumRoot = computed(() => deliveryMode.value === 'event' && currentPath.value === '' && scope.value?.viewMode === 'folder'), openerTotalLabel = computed(() => eventAlbumRoot.value ? n('proofing_gallery', '%n album', '%n albums', total.value) : undefined)
 const headerHeroUrl = computed(() => settings.value.presentation.heroFileId ? assetUrl('hero') : null)
-const headerLogoUrl = computed(() => {
-	const presentation = settings.value.presentation
-	if (presentation.logoMode === 'none') return null
-	if (presentation.logoMode === 'gallery') return presentation.logoFileId ? assetUrl('logo') : null
-	if (presentation.logoMode === 'upload') return presentation.logoAssetId ? assetUrl('logo') : null
-	return presentation.instanceLogoAssetId ? assetUrl('logo') : null
-})
+const headerLogoUrl = computed(() => galleryHasLogo(settings.value.presentation) ? assetUrl('logo') : null)
 const activeIndex = ref<number | null>(props.staticPreview?.scene && props.staticPreview.scene !== 'gallery' ? 0 : null)
 const activeOpener = ref<HTMLElement | null>(null)
 const selectedIds = ref<number[]>([])
@@ -148,11 +133,13 @@ function galleryControlProps() {
 		downloadScope: downloadScope.value,
 		selectedCount: selectedIds.value.length,
 		contactSheet: settings.value.delivery?.contactSheet !== false,
-		canSelect: ['selection', 'all'].includes(settings.value.delivery.downloadScope) || (settings.value.mode === 'collaboration' && settings.value.review?.selections !== false),
+		canSelect: !eventAlbumRoot.value && (['selection', 'all'].includes(settings.value.delivery.downloadScope) || (settings.value.mode === 'collaboration' && settings.value.review?.selections !== false)),
 		canCompare: settings.value.mode === 'collaboration' && selectedIds.value.length >= 2,
 		canSaveSelection: settings.value.mode === 'collaboration' && settings.value.review?.selections !== false,
 		savingSelection: savingSelection.value,
-		theme: settings.value.presentation.theme,
+		theme: effectiveTheme.value,
+		collaboration: settings.value.mode === 'collaboration',
+		albumRoot: eventAlbumRoot.value,
 	}
 }
 const tileGap = computed(() => mobileViewport.value
@@ -188,6 +175,7 @@ watch(() => props.gallery, gallery => {
 	if (!page) return
 	items.value = page.items; total.value = page.total
 	settings.value = page.gallery.settings ?? gallery.settings; title.value = page.gallery.title ?? gallery.title
+	deliveryMode.value = page.gallery.deliveryMode ?? gallery.deliveryMode ?? 'standard'
 	if (isStaticPreview) layout.value = settings.value.presentation.layout
 }, { deep: true })
 
@@ -360,6 +348,7 @@ function applyGalleryPage(payload: PublicGalleryPage) {
 	total.value = payload.total
 	settings.value = payload.gallery.settings
 	title.value = payload.gallery.title
+	deliveryMode.value = payload.gallery.deliveryMode
 	currentPath.value = payload.path
 	currentPage.value = payload.page
 	pageCount.value = payload.pageCount
@@ -586,7 +575,7 @@ async function saveSelection() {
 	savingSelection.value = false
 }
 
-function previewUrl(item: MediaItem, width = 900, height = 900, mode: 'cover' | 'fit' = 'cover'): string {
+function previewUrl(item: Pick<MediaItem, 'id'>, width = 900, height = 900, mode: 'cover' | 'fit' = 'cover'): string {
 	return publicEndpoint(`media/${item.id}/preview?x=${width}&y=${height}&mode=${mode}`)
 }
 
@@ -710,7 +699,7 @@ function openItem(item: MediaItem, event?: MouseEvent) {
 		}
 		return
 	}
-	currentPath.value = [currentPath.value, item.name].filter(Boolean).join('/')
+	currentPath.value = item.relativePath ?? [currentPath.value, item.name].filter(Boolean).join('/')
 	currentPage.value = 1
 	error.value = false
 	updateLocation('push')
@@ -769,13 +758,14 @@ function upOneLevel() {
 <template>
 	<IonApp class="public-gallery-app"
 		:class="[
-			`public-gallery-app--theme-${settings.presentation.theme}`,
-			{ 'ion-palette-dark': settings.presentation.theme === 'dark' },
+			`public-gallery-app--theme-${effectiveTheme}`,
+			{ 'ion-palette-dark': effectiveTheme === 'dark' },
 		]"
 		:style="pageStyle">
 		<IonPage>
 			<PublicGalleryHeader v-if="activeIndex === null && !compareOpen"
 				v-model:search="search"
+				v-model:appearance="appearancePreference"
 				:class="`logo-${settings.presentation.logoBackground}`"
 				:title="title"
 				:title-mode="galleryTitleMode(settings.presentation)"
@@ -789,6 +779,9 @@ function upOneLevel() {
 				:can-download="downloadScope !== 'none'"
 				:can-compare="settings.mode === 'collaboration' && selectedIds.length >= 2"
 				:collaboration="settings.mode === 'collaboration'"
+				:configured-theme="settings.presentation.theme"
+				:effective-theme="effectiveTheme"
+				:search-target="eventAlbumRoot ? 'albums' : 'photos'"
 				@search="queueSearch"
 				@toggle-search="searchOpen = !searchOpen"
 				@share="shareGallery"
@@ -803,7 +796,7 @@ function upOneLevel() {
 				<div
 					class="public-gallery"
 					:class="[
-						`public-gallery--theme-${settings.presentation.theme}`,
+						`public-gallery--theme-${effectiveTheme}`,
 						`public-gallery--motion-${settings.presentation.motionPreset}`,
 						`public-gallery--layout-${layout}`,
 						`public-gallery--tiles-${settings.presentation.tileSize}`,
@@ -814,6 +807,7 @@ function upOneLevel() {
 					<PublicGalleryOpener
 						:title="title"
 						:total="total"
+						:total-label="openerTotalLabel"
 						:settings="settings"
 						:hero-url="headerHeroUrl" />
 					<div v-if="continueVisible" class="continuation-banner" role="status">
@@ -848,6 +842,7 @@ function upOneLevel() {
 							@navigate="navigateToPage"
 							@update:panel="setPanel"
 							@start-selection="startSelectionMode"
+							@collaboration="collaborationSheetOpen = true"
 							@select-downloads="startSelectionMode"
 							@download-gallery="downloadEntireGallery"
 							@download-selection="startDownload(selectionUrl('download/selection'))"
@@ -889,6 +884,11 @@ function upOneLevel() {
 							<h2>{{ t('proofing_gallery', 'This gallery is empty') }}</h2>
 							<p>{{ t('proofing_gallery', 'New photographs will appear here automatically.') }}</p>
 						</div>
+
+						<PublicEventAlbumGrid v-else-if="eventAlbumRoot"
+							:items="items"
+							:preview-url="previewUrl"
+							@open="openItem" />
 
 						<PublicStoryGallery
 							v-else-if="layout === 'story'"
@@ -1010,9 +1010,10 @@ function upOneLevel() {
 						:preview-url="previewUrl"
 						@remove="itemId => { const item = mediaItems.find(value => value.id === itemId); if (item) toggleCompare(item); if (compareItems.length < 2) compareOpen = false }"
 						@close="compareOpen = false" />
-					<IonLoading :is-open="galleryDownloadBusy" :message="t('proofing_gallery', 'Preparing gallery download…')" />
+					<IonLoading :is-open="galleryDownloadBusy" css-class="proofing-public-overlay public-gallery-loading" :message="t('proofing_gallery', 'Preparing gallery download…')" />
 					<IonAlert
 						:is-open="galleryDownloadError !== ''"
+						css-class="proofing-public-overlay public-gallery-alert"
 						:header="t('proofing_gallery', 'Gallery download unavailable')"
 						:message="galleryDownloadError"
 						:buttons="[t('proofing_gallery', 'OK')]"

@@ -13,7 +13,7 @@ final class EventWaveRepository {
 
 	/**
 	 * @param array{sharedRoots: list<array{folderId: int, path: string}>, policy: array<string, mixed>, expiresAt: ?string, releaseAt: ?int, sendInvitations: bool} $wave
-	 * @param list<array{folderId: int, folderPath: string, groupRoots: list<array{folderId: int, path: string, name: string}>, name: string, emailCipher: ?string, locale: ?string, pinCipher: ?string}> $recipients
+	 * @param list<array{setupKey: ?string, folderId: int, folderPath: string, groupRoots: list<array{folderId: int, path: string, name: string}>, name: string, emailCipher: ?string, locale: ?string, pinCipher: ?string}> $recipients
 	 */
 	public function create(int $galleryId, string $status, array $wave, array $recipients, int $now, ?string $requestKey = null): int {
 		$this->db->beginTransaction();
@@ -40,6 +40,7 @@ final class EventWaveRepository {
 				$qb = $this->db->getQueryBuilder();
 				$qb->insert('proofing_event_recipients')->values([
 					'gallery_id' => $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT),
+					'setup_key' => $qb->createNamedParameter($recipient['setupKey']),
 					'public_link_id' => $qb->createNamedParameter(null, IQueryBuilder::PARAM_INT),
 					'folder_id' => $qb->createNamedParameter($recipient['folderId'], IQueryBuilder::PARAM_INT),
 					'folder_path' => $qb->createNamedParameter($recipient['folderPath']),
@@ -120,6 +121,22 @@ final class EventWaveRepository {
 			->where($qb->expr()->eq('r.gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->in('w.status', $qb->createNamedParameter(['draft', 'scheduled', 'releasing'], IQueryBuilder::PARAM_STR_ARRAY)))
 			->andWhere($qb->expr()->neq('r.publication_status', $qb->createNamedParameter('published')))->executeQuery()->fetchOne();
+	}
+
+	/** @return array{total: int, draft: int, published: int, invited: int, failed: int, revoked: int} */
+	public function recipientSummary(int $galleryId): array {
+		$qb = $this->db->getQueryBuilder();
+		$rows = QueryResult::rows($qb->select('delivery_status', $qb->func()->count('*', 'amount'))->from('proofing_event_recipients')
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->groupBy('delivery_status')->executeQuery());
+		$summary = ['total' => 0, 'draft' => 0, 'published' => 0, 'invited' => 0, 'failed' => 0, 'revoked' => 0];
+		foreach ($rows as $row) {
+			$status = (string)$row['delivery_status'];
+			$amount = (int)$row['amount'];
+			$summary['total'] += $amount;
+			if (array_key_exists($status, $summary)) $summary[$status] = $amount;
+		}
+		return $summary;
 	}
 
 	/** @return list<array<string, mixed>> */
@@ -204,14 +221,33 @@ final class EventWaveRepository {
 			->andWhere($qb->expr()->eq('id', $qb->createNamedParameter($recipientId, IQueryBuilder::PARAM_INT)))->executeQuery());
 	}
 
+	/** @param list<string> $setupKeys
+	 * @return list<array<string, mixed>>
+	 */
+	public function latestRecipientsForSetupKeys(int $galleryId, array $setupKeys): array {
+		if ($setupKeys === []) return [];
+		$latest = $this->db->getQueryBuilder();
+		$rows = QueryResult::rows($latest->select('setup_key')->selectAlias($latest->func()->max('id'), 'latest_id')->from('proofing_event_recipients')
+			->where($latest->expr()->eq('gallery_id', $latest->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->andWhere($latest->expr()->in('setup_key', $latest->createNamedParameter($setupKeys, IQueryBuilder::PARAM_STR_ARRAY)))
+			->groupBy('setup_key')->executeQuery());
+		$ids = array_map(static fn (array $row): int => (int)$row['latest_id'], $rows);
+		if ($ids === []) return [];
+		$qb = $this->db->getQueryBuilder();
+		return QueryResult::rows($qb->select('*')->from('proofing_event_recipients')
+			->where($qb->expr()->in('id', $qb->createNamedParameter($ids, IQueryBuilder::PARAM_INT_ARRAY)))
+			->orderBy('id', 'DESC')->executeQuery());
+	}
+
 	/** @return array{items: list<array<string, mixed>>, total: int, nextId: ?int} */
-	public function recipientPage(int $galleryId, int $limit, ?int $beforeId, ?string $status, string $query): array {
+	public function recipientPage(int $galleryId, int $limit, ?int $beforeId, ?string $status, string $query, ?string $setupKey = null): array {
 		$limit = max(1, min(100, $limit));
-		$build = function () use ($galleryId, $beforeId, $status, $query): IQueryBuilder {
+		$build = function () use ($galleryId, $beforeId, $status, $query, $setupKey): IQueryBuilder {
 			$qb = $this->db->getQueryBuilder();
 			$qb->from('proofing_event_recipients')->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
 			if ($beforeId !== null) $qb->andWhere($qb->expr()->lt('id', $qb->createNamedParameter($beforeId, IQueryBuilder::PARAM_INT)));
 			if ($status !== null && $status !== '') $qb->andWhere($qb->expr()->eq('delivery_status', $qb->createNamedParameter($status)));
+			if ($setupKey !== null) $qb->andWhere($qb->expr()->eq('setup_key', $qb->createNamedParameter($setupKey)));
 			if ($query !== '') {
 				$like = '%' . $this->db->escapeLikeParameter(mb_strtolower($query)) . '%';
 				$qb->andWhere($qb->expr()->orX(
@@ -227,6 +263,7 @@ final class EventWaveRepository {
 		$count = $this->db->getQueryBuilder();
 		$count->select($count->func()->count())->from('proofing_event_recipients')->where($count->expr()->eq('gallery_id', $count->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
 		if ($status !== null && $status !== '') $count->andWhere($count->expr()->eq('delivery_status', $count->createNamedParameter($status)));
+		if ($setupKey !== null) $count->andWhere($count->expr()->eq('setup_key', $count->createNamedParameter($setupKey)));
 		if ($query !== '') {
 			$like = '%' . $this->db->escapeLikeParameter(mb_strtolower($query)) . '%';
 			$count->andWhere($count->expr()->orX($count->expr()->iLike('display_name', $count->createNamedParameter($like)), $count->expr()->iLike('folder_path', $count->createNamedParameter($like))));

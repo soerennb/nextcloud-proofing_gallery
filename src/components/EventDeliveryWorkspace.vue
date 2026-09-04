@@ -4,13 +4,18 @@ import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import { deliverEventSetup, fetchEventSetup, previewEventImport, saveEventSetup } from '../services/eventApi.ts'
-import type { EventFolderPreview, EventFolderRole, EventImportPreview, EventSetup, EventSetupRecipient, EventSetupStep } from '../services/eventApi.ts'
+import { downloadEventBlob, eventWaveLabel as waveLabel } from '../domain/eventDeliveryPresentation.ts'
+import { cancelEventWave, deliverEventSetup, downloadEventPins, downloadEventStatus, fetchEventOperations, fetchEventSetup, previewEventImport, reconcileEventRecipients, releaseEventWave, retryEventWave, saveEventSetup } from '../services/eventApi.ts'
+import type { EventFolderPreview, EventFolderRole, EventImportPreview, EventOperations, EventSetup, EventSetupRecipient, EventSetupStep, EventWave } from '../services/eventApi.ts'
 import { ensureGalleryFolders, prepareOwnerUploadSessions, uploadGalleryMedia } from '../services/galleryApi.ts'
 import type { Gallery } from '../types.ts'
-import EventDeliveryManager from './EventDeliveryManager.vue'
+import EventRecipientLedger from './EventRecipientLedger.vue'
+import { eventDeliveryIcons } from './eventDeliveryIcons.ts'
+import './styles/EventDeliveryWorkspace.css'
+
+const { AccountMultiple: AccountMultipleIcon, AlertCircle: AlertCircleIcon, CheckCircle: CheckCircleIcon, FolderLock: FolderLockIcon, History: HistoryIcon, ImageMultiple: ImageMultipleIcon, SendClock: SendClockIcon, ShieldKey: ShieldKeyIcon } = eventDeliveryIcons
 
 const props = defineProps<{ gallery: Gallery }>()
 const emit = defineEmits<{ updated: [gallery: Gallery]; 'setup-updated': [setup: EventSetup] }>()
@@ -21,26 +26,36 @@ const saving = ref(false)
 const delivering = ref(false)
 const uploading = ref(false)
 const uploadProgress = ref({ completed: 0, total: 0, current: '' })
-const advancedOpen = ref(false)
-const operationsRevision = ref(0)
 const draggingDirectory = ref(false)
 const importPreview = ref<EventImportPreview | null>(null)
 const importMatchMode = ref<'exact' | 'prefix'>('exact')
+const pageSize = 50; const visibilityQuery = ref(''); const visibilityRole = ref<EventFolderRole | ''>(''); const visibilityPage = ref(0)
+const selectedFolderIds = ref<number[]>([]); const bulkRole = ref<EventFolderRole>('private')
+const pinPage = ref(0)
+const operations = ref<EventOperations | null>(null)
+const operationBusy = ref(false)
+let pollTimer: ReturnType<typeof setTimeout> | undefined
 
 const steps: Array<{ id: EventSetupStep; label: string; shortLabel: string; description: string }> = [
 	{ id: 'photos', label: t('proofing_gallery', 'Prepare photos'), shortLabel: t('proofing_gallery', 'Photos'), description: t('proofing_gallery', 'Choose or upload the event folder structure.') },
-	{ id: 'visibility', label: t('proofing_gallery', 'Set visibility'), shortLabel: t('proofing_gallery', 'Visibility'), description: t('proofing_gallery', 'Decide which folders everybody, groups, or individuals can see.') },
-	{ id: 'recipients', label: t('proofing_gallery', 'Assign recipients'), shortLabel: t('proofing_gallery', 'Recipients'), description: t('proofing_gallery', 'Add names, contact details, and group access.') },
-	{ id: 'delivery', label: t('proofing_gallery', 'Choose delivery'), shortLabel: t('proofing_gallery', 'Delivery'), description: t('proofing_gallery', 'Set protection, timing, and invitation delivery.') },
-	{ id: 'review', label: t('proofing_gallery', 'Review and create links'), shortLabel: t('proofing_gallery', 'Review'), description: t('proofing_gallery', 'Confirm every client’s exact folder scope before release.') },
+	{ id: 'visibility', label: t('proofing_gallery', 'Organize access'), shortLabel: t('proofing_gallery', 'Access'), description: t('proofing_gallery', 'Define shared, group, and private content.') },
+	{ id: 'recipients', label: t('proofing_gallery', 'Recipients & links'), shortLabel: t('proofing_gallery', 'Recipients'), description: t('proofing_gallery', 'Prepare people and manage every released link.') },
+	{ id: 'delivery', label: t('proofing_gallery', 'Release'), shortLabel: t('proofing_gallery', 'Release'), description: t('proofing_gallery', 'Protect, schedule, and monitor delivery.') },
 ]
+const stepIcons = { photos: ImageMultipleIcon, visibility: FolderLockIcon, recipients: AccountMultipleIcon, delivery: SendClockIcon }
 
 const assignments = computed(() => new Map((setup.value?.folderAssignments ?? []).map(item => [item.folderId, item.role])))
 const privateFolders = computed(() => (setup.value?.folders ?? []).filter(folder => assignments.value.get(folder.id) === 'private'))
 const groupFolders = computed(() => (setup.value?.folders ?? []).filter(folder => assignments.value.get(folder.id) === 'group'))
 const sharedFolders = computed(() => (setup.value?.folders ?? []).filter(folder => assignments.value.get(folder.id) === 'shared'))
-const privateMedia = computed(() => privateFolders.value.reduce((sum, folder) => sum + folder.totalMediaCount, 0))
 const validRecipients = computed(() => (setup.value?.recipients ?? []).filter(recipient => privateFolders.value.some(folder => folder.id === recipient.folderId) && recipient.name.trim()))
+const filteredVisibilityFolders = computed(() => (setup.value?.folders ?? []).filter(folder => {
+	const query = visibilityQuery.value.trim().toLocaleLowerCase()
+	return (!query || `${folder.name} ${folder.path}`.toLocaleLowerCase().includes(query)) && (!visibilityRole.value || role(folder) === visibilityRole.value)
+}))
+const visibleFolders = computed(() => filteredVisibilityFolders.value.slice(visibilityPage.value * pageSize, (visibilityPage.value + 1) * pageSize))
+const visiblePinRecipients = computed(() => (setup.value?.recipients ?? []).slice(pinPage.value * pageSize, (pinPage.value + 1) * pageSize))
+const activeWaves = computed(() => operations.value?.waves.filter(wave => ['scheduled', 'releasing'].includes(wave.status)) ?? [])
 const readinessLabels: Record<string, string> = {
 	folders_classified: t('proofing_gallery', 'Folder visibility is assigned'),
 	private_deliveries: t('proofing_gallery', 'At least one private delivery has a recipient'),
@@ -55,7 +70,17 @@ async function load() {
 		emit('setup-updated', setup.value)
 		activeStep.value = setup.value.currentStep
 		if (setup.value.revision === 0) applySuggestions()
+		await loadOperations()
 	} catch { showError(t('proofing_gallery', 'The event workflow could not be loaded.')) } finally { loading.value = false }
+}
+
+async function loadOperations() {
+	try {
+		operations.value = await fetchEventOperations(props.gallery.id)
+		schedulePolling()
+	} catch {
+		// Setup remains usable when operational history cannot be loaded.
+	}
 }
 
 function applySuggestions() {
@@ -76,12 +101,13 @@ function setRole(folder: EventFolderPreview, nextRole: EventFolderRole) {
 	if (nextRole !== 'group') for (const recipient of setup.value.recipients) recipient.groupFolderIds = recipient.groupFolderIds.filter(id => id !== folder.id)
 }
 
-function changeRole(folder: EventFolderPreview, event: Event) {
-	setRole(folder, (event.target as HTMLSelectElement).value as EventFolderRole)
+function applyBulkRole() {
+	for (const folder of (setup.value?.folders ?? []).filter(item => selectedFolderIds.value.includes(item.id))) setRole(folder, bulkRole.value)
+	selectedFolderIds.value = []
 }
 
-function toggleAdvanced(event: Event) {
-	advancedOpen.value = (event.target as HTMLDetailsElement).open
+function pageCount(total: number): number {
+	return Math.max(1, Math.ceil(total / pageSize))
 }
 
 function ensureRecipient(folder: EventFolderPreview) {
@@ -91,18 +117,6 @@ function ensureRecipient(folder: EventFolderPreview) {
 
 function emptyRecipient(folder: EventFolderPreview): EventSetupRecipient {
 	return { key: crypto.randomUUID().replaceAll('-', ''), folderId: folder.id, groupFolderIds: [], name: folder.name, email: '', locale: null, pin: '' }
-}
-
-function addRecipient(folder: EventFolderPreview) {
-	setup.value?.recipients.push({ ...emptyRecipient(folder), name: '' })
-}
-
-function removeRecipient(key: string) {
-	if (setup.value) setup.value.recipients = setup.value.recipients.filter(recipient => recipient.key !== key)
-}
-
-function recipientsFor(folderId: number): EventSetupRecipient[] {
-	return setup.value?.recipients.filter(recipient => recipient.folderId === folderId) ?? []
 }
 
 function folderById(folderId: number): EventFolderPreview | undefined {
@@ -127,12 +141,45 @@ async function persist(targetStep = activeStep.value): Promise<boolean> {
 }
 
 async function go(step: EventSetupStep) {
+	activeStep.value = step
+	await nextTick()
+	focusActiveTask()
 	await persist(step)
 }
 
 async function continueFrom(step: EventSetupStep) {
 	const index = steps.findIndex(item => item.id === step)
-	await persist(steps[Math.min(index + 1, steps.length - 1)].id)
+	await go(steps[Math.min(index + 1, steps.length - 1)].id)
+}
+
+function focusActiveTask() {
+	const heading = document.querySelector<HTMLElement>('.event-task > section > header h3')
+	heading?.focus({ preventScroll: true })
+	heading?.scrollIntoView({ block: 'start', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+}
+
+async function actOnWave(wave: EventWave, action: 'release' | 'retry' | 'cancel') {
+	operationBusy.value = true
+	try {
+		if (action === 'release') {
+			const result = await releaseEventWave(props.gallery.id, wave.id); emit('updated', result.gallery)
+		} else if (action === 'retry') await retryEventWave(props.gallery.id, wave.id)
+		else await cancelEventWave(props.gallery.id, wave.id)
+		await loadOperations()
+	} catch { showError(t('proofing_gallery', 'The delivery round could not be updated.')) } finally { operationBusy.value = false }
+}
+
+async function exportStatus() { downloadEventBlob(await downloadEventStatus(props.gallery.id), 'event-recipient-status.csv') }
+async function downloadPins(wave: EventWave) { downloadEventBlob(await downloadEventPins(props.gallery.id, wave.id), `event-pins-${wave.id}.csv`) }
+async function repairLinks() {
+	operationBusy.value = true
+	try { await reconcileEventRecipients(props.gallery.id); await loadOperations(); showSuccess(t('proofing_gallery', 'Recipient links checked and repaired.')) } catch { showError(t('proofing_gallery', 'Recipient links could not be checked.')) } finally { operationBusy.value = false }
+}
+
+function schedulePolling() {
+	if (pollTimer) clearTimeout(pollTimer)
+	if (!operations.value?.waves.some(wave => ['scheduled', 'releasing'].includes(wave.status))) return
+	pollTimer = setTimeout(() => { loadOperations().catch(() => {}) }, 2000)
 }
 
 async function uploadDirectory(event: Event) {
@@ -247,7 +294,7 @@ async function refreshFolders() {
 }
 
 async function deliver() {
-	if (!setup.value || !await persist('review')) return
+	if (!setup.value || !await persist('delivery')) return
 	if (!setup.value.readiness.ready) { showError(t('proofing_gallery', 'Resolve the highlighted checks before creating links.')); return }
 	const releaseMode = setup.value.delivery.releaseMode
 	const message = releaseMode === 'now'
@@ -261,8 +308,6 @@ async function deliver() {
 		const result = await deliverEventSetup(props.gallery.id, setup.value.revision, crypto.randomUUID().replaceAll('-', ''))
 		emit('updated', result.gallery)
 		showSuccess(releaseMode === 'now' ? t('proofing_gallery', 'Client link creation started.') : t('proofing_gallery', 'Delivery round saved.'))
-		advancedOpen.value = true
-		operationsRevision.value++
 		await load()
 	} catch (error) {
 		const message = typeof error === 'object' && error !== null && 'response' in error ? (error as { response?: { data?: { message?: string } } }).response?.data?.message : null
@@ -276,21 +321,17 @@ function stepState(step: EventSetupStep): 'current' | 'complete' | 'open' {
 	return target < current ? 'complete' : 'open'
 }
 
+watch([visibilityQuery, visibilityRole], () => { visibilityPage.value = 0; selectedFolderIds.value = [] })
+watch(() => filteredVisibilityFolders.value.length, total => { visibilityPage.value = Math.min(visibilityPage.value, pageCount(total) - 1) })
 onMounted(load)
+onBeforeUnmount(() => { if (pollTimer) clearTimeout(pollTimer) })
 </script>
 
 <template>
 	<section class="event-workflow" aria-labelledby="event-workflow-title">
-		<header class="event-workflow__hero">
-			<div>
-				<span>{{ t('proofing_gallery', 'Event delivery') }}</span><h2 id="event-workflow-title">
-					{{ t('proofing_gallery', 'From event folders to private client links') }}
-				</h2><p>{{ t('proofing_gallery', 'Prepare the folder structure once, verify what each client sees, and create every link in one controlled delivery.') }}</p>
-			</div>
-			<div v-if="setup" class="event-workflow__facts">
-				<strong>{{ validRecipients.length }}</strong><span>{{ t('proofing_gallery', 'client links prepared') }}</span><small>{{ t('proofing_gallery', '{shared} shared · {private} private photos', { shared: sharedFolders.reduce((sum, folder) => sum + folder.totalMediaCount, 0), private: privateMedia }) }}</small>
-			</div>
-		</header>
+		<h2 id="event-workflow-title" class="sr-only">
+			{{ t('proofing_gallery', 'Event delivery') }}
+		</h2>
 
 		<div v-if="loading" class="event-workflow__loading">
 			<NcLoadingIcon :size="32" /> {{ t('proofing_gallery', 'Loading event workflow…') }}
@@ -303,14 +344,14 @@ onMounted(load)
 					:data-state="stepState(step.id)"
 					:aria-current="activeStep === step.id ? 'step' : undefined"
 					@click="go(step.id)">
-					<span>{{ String(index + 1).padStart(2, '0') }}</span><span><strong class="step-label-long">{{ step.label }}</strong><strong class="step-label-short">{{ step.shortLabel }}</strong><small>{{ step.description }}</small></span>
+					<component :is="stepIcons[step.id]" :size="22" aria-hidden="true" /><span><strong class="step-label-long">{{ step.label }}</strong><strong class="step-label-short">{{ step.shortLabel }}</strong><small>{{ step.description }}</small></span><i aria-hidden="true">{{ stepState(step.id) === 'complete' ? '✓' : String(index + 1) }}</i>
 				</button>
 			</nav>
 
 			<main class="event-task">
 				<section v-if="activeStep === 'photos'" aria-labelledby="event-photos-title">
 					<header>
-						<span>{{ t('proofing_gallery', 'Step 1') }}</span><h3 id="event-photos-title">
+						<span>{{ t('proofing_gallery', 'Photo source') }}</span><h3 id="event-photos-title" tabindex="-1">
 							{{ t('proofing_gallery', 'Prepare the event photos') }}
 						</h3><p>{{ t('proofing_gallery', 'Use the selected Nextcloud source or upload an exported event folder. Subfolders are preserved.') }}</p>
 					</header>
@@ -339,21 +380,73 @@ onMounted(load)
 
 				<section v-else-if="activeStep === 'visibility'" aria-labelledby="event-visibility-title">
 					<header>
-						<span>{{ t('proofing_gallery', 'Step 2') }}</span><h3 id="event-visibility-title">
-							{{ t('proofing_gallery', 'Who may see each folder?') }}
-						</h3><p>{{ t('proofing_gallery', 'Every folder has one role. Suggestions are highlighted but remain yours to approve.') }}</p>
+						<span>{{ t('proofing_gallery', 'Access map') }}</span><h3 id="event-visibility-title" tabindex="-1">
+							{{ t('proofing_gallery', 'Organize folder access') }}
+						</h3><p>{{ t('proofing_gallery', 'Give every folder one clear audience. The colors remain visible throughout delivery.') }}</p>
 					</header>
-					<div class="folder-role-legend">
-						<span data-role="shared">{{ t('proofing_gallery', 'Everyone') }}</span><span data-role="group">{{ t('proofing_gallery', 'Group') }}</span><span data-role="private">{{ t('proofing_gallery', 'Private') }}</span><span data-role="ignored">{{ t('proofing_gallery', 'Not delivered') }}</span>
+					<div class="folder-role-legend" aria-label="Access summary">
+						<span data-role="shared"><strong>{{ sharedFolders.length }}</strong>{{ t('proofing_gallery', 'Everyone') }}</span><span data-role="group"><strong>{{ groupFolders.length }}</strong>{{ t('proofing_gallery', 'Selected groups') }}</span><span data-role="private"><strong>{{ privateFolders.length }}</strong>{{ t('proofing_gallery', 'One client') }}</span><span data-role="ignored"><strong>{{ setup.folders.filter(folder => role(folder) === 'ignored').length }}</strong>{{ t('proofing_gallery', 'Not delivered') }}</span>
+					</div>
+					<div class="event-list-toolbar">
+						<input v-model="visibilityQuery" type="search" :placeholder="t('proofing_gallery', 'Search folders')">
+						<select v-model="visibilityRole" :aria-label="t('proofing_gallery', 'Filter by visibility')">
+							<option value="">
+								{{ t('proofing_gallery', 'All visibility roles') }}
+							</option><option value="shared">
+								{{ t('proofing_gallery', 'Everyone') }}
+							</option><option value="group">
+								{{ t('proofing_gallery', 'Group') }}
+							</option><option value="private">
+								{{ t('proofing_gallery', 'Private client') }}
+							</option><option value="ignored">
+								{{ t('proofing_gallery', 'Not delivered') }}
+							</option>
+						</select>
+						<span>{{ t('proofing_gallery', '{count} folders', { count: filteredVisibilityFolders.length }) }}</span>
+					</div>
+					<div v-if="selectedFolderIds.length" class="event-bulk-bar">
+						<strong>{{ t('proofing_gallery', '{count} selected', { count: selectedFolderIds.length }) }}</strong><select v-model="bulkRole">
+							<option value="shared">
+								{{ t('proofing_gallery', 'Everyone') }}
+							</option><option value="group">
+								{{ t('proofing_gallery', 'Group') }}
+							</option><option value="private">
+								{{ t('proofing_gallery', 'Private client') }}
+							</option><option value="ignored">
+								{{ t('proofing_gallery', 'Not delivered') }}
+							</option>
+						</select><NcButton variant="secondary" @click="applyBulkRole">
+							{{ t('proofing_gallery', 'Apply visibility') }}
+						</NcButton>
 					</div>
 					<div class="folder-tree">
-						<article v-for="folder in setup.folders"
+						<article v-for="folder in visibleFolders"
 							:key="folder.id"
 							class="folder-role-row"
 							:style="{ '--folder-depth': folder.depth }">
-							<div><strong>{{ folder.name }}</strong><small>{{ folder.path }} · {{ t('proofing_gallery', '{count} photos here, {total} including subfolders', { count: folder.directMediaCount, total: folder.totalMediaCount }) }}</small></div>
-							<label><span class="sr-only">{{ t('proofing_gallery', 'Visibility for {folder}', { folder: folder.path }) }}</span><select :value="role(folder)" @change="changeRole(folder, $event)"><option value="shared">{{ t('proofing_gallery', 'Everyone') }}</option><option value="group">{{ t('proofing_gallery', 'Group') }}</option><option value="private">{{ t('proofing_gallery', 'Private client') }}</option><option value="ignored">{{ t('proofing_gallery', 'Not delivered') }}</option></select><small v-if="folder.suggestion === role(folder) && role(folder) !== 'ignored'">{{ t('proofing_gallery', 'Suggested') }}</small></label>
+							<input v-model="selectedFolderIds"
+								type="checkbox"
+								:value="folder.id"
+								:aria-label="t('proofing_gallery', 'Select {folder}', { folder: folder.path })"><div><strong>{{ folder.name }}</strong><small>{{ folder.path }} · {{ t('proofing_gallery', '{count} photos here, {total} including subfolders', { count: folder.directMediaCount, total: folder.totalMediaCount }) }}</small></div>
+							<div class="role-picker" role="radiogroup" :aria-label="t('proofing_gallery', 'Visibility for {folder}', { folder: folder.path })">
+								<button v-for="option in ([['shared', t('proofing_gallery', 'Everyone')], ['group', t('proofing_gallery', 'Groups')], ['private', t('proofing_gallery', 'One client')], ['ignored', t('proofing_gallery', 'Exclude')]] as const)"
+									:key="option[0]"
+									type="button"
+									role="radio"
+									:data-role="option[0]"
+									:aria-checked="role(folder) === option[0]"
+									@click="setRole(folder, option[0])">
+									{{ option[1] }}
+								</button>
+							</div>
 						</article>
+					</div>
+					<div v-if="pageCount(filteredVisibilityFolders.length) > 1" class="event-pager">
+						<NcButton variant="tertiary" :disabled="visibilityPage === 0" @click="visibilityPage--">
+							{{ t('proofing_gallery', 'Previous') }}
+						</NcButton><span>{{ t('proofing_gallery', 'Page {page} of {pages}', { page: visibilityPage + 1, pages: pageCount(filteredVisibilityFolders.length) }) }}</span><NcButton variant="tertiary" :disabled="visibilityPage + 1 >= pageCount(filteredVisibilityFolders.length)" @click="visibilityPage++">
+							{{ t('proofing_gallery', 'Next') }}
+						</NcButton>
 					</div>
 					<div class="task-actions">
 						<span>{{ t('proofing_gallery', '{shared} shared, {groups} group, {private} private folders', { shared: sharedFolders.length, groups: groupFolders.length, private: privateFolders.length }) }}</span><NcButton variant="primary" :disabled="saving || privateFolders.length === 0" @click="continueFrom('visibility')">
@@ -364,28 +457,21 @@ onMounted(load)
 
 				<section v-else-if="activeStep === 'recipients'" aria-labelledby="event-recipients-title">
 					<header>
-						<span>{{ t('proofing_gallery', 'Step 3') }}</span><h3 id="event-recipients-title">
-							{{ t('proofing_gallery', 'Assign people to private folders') }}
-						</h3><p>{{ t('proofing_gallery', 'Each card becomes its own client link. Add another contact only when that person needs a separate link.') }}</p>
+						<span>{{ t('proofing_gallery', 'Delivery ledger') }}</span><h3 id="event-recipients-title" tabindex="-1">
+							{{ t('proofing_gallery', 'Recipients & links') }}
+						</h3><p>{{ t('proofing_gallery', 'Prepare the next delivery, inspect exact access, and manage released links in one place.') }}</p>
 					</header>
-					<div class="delivery-card-list">
-						<article v-for="folder in privateFolders" :key="folder.id" class="delivery-card">
-							<header>
-								<div><strong>{{ folder.name }}</strong><small>{{ folder.path }} · {{ t('proofing_gallery', '{count} private photos', { count: folder.totalMediaCount }) }}</small></div><NcButton variant="tertiary" @click="addRecipient(folder)">
-									{{ t('proofing_gallery', 'Add separate contact') }}
-								</NcButton>
-							</header>
-							<div v-for="(recipient, index) in recipientsFor(folder.id)" :key="recipient.key" class="recipient-fields">
-								<label><span>{{ t('proofing_gallery', 'Client name') }}</span><input v-model="recipient.name" maxlength="120"></label><label><span>{{ t('proofing_gallery', 'Email (optional)') }}</span><input v-model="recipient.email" type="email"></label><label><span>{{ t('proofing_gallery', 'Language') }}</span><select v-model="recipient.locale"><option :value="null">{{ t('proofing_gallery', 'Gallery default') }}</option><option value="de">Deutsch</option><option value="en">English</option></select></label>
-								<fieldset v-if="groupFolders.length">
-									<legend>{{ t('proofing_gallery', 'Additional group folders') }}</legend><label v-for="group in groupFolders" :key="group.id"><input v-model="recipient.groupFolderIds" type="checkbox" :value="group.id"> {{ group.path }}</label>
-								</fieldset>
-								<NcButton v-if="index > 0" variant="tertiary" @click="removeRecipient(recipient.key)">
-									{{ t('proofing_gallery', 'Remove separate contact') }}
-								</NcButton>
-							</div>
-						</article>
-					</div>
+					<EventRecipientLedger
+						v-model:recipients="setup.recipients"
+						:gallery="gallery"
+						:folders="setup.folders"
+						:private-folders="privateFolders"
+						:group-folders="groupFolders"
+						:shared-folders="sharedFolders"
+						:delivery="setup.delivery"
+						:saving="saving"
+						@save="persist('recipients')"
+						@operations-updated="loadOperations" />
 					<details class="recipient-import">
 						<summary>{{ t('proofing_gallery', 'Import many recipients from CSV') }}</summary>
 						<p>{{ t('proofing_gallery', 'Use the advanced import when names and contacts already exist in a spreadsheet. Nothing is applied before you review the matches.') }}</p>
@@ -393,8 +479,8 @@ onMounted(load)
 							<label><span>{{ t('proofing_gallery', 'Folder matching') }}</span><select v-model="importMatchMode"><option value="exact">{{ t('proofing_gallery', 'Exact only') }}</option><option value="prefix">{{ t('proofing_gallery', 'Exact or unique prefix') }}</option></select></label><label><span>{{ t('proofing_gallery', 'Recipient CSV') }}</span><input type="file" accept=".csv,text/csv" @change="importRecipients"></label>
 						</div>
 						<div v-if="importPreview" class="recipient-import__preview">
-							<strong>{{ t('proofing_gallery', '{ready} ready · {conflicts} need attention', { ready: importPreview.summary.ready, conflicts: importPreview.summary.conflicts }) }}</strong><ul>
-								<li v-for="row in importPreview.rows" :key="row.line" :class="{ conflict: row.conflicts.length }">
+							<strong>{{ t('proofing_gallery', '{ready} ready · {conflicts} need attention', { ready: importPreview.summary.ready, conflicts: importPreview.summary.conflicts }) }}</strong><small v-if="importPreview.rows.length > 100">{{ t('proofing_gallery', 'Showing the first 100 rows. All reviewed rows will be applied.') }}</small><ul>
+								<li v-for="row in importPreview.rows.slice(0, 100)" :key="row.line" :class="{ conflict: row.conflicts.length }">
 									{{ row.name || `#${row.line}` }} → {{ row.folderPath || row.folderInput }}<small v-if="row.conflicts.length">{{ row.conflicts.join(', ') }}</small>
 								</li>
 							</ul><NcButton variant="secondary" :disabled="importPreview.summary.ready === 0" @click="applyRecipientImport">
@@ -411,241 +497,92 @@ onMounted(load)
 
 				<section v-else-if="activeStep === 'delivery'" aria-labelledby="event-options-title">
 					<header>
-						<span>{{ t('proofing_gallery', 'Step 4') }}</span><h3 id="event-options-title">
-							{{ t('proofing_gallery', 'Protect and time the delivery') }}
-						</h3><p>{{ t('proofing_gallery', 'These defaults apply to this delivery round. Individual links can still be managed later.') }}</p>
+						<span>{{ t('proofing_gallery', 'Release console') }}</span><h3 id="event-options-title" tabindex="-1">
+							{{ t('proofing_gallery', 'Protect, release, and monitor') }}
+						</h3><p>{{ t('proofing_gallery', 'Set this round once, resolve any blockers, then follow every link as it is created.') }}</p>
 					</header>
-					<div class="delivery-options">
-						<fieldset><legend>{{ t('proofing_gallery', 'Link protection') }}</legend><label><input v-model="setup.delivery.pinMode" type="radio" value="none"> {{ t('proofing_gallery', 'No PIN') }}</label><label><input v-model="setup.delivery.pinMode" type="radio" value="generated"> {{ t('proofing_gallery', 'Generate a strong PIN for every link') }}</label><label><input v-model="setup.delivery.pinMode" type="radio" value="manual"> {{ t('proofing_gallery', 'Enter PINs with each recipient') }}</label></fieldset><label><span>{{ t('proofing_gallery', 'Links expire on (optional)') }}</span><input v-model="setup.delivery.expiresAt" type="date"></label><NcCheckboxRadioSwitch v-model="setup.delivery.sendInvitations" type="switch">
-							{{ t('proofing_gallery', 'Send email invitations when links are released') }}
-						</NcCheckboxRadioSwitch><fieldset>
-							<legend>{{ t('proofing_gallery', 'Release') }}</legend><label><input v-model="setup.delivery.releaseMode" type="radio" value="draft"> {{ t('proofing_gallery', 'Save as draft') }}</label><label><input v-model="setup.delivery.releaseMode" type="radio" value="now"> {{ t('proofing_gallery', 'Create links now') }}</label><label><input v-model="setup.delivery.releaseMode" type="radio" value="schedule"> {{ t('proofing_gallery', 'Schedule') }}</label><input v-if="setup.delivery.releaseMode === 'schedule'"
-								v-model="setup.delivery.releaseAt"
-								type="datetime-local"
-								:aria-label="t('proofing_gallery', 'Release time')">
-						</fieldset>
+					<div class="release-grid">
+						<div class="delivery-options">
+							<fieldset class="choice-cards">
+								<legend>{{ t('proofing_gallery', 'Link protection') }}</legend><label v-for="choice in ([['none', t('proofing_gallery', 'No PIN'), t('proofing_gallery', 'Fastest for links you send privately.')], ['generated', t('proofing_gallery', 'Generated PIN'), t('proofing_gallery', 'Create a strong individual PIN for every link.')], ['manual', t('proofing_gallery', 'Manual PIN'), t('proofing_gallery', 'Enter each PIN yourself before release.')]] as const)" :key="choice[0]" :class="{ selected: setup.delivery.pinMode === choice[0] }"><input v-model="setup.delivery.pinMode" type="radio" :value="choice[0]"><ShieldKeyIcon :size="21" /><span><strong>{{ choice[1] }}</strong><small>{{ choice[2] }}</small></span></label>
+							</fieldset><label class="date-field"><span>{{ t('proofing_gallery', 'Links expire on (optional)') }}</span><input v-model="setup.delivery.expiresAt" type="date"></label><NcCheckboxRadioSwitch v-model="setup.delivery.sendInvitations" type="switch">
+								{{ t('proofing_gallery', 'Send email invitations when links are released') }}
+							</NcCheckboxRadioSwitch><fieldset class="choice-cards">
+								<legend>{{ t('proofing_gallery', 'Release timing') }}</legend><label v-for="choice in ([['draft', t('proofing_gallery', 'Save draft')], ['now', t('proofing_gallery', 'Create now')], ['schedule', t('proofing_gallery', 'Schedule')]] as const)" :key="choice[0]" :class="{ selected: setup.delivery.releaseMode === choice[0] }"><input v-model="setup.delivery.releaseMode" type="radio" :value="choice[0]"><SendClockIcon :size="20" /><strong>{{ choice[1] }}</strong></label><input v-if="setup.delivery.releaseMode === 'schedule'"
+									v-model="setup.delivery.releaseAt"
+									type="datetime-local"
+									:aria-label="t('proofing_gallery', 'Release time')">
+							</fieldset>
+						</div><aside class="release-summary">
+							<span>{{ t('proofing_gallery', 'Ready check') }}</span><strong>{{ validRecipients.length }} {{ t('proofing_gallery', 'client links') }}</strong><small>{{ t('proofing_gallery', '{count} of {capacity} available links', { count: validRecipients.length, capacity: setup.capacity }) }}</small><div class="readiness-checks">
+								<button v-for="check in setup.readiness.checks"
+									:key="check.code"
+									type="button"
+									:data-state="check.state"
+									@click="check.state === 'ready' ? undefined : go(check.code === 'folders_classified' || check.code === 'privacy_scopes' ? 'visibility' : 'recipients')">
+									<CheckCircleIcon v-if="check.state === 'ready'" :size="19" /><AlertCircleIcon v-else :size="19" /><span>{{ readinessLabels[check.code] ?? check.code }}</span>
+								</button>
+							</div><NcButton variant="primary" :disabled="saving || delivering || !setup.readiness.ready" @click="deliver">
+								{{ delivering ? t('proofing_gallery', 'Creating delivery…') : setup.delivery.releaseMode === 'now' ? t('proofing_gallery', 'Create {count} client links', { count: validRecipients.length }) : t('proofing_gallery', 'Save delivery round') }}
+							</NcButton>
+						</aside>
 					</div>
 					<div v-if="setup.delivery.pinMode === 'manual'" class="manual-pin-list">
-						<label v-for="recipient in setup.recipients" :key="recipient.key"><span>{{ recipient.name || folderById(recipient.folderId)?.name }}</span><input v-model="recipient.pin"
+						<label v-for="recipient in visiblePinRecipients" :key="recipient.key"><span>{{ recipient.name || folderById(recipient.folderId)?.name }}</span><input v-model="recipient.pin"
 							minlength="10"
 							maxlength="64"
 							autocomplete="new-password"></label>
-					</div>
-					<div class="task-actions">
-						<span>{{ setup.delivery.sendInvitations ? t('proofing_gallery', 'Email is required for every released invitation.') : t('proofing_gallery', 'Links can be copied or sent manually after creation.') }}</span><NcButton variant="primary" :disabled="saving" @click="continueFrom('delivery')">
-							{{ t('proofing_gallery', 'Review visibility') }}
+					</div><div v-if="setup.delivery.pinMode === 'manual' && pageCount(setup.recipients.length) > 1" class="event-pager">
+						<NcButton variant="tertiary" :disabled="pinPage === 0" @click="pinPage--">
+							{{ t('proofing_gallery', 'Previous') }}
+						</NcButton><span>{{ t('proofing_gallery', 'Page {page} of {pages}', { page: pinPage + 1, pages: pageCount(setup.recipients.length) }) }}</span><NcButton variant="tertiary" :disabled="pinPage + 1 >= pageCount(setup.recipients.length)" @click="pinPage++">
+							{{ t('proofing_gallery', 'Next') }}
 						</NcButton>
 					</div>
-				</section>
-
-				<section v-else aria-labelledby="event-review-title">
-					<header>
-						<span>{{ t('proofing_gallery', 'Step 5') }}</span><h3 id="event-review-title">
-							{{ t('proofing_gallery', 'Review exactly what each client sees') }}
-						</h3><p>{{ t('proofing_gallery', 'No client can browse the event root or another private folder.') }}</p>
-					</header>
-					<div class="readiness-checks">
-						<div v-for="check in setup.readiness.checks" :key="check.code" :data-state="check.state">
-							<span aria-hidden="true">{{ check.state === 'ready' ? '✓' : '!' }}</span><strong>{{ readinessLabels[check.code] ?? check.code }}</strong>
-						</div>
-					</div>
-					<div class="scope-preview-list">
-						<article v-for="recipient in validRecipients" :key="recipient.key">
-							<header><div><strong>{{ recipient.name }}</strong><small>{{ recipient.email || t('proofing_gallery', 'Link delivery without email') }}</small></div><span>{{ folderById(recipient.folderId)?.totalMediaCount ?? 0 }}+ {{ t('proofing_gallery', 'photos') }}</span></header><dl><div><dt>{{ t('proofing_gallery', 'For everyone') }}</dt><dd>{{ sharedFolders.map(folder => folder.path).join(', ') || '—' }}</dd></div><div><dt>{{ t('proofing_gallery', 'Groups') }}</dt><dd>{{ recipient.groupFolderIds.map(id => folderById(id)?.path).filter(Boolean).join(', ') || '—' }}</dd></div><div><dt>{{ t('proofing_gallery', 'Private') }}</dt><dd>{{ folderById(recipient.folderId)?.path }}</dd></div></dl>
+					<section v-if="operations?.waves.length" class="release-history">
+						<header>
+							<div><HistoryIcon :size="22" /><span><strong>{{ activeWaves.length ? t('proofing_gallery', 'Release in progress') : t('proofing_gallery', 'Release history') }}</strong><small>{{ t('proofing_gallery', 'Every delivery round remains available here.') }}</small></span></div><div>
+								<NcButton variant="tertiary" :disabled="operationBusy" @click="exportStatus">
+									{{ t('proofing_gallery', 'Export status') }}
+								</NcButton><NcButton variant="tertiary" :disabled="operationBusy" @click="repairLinks">
+									{{ t('proofing_gallery', 'Check links') }}
+								</NcButton>
+							</div>
+						</header><article v-for="wave in operations.waves"
+							:key="wave.id"
+							class="wave-card"
+							:data-status="wave.status">
+							<div class="wave-heading">
+								<span>#{{ wave.id }} · {{ waveLabel(wave) }}</span><strong>{{ wave.processed }} / {{ wave.total }}</strong>
+							</div><div class="wave-track" :aria-label="t('proofing_gallery', '{processed} of {total} processed', { processed: wave.processed, total: wave.total })">
+								<i :style="{ width: `${wave.total ? (wave.processed / wave.total) * 100 : 0}%` }" />
+							</div><div class="wave-actions">
+								<small v-if="wave.failed">{{ t('proofing_gallery', '{count} failed', { count: wave.failed }) }}</small><NcButton v-if="wave.status === 'draft' || wave.status === 'scheduled'"
+									variant="secondary"
+									:disabled="operationBusy"
+									@click="actOnWave(wave, 'release')">
+									{{ t('proofing_gallery', 'Release now') }}
+								</NcButton><NcButton v-if="wave.status === 'partial_failed'"
+									variant="secondary"
+									:disabled="operationBusy"
+									@click="actOnWave(wave, 'retry')">
+									{{ t('proofing_gallery', 'Retry failed') }}
+								</NcButton><NcButton v-if="wave.pinExportAvailable"
+									variant="tertiary"
+									:disabled="operationBusy"
+									@click="downloadPins(wave)">
+									{{ t('proofing_gallery', 'Download PIN list') }}
+								</NcButton><NcButton v-if="wave.status === 'draft' || wave.status === 'scheduled'"
+									variant="tertiary"
+									:disabled="operationBusy"
+									@click="actOnWave(wave, 'cancel')">
+									{{ t('proofing_gallery', 'Cancel') }}
+								</NcButton>
+							</div>
 						</article>
-					</div>
-					<div class="task-actions">
-						<span>{{ t('proofing_gallery', '{count} of {capacity} available event links will be used.', { count: validRecipients.length, capacity: setup.capacity }) }}</span><NcButton variant="primary" :disabled="saving || delivering || !setup.readiness.ready" @click="deliver">
-							{{ delivering ? t('proofing_gallery', 'Creating delivery…') : setup.delivery.releaseMode === 'now' ? t('proofing_gallery', 'Create {count} client links', { count: validRecipients.length }) : t('proofing_gallery', 'Save delivery round') }}
-						</NcButton>
-					</div>
+					</section>
 				</section>
 			</main>
 		</div>
-
-		<details v-if="setup"
-			:open="advancedOpen"
-			class="event-advanced"
-			@toggle="toggleAdvanced">
-			<summary><strong>{{ t('proofing_gallery', 'Released links and advanced tools') }}</strong><span>{{ t('proofing_gallery', 'Manage delivery rounds, individual links, exports, and repairs.') }}</span></summary><EventDeliveryManager :key="operationsRevision"
-				:gallery="gallery"
-				operations-only
-				@updated="emit('updated', $event)" />
-		</details>
 	</section>
 </template>
-
-<style scoped>
-.event-workflow { --run-ink: var(--color-main-text); --run-muted: var(--color-text-maxcontrast); --run-line: var(--color-border); display: grid; width: min(1180px,100%); min-width: 0; max-width: 100%; gap: 26px; }
-
-.event-workflow__hero { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: end; gap: 28px; padding: 8px 0 24px; border-bottom: 1px solid var(--run-line); }
-
-.event-workflow__hero > div:first-child { display: grid; max-width: 740px; gap: 7px; }
-
-.event-workflow__hero span,.event-task > section > header > span { color: var(--color-primary-element); font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
-
-.event-workflow h2,.event-workflow h3,.event-workflow p { margin: 0; }
-
-.event-workflow__hero h2 { font-size: clamp(27px,4vw,42px); line-height: 1.05; letter-spacing: -.035em; }
-
-.event-workflow__hero p { max-width: 680px; color: var(--run-muted); font-size: 15px; }
-
-.event-workflow__facts { display: grid; min-width: 190px; padding-inline-start: 22px; border-inline-start: 3px solid var(--color-primary-element); }
-
-.event-workflow__facts strong { font-size: 34px; font-variant-numeric: tabular-nums; line-height: 1; }
-
-.event-workflow__facts small { margin-top: 5px; color: var(--run-muted); }
-
-.event-workflow__loading { display: flex; align-items: center; justify-content: center; min-height: 280px; gap: 10px; }
-
-.event-workflow__layout { display: grid; grid-template-columns: minmax(220px,285px) minmax(0,1fr); align-items: start; min-width: 0; gap: clamp(24px,5vw,64px); }
-
-.event-run { position: sticky; top: 16px; display: grid; border-top: 1px solid var(--run-line); }
-
-.event-run button { display: grid; grid-template-columns: 35px 1fr; gap: 10px; padding: 16px 8px; border: 0; border-bottom: 1px solid var(--run-line); background: transparent; color: var(--run-muted); text-align: start; cursor: pointer; }
-
-.event-run button:hover,.event-run button[data-state='current'] { background: var(--color-background-hover); color: var(--run-ink); }
-
-.event-run button[data-state='current'] { box-shadow: inset 3px 0 var(--color-primary-element); }
-
-.event-run button > span:first-child { padding-top: 2px; font-size: 11px; font-variant-numeric: tabular-nums; }
-
-.event-run button > span:last-child { display: grid; gap: 3px; }
-
-.step-label-short { display: none; }
-
-.event-run small { line-height: 1.25; }
-
-.event-task > section { display: grid; gap: 22px; }
-
-.event-task { min-width: 0; }
-
-.event-task > section > header { display: grid; gap: 6px; }
-
-.event-task h3 { font-size: clamp(23px,3vw,32px); letter-spacing: -.025em; }
-
-.event-task > section > header p { color: var(--run-muted); }
-
-.source-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; border: 1px solid var(--run-line); }
-
-.source-card > div { display: grid; min-width: 0; }
-
-.source-card strong,.source-card small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.source-card small { color: var(--run-muted); }
-
-.directory-drop { display: grid; place-items: center; min-height: 190px; gap: 7px; padding: 24px; border: 1px dashed var(--color-primary-element); background: color-mix(in srgb,var(--color-primary-element) 5%,transparent); text-align: center; cursor: pointer; }
-
-.directory-drop input { position: absolute; width: 1px; height: 1px; clip-path: inset(50%); }
-
-.directory-drop strong { font-size: 19px; }
-
-.directory-drop span,.directory-drop small { color: var(--run-muted); }
-
-.directory-drop progress { width: min(360px,100%); }
-
-.task-actions { position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 0; border-top: 1px solid var(--run-line); background: var(--color-main-background); }
-
-.task-actions > span { color: var(--run-muted); font-size: 13px; }
-
-.folder-role-legend { display: flex; flex-wrap: wrap; gap: 8px; }
-
-.folder-role-legend span { padding: 4px 9px; border-inline-start: 3px solid var(--run-line); background: var(--color-background-hover); font-size: 12px; }
-
-.folder-role-legend [data-role='shared'] { border-color: var(--color-primary-element); }
-
-.folder-role-legend [data-role='group'] { border-color: var(--color-warning); }
-
-.folder-role-legend [data-role='private'] { border-color: var(--color-success); }
-
-.folder-tree { display: grid; border-top: 1px solid var(--run-line); }
-
-.folder-role-row { display: grid; grid-template-columns: minmax(0,1fr) minmax(160px,220px); align-items: center; gap: 16px; min-height: 72px; padding: 10px 8px 10px calc(8px + var(--folder-depth) * 20px); border-bottom: 1px solid var(--run-line); }
-
-.folder-role-row > div,.folder-role-row label { display: grid; gap: 3px; }
-
-.folder-role-row small { overflow: hidden; color: var(--run-muted); text-overflow: ellipsis; white-space: nowrap; }
-
-.folder-role-row label > small { color: var(--color-primary-element); font-weight: 650; text-align: end; }
-
-.delivery-card-list,.scope-preview-list { display: grid; gap: 12px; }
-
-.delivery-card { border: 1px solid var(--run-line); }
-
-.delivery-card > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; background: var(--color-background-hover); }
-
-.delivery-card > header div { display: grid; }
-
-.delivery-card small { color: var(--run-muted); }
-
-.recipient-fields { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; padding: 16px; border-top: 1px solid var(--run-line); }
-
-.recipient-fields label,.delivery-options > label,.manual-pin-list label { display: grid; gap: 5px; }
-
-.recipient-fields fieldset { grid-column: 1/-1; display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0; padding: 10px 0 0; border: 0; }
-
-.recipient-fields fieldset legend { margin-bottom: 6px; font-weight: 650; }
-
-.delivery-options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
-
-.delivery-options fieldset { display: grid; gap: 8px; margin: 0; padding: 16px; border: 1px solid var(--run-line); }
-
-.delivery-options legend { padding: 0 5px; font-weight: 700; }
-
-.manual-pin-list { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 10px; padding: 16px; background: var(--color-background-hover); }
-
-.readiness-checks { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
-
-.directory-drop.dragging { border-color: var(--color-primary-element); background: var(--color-primary-element-light); transform: translateY(-1px); }
-
-.recipient-import { padding: 14px 16px; border: 1px solid var(--run-line); border-radius: var(--border-radius-large); }
-
-.recipient-import > summary { cursor: pointer; font-weight: 700; }
-
-.recipient-import > p { margin: 10px 0; color: var(--run-muted); }
-
-.recipient-import__controls { display: flex; flex-wrap: wrap; gap: 12px; }
-
-.recipient-import__controls label { display: grid; gap: 5px; }
-
-.recipient-import__preview { display: grid; gap: 10px; margin-top: 14px; }
-
-.recipient-import__preview ul { max-height: 220px; overflow: auto; border-block: 1px solid var(--run-line); }
-
-.recipient-import__preview li { display: grid; padding: 7px 3px; }
-
-.recipient-import__preview li.conflict { color: var(--color-error-text); }
-
-.readiness-checks div { display: flex; align-items: center; gap: 9px; padding: 11px; border: 1px solid var(--run-line); }
-
-.readiness-checks span { display: grid; place-items: center; width: 23px; height: 23px; border-radius: 50%; background: var(--color-success); color: white; }
-
-.readiness-checks [data-state='blocked'] span { background: var(--color-error); }
-
-.scope-preview-list article { padding: 16px; border: 1px solid var(--run-line); }
-
-.scope-preview-list header { display: flex; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--run-line); }
-
-.scope-preview-list header div { display: grid; }
-
-.scope-preview-list header span { color: var(--run-muted); }
-
-.scope-preview-list dl { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; margin: 12px 0 0; }
-
-.scope-preview-list dl div { min-width: 0; }
-
-.scope-preview-list dt { color: var(--run-muted); font-size: 11px; text-transform: uppercase; }
-
-.scope-preview-list dd { margin: 4px 0 0; overflow-wrap: anywhere; }
-
-.event-advanced { border-top: 1px solid var(--run-line); }
-
-.event-advanced > summary { display: grid; gap: 3px; padding: 18px 0; cursor: pointer; }
-
-.event-advanced > summary span { color: var(--run-muted); font-size: 13px; }
-
-.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-@media(max-width:800px){.event-workflow__hero { grid-template-columns: 1fr; }.event-workflow__facts { padding: 12px 0 0; border-block-start: 3px solid var(--color-primary-element); border-inline-start: 0; }.event-workflow__layout { grid-template-columns: 1fr; }.event-run { position: static; grid-template-columns: repeat(5,minmax(48px,1fr)); overflow: hidden; border: 1px solid var(--run-line); }.event-run button { display: grid; grid-template-columns: 1fr; min-width: 0; padding: 10px 5px; border: 0; border-inline-end: 1px solid var(--run-line); text-align: center; }.event-run button > span:last-child small { display: none; }.event-run button > span:first-child { order: 2; }.event-run button[data-state='current'] { box-shadow: inset 0 -3px var(--color-primary-element); }.recipient-fields,.delivery-options,.readiness-checks,.scope-preview-list dl { grid-template-columns: 1fr; }}
-@media(max-width:520px){.event-run button strong { font-size: 10px; }.event-run .step-label-long { display: none; }.event-run .step-label-short { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.source-card { align-items: stretch; flex-direction: column; }.source-card :deep(button) { align-self: start; }.directory-drop { min-height: 170px; padding: 20px 14px; }.folder-role-row { grid-template-columns: 1fr; padding-inline-start: calc(8px + var(--folder-depth) * 12px); }.delivery-card > header,.task-actions { align-items: stretch; flex-direction: column; }.task-actions { position: static; }.task-actions :deep(button) { width: 100%; }.recipient-fields { padding: 12px; }.scope-preview-list header { flex-direction: column; }}
-@media(prefers-reduced-motion:reduce){* { scroll-behavior: auto !important; }}
-</style>

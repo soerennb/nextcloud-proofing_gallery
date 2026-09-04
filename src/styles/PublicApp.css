@@ -44,7 +44,41 @@
 	background: var(--ion-background-color);
 }
 
-.public-gallery-app--theme-light { --gallery-accent-readable: var(--gallery-accent-on-light); }
+.public-gallery-app--theme-light {
+	--ion-background-color: #fff;
+	--ion-background-color-rgb: 255, 255, 255;
+	--ion-text-color: #1c1c1e;
+	--ion-text-color-rgb: 28, 28, 30;
+	--ion-item-background: #fff;
+	--ion-toolbar-background: #fff;
+	--ion-border-color: rgb(60 60 67 / 20%);
+	--ion-color-medium: #636366;
+	--gallery-bg: #f2f2f7;
+	--gallery-surface: #fff;
+	--gallery-surface-raised: #e5e5ea;
+	--gallery-border: rgb(60 60 67 / 20%);
+	--gallery-text: #1c1c1e;
+	--gallery-muted: #636366;
+	--gallery-accent-readable: var(--gallery-accent-on-light);
+}
+
+.public-gallery-app--theme-dark {
+	--ion-background-color: #000;
+	--ion-background-color-rgb: 0, 0, 0;
+	--ion-text-color: #fff;
+	--ion-text-color-rgb: 255, 255, 255;
+	--ion-item-background: #1c1c1e;
+	--ion-toolbar-background: #000;
+	--ion-border-color: rgb(255 255 255 / 17%);
+	--ion-color-light: #2c2c2e;
+	--ion-color-medium: #aeaeb2;
+	--gallery-bg: #000;
+	--gallery-surface: #1c1c1e;
+	--gallery-surface-raised: #2c2c2e;
+	--gallery-border: rgb(255 255 255 / 17%);
+	--gallery-text: #fff;
+	--gallery-muted: #aeaeb2;
+}
 
 @media (prefers-color-scheme: light) {
 	.public-gallery-app--theme-auto { --gallery-accent-readable: var(--gallery-accent-on-light); }
@@ -94,6 +128,17 @@
 	--gallery-glass: rgb(255 255 255 / 92%);
 	--gallery-glass-border: rgb(17 19 24 / 12%);
 	--gallery-accent-readable: var(--gallery-accent-on-light);
+}
+
+.public-gallery--theme-dark {
+	--gallery-bg: #000;
+	--gallery-surface: #1c1c1e;
+	--gallery-surface-raised: #2c2c2e;
+	--gallery-border: rgb(255 255 255 / 17%);
+	--gallery-text: #fff;
+	--gallery-muted: #aeaeb2;
+	--gallery-glass: rgb(28 28 30 / 94%);
+	--gallery-glass-border: rgb(255 255 255 / 14%);
 }
 
 @media (prefers-color-scheme: light) {

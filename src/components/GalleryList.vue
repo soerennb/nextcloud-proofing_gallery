@@ -42,6 +42,7 @@ function previewUrl(gallery: GalleryListItem): string {
 				<span class="gallery-row__identity">
 					<strong>{{ gallery.title }}</strong>
 					<small>
+						{{ gallery.deliveryMode === 'event' ? t('proofing_gallery', 'Event delivery') + ' · ' : '' }}
 						{{ gallery.sourceType === 'collection' ? t('proofing_gallery', 'Collection') + ' · ' : '' }}
 						{{ gallery.mode === 'collaboration'
 							? t('proofing_gallery', 'Proofing')
@@ -64,7 +65,7 @@ function previewUrl(gallery: GalleryListItem): string {
 					role="menuitem"
 					type="button"
 					@click="emit('share', gallery)">
-					{{ t('proofing_gallery', 'Share') }}
+					{{ gallery.deliveryMode === 'event' ? t('proofing_gallery', 'Event delivery') : t('proofing_gallery', 'Share') }}
 				</button>
 				<button
 					v-if="archived && gallery.permissions.canArchive"

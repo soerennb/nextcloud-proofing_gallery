@@ -51,9 +51,10 @@ function toGallery(bootstrap: PreviewBootstrap): PublicGallery {
 		id: bootstrap.galleryId,
 		title: bootstrap.title,
 		token: PREVIEW_TOKEN,
+		deliveryMode: 'standard',
 		settings,
 		initialPage: {
-			gallery: { id: bootstrap.galleryId, title: bootstrap.title, settings },
+			gallery: { id: bootstrap.galleryId, title: bootstrap.title, deliveryMode: 'standard', settings },
 			items,
 			s: [],
 			total: items.length,

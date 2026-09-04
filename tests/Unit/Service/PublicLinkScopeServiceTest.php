@@ -48,6 +48,16 @@ final class PublicLinkScopeServiceTest extends TestCase {
 		self::assertFalse($service->visiblePath($link, 'Kinder/Ben'));
 	}
 
+	public function testLegacyRootDetailsExposeNamesAndSafeDefaultRoles(): void {
+		$link = $this->link('', 'folder');
+		$link->setAllowedRootList(['Allgemein', 'Kinder/Anna']);
+
+		self::assertSame([
+			['path' => 'Allgemein', 'name' => 'Allgemein', 'role' => 'shared'],
+			['path' => 'Kinder/Anna', 'name' => 'Anna', 'role' => 'shared'],
+		], (new PublicLinkScopeService())->rootDetails($link));
+	}
+
 	private function link(string $startPath, string $viewMode): PublicLink {
 		$link = new PublicLink();
 		$link->setStartPath($startPath);
