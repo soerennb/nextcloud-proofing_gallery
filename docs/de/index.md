@@ -10,3 +10,7 @@ Präsentation, Abstimmung, Auswahl, Upload und Auslieferung werden ergänzt.
 
 Benutzer- und Administrationshandbuch sind außerdem vollständig in der App
 enthalten und benötigen keine Verbindung zu GitHub.
+
+Die aktuelle Einstellungs-Hierarchie, Event-Auslieferungswellen,
+Datenschutzgrenzen und Betriebswarteschlangen sind in den Architektur-,
+Betriebs-, Datenschutz- und App-Store-Dokumenten des Repositorys beschrieben.

@@ -36,6 +36,11 @@ scan the complete rewritten history before publishing it. The sanitizer removes
 `.agents`, `.beads`, `.claude`, `.codex`, `AGENTS.md`, and `CLAUDE.md` in
 addition to rewriting configured private metadata.
 
+Public documentation assets under `docs/public/` are part of the sanitized
+release surface. Review generated screenshots for fictional data, stable
+layout, and matching full-size/thumbnail pairs before updating App Store
+metadata in `appinfo/info.xml`.
+
 For later updates, use `scripts/prepare-incremental-public-history.sh` with the
 same private metadata inputs and an explicit public commit message. Both scripts
 accept a space-separated list of private author emails in
@@ -44,6 +49,12 @@ the same public author. It starts
 from the existing public `main`, replaces its working tree with the fully
 sanitized internal end state, and creates exactly one deterministic public sync
 commit. The result must remain a fast-forward of the fetched public branch.
+
+Content alternatives are matched as standalone tokens. This is important when
+a private name is a prefix of the public repository identity: for example,
+`internal.example.invalid` removes a standalone private name without changing the public
+`soerennb` GitHub and Pages URLs. Email addresses listed in
+`PRIVATE_AUTHOR_EMAIL` are replaced independently.
 
 Run the incremental preparation twice into separate new destinations and
 require identical public head hashes. Review the complete diff, retain a full

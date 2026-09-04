@@ -6,8 +6,9 @@ The controls available to you can be restricted by your Nextcloud administrator.
 ## Create a gallery
 
 1. Open **Proofing Gallery** and choose **New project**.
-2. Choose the job you want to complete: deliver files, present a story, collect
-   a selection, run proofing, or receive files.
+2. Choose the purpose that matches the job: **Show photos only**, **Deliver
+   finished photos**, **Collect a selection**, **Review together**, or
+   **Receive files**.
 3. Enter a title, then choose from the audiences and sources that fit that job.
    Existing folders, new folders, and curated collections remain available
    where they make sense. Delivery, presentation, selection, and proofing jobs
@@ -19,6 +20,12 @@ The controls available to you can be restricted by your Nextcloud administrator.
 A folder gallery references one existing folder. A collection combines files
 from several folder galleries without copying them. Collection sources must
 belong to the same owner, and collections cannot accept guest uploads.
+
+The wizard keeps three choices separate: the project purpose describes the
+workflow, the gallery mode is **Presentation** or **Proofing**, and the delivery
+mode is **Standard** or **Event**. Event delivery is available for the delivery,
+showcase, selection, and proofing purposes; receive-files projects use one
+moderated upload inbox and do not support collections or event delivery.
 
 ## Deliver a volume event privately
 
@@ -47,6 +54,11 @@ and optional `groups` columns. Drafts, schedules, individual links, exports,
 retries, repairs, and link rotation remain in the recipient and release areas.
 Email addresses are encrypted at rest.
 
+The final **Release** step creates one scoped link per recipient. The link only
+contains the shared folders, any assigned group folders, and that recipient's
+private folder. A successful release can be inspected in the ledger; failed
+recipients can be retried without recreating successful links.
+
 ## Work through a project
 
 The gallery workspace separates the common tasks:
@@ -64,6 +76,12 @@ The gallery workspace separates the common tasks:
 
 Changes to gallery settings use revision checks. If another browser changed the
 same gallery, reload the current state instead of overwriting it blindly.
+
+Settings are intentionally layered. Administrators define instance policies and
+defaults, owners configure the gallery, each public link can further restrict
+access, and an event release wave can restrict its own recipient links again.
+The most restrictive applicable policy wins; a client cannot use a capability
+that is disabled at an earlier layer.
 
 When an owner uploads files whose names already exist, Proofing Gallery opens
 the standard Nextcloud conflict dialog before transferring them. Each incoming
@@ -139,11 +157,17 @@ decisions remain in the Proofing Gallery interface.
 
 ## Downloads and guest uploads
 
-Depending on link policy, guests can download individual originals, a ZIP of a
-saved selection, or a printable contact sheet made from previews. Individual
-and selection downloads also offer metadata-free 2048 px and 1600 px JPEGs,
-optionally with the gallery watermark; smaller images are never enlarged.
-Large deliveries are bounded by administrator limits.
+Depending on link policy, guests can have **no downloads**, download individual
+files, download a ZIP of a saved selection, or download the complete gallery.
+The complete-gallery option also includes individual and selection downloads.
+Individual and selection downloads offer the original or metadata-free 2048 px
+and 1600 px JPEGs, optionally with the gallery watermark; smaller images are
+never enlarged. A printable contact sheet contains previews, not originals.
+Administrator limits bound file counts and delivery size.
+
+Event delivery applies this policy to the whole release wave. It still keeps
+each recipient inside their assigned folder scope, and a later wave with a more
+generous policy does not change already released links.
 
 Guest uploads are resumable and enter a hidden moderation inbox. Owners or
 authorized managers accept an upload with a conflict-free filename or reject

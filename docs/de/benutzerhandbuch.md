@@ -7,8 +7,8 @@ Nextcloud-Administration einschränken.
 ## Galerie erstellen
 
 1. Öffne **Proofing Gallery** und wähle **Neues Projekt**.
-2. Wähle die Aufgabe: Dateien ausliefern, eine Geschichte präsentieren, eine
-   Auswahl einsammeln, Korrekturen abstimmen oder Dateien empfangen.
+2. Wähle den passenden Zweck: **Fotos zeigen**, **Fertige Fotos ausliefern**,
+   **Auswahl einsammeln**, **Gemeinsam prüfen** oder **Dateien empfangen**.
 3. Vergib einen Titel und wähle anschließend nur aus den Empfänger- und
    Quellenoptionen, die zu dieser Aufgabe passen. Vorhandene Ordner, neue Ordner
    und kuratierte Sammlungen bleiben dort verfügbar, wo sie sinnvoll sind.
@@ -21,6 +21,13 @@ Nextcloud-Administration einschränken.
 Eine Ordnergalerie verweist auf einen vorhandenen Ordner. Eine Sammlung fasst
 Dateien aus mehreren eigenen Ordnergalerien ohne Kopien zusammen. Sammlungen
 können keine Gast-Uploads empfangen.
+
+Der Assistent hält drei Entscheidungen getrennt: Der Zweck beschreibt den
+Arbeitsablauf, der Galeriemodus ist **Präsentation** oder **Proofing**, und der
+Auslieferungsmodus ist **Standard** oder **Event**. Event-Auslieferung gibt es
+für Auslieferung, Präsentation, Auswahl und Korrektur; Empfangsprojekte haben
+nur einen moderierten Upload-Eingang und unterstützen weder Sammlungen noch
+Event-Auslieferung.
 
 ## Serien-Events privat ausliefern
 
@@ -54,6 +61,11 @@ einzelne Links, Exporte, Wiederholungen, Reparaturen und Linkwechsel bleiben in
 den Empfänger- und Freigabebereichen verfügbar. E-Mail-Adressen werden
 verschlüsselt gespeichert.
 
+Der abschließende Schritt erzeugt je Empfänger einen beschränkten Link. Dieser
+enthält nur gemeinsame Ordner, zugewiesene Gruppenordner und genau den privaten
+Ordner des Empfängers. Fehlgeschlagene Empfänger können nach einer erfolgreichen
+Auslieferung einzeln wiederholt werden.
+
 ## Projekt bearbeiten
 
 Der Arbeitsbereich ist nach Aufgaben gegliedert:
@@ -72,6 +84,11 @@ Der Arbeitsbereich ist nach Aufgaben gegliedert:
 
 Änderungen verwenden Revisionsprüfungen. Hat ein anderes Browserfenster die
 Galerie verändert, lade den aktuellen Stand, statt ihn unbemerkt zu überschreiben.
+
+Einstellungen sind bewusst gestaffelt: Die Administration legt Instanzregeln
+und Vorgaben fest, Eigentümer konfigurieren die Galerie, jeder öffentliche Link
+kann Rechte weiter einschränken und eine Event-Auslieferungswelle kann ihre
+Empfängerlinks nochmals begrenzen. Es gilt immer die strengste wirksame Regel.
 
 Lädt ein Eigentümer Dateien hoch, deren Namen bereits vorhanden sind, öffnet
 Proofing Gallery vor der Übertragung den üblichen Nextcloud-Konfliktdialog. Jede
@@ -148,11 +165,17 @@ bleiben in der Oberfläche von Proofing Gallery.
 
 ## Downloads und Gast-Uploads
 
-Abhängig vom Link dürfen Gäste einzelne Originale, ein ZIP ihrer Auswahl oder
-einen Kontaktbogen aus Vorschauen laden. Für einzelne Dateien und Auswahl-ZIPs
-stehen außerdem metadatenfreie JPEGs mit 2048 px oder 1600 px bereit, optional
-mit dem Galerie-Wasserzeichen; kleinere Bilder werden nie hochskaliert.
-Administrationslimits begrenzen große Auslieferungen.
+Abhängig von der Linkregel gibt es **keine Downloads**, einzelne Dateien, ein
+ZIP gespeicherter Auswahlen oder die komplette Galerie. Die komplette Galerie
+schließt Einzel- und Auswahl-Downloads ein. Für einzelne Dateien und
+Auswahl-ZIPs stehen das Original oder metadatenfreie JPEGs mit 2048 px oder
+1600 px bereit, optional mit dem Galerie-Wasserzeichen; kleinere Bilder werden
+nie hochskaliert. Ein Kontaktbogen enthält Vorschauen, keine Originale.
+Administrationslimits begrenzen Dateianzahl und Auslieferungsgröße.
+
+Bei Event-Auslieferungen gilt die Regel für die gesamte Welle. Jeder Empfänger
+bleibt trotzdem auf seinen Ordnerumfang beschränkt; eine spätere großzügigere
+Welle erweitert bereits veröffentlichte Links nicht.
 
 Gast-Uploads sind fortsetzbar und landen zunächst in einem versteckten
 Prüfeingang. Eigentümer oder berechtigte Manager nehmen sie unter konfliktfreien

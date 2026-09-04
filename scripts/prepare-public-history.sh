@@ -9,6 +9,11 @@ private_author_email="${PRIVATE_AUTHOR_EMAIL:-}"
 private_content_pattern="${PRIVATE_CONTENT_PATTERN:-}"
 public_author_email="${PUBLIC_AUTHOR_EMAIL:-soerennb@users.noreply.github.com}"
 
+# Content alternatives are matched as standalone tokens. This keeps a private
+# token such as "internal.example.invalid" from rewriting the public "soerennb" repository
+# identity while still removing standalone private names and domains.
+source "${repo_dir}/scripts/lib/public-history-sanitizer.sh"
+
 if [[ -z "${destination}" ]]; then
 	echo "Usage: $0 <new-empty-destination>" >&2
 	exit 2
@@ -52,7 +57,8 @@ for email in "${private_email_list[@]}"; do
 	printf 'soerennb <%s> <%s>\n' "${public_author_email}" "${email}" >> "${mailmap_file}"
 	printf 'literal:%s==>%s\n' "${email}" "${public_author_email}" >> "${replacement_file}"
 done
-printf 'regex:%s==>internal.example.invalid\n' "${private_content_pattern}" >> "${replacement_file}"
+private_content_regex="$(public_history_token_regex "${private_content_pattern}")"
+printf 'regex:%s==>internal.example.invalid\n' "${private_content_regex}" >> "${replacement_file}"
 
 git filter-repo --force \
 	--path .agents \
@@ -65,21 +71,24 @@ git filter-repo --force \
 	--mailmap "${mailmap_file}" \
 	--replace-text "${replacement_file}"
 
+public_history_clear_replace_refs
+
 private_pattern="${private_content_pattern}"
 for email in "${private_email_list[@]}"; do
 	private_pattern+="|${email//./\\.}"
 done
-if git log --all --format='%an <%ae>%n%cn <%ce>%n%B' | grep -Eiq "${private_pattern}"; then
+private_scan_regex="$(public_history_scan_regex "${private_pattern}")"
+if git log --all --format='%an <%ae>%n%cn <%ce>%n%B' | grep -Ei "${private_scan_regex}" >/dev/null; then
 	echo "Private metadata remains in commit metadata or messages." >&2
 	exit 1
 fi
-if git rev-list --objects --all | grep -Eiq '(^| )(.beads|.agents|.claude|.codex)/|(^| )(AGENTS|CLAUDE)\.md$'; then
+if git rev-list --objects --all | grep -Ei '(^| )(.beads|.agents|.claude|.codex)/|(^| )(AGENTS|CLAUDE)\.md$' >/dev/null; then
 	echo "Internal files remain in the rewritten object graph." >&2
 	exit 1
 fi
 private_content_found=0
 while read -r commit; do
-	if git grep -I -n -E "${private_pattern}" "${commit}"; then
+	if git grep -I -n -E "${private_scan_regex}" "${commit}"; then
 		private_content_found=1
 	fi
 done < <(git rev-list --all)

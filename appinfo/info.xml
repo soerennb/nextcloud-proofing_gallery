@@ -4,19 +4,23 @@
 	<id>proofing_gallery</id>
 	<name lang="en">Proofing Gallery</name>
 	<name lang="de">Proofing Gallery – Kundengalerien</name>
-	<summary lang="en">Branded client galleries and collaborative photo proofing</summary>
-	<summary lang="de">Moderne Kundengalerien für Bildauswahl, Feedback und Freigabe</summary>
+	<summary lang="en">Branded client galleries, private event delivery, and collaborative photo proofing</summary>
+	<summary lang="de">Kundengalerien, private Event-Auslieferung und kollaborative Bildauswahl</summary>
 	<description lang="en"><![CDATA[
 Publish existing Nextcloud folders as customizable client galleries.
 Collect likes, workflow states, comments, annotations, and named selections
-without copying or changing original files.
+without copying or changing original files. Deliver finished work, collect
+client decisions, receive uploads, or privately release shared and participant
+folders to event recipients.
 	]]></description>
 	<description lang="de"><![CDATA[
 Veröffentliche vorhandene Nextcloud-Ordner als individuell gestaltbare
 Kundengalerien. Sammle Favoriten, Bearbeitungsstände, Kommentare, Anmerkungen
 und benannte Auswahlen, ohne Originaldateien zu kopieren oder zu verändern.
+Liefere fertige Arbeiten aus, sammle Kundenentscheidungen, empfange Uploads
+oder liefere gemeinsame und persönliche Event-Ordner privat aus.
 	]]></description>
-	<version>0.8.2</version>
+	<version>0.9.0</version>
 	<licence>AGPL-3.0-or-later</licence>
 	<author>soerennb</author>
 	<namespace>ProofingGallery</namespace>
@@ -31,11 +35,11 @@ und benannte Auswahlen, ohne Originaldateien zu kopieren oder zu verändern.
 		<admin>https://soerennb.github.io/nextcloud-proofing_gallery/en/admin-guide/</admin>
 		<developer>https://soerennb.github.io/nextcloud-proofing_gallery/en/development/</developer>
 	</documentation>
-	<screenshot small-thumbnail="https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/public-showcase-desktop-small.png">https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/public-showcase-desktop.png</screenshot>
-	<screenshot small-thumbnail="https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/public-lightbox-desktop-small.png">https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/public-lightbox-desktop.png</screenshot>
-	<screenshot small-thumbnail="https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/culling-focus-desktop-small.png">https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/culling-focus-desktop.png</screenshot>
-	<screenshot small-thumbnail="https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/design-studio-desktop-small.png">https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/design-studio-desktop.png</screenshot>
 	<screenshot small-thumbnail="https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/owner-dashboard-desktop-small.png">https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/owner-dashboard-desktop.png</screenshot>
+	<screenshot small-thumbnail="https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/public-showcase-desktop-small.png">https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/public-showcase-desktop.png</screenshot>
+	<screenshot small-thumbnail="https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/public-collaboration-desktop-small.png">https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/public-collaboration-desktop.png</screenshot>
+	<screenshot small-thumbnail="https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/public-event-albums-desktop-small.png">https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/public-event-albums-desktop.png</screenshot>
+	<screenshot small-thumbnail="https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/event-release-desktop-small.png">https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/event-release-desktop.png</screenshot>
 	<screenshot small-thumbnail="https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/public-showcase-mobile-small.png">https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/public-showcase-mobile.png</screenshot>
 	<dependencies>
 		<php min-version="8.1" max-version="8.6"/>

@@ -120,6 +120,38 @@ contain one `proofing_gallery` directory, remain below 20 MiB, and contain both
 6. Verify the version, supported Nextcloud releases, metadata, screenshots, and
    install/update behavior in the App Store and on a clean Nextcloud instance.
 
+### Screenshot review
+
+Screenshots are generated only from the isolated loopback Studio seeded with
+fictional media and recipient data. The reproducible capture matrix covers the
+owner dashboard and workspaces, the culling/darkroom focus, administrator
+settings, standard public galleries, proofing controls, downloads, uploads,
+and event delivery. It exercises representative behavioral and visual
+equivalence classes rather than every possible boolean setting, with desktop
+and mobile checks for the public workflows.
+
+Run `make studio-screenshots` to rebuild the complete local candidate matrix
+under `.local/screenshot-candidates/`. The reviewed App Store selection is
+maintained as six full-size/thumbnail pairs under `docs/public/screenshots/`:
+
+- `owner-dashboard-desktop`
+- `public-showcase-desktop`
+- `public-collaboration-desktop`
+- `public-event-albums-desktop`
+- `event-release-desktop`
+- `public-showcase-mobile`
+
+Run `make studio-screenshot-pairs` to recreate that selection, or pass an
+explicit `SCREENSHOT_NAMES="..."` list for another reviewed subset. Review
+both the candidate matrix and the selected pairs before publishing them.
+
+Each App Store image is stored with a full-size file and a matching thumbnail
+under `docs/public/screenshots/`. Check the rendered result for clipped content,
+horizontal overflow, missing media, browser errors, visible credentials, and
+real personal data. Update the corresponding `<screenshot>` entries in
+`appinfo/info.xml` only after this review; the public documentation and release
+metadata must refer to the same filenames.
+
 Rerunning a release is safe only when the existing GitHub archive and checksum
 match the newly built files. A mismatch aborts publication; never overwrite an
 already published stable artifact.

@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - "docs/**"
+      - "scripts/build-docs-site.mjs"
+      - "scripts/check-docs.mjs"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/docs.yml"
