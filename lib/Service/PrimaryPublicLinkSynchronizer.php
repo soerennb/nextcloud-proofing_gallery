@@ -9,6 +9,8 @@ use OCA\ProofingGallery\Db\PublicLink;
 use OCA\ProofingGallery\Db\PublicLinkMapper;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\Share\IManager;
+use OCP\Share\Exceptions\ShareNotFound;
 
 final class PrimaryPublicLinkSynchronizer {
 	public function __construct(
@@ -16,6 +18,7 @@ final class PrimaryPublicLinkSynchronizer {
 		private PublicLinkPolicyService $policies,
 		private PolicyService $instancePolicies,
 		private ITimeFactory $clock,
+		private IManager $shareManager,
 	) {
 	}
 
@@ -68,6 +71,24 @@ final class PrimaryPublicLinkSynchronizer {
 	public function synchronizePrimaryNavigation(Gallery $gallery): void {
 		if ($gallery->getShareToken() === null) return;
 		$this->ensurePrimary($gallery);
+	}
+
+	public function synchronizeEventDownloadRestriction(Gallery $gallery): void {
+		if ($gallery->getDeliveryMode() !== 'event') return;
+		$settings = \OCA\ProofingGallery\Dto\GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
+		if ($settings->delivery->downloadScope->allowsIndividual()) return;
+		foreach ($this->links->findForGallery($gallery->getId()) as $link) {
+			if ($link->getIsPrimary() || $link->getStatus() !== 'active') continue;
+			try {
+				$share = $this->shareManager->getShareByToken($link->getToken());
+				if (!$share->getHideDownload()) {
+					$share->setHideDownload(true);
+					$this->shareManager->updateShare($share);
+				}
+			} catch (ShareNotFound) {
+				// Link reconciliation handles an already missing native share.
+			}
+		}
 	}
 
 	public function markPrimaryRevoked(Gallery $gallery): void {

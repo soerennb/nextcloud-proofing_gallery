@@ -642,6 +642,7 @@ onBeforeUnmount(() => {
 					v-else-if="activeTab === 'share'"
 					v-model:settings="draft.settings"
 					:gallery="gallery"
+					:save-gallery-settings="flushSave"
 					@open-sharing="openSharing"
 					@event-setup-updated="eventSetup = $event"
 					@updated="emit('updated', $event)" />

@@ -971,6 +971,31 @@ test('public gallery remains usable on a narrow viewport', async ({ page, reques
 	})
 })
 
+test('changing a published gallery download policy updates the native share', async ({ request, baseURL }) => {
+	const fixture = await state()
+	const apiHeaders = { Authorization: `Basic ${Buffer.from('admin:admin').toString('base64')}`, 'OCS-APIRequest': 'true' }
+	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
+	const created = await request.post(`${galleries}?format=json`, { headers: apiHeaders, data: { folderId: fixture.folderId, title: 'E2E download policy sync', settings: { mode: 'presentation', publicLocale: 'en' } } })
+	const gallery = await created.json() as { id: number }
+	const galleryEndpoint = `${galleries}/${gallery.id}`
+	try {
+		const media = await request.get(`${galleryEndpoint}/media?format=json&limit=100`, { headers: apiHeaders }).then(response => response.json()) as { items: Array<{ id: number; name: string }> }
+		const proof = media.items.find(item => item.name === 'proof.png')
+		expect(proof).toBeTruthy()
+		const published = await request.post(`${galleryEndpoint}/publish?format=json`, { headers: apiHeaders, data: { allowDownloads: false } })
+		expect(published.ok()).toBe(true)
+		const token = (await published.json() as { gallery: { shareToken: string } }).gallery.shareToken
+		expect((await request.get(`${baseURL}/apps/proofing_gallery/public/${token}/media/${proof!.id}/download`)).status()).toBe(403)
+		const before = await request.get(`${galleryEndpoint}?format=json`, { headers: apiHeaders }).then(response => response.json()) as { revision: number }
+		const updated = await request.put(`${galleryEndpoint}?format=json`, { headers: apiHeaders, data: { settings: { delivery: { downloadScope: 'all' } }, expectedRevision: before.revision } })
+		expect(updated.ok()).toBe(true)
+		const download = await request.get(`${baseURL}/apps/proofing_gallery/public/${token}/media/${proof!.id}/download`)
+		expect(download.status()).toBe(200)
+	} finally {
+		await request.delete(`${galleryEndpoint}?format=json`, { headers: apiHeaders })
+	}
+})
+
 test('large mobile masonry stays reachable and responds to a touch swipe', async ({ browser, baseURL, request }) => {
 	test.setTimeout(60_000)
 	const { largeFolderId, largeExtension } = await state()

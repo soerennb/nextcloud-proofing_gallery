@@ -35,6 +35,12 @@ shared/group/private scope, current link, and link history in one row per
 recipient. The final action publishes the hidden technical base when needed and
 creates the client links.
 
+In **Release**, choose the download access for the delivery round: disabled,
+individual files, saved selections, or files plus the entire gallery. The
+setting applies to every shared, group, and private folder in the round, while
+each recipient remains restricted to their assigned folders. Existing released
+links are not broadened automatically when a later round uses a wider policy.
+
 Folder names provide initial recipient names. For large lists, expand the CSV
 import in the recipient step and use `folder`, `name`, `email`, `locale`, `pin`,
 and optional `groups` columns. Drafts, schedules, individual links, exports,

@@ -293,6 +293,20 @@ final class PublicShareService {
 
 	public function synchronizePrimaryNavigation(Gallery $gallery): void {
 		$this->publicLinks->synchronizePrimaryNavigation($gallery);
+		if ($gallery->getDeliveryMode() === 'event') {
+			$this->publicLinks->synchronizeEventDownloadRestriction($gallery);
+			return;
+		}
+		if ($gallery->getShareToken() === null) return;
+		try {
+			$share = $this->shareManager->getShareByToken($gallery->getShareToken());
+			$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
+			$share->setHideDownload(!$settings->delivery->downloadScope->allowsIndividual());
+			$this->shareManager->updateShare($share);
+		} catch (ShareNotFound) {
+			// The public-link policy remains authoritative until the native share is
+			// recreated or repaired by the normal publishing flow.
+		}
 	}
 
 	/**

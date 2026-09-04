@@ -164,6 +164,19 @@ final class EventRecipientService {
 		return compact('processed', 'failed', 'results');
 	}
 
+	/** @return array{updated: int, skipped: int} */
+	public function applyDownloadPolicy(Gallery $gallery, string $downloadScope, string $actorUid): array {
+		$this->assertEvent($gallery);
+		try {
+			$result = $this->links->applyEventDownloadPolicy($gallery, $downloadScope);
+			$this->audit->record((int)$gallery->getId(), null, null, $actorUid, 'download_policy_apply', 'success', null, $this->clock->getTime());
+			return $result;
+		} catch (\Throwable $exception) {
+			$this->audit->record((int)$gallery->getId(), null, null, $actorUid, 'download_policy_apply', 'failed', 'operation_failed', $this->clock->getTime());
+			throw $exception;
+		}
+	}
+
 	public function statusCsv(Gallery $gallery, string $actorUid): string {
 		$this->assertEvent($gallery);
 		$rows = [['Recipient ID', 'Name', 'Email', 'Private folder', 'Groups', 'Status', 'Invitation', 'Health', 'Error', 'Updated at']];

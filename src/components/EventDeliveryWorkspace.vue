@@ -7,18 +7,22 @@ import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { downloadEventBlob, eventWaveLabel as waveLabel } from '../domain/eventDeliveryPresentation.ts'
-import { cancelEventWave, deliverEventSetup, downloadEventPins, downloadEventStatus, fetchEventOperations, fetchEventSetup, previewEventImport, reconcileEventRecipients, releaseEventWave, retryEventWave, saveEventSetup } from '../services/eventApi.ts'
+import { createDefaultGallerySettings } from '../domain/gallerySettings.ts'
+import type { GallerySettings } from '../domain/gallerySettings.ts'
+import { applyEventDownloadPolicy, cancelEventWave, deliverEventSetup, downloadEventPins, downloadEventStatus, fetchEventOperations, fetchEventSetup, previewEventImport, reconcileEventRecipients, releaseEventWave, retryEventWave, saveEventSetup } from '../services/eventApi.ts'
 import type { EventFolderPreview, EventFolderRole, EventImportPreview, EventOperations, EventSetup, EventSetupRecipient, EventSetupStep, EventWave } from '../services/eventApi.ts'
 import { ensureGalleryFolders, prepareOwnerUploadSessions, uploadGalleryMedia } from '../services/galleryApi.ts'
 import type { Gallery } from '../types.ts'
+import DownloadPolicyFields from './DownloadPolicyFields.vue'
 import EventRecipientLedger from './EventRecipientLedger.vue'
 import { eventDeliveryIcons } from './eventDeliveryIcons.ts'
 import './styles/EventDeliveryWorkspace.css'
 
 const { AccountMultiple: AccountMultipleIcon, AlertCircle: AlertCircleIcon, CheckCircle: CheckCircleIcon, FolderLock: FolderLockIcon, History: HistoryIcon, ImageMultiple: ImageMultipleIcon, SendClock: SendClockIcon, ShieldKey: ShieldKeyIcon } = eventDeliveryIcons
 
-const props = defineProps<{ gallery: Gallery }>()
+const props = defineProps<{ gallery: Gallery; saveGallerySettings?: () => Promise<boolean> }>()
 const emit = defineEmits<{ updated: [gallery: Gallery]; 'setup-updated': [setup: EventSetup] }>()
+const settings = defineModel<GallerySettings>('settings', { default: () => createDefaultGallerySettings() })
 const setup = ref<EventSetup | null>(null)
 const activeStep = ref<EventSetupStep>('photos')
 const loading = ref(true)
@@ -171,6 +175,19 @@ async function actOnWave(wave: EventWave, action: 'release' | 'retry' | 'cancel'
 
 async function exportStatus() { downloadEventBlob(await downloadEventStatus(props.gallery.id), 'event-recipient-status.csv') }
 async function downloadPins(wave: EventWave) { downloadEventBlob(await downloadEventPins(props.gallery.id, wave.id), `event-pins-${wave.id}.csv`) }
+async function applyDownloadPolicy() {
+	if (!window.confirm(t('proofing_gallery', 'Apply this download policy to all active event links?'))) return
+	operationBusy.value = true
+	try {
+		if (props.saveGallerySettings && !await props.saveGallerySettings()) {
+			showError(t('proofing_gallery', 'Save the gallery settings before applying this policy.'))
+			return
+		}
+		const result = await applyEventDownloadPolicy(props.gallery.id, settings.value.delivery.downloadScope)
+		showSuccess(t('proofing_gallery', 'Download policy applied to {updated} active links.', { updated: result.updated }))
+		await loadOperations()
+	} catch { showError(t('proofing_gallery', 'The download policy could not be applied to active links.')) } finally { operationBusy.value = false }
+}
 async function repairLinks() {
 	operationBusy.value = true
 	try { await reconcileEventRecipients(props.gallery.id); await loadOperations(); showSuccess(t('proofing_gallery', 'Recipient links checked and repaired.')) } catch { showError(t('proofing_gallery', 'Recipient links could not be checked.')) } finally { operationBusy.value = false }
@@ -293,8 +310,15 @@ async function refreshFolders() {
 	applyNewSuggestions()
 }
 
+async function persistGallerySettings(): Promise<boolean> {
+	if (!props.saveGallerySettings || await props.saveGallerySettings()) return true
+	showError(t('proofing_gallery', 'Save the gallery settings before releasing this delivery.'))
+	return false
+}
+
 async function deliver() {
 	if (!setup.value || !await persist('delivery')) return
+	if (!await persistGallerySettings()) return
 	if (!setup.value.readiness.ready) { showError(t('proofing_gallery', 'Resolve the highlighted checks before creating links.')); return }
 	const releaseMode = setup.value.delivery.releaseMode
 	const message = releaseMode === 'now'
@@ -503,6 +527,14 @@ onBeforeUnmount(() => { if (pollTimer) clearTimeout(pollTimer) })
 					</header>
 					<div class="release-grid">
 						<div class="delivery-options">
+							<DownloadPolicyFields v-model:delivery="settings.delivery" context="event" />
+							<NcButton v-if="operations?.waves.length"
+								class="download-policy-apply"
+								variant="tertiary"
+								:disabled="operationBusy"
+								@click="applyDownloadPolicy">
+								{{ t('proofing_gallery', 'Apply to active links') }}
+							</NcButton>
 							<fieldset class="choice-cards">
 								<legend>{{ t('proofing_gallery', 'Link protection') }}</legend><label v-for="choice in ([['none', t('proofing_gallery', 'No PIN'), t('proofing_gallery', 'Fastest for links you send privately.')], ['generated', t('proofing_gallery', 'Generated PIN'), t('proofing_gallery', 'Create a strong individual PIN for every link.')], ['manual', t('proofing_gallery', 'Manual PIN'), t('proofing_gallery', 'Enter each PIN yourself before release.')]] as const)" :key="choice[0]" :class="{ selected: setup.delivery.pinMode === choice[0] }"><input v-model="setup.delivery.pinMode" type="radio" :value="choice[0]"><ShieldKeyIcon :size="21" /><span><strong>{{ choice[1] }}</strong><small>{{ choice[2] }}</small></span></label>
 							</fieldset><label class="date-field"><span>{{ t('proofing_gallery', 'Links expire on (optional)') }}</span><input v-model="setup.delivery.expiresAt" type="date"></label><NcCheckboxRadioSwitch v-model="setup.delivery.sendInvitations" type="switch">

@@ -70,6 +70,15 @@ function applyPreset(name: string) {
 	if (presets.value[name]) draft.value.policy = structuredClone(presets.value[name])
 }
 
+function downloadScopeLabel(scope: PublicLinkPolicy['downloadScope']): string {
+	return ({
+		none: t('proofing_gallery', 'Downloads disabled'),
+		individual: t('proofing_gallery', 'Individual files'),
+		selection: t('proofing_gallery', 'Saved selections'),
+		all: t('proofing_gallery', 'Files, selections, and entire gallery'),
+	} as const)[scope]
+}
+
 function updatePermission(key: Exclude<keyof PublicLinkPolicy, 'view' | 'downloadScope'>, value: boolean) {
 	draft.value.policy[key] = value
 	if (key === 'comments' && !value) draft.value.policy.annotations = false
@@ -177,7 +186,7 @@ onMounted(load)
 				<div class="link-card__top">
 					<div><strong>{{ link.name }}</strong><span v-if="link.primary">{{ t('proofing_gallery', 'PRIMARY') }}</span></div><small>{{ link.status === 'active' ? t('proofing_gallery', 'Active') : t('proofing_gallery', 'Revoked') }}</small>
 				</div>
-				<p>{{ link.viewMode === 'recursive' ? t('proofing_gallery', 'Recursive') : t('proofing_gallery', 'Folder view') }} · {{ link.allowedRoots?.length ? link.allowedRoots.join(' + ') : (link.startPath || t('proofing_gallery', 'Gallery root')) }} · {{ link.policy.downloadScope }}</p>
+				<p>{{ link.viewMode === 'recursive' ? t('proofing_gallery', 'Recursive') : t('proofing_gallery', 'Folder view') }} · {{ link.allowedRoots?.length ? link.allowedRoots.join(' + ') : (link.startPath || t('proofing_gallery', 'Gallery root')) }} · {{ downloadScopeLabel(link.policy.downloadScope) }}</p>
 				<p v-if="link.reviewEnabled" class="link-card__review">
 					{{ t('proofing_gallery', 'Review round {round}: {status}', { round: link.review.current?.round ?? 1, status: link.review.current?.status ?? 'awaiting_feedback' }) }}<template v-if="link.reviewDueDate">
 						· {{ link.reviewDueDate }}
@@ -254,7 +263,7 @@ onMounted(load)
 					type="checkbox"
 					:name="`policy-${key}`"
 					:disabled="key === 'annotations' && !draft.policy.comments"
-					@change="updatePermission(key, ($event.target as HTMLInputElement).checked)">{{ key }}</label><label><span>{{ t('proofing_gallery', 'Downloads') }}</span><select v-model="draft.policy.downloadScope" name="linkDownloads"><option value="none">none</option><option value="individual">individual</option><option value="selection">selection</option><option value="all">all</option></select></label>
+					@change="updatePermission(key, ($event.target as HTMLInputElement).checked)">{{ key }}</label><label><span>{{ t('proofing_gallery', 'Download access') }}</span><select v-model="draft.policy.downloadScope" name="linkDownloads"><option value="none">{{ t('proofing_gallery', 'Downloads disabled') }}</option><option value="individual">{{ t('proofing_gallery', 'Individual files') }}</option><option value="selection">{{ t('proofing_gallery', 'Saved selections') }}</option><option value="all">{{ t('proofing_gallery', 'Files, selections, and entire gallery') }}</option></select></label>
 			</fieldset>
 			<div class="link-editor__actions">
 				<NcButton type="submit" variant="primary" :disabled="saving">
