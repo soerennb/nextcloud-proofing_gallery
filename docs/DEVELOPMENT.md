@@ -22,6 +22,28 @@ PHP routes, templates, or controller constructors, run
 `docker compose restart nextcloud` to clear PHP OPcache before validating the
 change.
 
+## Documentation sources and builds
+
+The English and German user and administrator guides under `docs/en/` and
+`docs/de/` are the canonical content sources. Vite compiles those four Markdown
+files into the offline **Help** view and administrator settings. The same files
+are rendered into the GitHub Pages site by `npm run build:docs`. The repository
+root `docs/USER-GUIDE.md` is an intentionally synchronized English mirror for
+existing links and must remain byte-identical to `docs/en/user-guide.md`.
+
+Run the non-mutating documentation checks before committing content changes:
+
+```bash
+npm run check:docs
+npm run build:docs
+```
+
+The checker validates required bilingual guides, local Markdown links, the
+synchronized mirror, and the declared screenshot thumbnail pairs. Technical
+documents remain repository documentation; only the public overview, language
+overviews, user/admin guides, and English development landing page are built as
+GitHub Pages routes.
+
 ## Persistent demo studio
 
 The regular E2E tenant is disposable test infrastructure. For visual QA,
@@ -34,6 +56,7 @@ make studio-library-check
 make studio-seed
 make studio-browser-check
 make studio-screenshots
+make studio-screenshot-pairs
 ```
 
 It uses an isolated Compose project and named volumes, serves only on
@@ -56,6 +79,14 @@ Their prompts, dimensions, provenance, and checksums are versioned in
 idempotent: gallery IDs and public tokens remain stable. Approved screenshots
 are copied to `docs/public/screenshots/`; local source media never enters the
 App Store archive.
+
+Screenshot capture is a separate reviewed phase: use only seeded fictional data,
+inspect rendered desktop and mobile results with DevTools/CDP, and update
+`appinfo/info.xml` only after the approved full-size and thumbnail pairs are
+present. `studio-screenshots` writes the complete candidate matrix to
+`.local/screenshot-candidates/`; `studio-screenshot-pairs` copies only the
+approved names (or `SCREENSHOT_NAMES="..."` supplied names) into the tracked
+App Store asset directory and generates the matching thumbnails.
 
 ## Quality checks
 
@@ -189,7 +220,7 @@ persistent database schema.
 Set the same semantic version in `appinfo/info.xml`, `package.json`, and
 `package-lock.json`, update the changelog, then run `make verify-package`.
 Run `make test-upgrade` as well when a release adds database migrations. The
-release gate downloads the published 0.7.0 package and `SHA256SUMS`, verifies
+release gate downloads the matching published package and `SHA256SUMS`, verifies
 the checksum, and tests preserved galleries against the current package in an
 isolated Nextcloud 34 instance without importing the sanitized public Git
 history into the internal repository.

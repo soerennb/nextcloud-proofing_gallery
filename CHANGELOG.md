@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+## 0.9.0 — 2026-09-04
+
+- add guided photographer projects for showcase, delivery, selection, proofing,
+  receiving files, and private event-folder delivery
+- add the Studio workspace model for overview, photos, culling, design, links,
+  review, team, automation, privacy, and history workflows
+- add recipient-ledger event delivery with scoped shared/group/private folders,
+  CSV assignment, encrypted contact data, PIN handoff, scheduled release waves,
+  retries, repairs, invitations, and link rotation
+- add link- and event-wave-specific download policies for individual files,
+  selections, complete galleries, JPEG presets, watermarks, and contact sheets
+- refine public gallery navigation, appearance, story layouts, event albums,
+  private client signals, comparison, annotations, and mobile actions
+- document the current settings hierarchy, event delivery behavior, privacy
+  boundaries, operational queues, and screenshot/release workflow
+- add a versioned 48-photo fictional Studio library with seven scenario galleries,
+  reproducible browser screenshot coverage, and reviewed App Store image pairs
+
 ## 0.8.2 — 2026-08-19
 
 - rebuild public galleries as platform-adaptive Ionic apps with Geist typography,

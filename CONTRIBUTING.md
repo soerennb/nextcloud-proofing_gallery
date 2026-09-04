@@ -29,7 +29,10 @@ make verify-package
 Add tests for behavior changes and keep public authorization checks on the
 server. Never use client visibility as an access-control boundary. Avoid adding
 network dependencies to the bundled help; user and administrator documentation
-must work offline.
+must work offline. When UI or workflow behavior changes, update the README,
+English and German user/admin guides, and the changelog in the same change.
+Keep `docs/USER-GUIDE.md` synchronized with `docs/en/user-guide.md` and run
+`npm run check:docs` before opening the pull request.
 
 ## Pull requests
 

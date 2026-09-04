@@ -11,6 +11,11 @@ guest feedback, selections, secure downloads, and an upload inbox.
 
 ## Included
 
+Proofing Gallery is organized around photographer workflows: create a guided
+showcase, delivery, selection, proofing, or receiving-files project and then
+work through its focused Overview, Photos, Cull, Design, Share, Review, Team,
+Automation, Privacy, and History workspaces.
+
 - presentation and collaborative proofing modes
 - standard Nextcloud public-link protection, password, and expiry
 - responsive image/video gallery with nested folders, previews, lightbox,
@@ -57,6 +62,13 @@ guest feedback, selections, secure downloads, and an upload inbox.
   explicit preview-before-promotion workflow that never writes XMP implicitly
 - a field-selectable, privacy-bounded UTF-8 CSV export composer with preview and
   clipboard support, plus configurable resource-aware slideshows
+
+For private volume events, shared, group, and participant folders are released
+through recipient-specific links. CSV assignment, encrypted contact data,
+optional PINs, scheduled waves, retries, invitations, and link rotation are
+handled in the Event delivery workspace. The download policy is selected per
+release wave and is intersected with the instance, gallery, and link policies;
+existing links are not silently expanded by a later wave.
 
 ## Local development
 

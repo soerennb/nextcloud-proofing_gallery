@@ -69,6 +69,23 @@ status before treating them as an upload failure. Keep
 raise it temporarily only while diagnosing replica-consistency paths; do not
 disable required file hooks merely to suppress these diagnostics.
 
+### Event delivery waves
+
+Event releases are queued in bounded batches and can be immediate or scheduled.
+Each recipient is processed independently: successful links remain valid when
+another recipient fails, and a partial-failure wave exposes only the failed
+rows for retry. Link rotation and invitation resend are also recipient-scoped.
+The event policy is captured with the wave and is intersected with the global,
+gallery, and public-link policies. It controls no-download, individual,
+selection, or complete-gallery delivery without ever crossing the recipient's
+assigned folder roots.
+
+Plan capacity for the number of recipient links, native public shares, queued
+mail messages, and temporary PIN handoff data in addition to source media and
+preview derivatives. Run cron continuously during a large release and monitor
+the recipient ledger, event operations endpoint, Nextcloud failed jobs, and
+integration/mail logs until the wave reaches `released` or `partial_failed`.
+
 ### Capacity and backlog monitoring
 
 The Administration settings system-status section reads indexed counters for

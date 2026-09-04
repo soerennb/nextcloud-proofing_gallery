@@ -1,66 +1,31 @@
 # User guide
 
-## Create and publish a gallery
+This guide describes Proofing Gallery for gallery owners and managers.
+The controls available to you can be restricted by your Nextcloud administrator.
 
-1. Open **Proofing Gallery**, choose **New project**, and select the job:
-   delivery, presentation, selection, proofing, or receiving files.
-2. Enter a title and choose one of the audience and source combinations offered
-   for that job. Delivery, presentation, selection, and proofing also support
-   private event-folder links; receive-files projects use one upload inbox and
-   exclude collections and event delivery.
-3. Open the project and use the focused workspaces:
-   - **Plan** shows the source folder, media count, gallery mode, and a
-     preview of the files clients will see.
-   - **Photos** manages files and folder-backed delivery content.
-   - **Cull** provides ratings, picks/rejects, color labels, saved views, a
-     persistent side/bottom filmstrip, client rating signals, and explicit XMP
-     synchronization.
-   - **Style** controls title visibility and size, header count, opener,
-     typography, colors, logo, cover, and preview watermarking. Watermarks never
-     alter originals.
-   - **Deliver** publishes one or more independently configured client links.
-   - **Results** controls review visibility, workflow labels, uploads, and the
-     moderation inbox.
-   - **History** provides the gallery audit trail.
-4. Publish the gallery from **Deliver**. Proofing Gallery creates a regular
-   Nextcloud public-link share for the source folder.
-5. Optionally add a password and expiry date, then copy the link or send an
-   email invitation. Leaving the password field empty preserves an existing
-   password; use **Remove existing password** to remove it deliberately.
+## Create a gallery
 
-Owner uploads use the standard Nextcloud conflict dialog when a filename is
-already present. Choose per file whether to replace it, retain both under a
-numbered name, or skip the incoming file. Replacement creates a new file and
-clears review data attached to the old file ID; use **Upload new version** to
-preserve that context.
+1. Open **Proofing Gallery** and choose **New project**.
+2. Choose the purpose that matches the job: **Show photos only**, **Deliver
+   finished photos**, **Collect a selection**, **Review together**, or
+   **Receive files**.
+3. Enter a title, then choose from the audiences and sources that fit that job.
+   Existing folders, new folders, and curated collections remain available
+   where they make sense. Delivery, presentation, selection, and proofing jobs
+   can also create private links from event folders.
+4. Review the source and media count before configuring delivery. A receive-files
+   project starts with one moderated upload inbox and cannot use collections or
+   event delivery.
 
-Revoking the public link immediately removes guest access. Archiving a gallery
-removes it from the active list without touching its source folder. The archive
-view can restore it; a restored published gallery keeps its link.
+A folder gallery references one existing folder. A collection combines files
+from several folder galleries without copying them. Collection sources must
+belong to the same owner, and collections cannot accept guest uploads.
 
-## Cull, rate, and deliver to different audiences
-
-The **Cull** workspace is optimized for keyboard work: arrow keys move between
-photos, 0–5 sets a rating, P and X toggle pick/reject, Space selects, and
-Ctrl/Command+Z undoes the last batch. Filters and sort order can be saved as a
-named view; saved views follow the Nextcloud user across devices. App culling is
-stored separately from XMP until **XMP sync** is explicitly opened and applied.
-
-In **Deliver**, create separate links for clients, internal reviewers, or a
-finished presentation. Each link can start at a different subfolder and can use
-folder or recursive browsing, its own language, password, expiry, download
-scope, metadata visibility, upload permission, feedback capabilities, and
-minimum owner rating. Revoking one link does not revoke the others.
-
-Private client star ratings and pick/reject decisions remain visible only to
-that client and gallery managers. **Client signal** shows anonymization-safe
-aggregates and named individual votes to authorized owners. Applying them to
-owner culling always requires a fresh preview and never updates XMP by itself.
-
-Named selections can be exported through **Export composer**. Owners choose
-among paths, culling values, client aggregates, selection names, and comments.
-Guests can export only filenames and their own rating/decision. Inspect the
-RFC 4180 UTF-8 preview before copying or downloading it.
+The wizard keeps three choices separate: the project purpose describes the
+workflow, the gallery mode is **Presentation** or **Proofing**, and the delivery
+mode is **Standard** or **Event**. Event delivery is available for the delivery,
+showcase, selection, and proofing purposes; receive-files projects use one
+moderated upload inbox and do not support collections or event delivery.
 
 ## Deliver a volume event privately
 
@@ -75,94 +40,175 @@ retaining its subfolders. Assign each folder exactly one role: everyone, group,
 private, or not delivered. The recipient ledger combines contact editing, exact
 shared/group/private scope, current link, and link history in one row per
 recipient. The final action publishes the hidden technical base when needed and
-creates the client links. Folder names provide recipient suggestions; a
-reviewed CSV import, drafts, schedules, exports, retries, repairs, and link
-rotation remain available in the same workflow.
+creates the client links.
 
-## Build a collection across galleries
+In **Release**, choose the download access for the delivery round: disabled,
+individual files, saved selections, or files plus the entire gallery. The
+setting applies to every shared, group, and private folder in the round, while
+each recipient remains restricted to their assigned folders. Existing released
+links are not broadened automatically when a later round uses a wider policy.
 
-1. Create the folder galleries that contain the source files. They must belong
-   to the same owner; shared-in galleries and other collections cannot be used
-   as sources.
-2. Choose **Create gallery → Collection** and enter a title and mode.
-3. Open **Content**, choose a source gallery, browse its subfolders, select
-   files, and add them to the collection.
-4. Reorder files by dragging them or with the keyboard-friendly arrow buttons,
-   then save. Saving checks the revision so a stale browser tab cannot silently
-   overwrite newer changes.
-5. Configure design and feedback as usual, then publish from **Access**. An
-   empty collection cannot be published.
+Folder names provide initial recipient names. For large lists, expand the CSV
+import in the recipient step and use `folder`, `name`, `email`, `locale`, `pin`,
+and optional `groups` columns. Drafts, schedules, individual links, exports,
+retries, repairs, and link rotation remain in the recipient and release areas.
+Email addresses are encrypted at rest.
 
-Collections reference originals by file ID and never copy them. If a source
-gallery or file becomes unreadable, the owner sees an unavailable item in the
-Content workspace. Guests see only currently available items, and direct media
-requests for missing or unrelated files return not found. Guest uploads are not
-available for collections because there is no single destination folder.
+The final **Release** step creates one scoped link per recipient. The link only
+contains the shared folders, any assigned group folders, and that recipient's
+private folder. A successful release can be inspected in the ledger; failed
+recipients can be retried without recreating successful links.
 
-## Presentation and proofing
+## Work through a project
 
-Presentation mode is intended for quiet delivery. Proofing mode lets named
-guests like images, apply configured color states, comment, place point
-annotations, and save selections. Feedback can be private per guest or shared
-with all reviewers.
+The gallery workspace separates the common tasks:
 
-In proofing mode, click or tap directly on an image to place a numbered point
-and write its comment. **Add point comment** provides keyboard placement: move
-the point with the arrow keys, press Enter to write, or Escape to cancel.
-General image comments remain available in **Feedback**. Review controls stay
-visible while reviewing; lightbox auto-hide applies only to presentation
-viewing. An explicitly hidden filmstrip remains hidden.
+- **Plan** shows source, status, purpose, and media summary.
+- **Photos** manages folder content, uploads, metadata, and collections.
+- **Cull** provides ratings, picks, rejects, color labels, saved views, and
+  explicit XMP synchronization.
+- **Style** controls the opener, title visibility and size, photo-count
+  visibility, title typeface, layout, theme, logo, cover, accent, welcome text,
+  metadata, and preview watermark. Originals are never watermarked.
+- **Deliver** creates independently configured public links.
+- **Results** contains feedback, client selections, exports, and upload moderation.
+- **History** records relevant gallery activity.
 
-Guests do not need Nextcloud accounts. Their browser receives a private session
-cookie and a separate mutation nonce. Clearing site data or deleting the guest
-identity ends access to that identity's private feedback.
+Changes to gallery settings use revision checks. If another browser changed the
+same gallery, reload the current state instead of overwriting it blindly.
 
-## Photo metadata and XMP sidecars
+Settings are intentionally layered. Administrators define instance policies and
+defaults, owners configure the gallery, each public link can further restrict
+access, and an event release wave can restrict its own recipient links again.
+The most restrictive applicable policy wins; a client cannot use a capability
+that is disabled at an earlier layer.
 
-In a folder gallery, choose **Index metadata** to process the current folder in
-the administrator-defined batch size. Once indexed, **Metadata filters** can
-narrow the owner view by capture date, camera, lens, keyword, or minimum
-rating. Files outside the configured size limit remain unprocessed.
+When an owner uploads files whose names already exist, Proofing Gallery opens
+the standard Nextcloud conflict dialog before transferring them. Each incoming
+file can replace the existing file, be kept under a numbered name, or be
+skipped. Replacing creates a new file and clears the old file's gallery review
+data; use **Upload new version** when comments and selections must stay attached.
 
-Open a file's **Metadata** action to inspect technical EXIF/IPTC fields and edit
-title, description, creator, copyright, keywords, rating, or label. Saving
-creates or updates `<image basename>.xmp` beside the original. The original is
-never rewritten. Existing sidecars are merged, and saving stops if the source
-or sidecar changed since it was opened. Two images with the same basename in
-one folder cannot safely share an Adobe-style sidecar, so resolve that filename
-collision first.
+## Cull and organize photographs
 
-Public image information is off by default. In **Design**, owners can expose
-individual safe fields such as capture date, camera, lens, exposure, title, or
-copyright. GPS, keywords, rating, and workflow labels always remain private.
+The culling view is keyboard friendly. Arrow keys move between images, number
+keys 0–5 set ratings, **P** toggles pick, **X** toggles reject, Space selects,
+and Ctrl/Command+Z undoes the most recent batch. Named views store filters and
+sort order in your Nextcloud account. The virtualized filmstrip remains in the
+workspace viewport and can be placed automatically, on the right, or below;
+the choice follows your Nextcloud account across devices.
 
-The **Client selections** section can write a saved selection back to each
-selected image's sidecar. The export records a five-star selection, the most
-common workflow label, standard keywords, a Lightroom hierarchy, and the
-gallery/selection identity in the Proofing Gallery XMP namespace. Review any
-reported per-file conflicts before repeating the export.
+App culling values remain separate from XMP until you explicitly preview and
+apply an XMP synchronization. Concurrent changes to the source or sidecar stop
+the write and are reported for review.
 
-## Downloads and uploads
+## Publish and share
 
-Depending on gallery settings, guests can download one original, a ZIP of their
-selection, or a printable preview contact sheet. For individual and selection
-downloads they can keep the original or choose a metadata-free 2048 px or
-1600 px JPEG, optionally with the configured gallery watermark. Web JPEGs are
-never enlarged. Contact sheets contain previews, not original files.
+Open **Deliver**, create a public link, and configure its audience. Each link
+can have its own start folder, folder depth, language, presentation, password,
+expiry, download scope, metadata fields, feedback, upload permission, and
+minimum owner rating. Proofing Gallery uses native Nextcloud public-link rules
+and can make instance policy stricter, never weaker.
 
-Guest uploads are resumable. Completed uploads first enter the hidden moderation
-inbox. A gallery owner or manager can accept an upload with a conflict-free
-filename or permanently reject it. Until accepted, it does not appear in the
-gallery.
+Copy the link or send an invitation through the configured Nextcloud mail
+server. Leaving an existing password field empty preserves the password; use
+the explicit removal action to remove it. Revoking one link immediately blocks
+that audience without affecting other links or source files.
 
-## Gallery managers
+## Client proofing and selections
 
-Owners can grant access to individual Nextcloud users or groups:
+Proofing mode lets guests identify themselves and, when enabled, like, rate,
+pick, reject, label, comment, annotate, and save named selections. Guests do
+not need Nextcloud accounts. Their identity and mutation token are stored in a
+private browser session; clearing site data ends access to private feedback.
 
-- **Viewer** can inspect the overview and activity.
-- **Editor** can additionally change design and feedback settings.
-- **Owner** can also publish, revoke, manage access, archive, and restore.
+Click or tap an image to place a numbered point and open its comment editor.
+For keyboard placement, choose **Add point comment**, move the point with the
+arrow keys, press Enter to write, or Escape to cancel. Unpinned comments remain
+available in **Feedback**. Review controls stay visible in proofing mode; the
+lightbox auto-hide preference applies only to presentation viewing. Explicit
+filmstrip visibility settings are still respected.
 
-The gallery reads media through its owner-backed source folder, so a delegated
-editor can manage an explicitly granted gallery without receiving unrelated
-file access.
+Client ratings and decisions stay separate from owner culling. Authorized
+owners can inspect aggregates and individual responses, then preview an
+explicit promotion. Client signals never update XMP automatically.
+
+Selection exports can include paths, owner culling values, client aggregates,
+selection names, or comments. Guests can export only filenames and their own
+rating or decision. Review the UTF-8 CSV preview before downloading or copying it.
+
+## Review rounds and Nextcloud follow-up
+
+Each active client link can inherit or override the gallery's minimum, maximum,
+and due date for selections. Guests may save incomplete drafts, but submission
+enforces those rules and locks the submitted selection. The gallery owner can
+approve it, request changes, or reopen an approved result in the same round.
+This is a workflow decision, not an electronic
+signature or a frozen legal snapshot.
+
+Under **Results**, owners see the current state and traceable round history.
+When the corresponding apps are available, a due date can be added to a
+writable Nextcloud Calendar and the review can be created as a Deck card. These
+resources run with the current user's permissions; Proofing Gallery stores no
+credentials or public link token. Context Agent can read this status and offers
+an experimental read-only integration for listing galleries, inspecting their
+details and readiness, and searching gallery filenames. Publishing and owner
+decisions remain in the Proofing Gallery interface.
+
+## Downloads and guest uploads
+
+Depending on link policy, guests can have **no downloads**, download individual
+files, download a ZIP of a saved selection, or download the complete gallery.
+The complete-gallery option also includes individual and selection downloads.
+Individual and selection downloads offer the original or metadata-free 2048 px
+and 1600 px JPEGs, optionally with the gallery watermark; smaller images are
+never enlarged. A printable contact sheet contains previews, not originals.
+Administrator limits bound file counts and delivery size.
+
+Event delivery applies this policy to the whole release wave. It still keeps
+each recipient inside their assigned folder scope, and a later wave with a more
+generous policy does not change already released links.
+
+Guest uploads are resumable and enter a hidden moderation inbox. Owners or
+authorized managers accept an upload with a conflict-free filename or reject
+it. An upload does not appear publicly before acceptance.
+
+## Metadata and XMP
+
+Folder galleries can index a bounded set of EXIF/IPTC fields. Owners can filter
+by capture date, camera, lens, keywords, or rating and edit descriptive values
+in an Adobe-compatible `<basename>.xmp` sidecar. The original is never changed.
+
+Public metadata starts disabled. Owners may expose selected safe fields such as
+capture date, camera, lens, exposure, title, or copyright. GPS, private
+keywords, owner ratings, and workflow labels are never disclosed publicly.
+
+## Managers, archive, and recovery
+
+Owners may grant Nextcloud users or groups scoped gallery roles. Viewers inspect
+overview and activity, editors also change permitted gallery settings, and
+owner-level managers can publish, revoke, manage access, archive, and restore.
+These roles do not grant unrelated access to the owner's Files.
+
+Archiving disables active delivery but does not delete source files or feedback.
+Restore the gallery from **Archive**. If a source folder is missing, select a
+replacement owned folder; the existing link and review history are retained
+only after the server validates the new source.
+
+## Privacy and troubleshooting
+
+After identifying for collaboration, use **Export my data** to download your
+own review records or **Delete my data** to erase them and end the guest
+session. Owners can export complete app records. For archived galleries they
+can schedule app-data deletion with a 30-day cancellation period; the source
+folder and original Nextcloud files are not removed.
+
+If a link may have leaked, revoke it first and create a new one. Do not send
+passwords in the same channel as links. Report unexpected access behavior to
+your administrator and security defects through the repository's private
+security-reporting form, not a public issue.
+
+When content is missing, verify the source still exists, you can read it, the
+link starts in the intended folder, media matches its rating/type filters, and
+background jobs have completed. Administrators can inspect the system-status
+section without exposing guest credentials or private paths.
