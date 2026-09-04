@@ -24,6 +24,7 @@ vi.mock('./EventRecipientLedger.vue', () => ({ default: { template: '<div class=
 import { createDefaultGallerySettings } from '../domain/gallerySettings.ts'
 import type { EventSetup, EventSetupStep } from '../services/eventApi.ts'
 import type { Gallery } from '../types.ts'
+import DownloadPolicyFields from './DownloadPolicyFields.vue'
 import EventDeliveryWorkspace from './EventDeliveryWorkspace.vue'
 import EventRecipientLedger from './EventRecipientLedger.vue'
 
@@ -68,6 +69,15 @@ describe('EventDeliveryWorkspace scaling', () => {
 		await flushPromises()
 		expect(wrapper.findComponent(EventRecipientLedger).exists()).toBe(true)
 		expect(wrapper.text()).toContain('Recipients & links')
+		wrapper.unmount()
+	})
+
+	it('shows the gallery download policy in the release step', async () => {
+		eventApi.fetchEventSetup.mockResolvedValueOnce(setup('delivery'))
+		eventApi.fetchEventOperations.mockResolvedValueOnce({ summary: {}, waves: [] })
+		const wrapper = shallowMount(EventDeliveryWorkspace, { props: { gallery: gallery(), settings: createDefaultGallerySettings() } })
+		await flushPromises()
+		expect(wrapper.findComponent(DownloadPolicyFields).exists()).toBe(true)
 		wrapper.unmount()
 	})
 })

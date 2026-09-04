@@ -40,6 +40,13 @@ und den Linkverlauf in einer Zeile je Empfänger. Die abschließende Aktion
 veröffentlicht bei Bedarf automatisch die verborgene technische Basis und
 erstellt die Kundenlinks.
 
+Unter **Freigabe** legst du fest, was Empfänger dieser Lieferwelle laden dürfen:
+keine Downloads, einzelne Dateien, gespeicherte Auswahlen oder Dateien samt
+gesamter Galerie. Die Einstellung gilt für gemeinsame, Gruppen- und private
+Ordner der Welle; jeder Empfänger bleibt auf seine Ordner beschränkt. Bereits
+veröffentlichte Links werden durch eine spätere, großzügigere Einstellung nicht
+automatisch erweitert.
+
 Ordnernamen dienen als Empfängervorschlag. Für große Listen öffnest du beim
 Empfängerschritt den CSV-Import mit den Spalten `folder`, `name`, `email`,
 `locale`, `pin` und optional `groups`. Entwürfe, geplante Auslieferungen,

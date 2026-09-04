@@ -2,6 +2,7 @@ import axios from '@nextcloud/axios'
 import { generateOcsUrl } from '@nextcloud/router'
 
 import type { Gallery, GalleryPublicLink, MediaItem, PublicLinkPolicy } from '../types.ts'
+import type { GallerySettings } from '../domain/gallerySettings.ts'
 
 const galleriesUrl = generateOcsUrl('/apps/proofing_gallery/api/v1/galleries')
 const galleriesV2Url = generateOcsUrl('/apps/proofing_gallery/api/v2/galleries')
@@ -217,6 +218,10 @@ export async function saveEventSetup(id: number, setup: Pick<EventSetup, 'curren
 
 export async function deliverEventSetup(id: number, setupRevision: number, requestKey: string): Promise<{ gallery: Gallery; wave: EventWave }> {
 	return (await axios.post(`${galleriesV2Url}/${id}/event/deliver`, { setupRevision, requestKey })).data
+}
+
+export async function applyEventDownloadPolicy(id: number, downloadScope: GallerySettings['delivery']['downloadScope']): Promise<{ updated: number; skipped: number }> {
+	return (await axios.post(`${galleriesV2Url}/${id}/event/download-policy`, { downloadScope })).data
 }
 
 export async function createEventRecipients(id: number, payload: {

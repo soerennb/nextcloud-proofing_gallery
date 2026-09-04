@@ -22,8 +22,10 @@ test('event delivery exposes shared and assigned folders but rejects siblings', 
 	}
 	const propfind = { method: 'PROPFIND', headers: { ...headers, Depth: '0', 'Content-Type': 'application/xml' }, data: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/></d:prop></d:propfind>' }
 	const folderId = await fileId(await request.fetch(dav, propfind))
+	const annaFileId = await fileId(await request.fetch(`${dav}/Anna/anna.png`, propfind))
 	const benFileId = await fileId(await request.fetch(`${dav}/Ben/ben.png`, propfind))
 	expect(folderId).toBeGreaterThan(0)
+	expect(annaFileId).toBeGreaterThan(0)
 	expect(benFileId).toBeGreaterThan(0)
 
 	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
@@ -100,6 +102,14 @@ test('event delivery exposes shared and assigned folders but rejects siblings', 
 	expect(token).toBeTruthy()
 
 	const publicEndpoint = `${baseURL}/index.php/apps/proofing_gallery/public/${token}`
+	const downloadPolicyEndpoint = `${recipientsV2}/download-policy?format=json`
+	const selectionPolicy = await request.post(downloadPolicyEndpoint, { headers, data: { downloadScope: 'selection' } })
+	expect(selectionPolicy.status()).toBe(200)
+	expect(await selectionPolicy.json()).toMatchObject({ updated: 1, skipped: 1 })
+	expect((await request.get(`${publicEndpoint}/media/${annaFileId}/download`)).status()).toBe(403)
+	const allDownloadsPolicy = await request.post(downloadPolicyEndpoint, { headers, data: { downloadScope: 'all' } })
+	expect(allDownloadsPolicy.status()).toBe(200)
+	expect(await allDownloadsPolicy.json()).toMatchObject({ updated: 1, skipped: 1 })
 	const root = await request.get(`${publicEndpoint}/gallery`).then((response) => response.json()) as {
 		gallery: { deliveryMode: string }
 		scope: { roots: Array<{ path: string, name: string, role: string }> }
@@ -138,6 +148,7 @@ test('event delivery exposes shared and assigned folders but rejects siblings', 
 	expect(masterRoot.items).toEqual([])
 	const forbiddenPreview = await request.get(`${publicEndpoint}/preview/${benFileId}/400/300`)
 	expect(forbiddenPreview.status()).toBe(404)
+	expect((await request.get(`${publicEndpoint}/media/${annaFileId}/download`)).status()).toBe(200)
 	expect((await request.get(`${publicEndpoint}/media/${benFileId}/stream`)).status()).toBe(404)
 	expect((await request.get(`${publicEndpoint}/media/${benFileId}/download`)).status()).toBe(404)
 	const traversal = await request.get(`${publicEndpoint}/gallery?path=Ben`)
@@ -167,6 +178,8 @@ test('event delivery exposes shared and assigned folders but rejects siblings', 
 	await expect(page.locator('.event-workflow')).toBeVisible()
 	await expect(page.locator('.event-workflow__hero')).toHaveCount(0)
 	await expect(page.locator('#proofing_gallery')).toHaveAttribute('data-studio-theme', 'dark')
+	await page.getByRole('button', { name: /Release/ }).click()
+	await expect(page.locator('select[name="downloadScope"]')).toHaveValue('all')
 	await page.getByRole('button', { name: /Recipients & links/ }).click()
 	await expect(page.getByRole('heading', { name: 'Recipients & links' })).toBeVisible()
 	await expect(page.getByText(/Anna-Renamed/).first()).toBeVisible()
@@ -186,7 +199,7 @@ test('event delivery exposes shared and assigned folders but rejects siblings', 
 	const reconcile = await request.post(`${recipientsV2}/reconcile?format=json`, { headers })
 	expect(reconcile.status()).toBe(200)
 	const eventAudit = await request.get(`${recipientsV2}/audit?format=json`, { headers }).then((response) => response.json()) as { items: Array<{ action: string }> }
-	expect(eventAudit.items.map((item) => item.action)).toEqual(expect.arrayContaining(['recipient_edit', 'recipient_delete', 'recipient_export', 'recipient_pin_rotate', 'recipient_link_rotate', 'recipient_reconcile']))
+	expect(eventAudit.items.map((item) => item.action)).toEqual(expect.arrayContaining(['recipient_edit', 'recipient_delete', 'recipient_export', 'recipient_pin_rotate', 'recipient_link_rotate', 'recipient_reconcile', 'download_policy_apply']))
 
 	expect((await request.delete(`${dav}/Anna-Renamed`, { headers })).status()).toBe(204)
 	const degraded = await request.get(`${galleries}/${gallery.id}/event?format=json`, { headers }).then((response) => response.json()) as { items: Array<{ folderState: string }> }

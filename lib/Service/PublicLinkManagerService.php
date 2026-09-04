@@ -12,6 +12,8 @@ use OCA\ProofingGallery\Db\CustomDomainRepository;
 use OCA\ProofingGallery\Db\PublicLink;
 use OCA\ProofingGallery\Db\PublicLinkMapper;
 use OCA\ProofingGallery\Db\PublicLinkRootRepository;
+use OCA\ProofingGallery\Domain\DownloadScope;
+use OCA\ProofingGallery\Domain\PublicLinkPolicy;
 use OCA\ProofingGallery\Dto\PublicLinkConfiguration;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Db\TTransactional;
@@ -141,6 +143,39 @@ final class PublicLinkManagerService {
 	public function updateEventRecipient(Gallery $gallery, int $linkId, string $name, array $allowedRoots, string $privateRoot, ?string $locale, ?string $password = null, array $groupRoots = []): array {
 		$link = $this->owned($gallery, $linkId);
 		return $this->updateEvent($gallery, $linkId, $this->eventConfiguration($link, $name, $allowedRoots, $locale, $password), $privateRoot, $groupRoots);
+	}
+
+	/** @return array{updated: int, skipped: int} */
+	public function applyEventDownloadPolicy(Gallery $gallery, string $downloadScope): array {
+		if ($gallery->getDeliveryMode() !== 'event') throw new \InvalidArgumentException('Download policy application requires an event project');
+		$scope = DownloadScope::tryFrom($downloadScope);
+		if ($scope === null) throw new \InvalidArgumentException('Invalid event download scope');
+		if ($scope !== DownloadScope::None) $this->capabilities->assertFeature('downloads');
+		$settings = \OCA\ProofingGallery\Dto\GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
+		if ($settings->delivery->downloadScope->restrict($scope) !== $scope) {
+			throw new \InvalidArgumentException('The active-link policy cannot exceed the gallery download policy');
+		}
+		$updated = 0; $skipped = 0;
+		foreach ($this->links->findForGallery($gallery->getId()) as $link) {
+			if ($link->getIsPrimary() || $link->getStatus() !== 'active') { $skipped++; continue; }
+			$policy = PublicLinkPolicy::fromArray(json_decode($link->getPolicy(), true, flags: JSON_THROW_ON_ERROR))->jsonSerialize();
+			$policy['downloadScope'] = $scope->value;
+			$policy = $this->policies->validate($policy);
+			$share = $this->shareManager->getShareByToken($link->getToken());
+			$snapshot = $this->shareSnapshot($share);
+			try {
+				$share->setHideDownload(!$scope->allowsIndividual());
+				$this->shareManager->updateShare($share);
+				$link->setPolicy(json_encode($policy, JSON_THROW_ON_ERROR));
+				$link->setUpdatedAt($this->clock->getTime());
+				$this->links->update($link);
+			} catch (\Throwable $exception) {
+				$this->compensateShare($share, $snapshot, $exception);
+				throw $exception;
+			}
+			$updated++;
+		}
+		return compact('updated', 'skipped');
 	}
 
 	/**

@@ -187,6 +187,10 @@ final class EventController extends Controller {
 	public function bulkRecipients(int $id, array $recipientIds, string $action): DataResponse { return $this->respond(fn () => $this->recipients->bulk($this->gallery($id), $recipientIds, $action, $this->userId())); }
 
 	#[NoAdminRequired]
+	#[ApiRoute(verb: 'POST', url: '/api/v2/galleries/{id}/event/download-policy')]
+	public function applyDownloadPolicy(int $id, string $downloadScope): DataResponse { return $this->respond(fn () => $this->recipients->applyDownloadPolicy($this->gallery($id), $downloadScope, $this->userId())); }
+
+	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v2/galleries/{id}/event/reconcile')]
 	public function reconcile(int $id): DataResponse { return $this->respond(fn () => $this->recipients->reconcile($this->gallery($id), $this->userId())); }
 
