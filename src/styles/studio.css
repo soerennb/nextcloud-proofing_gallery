@@ -122,23 +122,23 @@ body[data-proofing-gallery-theme='dark'] .modal-container {
 
 #proofing_gallery .gallery-page h1 { margin: 0; font-family: NewsreaderVariable, Newsreader, serif; font-size: clamp(38px, 5vw, 58px); font-weight: 520; letter-spacing: -.04em; line-height: 1; }
 
-#proofing_gallery :is(.gallery-toolbar, .settings-section, .overview-card, .design-section, .team-section, .automation-section, .privacy-section, .history-section, .help-card) {
+#proofing_gallery :is(.gallery-page, .help-view, .settings-page:not(.settings-page--workspace)) :is(.gallery-toolbar, .settings-section, .overview-card, .design-section, .team-section, .automation-section, .privacy-section, .history-section, .help-card) {
 	border-color: var(--studio-line);
 	background: var(--studio-surface);
 	color: var(--studio-ink);
 }
 
-#proofing_gallery :is(input:not([type='checkbox'], [type='radio']), select, textarea) {
+#proofing_gallery :is(.gallery-page, .help-view, .settings-page:not(.settings-page--workspace)) :is(input:not([type='checkbox'], [type='radio']), select, textarea) {
 	border-color: var(--studio-line-strong);
 	background: var(--studio-canvas);
 	color: var(--studio-ink);
 }
 
-#proofing_gallery :is(input, select, textarea)::placeholder { color: var(--studio-muted); opacity: 1; }
+#proofing_gallery :is(.gallery-page, .help-view, .settings-page:not(.settings-page--workspace)) :is(input, select, textarea)::placeholder { color: var(--studio-muted); opacity: 1; }
 
-#proofing_gallery :is(.settings-page, .gallery-page, .help-view) :is(h1, h2, h3) { color: var(--studio-ink); }
+#proofing_gallery :is(.settings-page:not(.settings-page--workspace), .gallery-page, .help-view) :is(h1, h2, h3) { color: var(--studio-ink); }
 
-#proofing_gallery :is(.settings-page, .gallery-page, .help-view) :is(p, small) { color: var(--studio-muted); }
+#proofing_gallery :is(.settings-page:not(.settings-page--workspace), .gallery-page, .help-view) :is(p, small) { color: var(--studio-muted); }
 
 body[data-proofing-gallery-theme='dark'] .modal-container:has(.proofing-gallery-modal),
 body[data-proofing-gallery-theme='dark'] .modal-container:has(.sharing-modal) { color-scheme: dark; }
