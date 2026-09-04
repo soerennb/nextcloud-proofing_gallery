@@ -5,6 +5,7 @@ set -Eeuo pipefail
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 compose_file="${repo_dir}/tests/compat/compose.yaml"
 archive="${repo_dir}/build/artifacts/appstore/proofing_gallery.tar.gz"
+current_archive="${UPGRADE_CURRENT_ARCHIVE:-${archive}}"
 upgrade_root="$(mktemp -d -t proofing-gallery-upgrade.XXXXXXXX)"
 database="${UPGRADE_DATABASE:-sqlite}"
 case "${database}" in
@@ -98,10 +99,20 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Always rebuild the candidate. A package left by an earlier version can make
-# Nextcloud correctly skip migrations while the test appears to exercise the
-# current checkout.
-"${repo_dir}/scripts/build-appstore.sh"
+# Always use a freshly built candidate unless the caller supplied the archive
+# produced by the current workflow. A package left by an earlier version can
+# make Nextcloud correctly skip migrations while the test appears to exercise
+# the current checkout.
+if [[ -z "${UPGRADE_CURRENT_ARCHIVE:-}" ]]; then
+	"${repo_dir}/scripts/build-appstore.sh"
+else
+	if [[ ! -f "${current_archive}" ]]; then
+		echo "UPGRADE_CURRENT_ARCHIVE does not exist: ${current_archive}" >&2
+		exit 1
+	fi
+	archive="${current_archive}"
+fi
+"${repo_dir}/scripts/validate-appstore-package.sh" "${archive}"
 
 if [[ "${upgrade_from_ref}" != "verified release archive" ]]; then
 	install -d "${app_source}"
