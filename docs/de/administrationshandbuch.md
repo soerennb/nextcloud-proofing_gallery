@@ -22,6 +22,27 @@ Sichere vor Upgrades Datenbank, Datenverzeichnis, Konfiguration und Appdata.
 Nextcloud führt App-Migrationen bei Aktivierung oder Upgrade aus. Überspringe
 keine vorgesehenen Nextcloud-Upgrade-Schritte.
 
+### Fehlgeschlagenes Upgrade von 0.9.0 wiederherstellen
+
+Wenn ein Upgrade von 0.9.0 Nextcloud im Wartungsmodus zurückgelassen hat, lasse
+den Wartungsmodus aktiv und sichere Datenbank, `config/`, Datenverzeichnis und
+Appdata. Installiere das geprüfte signierte 0.9.1-Archiv, indem du nur
+`custom_apps/proofing_gallery` ersetzt. Deinstalliere die App nicht und lösche
+keine Tabellen, Aufträge, Galerien, Links oder Feedbackdaten. Starte den
+Nextcloud-AIO-Container oder die PHP-Worker neu, damit kein alter OPcache-Code
+verwendet wird. Führe anschließend im Nextcloud-Hauptverzeichnis aus:
+
+```bash
+sudo -u www-data php occ upgrade
+sudo -u www-data php occ status --output=json
+sudo -u www-data php occ app:list --output=json
+```
+
+Die Wiederherstellung ist abgeschlossen, wenn `maintenance` und
+`needsDbUpgrade` beide `false` sind und Proofing Gallery die Version 0.9.1
+meldet. Schlägt der erneute Versuch fehl, lasse den Wartungsmodus aktiv und
+bewahre Backup und Logs auf, bevor du den neuen Fehler untersuchst.
+
 ## Zugriff und Richtlinien
 
 Administration → Zusätzliche Einstellungen → Proofing Gallery steuert Gruppen,

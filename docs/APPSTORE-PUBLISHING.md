@@ -80,6 +80,31 @@ Do not add these values to `.env.example`. The release workflow checks that all
 three secrets exist without printing them and removes temporary credential files
 even when publishing fails.
 
+## App Store metadata
+
+`appinfo/info.xml` is the single source for the App Store name, summary, and
+description. Keep the English and German summaries and descriptions aligned
+with the current user guide and UI whenever a user-visible feature changes.
+
+The summary is a short value proposition and must remain within the App Store
+schema limit of 128 characters. The description should explain the main
+photographer workflows and the capabilities that distinguish the app: branded
+presentations, proofing and selections, downloads, moderated uploads, and
+private event delivery. Mention optional integrations or media services only
+as optional, and describe policy intersections and source-file handling
+precisely.
+
+Do not put version numbers, release dates, private project metadata, or
+temporary implementation details in the App Store copy. Do not claim that
+original files are never changed: the app does not copy source media into its
+own storage, but it can manage XMP sidecars and accepted uploads. Run
+`npm run check:docs` to verify localized metadata, release-safe wording, and
+the required evergreen topics before committing.
+
+The App Store reads this metadata from the uploaded release archive. Changes
+to `info.xml` become visible there only after a new release is published; they
+do not rewrite the description of an already published release.
+
 ## Local package checks
 
 The normal target remains unsigned and requires no credentials:
@@ -107,7 +132,8 @@ contain one `proofing_gallery` directory, remain below 20 MiB, and contain both
 
 1. Confirm the App Store registration and all three environment secrets before
    creating a tag.
-2. Align `appinfo/info.xml`, `package.json`, and `package-lock.json`; update the
+2. Review the App Store metadata against the current UI and guides, then align
+   `appinfo/info.xml`, `package.json`, and `package-lock.json`; update the
    changelog and run all release gates.
 3. Create the annotated tag from sanitized public `main` and push it to the
    public repository.

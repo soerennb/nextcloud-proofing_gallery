@@ -24,6 +24,25 @@ Back up database, data directory, configuration, and appdata before upgrades.
 Nextcloud runs app migrations while enabling or upgrading. Do not skip supported
 Nextcloud server upgrade steps.
 
+### Recover a failed 0.9.0 upgrade
+
+If a 0.9.0 upgrade left Nextcloud in maintenance mode, keep maintenance mode
+enabled and back up the database, `config/`, data directory, and appdata. Install
+the verified signed 0.9.1 archive by replacing only
+`custom_apps/proofing_gallery`; do not uninstall the app or delete its tables,
+jobs, galleries, links, or feedback. Restart the AIO Nextcloud container or the
+PHP workers to clear OPcache, then run from the Nextcloud root:
+
+```bash
+sudo -u www-data php occ upgrade
+sudo -u www-data php occ status --output=json
+sudo -u www-data php occ app:list --output=json
+```
+
+Recovery is complete when `maintenance` and `needsDbUpgrade` are both `false`
+and Proofing Gallery reports version 0.9.1. If the retry fails, leave maintenance
+mode enabled, retain the backup and logs, and investigate the new error.
+
 ## Access and policy
 
 Administration settings → Additional settings → Proofing Gallery controls which
