@@ -3,6 +3,7 @@ import { dirname, extname, resolve, sep } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
 const readmeRelative = 'README.md'
+const securityRelative = 'SECURITY.md'
 const mirrorRelative = 'docs/USER-GUIDE.md'
 const canonicalUserGuideRelative = 'docs/en/user-guide.md'
 const appInfoRelative = 'appinfo/info.xml'
@@ -16,11 +17,34 @@ const forbidden = [
 	/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i,
 	/\.beads\//i,
 ]
+const appStoreForbidden = [
+	/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i,
+	/\b(?:internal.example.invalid|internal.example.invalid|internal.example.invalid|internal.example.invalid)\b/i,
+	/\b(?:v\s*)?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?\b/i,
+]
+const appStoreLanguages = ['en', 'de']
+const appStoreTopics = {
+	en: [
+		/\bproofing\b/i,
+		/\bselection/i,
+		/\bdownload/i,
+		/\bguest uploads?\b/i,
+		/\bevent/i,
+	],
+	de: [
+		/\bproofing\b/i,
+		/\bauswahl/i,
+		/\bdownload/i,
+		/\bgast-uploads?\b/i,
+		/\bevent/i,
+	],
+}
 const markdownLink = /!?(?:\[[^\]]*\])\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/g
 const documentationRoot = resolve(root, 'docs')
 const documentation = readdirSync(documentationRoot, { recursive: true })
 	.filter(relative => typeof relative === 'string' && relative.endsWith('.md'))
 	.map(relative => `docs/${relative.split(sep).join('/')}`)
+const markdownFiles = [securityRelative, ...documentation]
 let failed = false
 
 function checkLocalLinks(relative, source) {
@@ -43,7 +67,7 @@ function pngDimensions(filename) {
 	return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) }
 }
 
-for (const relative of documentation) {
+for (const relative of markdownFiles) {
 	const file = resolve(root, relative)
 	if (!existsSync(file)) {
 		console.error(`Missing required documentation: ${relative}`)
@@ -75,6 +99,49 @@ if (canonicalUserGuide !== mirror) {
 }
 
 const appInfo = readFileSync(resolve(root, appInfoRelative), 'utf8')
+function localizedAppInfoText(tag, language) {
+	const matches = [...appInfo.matchAll(new RegExp(`<${tag}\\s+lang="${language}">(.*?)</${tag}>`, 'gs'))]
+	if (matches.length !== 1) {
+		console.error(`${appInfoRelative} must contain exactly one ${tag} for ${language}`)
+		failed = true
+		return ''
+	}
+	return matches[0][1]
+		.replace(/^\s*<!\[CDATA\[/, '')
+		.replace(/\]\]>\s*$/, '')
+		.replace(/\s+/g, ' ')
+		.trim()
+}
+
+for (const language of appStoreLanguages) {
+	const summary = localizedAppInfoText('summary', language)
+	const description = localizedAppInfoText('description', language)
+	if (!summary) {
+		console.error(`${appInfoRelative} ${language} summary must not be empty`)
+		failed = true
+	}
+	if (summary.length > 128) {
+		console.error(`${appInfoRelative} ${language} summary exceeds the 128-character App Store limit`)
+		failed = true
+	}
+	if (!description) {
+		console.error(`${appInfoRelative} ${language} description must not be empty`)
+		failed = true
+	}
+	for (const pattern of appStoreForbidden) {
+		if (pattern.test(`${summary} ${description}`)) {
+			console.error(`${appInfoRelative} ${language} App Store metadata contains forbidden content: ${pattern}`)
+			failed = true
+		}
+	}
+	for (const topic of appStoreTopics[language]) {
+		if (!topic.test(description)) {
+			console.error(`${appInfoRelative} ${language} App Store description is missing evergreen topic: ${topic}`)
+			failed = true
+		}
+	}
+}
+
 const screenshotTags = [...appInfo.matchAll(/<screenshot\s+small-thumbnail="([^"]+)">([^<]+)<\/screenshot>/g)]
 if (screenshotTags.length === 0) {
 	console.error(`${appInfoRelative} must declare at least one screenshot pair`)
@@ -125,4 +192,4 @@ for (const relative of required) {
 	}
 }
 if (failed) process.exit(1)
-console.log(`Checked ${documentation.length} documentation files, README links, the synchronized user guide, and ${screenshotTags.length} screenshot pairs.`)
+console.log(`Checked ${markdownFiles.length} Markdown files, README links, the synchronized user guide, and ${screenshotTags.length} screenshot pairs.`)

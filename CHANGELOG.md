@@ -2,23 +2,41 @@
 
 ## Unreleased
 
+## 0.9.1 — 2026-09-06
+
+- fix upgrades for installations left in maintenance mode by 0.9.0: install 0.9.1
+  and run the normal Nextcloud upgrade again without deleting galleries, links,
+  feedback, or background jobs
+- keep cleanup jobs running reliably after an upgrade so existing galleries can
+  continue their automatic data maintenance
+- add an automated recovery test that reproduces the failed 0.9.0 upgrade and
+  verifies recovery with 0.9.1 on SQLite, MariaDB, and PostgreSQL
+
 ## 0.9.0 — 2026-09-04
 
-- add guided photographer projects for showcase, delivery, selection, proofing,
-  receiving files, and private event-folder delivery
-- add the Studio workspace model for overview, photos, culling, design, links,
-  review, team, automation, privacy, and history workflows
-- add recipient-ledger event delivery with scoped shared/group/private folders,
-  CSV assignment, encrypted contact data, PIN handoff, scheduled release waves,
-  retries, repairs, invitations, and link rotation
-- add link- and event-wave-specific download policies for individual files,
-  selections, complete galleries, JPEG presets, watermarks, and contact sheets
-- refine public gallery navigation, appearance, story layouts, event albums,
-  private client signals, comparison, annotations, and mobile actions
-- document the current settings hierarchy, event delivery behavior, privacy
-  boundaries, operational queues, and screenshot/release workflow
-- add a versioned 48-photo fictional Studio library with seven scenario galleries,
-  reproducible browser screenshot coverage, and reviewed App Store image pairs
+- add guided **New project** workflows for showcases, finished-photo delivery,
+  client selections, collaborative review, receiving files, and private event
+  folders, with workflow-specific gallery modes and moderated upload inboxes
+- add Studio workspaces for overview, photos, culling, design, links, review,
+  team, automation, privacy, and history, including reusable artwork assets and
+  a live design preview
+- improve owner and client review with photo comparison, loupe and filmstrip
+  culling, annotations, comments, named selections, and per-link selection
+  limits and due dates; submitted selections can be locked for delivery
+- add private event delivery for schools, sports, and other volume jobs with a
+  recipient ledger, CSV import, encrypted contact data, locales, assigned
+  shared/group/private folders, one-time PINs, invitations, scheduled release
+  waves, retries, repairs, and link rotation
+- keep every event recipient inside their assigned folders and apply layered
+  access rules at gallery, public-link, and release-wave level
+- let owners choose whether guests can download nothing, individual files,
+  saved selections, or the complete gallery; offer original or metadata-free
+  JPEGs, optional watermarks, and printable contact sheets
+- refresh public galleries with responsive mobile navigation, appearance themes,
+  album covers, story layouts, event albums, richer metadata, private client
+  identity signals, comparison, annotations, and improved mobile actions
+- expand the user and administration guides for project setup, event delivery,
+  settings, privacy, downloads, and operational workflows
 
 ## 0.8.2 — 2026-08-19
 

@@ -16,6 +16,16 @@ test('runs the complete application surface for a migration', () => {
 	})
 })
 
+test('routes upgrade-sensitive job and repair code through upgrade validation', () => {
+	for (const file of ['lib/AppInfo/Application.php', 'lib/BackgroundJob/CleanupGalleryDataJob.php', 'lib/RepairStep/NormalizeBackgroundJobs.php', 'lib/Service/BackgroundMaintenanceHealthService.php']) {
+		const result = classifyCiChanges([file])
+		assert.equal(result.php, true)
+		assert.equal(result.integration, true)
+		assert.equal(result.compatibility, true)
+		assert.equal(result.upgrade, true)
+	}
+})
+
 test('limits workflow-only changes to workflow validation', () => {
 	assert.deepEqual(classifyCiChanges(['.github/workflows/ci.yml']), {
 		web: false, php: false, workflow: true, docs: false, dependencies: false,

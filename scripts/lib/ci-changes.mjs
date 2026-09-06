@@ -26,7 +26,7 @@ export function classifyCiChanges(files) {
 		if (match(file, [/^package(-lock)?\.json$/, /^composer\.(json|lock)$/])) selected.dependencies = true
 		if (match(file, [/^src\//, /^lib\//, /^appinfo\//, /^templates\//, /^tests\/(e2e|smoke|context_agent)\//, /^integrations\//, /^compose\.yaml$/, /^scripts\/(run-e2e|test-context-agent|test-user-migration)\./])) selected.integration = true
 		if (match(file, [/^lib\//, /^appinfo\//, /^integrations\//, /^tests\/compat\//, /^scripts\/compatibility-matrix\.sh$/, /^compose\.yaml$/, /^composer\.(json|lock)$/])) selected.compatibility = true
-		if (match(file, [/^lib\/(Migration|Db)\//, /^appinfo\/info\.xml$/, /^scripts\/(test-upgrade|build-appstore|verify-appstore-package|validate-appstore-package)\./, /^Makefile$/, /^composer\.(json|lock)$/])) selected.upgrade = true
+		if (match(file, [/^lib\/(Migration|Db|AppInfo|BackgroundJob|RepairStep|Service)\//, /^appinfo\/info\.xml$/, /^scripts\/(test-upgrade|build-appstore|verify-appstore-package|validate-appstore-package)\./, /^Makefile$/, /^composer\.(json|lock)$/])) selected.upgrade = true
 	}
 
 	if (selected.integration) {
