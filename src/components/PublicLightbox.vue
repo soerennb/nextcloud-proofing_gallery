@@ -721,7 +721,7 @@ async function saveEditedComment(commentId: number) {
 						:editing-comment-id="editingCommentId"
 						:editing-comment-body="editingCommentBody"
 						@start-annotation="annotations.startKeyboard"
-						@open-thread="selectedCommentId = $event"
+						@open-thread="annotations.select"
 						@edit="editComment"
 						@save="saveEditedComment"
 						@update:editing-comment-body="editingCommentBody = $event"

@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 define('OC_CONSOLE', 1);
 require '/var/www/html/lib/base.php';
+set_exception_handler(static function (Throwable $error): void {
+	fwrite(STDERR, $error->getMessage() . "\n");
+	exit(1);
+});
 
 $users = \OCP\Server::get(\OCP\IUserManager::class);
 $uid = 'proofing-migration-' . bin2hex(random_bytes(4));

@@ -441,17 +441,18 @@ final class CollaborationRepository {
 	}
 
 	/** @param array<string, mixed> $payload */
-	public function insertOwnerEvent(int $galleryId, ?int $guestId, string $actorUid, string $type, array $payload, int $now): int {
-		return $this->insertActorEvent($galleryId, $guestId, $actorUid, $type, $payload, $now);
+	public function insertOwnerEvent(int $galleryId, ?int $guestId, string $actorUid, string $type, array $payload, int $now, ?string $recipientUid = null): int {
+		return $this->insertActorEvent($galleryId, $guestId, $actorUid, $type, $payload, $now, $recipientUid);
 	}
 
 	/** @param array<string, mixed> $payload */
-	private function insertActorEvent(int $galleryId, ?int $guestId, ?string $actorUid, string $type, array $payload, int $now): int {
+	private function insertActorEvent(int $galleryId, ?int $guestId, ?string $actorUid, string $type, array $payload, int $now, ?string $recipientUid = null): int {
 		$qb = $this->db->getQueryBuilder();
 		$qb->insert('proofing_events')->values([
 			'gallery_id' => $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT),
 			'guest_id' => $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT),
 			'actor_uid' => $qb->createNamedParameter($actorUid),
+			'recipient_uid' => $qb->createNamedParameter($recipientUid),
 			'event_type' => $qb->createNamedParameter($type),
 			'payload' => $qb->createNamedParameter(json_encode($payload, JSON_THROW_ON_ERROR)),
 			'created_at' => $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT),
@@ -541,7 +542,14 @@ final class CollaborationRepository {
 			->andWhere($qb->expr()->gt('id', $qb->createNamedParameter(max(0, $cursor), IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->in('event_type', $qb->createNamedParameter(self::COLLABORATION_EVENT_TYPES, IQueryBuilder::PARAM_STR_ARRAY)))
 			->orderBy('id', 'ASC')->setMaxResults(200);
-		$this->actorCondition($qb, $guestId, $actorUid);
+		if ($guestId === null && $actorUid !== null) {
+			$qb->andWhere($qb->expr()->orX(
+				$qb->expr()->eq('actor_uid', $qb->createNamedParameter($actorUid)),
+				$qb->expr()->eq('recipient_uid', $qb->createNamedParameter($actorUid)),
+			));
+		} else {
+			$this->actorCondition($qb, $guestId, $actorUid);
+		}
 		return QueryResult::rows($qb->executeQuery());
 	}
 

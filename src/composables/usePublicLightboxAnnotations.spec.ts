@@ -44,6 +44,20 @@ function setup(mutate = vi.fn().mockResolvedValue(true), hasIdentity = true) {
 	return { annotations, container, mutate, shell, image, photoSwipe, comments, bindZoom }
 }
 
+describe('public lightbox thread selection', () => {
+	it('refreshes stale screen bounds when opening an existing thread', () => {
+		const { annotations, image, shell, comments } = setup()
+		comments.value = [{ id: 12, fileId: 7, body: 'Point', author: 'A', mine: false, createdAt: 1, deletedAt: null, annotations: [{ x: 2500, y: 5000, width: 800, height: 800 }] }]
+		annotations.syncHost()
+		vi.mocked(image.getBoundingClientRect).mockReturnValue({ left: -100, top: -50, width: 1600, height: 800 } as DOMRect)
+		annotations.select(12)
+		expect(annotations.imageBounds.value).toEqual({ left: -100, top: -50, width: 1600, height: 800 })
+		expect(annotations.selectedCommentId.value).toBe(12)
+		annotations.destroy()
+		shell.remove()
+	})
+})
+
 describe('public lightbox annotation state', () => {
 	it('keeps observing layout changes after the image first acquires nonzero dimensions', () => {
 		let resized: (() => void) | undefined

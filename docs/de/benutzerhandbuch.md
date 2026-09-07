@@ -131,6 +131,21 @@ Auswahlen speichern. Ein Nextcloud-Konto ist nicht nötig. Identität und
 Änderungstoken liegen in einer privaten Browsersitzung; gelöschte Website-Daten
 beenden den Zugriff auf privates Feedback.
 
+Wenn du bei Nextcloud angemeldet bist, gehört neues Feedback zu deinem Konto.
+Frühere Gastkommentare bleiben ihrer ursprünglichen Gastidentität zugeordnet;
+die Anmeldung übernimmt sie nicht. Galerie- und Linkregeln gelten weiterhin.
+
+**Feedback** öffnet **Allgemeine Kommentare**, mit den neuesten Beiträgen direkt
+unter dem Eingabefeld. **Markierungen** gruppiert Punktgespräche in aufklappbaren
+Zeilen. Klappe eine Zeile zum Lesen auf oder öffne das Gespräch über dessen
+separate Schaltfläche neben dem Punkt. Diese Fenster verdunkeln das Bild nicht.
+**Prüfstatus** zeigt den konfigurierten Statusnamen zusammen mit seiner Farbe.
+
+Zoome über die Bedienelemente, das Mausrad oder eine Zwei-Finger-Geste. Am Desktop
+kannst du das vergrößerte Bild mit gedrückter rechter Maustaste verschieben.
+Ein Rechtsklick ohne Ziehen öffnet weiterhin das Browser-Kontextmenü. Punkte
+bleiben beim Zoomen und Verschieben an derselben bildrelativen Position.
+
 Klicke oder tippe direkt auf ein Bild, um einen nummerierten Punkt zu setzen
 und den zugehörigen Kommentar zu schreiben. Wähle für die Tastaturplatzierung
 **Punktkommentar hinzufügen**, verschiebe den Punkt mit den Pfeiltasten, drücke

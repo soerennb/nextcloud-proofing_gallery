@@ -51,6 +51,20 @@ Aufbewahrung. Die Regeln werden serverseitig erzwungen und sperren kritische
 Funktionen bei Unsicherheit. Native Nextcloud-Regeln für Freigaben, Passwörter,
 Ablauf und Uploads bleiben maßgeblich und werden niemals gelockert.
 
+Öffentliche Prüfer können Gastidentitäten oder angemeldete Nextcloud-Konten
+verwenden. Konto-UIDs bestimmen die Urheberschaft, nicht zusätzliche Rechte.
+Frühere Gastbeiträge werden nicht anhand von Namen oder E-Mail-Adressen
+übertragen. Privates Feedback bleibt auf den Autor und berechtigte
+Galerieverwalter beschränkt. Eigentümeränderungen an einer Kontoauswahl werden
+nur an den zulässigen Empfängerkreis übermittelt. Gast-Uploads bleiben ein
+separater, Gästen vorbehaltener Ablauf.
+
+Die Migration der Kontozuordnung behält bei doppelten Konto-Feedbackzeilen die
+höchste ID, bevor sie Eindeutigkeitsregeln anlegt; Gastkommentare und Punkte
+werden nicht neu zugeordnet. Eine folgende Migration ergänzt eine optionale
+Empfänger-UID für Ereignisse, getrennt vom auslösenden Eigentümer. Schließe das
+normale Datenbank-Upgrade ab, bevor der neue Anwendungscode bereitgestellt wird.
+
 Prüfe Freigabe-, Mail- und Gruppenrichtlinien vor der Einführung. Aktiviere
 Gast-Downloads und -Uploads nur bei Bedarf. Richte Grenzen nach PHP, Proxy,
 Speicher und Worker-Kapazität aus, nicht nach Browservalidierung.

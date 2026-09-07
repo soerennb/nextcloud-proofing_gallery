@@ -491,7 +491,7 @@ final class CollaborationService {
 			}
 			$this->repository->insertOwnerEvent(
 				$gallery->getId(), $selection['guest_id'] === null ? null : (int)$selection['guest_id'], $gallery->getOwnerUid(),
-				'selection.updated', ['selectionId' => $publicId], $now,
+				'selection.updated', ['selectionId' => $publicId], $now, $selection['actor_uid'],
 			);
 		});
 	}
@@ -503,7 +503,7 @@ final class CollaborationService {
 			if (!$this->repository->deleteSelection($gallery->getId(), $publicId)) throw new InvalidArgumentException('Selection not found');
 			$this->repository->insertOwnerEvent(
 				$gallery->getId(), $selection['guest_id'] === null ? null : (int)$selection['guest_id'], $gallery->getOwnerUid(),
-				'selection.deleted', ['selectionId' => $publicId, 'deleted' => true], $this->clock->getTime(),
+				'selection.deleted', ['selectionId' => $publicId, 'deleted' => true], $this->clock->getTime(), $selection['actor_uid'],
 			);
 		});
 	}

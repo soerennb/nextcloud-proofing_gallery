@@ -277,6 +277,7 @@ jobs:
         run: |
           ./scripts/test-context-agent.sh
           ./scripts/test-user-migration.sh
+          docker compose exec -T --user www-data nextcloud php /var/www/html/custom_apps/proofing_gallery/tests/smoke/CollaborationSelectionSync.php
       - name: Verify protected public routes
         env:
           E2E_SECURITY_PROTECTIONS: "1"

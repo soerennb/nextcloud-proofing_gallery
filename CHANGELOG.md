@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- separate general feedback from expandable annotation conversations, keep
+  panels beside the image detail without dimming artwork, and display review
+  state names with their configured colors
+- retain image-relative annotation positions through transform-only zoom and
+  right-button panning, and refresh thread placement when opened from Pins
+- deliver owner selection updates and deletions to the correct private account
+  without changing event attribution or guest visibility
+- accept empty settings objects during additive user migration and report
+  migration smoke-test failures with a failing exit status
 - make signed-in Nextcloud accounts and public guests first-class collaboration
   actors across comments, selections, private ratings, picks, and review rounds
 - preserve account UIDs in storage while displaying current Nextcloud names,

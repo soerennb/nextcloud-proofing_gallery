@@ -57,9 +57,14 @@ and workflow labels even if those values exist in Files or an XMP sidecar.
 
 ## Visibility and retention
 
-Private proofing exposes a guest's feedback only to that guest and gallery
+Private proofing exposes an author's feedback only to that guest or account and gallery
 managers. Collaborative proofing deliberately shares feedback with other
 reviewers. The chosen policy should be communicated before inviting guests.
+
+Signed-in feedback records the existing Nextcloud UID. Historical guest
+authorship is not transferred on sign-in. Owner-originated selection events
+retain the owner's UID and a separate private account recipient where needed;
+neither identity field is added to the public event response.
 
 Guest identities expire after 30 days unless renewed by product behavior.
 Scheduled cleanup removes expired identities, abandoned chunks, stale derived

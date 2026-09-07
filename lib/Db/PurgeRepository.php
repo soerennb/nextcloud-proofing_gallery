@@ -181,6 +181,8 @@ final class PurgeRepository {
 					$deleted += $qb->delete($table)->where($qb->expr()->eq('actor_uid', $qb->createNamedParameter($id)))->executeStatement();
 				}
 				$qb = $this->db->getQueryBuilder();
+				$deleted += $qb->delete('proofing_events')->where($qb->expr()->eq('recipient_uid', $qb->createNamedParameter($id)))->executeStatement();
+				$qb = $this->db->getQueryBuilder();
 				$qb->update('proofing_review_rounds')->set('submitted_by_actor_uid', $qb->createNamedParameter(null))
 					->where($qb->expr()->eq('submitted_by_actor_uid', $qb->createNamedParameter($id)))->executeStatement();
 				foreach ([

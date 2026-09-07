@@ -165,7 +165,7 @@ test('bundled user documentation works offline in English and German', async ({ 
 	await expect(page).toHaveURL(/#help$/)
 	await expect(page.getByRole('heading', { name: 'Proofing Gallery help' })).toBeVisible()
 	await expect(page.getByRole('heading', { name: 'Create a gallery' })).toBeVisible()
-	await page.getByRole('button', { name: 'Deutsch' }).click()
+	await page.getByRole('button', { name: 'German', exact: true }).click()
 	await expect(page.getByRole('heading', { name: 'Galerie erstellen' })).toBeVisible()
 	await page.reload()
 	await expect(page.getByRole('heading', { name: 'Galerie erstellen' })).toBeVisible()
@@ -1198,25 +1198,21 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 
 	const activeImage = page.locator(`.pswp__img[alt="${firstName}"]`)
 	const beforePinch = await activeImage.boundingBox()
-	await page.evaluate(() => {
-		const target = document.querySelector('.pswp__scroll-wrap')
-		for (const [pointerId, clientX] of [[11, 150], [12, 240]]) {
-			target?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, clientX, clientY: 420, isPrimary: pointerId === 11, pointerId, pointerType: 'touch', buttons: 1 }))
-		}
-	})
-	await page.waitForTimeout(80)
-	await page.evaluate(() => {
-		for (const [pointerId, clientX] of [[11, 90], [12, 300]]) {
-			window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, clientX, clientY: 420, isPrimary: pointerId === 11, pointerId, pointerType: 'touch', buttons: 1 }))
-		}
-	})
-	await page.waitForTimeout(120)
-	await page.evaluate(() => {
-		for (const [pointerId, clientX] of [[11, 90], [12, 300]]) {
-			window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, clientX, clientY: 420, isPrimary: pointerId === 11, pointerId, pointerType: 'touch', buttons: 0 }))
-		}
-	})
-	await page.waitForTimeout(450)
+	expect(beforePinch).not.toBeNull()
+	const touch = await context.newCDPSession(page)
+	const centerX = beforePinch!.x + beforePinch!.width / 2
+	const centerY = beforePinch!.y + beforePinch!.height / 2
+	const touchPoints = (distance: number) => [
+		{ x: centerX - distance, y: centerY, id: 11 },
+		{ x: centerX + distance, y: centerY, id: 12 },
+	]
+	await touch.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: touchPoints(40) })
+	for (const distance of [50, 60, 70, 80, 90]) {
+		await touch.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: touchPoints(distance) })
+	}
+	await touch.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+	await expect.poll(async () => (await activeImage.boundingBox())!.width).toBeGreaterThan(beforePinch!.width * 1.1)
+	await touch.detach()
 	const afterPinch = await activeImage.boundingBox()
 	expect(beforePinch).not.toBeNull()
 	expect(afterPinch).not.toBeNull()
