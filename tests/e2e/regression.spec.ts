@@ -6,9 +6,12 @@ import { promisify } from 'node:util'
 import AxeBuilder from '@axe-core/playwright'
 import { expect, request as requestFactory, test } from '@playwright/test'
 
+import { expectSuccessToast } from './dialogs.ts'
+
 const auth = `Basic ${Buffer.from('admin:admin').toString('base64')}`
 const apiHeaders = { Authorization: auth, 'OCS-APIRequest': 'true' }
 const execFileAsync = promisify(execFile)
+const mailpitUrl = process.env.MAILPIT_URL ?? 'http://127.0.0.1:8026'
 
 async function state(): Promise<{ galleryId: number, token: string, folderId: number, largeFolderId: number }> {
 	return JSON.parse(await readFile(path.join(process.cwd(), 'test-results-e2e-state.json'), 'utf8'))
@@ -973,10 +976,10 @@ test('owner preset and locale controls remain clear and responsive', async ({ pa
 	await page.getByRole('button', { name: 'Reusable preset' }).click()
 	await page.getByRole('textbox', { name: 'Preset name' }).fill(presetName)
 	await page.getByRole('button', { name: 'Save as new' }).click()
-	await expect(page.locator('.toastify.toast-success').filter({ hasText: 'Preset created.' })).toBeVisible()
+	await expectSuccessToast(page, 'Preset created.')
 	await expect(page.getByRole('combobox', { name: 'Saved preset' })).toHaveValue(/\d+/)
 	await page.getByRole('button', { name: 'Apply', exact: true }).click()
-	await expect(page.locator('.toastify.toast-success').filter({ hasText: 'Preset applied.' })).toBeVisible()
+	await expectSuccessToast(page, 'Preset applied.')
 
 	const accessibility = await new AxeBuilder({ page }).include('.settings-page').analyze()
 	expect(accessibility.violations).toEqual([])
@@ -986,7 +989,7 @@ test('owner preset and locale controls remain clear and responsive', async ({ pa
 
 	page.once('dialog', dialog => dialog.accept())
 	await page.getByRole('button', { name: 'Delete preset' }).click()
-	await expect(page.locator('.toastify.toast-success').filter({ hasText: 'Preset deleted.' })).toBeVisible()
+	await expectSuccessToast(page, 'Preset deleted.')
 })
 
 test('invitation templates are owner-scoped, validated and render editable plain text', async ({ request, baseURL }) => {
@@ -1131,26 +1134,26 @@ test('notification subscriptions are opt-in, eligible, deduplicated and scoped o
 			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
 			data: { allowDownloads: false },
 		})
-		await request.delete('http://127.0.0.1:8026/api/v1/messages')
+		await request.delete(`${mailpitUrl}/api/v1/messages`)
 		expect((await request.post(`${galleries}/${secondGalleryId}/invite?format=json`, {
 			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
 			data: { recipient: 'client@example.test', message: '<b>Literal invitation text</b>' },
 		})).status()).toBe(202)
-		const invitationMailbox = await request.get('http://127.0.0.1:8026/api/v1/messages').then(response => response.json()) as {
+		const invitationMailbox = await request.get(`${mailpitUrl}/api/v1/messages`).then(response => response.json()) as {
 			count: number; messages: Array<{ ID: string; Subject: string }>
 		}
 		expect(invitationMailbox.count).toBe(1)
 		expect(invitationMailbox.messages[0].Subject).toContain('hat')
-		const invitationMail = await request.get(`http://127.0.0.1:8026/api/v1/message/${invitationMailbox.messages[0].ID}`).then(response => response.json()) as { Text: string; HTML: string }
+		const invitationMail = await request.get(`${mailpitUrl}/api/v1/message/${invitationMailbox.messages[0].ID}`).then(response => response.json()) as { Text: string; HTML: string }
 		expect(invitationMail.Text).toContain('<b>Literal invitation text</b>')
 		expect(invitationMail.HTML).not.toContain('<b>Literal invitation text</b>')
 		expect(invitationMail.HTML).toContain('&lt;b&gt;Literal invitation text&lt;/b&gt;')
 
-		await request.delete('http://127.0.0.1:8026/api/v1/messages')
+		await request.delete(`${mailpitUrl}/api/v1/messages`)
 		// Other serial scenarios can leave due digests queued even though their
 		// mailbox is empty. Drain them before observing this scenario's message.
 		await runDigestJob()
-		await request.delete('http://127.0.0.1:8026/api/v1/messages')
+		await request.delete(`${mailpitUrl}/api/v1/messages`)
 		const endpoint = (suffix: string) => `${baseURL}/index.php/apps/proofing_gallery/public/${stable.token}/${suffix}`
 		const media = await request.get(endpoint('gallery')).then(response => response.json()) as { items: Array<{ id: number; folder: boolean }> }
 		const file = media.items.find(item => !item.folder)
@@ -1162,17 +1165,17 @@ test('notification subscriptions are opt-in, eligible, deduplicated and scoped o
 		})).status()).toBe(200)
 
 		await runDigestJob()
-		let mailbox = await request.get('http://127.0.0.1:8026/api/v1/messages').then(response => response.json()) as {
+		let mailbox = await request.get(`${mailpitUrl}/api/v1/messages`).then(response => response.json()) as {
 			count: number; messages: Array<{ ID: string; Subject: string }>
 		}
 		let ownMessages = mailbox.messages.filter(message => message.Subject.includes('Aktualisierungen für „E2E Gallery“'))
 		expect(ownMessages).toHaveLength(1)
 		await runDigestJob()
-		mailbox = await request.get('http://127.0.0.1:8026/api/v1/messages').then(response => response.json()) as typeof mailbox
+		mailbox = await request.get(`${mailpitUrl}/api/v1/messages`).then(response => response.json()) as typeof mailbox
 		ownMessages = mailbox.messages.filter(message => message.Subject.includes('Aktualisierungen für „E2E Gallery“'))
 		expect(ownMessages).toHaveLength(1)
 
-		const message = await request.get(`http://127.0.0.1:8026/api/v1/message/${ownMessages[0]!.ID}`).then(response => response.json()) as { Text: string }
+		const message = await request.get(`${mailpitUrl}/api/v1/message/${ownMessages[0]!.ID}`).then(response => response.json()) as { Text: string }
 		const unsubscribePath = message.Text.match(/http:\/\/localhost(\/index\.php\/apps\/proofing_gallery\/notifications\/unsubscribe\/[A-Za-z0-9]{48})/)?.[1]
 		expect(unsubscribePath).toBeDefined()
 		expect((await request.get(`${baseURL}${unsubscribePath}`)).status()).toBe(200)
@@ -1203,13 +1206,13 @@ test('notification and invitation controls stay understandable and responsive', 
 	await settingsNavigation.locator('summary').click()
 	await settingsNavigation.getByRole('button', { name: 'Team', exact: true }).click()
 	await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible()
-	await expect(page.getByRole('checkbox', { name: 'Nextcloud notification center' })).toBeChecked()
+	await expect(page.getByRole('switch', { name: 'Nextcloud notification center' })).toBeChecked()
 	await page.getByText('Email digest', { exact: true }).click()
-	await expect(page.getByRole('checkbox', { name: 'Email digest' })).toBeChecked()
+	await expect(page.getByRole('switch', { name: 'Email digest' })).toBeChecked()
 	await page.getByRole('combobox', { name: 'Delivery' }).selectOption('daily')
 	await expect(page.getByRole('combobox', { name: 'Delivery' })).toHaveValue('daily')
 	await page.getByRole('button', { name: /^(Subscribe|Update subscription)$/ }).click()
-	await expect(page.locator('.toastify.toast-success').filter({ hasText: 'Notification subscription saved.' })).toBeVisible()
+	await expectSuccessToast(page, 'Notification subscription saved.')
 	await expect(page.getByRole('button', { name: 'Update subscription' })).toBeVisible()
 
 	let violations = await new AxeBuilder({ page }).include('.settings-content').analyze()
@@ -1218,7 +1221,7 @@ test('notification and invitation controls stay understandable and responsive', 
 	const panelOverflow = await page.getByRole('heading', { name: 'Notifications' }).locator('..').evaluate(element => element.scrollWidth > element.clientWidth)
 	expect(panelOverflow).toBe(false)
 	await page.getByRole('button', { name: 'Remove subscription' }).click()
-	await expect(page.locator('.toastify.toast-success').filter({ hasText: 'Notification subscription removed.' })).toBeVisible()
+	await expectSuccessToast(page, 'Notification subscription removed.')
 
 	await page.setViewportSize({ width: 1280, height: 900 })
 	await page.locator('.settings-header__actions').getByRole('button', { name: 'Share', exact: true }).click()
@@ -1226,7 +1229,7 @@ test('notification and invitation controls stay understandable and responsive', 
 	await page.getByRole('textbox', { name: 'Template name' }).fill(templateName)
 	await page.getByRole('textbox', { name: 'Personal message (optional)' }).fill('<b>Hello {gallery}</b> — {owner}\n{url}')
 	await page.getByRole('button', { name: 'Save as template' }).click()
-	await expect(page.locator('.toastify.toast-success').filter({ hasText: 'Invitation template saved.' })).toBeVisible()
+	await expectSuccessToast(page, 'Invitation template saved.')
 	const templateSelect = page.getByRole('combobox', { name: 'Message template' })
 	await templateSelect.selectOption({ label: 'New template' })
 	await templateSelect.selectOption({ label: templateName })
@@ -1238,5 +1241,5 @@ test('notification and invitation controls stay understandable and responsive', 
 	expect(dialogOverflow).toBe(false)
 	page.once('dialog', dialog => dialog.accept())
 	await page.getByRole('button', { name: 'Delete template' }).click()
-	await expect(page.locator('.toastify.toast-success').filter({ hasText: 'Invitation template deleted.' })).toBeVisible()
+	await expectSuccessToast(page, 'Invitation template deleted.')
 })
