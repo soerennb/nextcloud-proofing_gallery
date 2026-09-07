@@ -6,6 +6,8 @@ namespace OCA\ProofingGallery\Tests\Unit\Db;
 
 use OCA\ProofingGallery\Db\CollaborationRepository;
 use OCP\DB\IResult;
+use OCP\DB\QueryBuilder\IExpressionBuilder;
+use OCP\DB\QueryBuilder\IFunctionBuilder;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 use OCP\IUserManager;
@@ -35,7 +37,8 @@ final class CollaborationSelectionIdentityTest extends TestCase {
 			$query->method($method)->willReturnSelf();
 		}
 		$query->method('createNamedParameter')->willReturnCallback(static fn (mixed $value): string => json_encode($value, JSON_THROW_ON_ERROR));
-		$expressions = $query->expr();
+		$expressions = $this->createMock(IExpressionBuilder::class);
+		$query->method('func')->willReturn($this->createMock(IFunctionBuilder::class));
 		$comparisons = [];
 		$expressions->method('eq')->willReturnCallback(static function (string $left, mixed $right) use (&$comparisons): string {
 			$comparisons[$left] = $right;

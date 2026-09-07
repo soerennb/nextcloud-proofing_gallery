@@ -10,6 +10,17 @@
 - retain the existing guest session, export, rating, and review behavior for
   backward compatibility
 
+## 0.9.2 — 2026-09-07
+
+- make the mobile gallery and lightbox easier to use with more reliable overlays,
+  touch interaction, navigation, and action controls
+- make success feedback and file-conflict resolution clearer and more accessible,
+  including improved screen-reader announcements and a simpler conflict dialog
+- improve project settings and reusable preset controls with updated Nextcloud
+  interface components
+- harden client-side input handling against case and whitespace variants of
+  malicious `onload` attributes
+
 ## 0.9.1 — 2026-09-06
 
 - fix upgrades for installations left in maintenance mode by 0.9.0: install 0.9.1

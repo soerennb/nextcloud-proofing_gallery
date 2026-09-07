@@ -3,6 +3,8 @@ import path from 'node:path'
 
 import { expect, test } from '@playwright/test'
 
+import { expectSuccessToast } from './dialogs.ts'
+
 const auth = `Basic ${Buffer.from('admin:admin').toString('base64')}`
 const apiHeaders = { Authorization: auth, 'OCS-APIRequest': 'true' }
 
@@ -191,7 +193,7 @@ test('owner creates and fills a collection through the content workspace', async
 		await page.getByRole('button', { name: 'Add selected files' }).click()
 		await expect(page.getByRole('region', { name: 'Selected files' }).getByText('proof.png')).toBeVisible()
 		await page.getByRole('button', { name: 'Save collection' }).click()
-		await expect(page.locator('.toastify.toast-success').filter({ hasText: 'Collection content saved.' })).toBeVisible()
+		await expectSuccessToast(page, 'Collection content saved.')
 
 	} finally {
 		if (collectionId !== null) {
