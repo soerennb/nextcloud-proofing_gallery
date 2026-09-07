@@ -5,12 +5,11 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { ANNOTATION_COORDINATE_SCALE } from '../domain/collaboration.ts'
 import type { NormalizedAnnotation } from '../domain/collaboration.ts'
 import { annotationThreadKey } from '../domain/lightboxReview.ts'
-import type { ScreenBounds, ScreenPoint } from '../domain/lightboxReview.ts'
+import type { ScreenPoint } from '../domain/lightboxReview.ts'
 import type { CollaborationState } from '../publicTypes.ts'
 
 const props = defineProps<{
 	host: HTMLElement | null
-	imageBounds: ScreenBounds | null
 	comments: CollaborationState['comments']
 	draft: NormalizedAnnotation | null
 	body: string

@@ -141,6 +141,9 @@ describe('public lightbox annotation state', () => {
 		shell.remove()
 	})
 
+})
+
+describe('public lightbox annotation image readiness', () => {
 	it.each(['before', 'after'])('attaches to late HTML image insertion with comments arriving %s the image', async arrival => {
 		const { annotations, container, image, photoSwipe, shell, comments, bindZoom } = setup()
 		const slide = photoSwipe.currSlide!
@@ -207,6 +210,9 @@ describe('public lightbox annotation state', () => {
 		shell.remove()
 	})
 
+})
+
+describe('public lightbox annotation composer actions', () => {
 	it('restores focus after cancelling from the keyboard composer', async () => {
 		const trigger = document.createElement('button')
 		document.body.append(trigger)

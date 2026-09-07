@@ -26,16 +26,16 @@ const DRAG_THRESHOLD = 3
  * slide sizing. Images deliberately use one fixed source and this surface owns
  * their zoom transform, so a zoom frame never promotes an image resolution or
  * changes its layout dimensions.
+ *
+ * @param photoSwipe - Current PhotoSwipe viewer.
+ * @param onUpdate - Synchronize markers after a transform.
+ * @param onImageChange - Attach annotations when the active image changes.
  */
 export function usePublicLightboxZoomSurface(photoSwipe: () => PhotoSwipe | null, onUpdate: () => void, onImageChange: () => void = () => {}) {
 	let state: ZoomState = { scale: 1, panX: 0, panY: 0 }
 	let surface: HTMLElement | null = null
 	let image: HTMLImageElement | null = null
-	let drag: ActiveDrag | null = null
-	const touches = new Map<number, { x: number; y: number }>()
-	let pinchDistance = 0
-	let pinchScale = 1
-	let suppressContextMenuUntil = 0
+	let resetInput = () => {}
 
 	function activeImage() { return image }
 	function markerScale() { return 1 / state.scale }
@@ -81,9 +81,7 @@ export function usePublicLightboxZoomSurface(photoSwipe: () => PhotoSwipe | null
 		const nextSurface = pswp?.currSlide?.container.querySelector<HTMLElement>('.proofing-zoom-surface') ?? null
 		// Annotation DOM updates must not remount or reset an already active image.
 		if (nextImage === image && nextSurface === surface) return
-		touches.clear()
-		pinchDistance = 0
-		drag = null
+		resetInput()
 		if (!nextImage || !nextSurface) {
 			surface = null
 			image = null
@@ -95,29 +93,67 @@ export function usePublicLightboxZoomSurface(photoSwipe: () => PhotoSwipe | null
 		reset()
 		onImageChange()
 	}
+	function bind() {
+		const element = photoSwipe()?.element
+		if (!element) return () => {}
+		// HTML slide content can be inserted/replaced after PhotoSwipe startup.
+		// Observe availability for the viewer lifetime, independent of fetch timing.
+		const imageObserver = new MutationObserver(mount)
+		imageObserver.observe(element, { childList: true, subtree: true })
+		mount()
+		const input = bindZoomInput(element, activeImage, () => state, zoomTo, apply)
+		resetInput = input.reset
+		return () => {
+			imageObserver.disconnect()
+			input.destroy()
+			resetInput = () => {}
+		}
+	}
+	return { activeImage, markerScale, mount, refresh, zoom, zoomTo, bind }
+}
+function bindZoomInput(
+	element: HTMLElement,
+	activeImage: () => HTMLImageElement | null,
+	zoomState: () => ZoomState,
+	zoomTo: (scale: number, point?: { x: number; y: number }) => void,
+	apply: () => void,
+) {
+	let drag: ActiveDrag | null = null
+	const touches = new Map<number, { x: number; y: number }>()
+	let pinchDistance = 0
+	let pinchScale = 1
+	let suppressContextMenuUntil = 0
+	function reset() {
+		touches.clear()
+		pinchDistance = 0
+		drag = null
+	}
 	function onWheel(event: WheelEvent) {
+		const image = activeImage()
 		if (!image || !(event.target instanceof Node) || !image.parentElement?.contains(event.target)) return
 		if (event.ctrlKey || Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
 			event.preventDefault()
-			zoomTo(state.scale * Math.exp(-event.deltaY * 0.0025), { x: event.clientX, y: event.clientY })
+			zoomTo(zoomState().scale * Math.exp(-event.deltaY * 0.0025), { x: event.clientX, y: event.clientY })
 		}
 	}
 	function onPointerDown(event: PointerEvent) {
+		const image = activeImage()
 		if (event.pointerType === 'touch' && event.target === image) {
 			touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
 			if (touches.size === 2) {
 				const [first, second] = [...touches.values()]
 				pinchDistance = Math.hypot(second.x - first.x, second.y - first.y)
-				pinchScale = state.scale
+				pinchScale = zoomState().scale
 				image?.setPointerCapture?.(event.pointerId)
 			}
 			return
 		}
-		if (event.pointerType !== 'mouse' || event.button !== 2 || event.target !== image || state.scale <= MIN_SCALE) return
-		drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, startPanX: state.panX, startPanY: state.panY, moved: false }
+		if (event.pointerType !== 'mouse' || event.button !== 2 || event.target !== image || zoomState().scale <= MIN_SCALE) return
+		drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, startPanX: zoomState().panX, startPanY: zoomState().panY, moved: false }
 		image?.setPointerCapture?.(event.pointerId)
 	}
 	function finishDrag(event: PointerEvent) {
+		const image = activeImage()
 		touches.delete(event.pointerId)
 		if (touches.size < 2) pinchDistance = 0
 		if (!drag || drag.pointerId !== event.pointerId) return
@@ -144,38 +180,28 @@ export function usePublicLightboxZoomSurface(photoSwipe: () => PhotoSwipe | null
 		if (!drag.moved && Math.hypot(deltaX, deltaY) < DRAG_THRESHOLD) return
 		drag.moved = true
 		event.preventDefault()
-		state.panX = drag.startPanX + deltaX
-		state.panY = drag.startPanY + deltaY
+		zoomState().panX = drag.startPanX + deltaX
+		zoomState().panY = drag.startPanY + deltaY
 		apply()
 	}
 	function onContextMenu(event: MouseEvent) {
 		if (Date.now() <= suppressContextMenuUntil) event.preventDefault()
 	}
-	function bind() {
-		const element = photoSwipe()?.element
-		if (!element) return () => {}
-		// HTML slide content can be inserted/replaced after PhotoSwipe startup.
-		// Observe availability for the viewer lifetime, independent of fetch timing.
-		const imageObserver = new MutationObserver(mount)
-		imageObserver.observe(element, { childList: true, subtree: true })
-		mount()
-		element.addEventListener('wheel', onWheel, { capture: true, passive: false })
-		element.addEventListener('pointerdown', onPointerDown, true)
-		element.addEventListener('pointermove', onPointerMove, true)
-		element.addEventListener('pointerup', finishDrag, true)
-		element.addEventListener('pointercancel', finishDrag, true)
-		element.addEventListener('contextmenu', onContextMenu, true)
-		return () => {
-			imageObserver.disconnect()
-			element.removeEventListener('wheel', onWheel, true)
-			element.removeEventListener('pointerdown', onPointerDown, true)
-			element.removeEventListener('pointermove', onPointerMove, true)
-			element.removeEventListener('pointerup', finishDrag, true)
-			element.removeEventListener('pointercancel', finishDrag, true)
-			element.removeEventListener('contextmenu', onContextMenu, true)
-			drag = null
-			touches.clear()
-		}
+	element.addEventListener('wheel', onWheel, { capture: true, passive: false })
+	element.addEventListener('pointerdown', onPointerDown, true)
+	element.addEventListener('pointermove', onPointerMove, true)
+	element.addEventListener('pointerup', finishDrag, true)
+	element.addEventListener('pointercancel', finishDrag, true)
+	element.addEventListener('contextmenu', onContextMenu, true)
+	function destroy() {
+		element.removeEventListener('wheel', onWheel, true)
+		element.removeEventListener('pointerdown', onPointerDown, true)
+		element.removeEventListener('pointermove', onPointerMove, true)
+		element.removeEventListener('pointerup', finishDrag, true)
+		element.removeEventListener('pointercancel', finishDrag, true)
+		element.removeEventListener('contextmenu', onContextMenu, true)
+		drag = null
+		touches.clear()
 	}
-	return { activeImage, markerScale, mount, refresh, zoom, zoomTo, bind }
+	return { destroy, reset }
 }

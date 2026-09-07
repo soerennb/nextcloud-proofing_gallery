@@ -64,7 +64,7 @@ const orderedComments = computed(() => [...props.comments].sort((left, right) =>
 	<div v-if="settings.review.colors" class="feedback-colors">
 		<span id="feedback-review-state-label">{{ t('proofing_gallery', 'Review state') }}</span>
 		<details ref="reviewStateMenu" class="feedback-state-picker" @keydown.escape="reviewStateMenu?.removeAttribute('open')">
-			<summary :aria-labelledby="'feedback-review-state-label'">
+			<summary aria-labelledby="feedback-review-state-label">
 				<span class="feedback-state-picker__pip"
 					:class="{ 'feedback-state-picker__pip--empty': !selectedReviewState.color }"
 					:style="{ '--feedback-color': selectedReviewState.color || 'transparent' }"

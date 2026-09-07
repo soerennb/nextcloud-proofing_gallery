@@ -37,17 +37,11 @@ interface AnnotationState {
 	returnFocus: Ref<HTMLElement | null>
 }
 
-function createOverlay(options: Options, state: AnnotationState) {
+function createOverlayGeometry(options: Options, state: AnnotationState) {
 	let geometryFrame: number | null = null
 	let contentWidth: number | null = null
 	let contentHeight: number | null = null
 	let markerScale: number | null = null
-	let pendingImage: HTMLImageElement | null = null
-	let pendingImageLoad: (() => void) | null = null
-	let imageLayoutObserver: ResizeObserver | null = null
-	let imageReadyFrame: number | null = null
-	let imageReadyGeneration = 0
-	let hostImage: HTMLImageElement | null = null
 
 	function activeImage(): HTMLImageElement | null {
 		const image = options.zoomSurfaceImage?.() ?? options.photoSwipe()?.currSlide?.content.element
@@ -117,6 +111,25 @@ function createOverlay(options: Options, state: AnnotationState) {
 		geometryFrame = null
 	}
 
+	function resetContentSize() {
+		contentWidth = null
+		contentHeight = null
+		markerScale = null
+	}
+
+	return { activeImage, updateAnchor, syncMarkerScale, syncContentSize, syncGeometry, scheduleGeometry, cancelScheduledGeometry, resetContentSize }
+}
+
+function createOverlay(options: Options, state: AnnotationState) {
+	const geometry = createOverlayGeometry(options, state)
+	const { activeImage, syncContentSize, syncGeometry } = geometry
+	let pendingImage: HTMLImageElement | null = null
+	let pendingImageLoad: (() => void) | null = null
+	let imageLayoutObserver: ResizeObserver | null = null
+	let imageReadyFrame: number | null = null
+	let imageReadyGeneration = 0
+	let hostImage: HTMLImageElement | null = null
+
 	function cancelPendingHostSync() {
 		if (pendingImage && pendingImageLoad) pendingImage.removeEventListener('load', pendingImageLoad)
 		pendingImage = null
@@ -133,6 +146,9 @@ function createOverlay(options: Options, state: AnnotationState) {
 	 * image. Keep the immediate overlay attach, then perform one guarded,
 	 * post-decode refresh so a slow image cannot leave its already-fetched pins
 	 * waiting for a later slide change.
+	 *
+	 * @param image - Active image being decoded.
+	 * @param element - Annotation host attached to that image.
 	 */
 	function refreshAfterImageReady(image: HTMLImageElement, element: HTMLElement) {
 		const generation = ++imageReadyGeneration
@@ -149,29 +165,7 @@ function createOverlay(options: Options, state: AnnotationState) {
 		else refresh()
 	}
 
-	function syncHost() {
-		const pswp = options.photoSwipe()
-		const image = activeImage()
-		const target = image?.parentElement ?? pswp?.currSlide?.container
-		if (image && image === hostImage && state.host.value?.parentElement === target) {
-			syncContentSize()
-			syncGeometry()
-			return
-		}
-		cancelPendingHostSync()
-		state.host.value?.remove()
-		state.host.value = null
-		contentWidth = null
-		contentHeight = null
-		markerScale = null
-		hostImage = null
-		if (!pswp?.currSlide || !options.activeItem.value?.mimeType.startsWith('image/')) return
-		if (!image) return
-		const element = document.createElement('div')
-		element.className = 'proofing-annotation-layer'
-		target!.append(element)
-		state.host.value = element
-		hostImage = image
+	function watchImage(image: HTMLImageElement, element: HTMLElement) {
 		if (typeof ResizeObserver !== 'undefined') {
 			imageLayoutObserver = new ResizeObserver(() => {
 				if (state.host.value !== element || activeImage() !== image) return
@@ -196,7 +190,31 @@ function createOverlay(options: Options, state: AnnotationState) {
 		refreshAfterImageReady(image, element)
 	}
 
-	return { activeImage, updateAnchor, syncMarkerScale, syncContentSize, syncGeometry, scheduleGeometry, cancelScheduledGeometry, cancelPendingHostSync, syncHost }
+	function syncHost() {
+		const pswp = options.photoSwipe()
+		const image = activeImage()
+		const target = image?.parentElement ?? pswp?.currSlide?.container
+		if (image && image === hostImage && state.host.value?.parentElement === target) {
+			syncContentSize()
+			syncGeometry()
+			return
+		}
+		cancelPendingHostSync()
+		state.host.value?.remove()
+		state.host.value = null
+		geometry.resetContentSize()
+		hostImage = null
+		if (!pswp?.currSlide || !options.activeItem.value?.mimeType.startsWith('image/')) return
+		if (!image) return
+		const element = document.createElement('div')
+		element.className = 'proofing-annotation-layer'
+		target!.append(element)
+		state.host.value = element
+		hostImage = image
+		watchImage(image, element)
+	}
+
+	return { ...geometry, cancelPendingHostSync, syncHost }
 }
 
 function createDraftActions(options: Options, state: AnnotationState, overlay: ReturnType<typeof createOverlay>) {

@@ -1,12 +1,12 @@
 {
   "translations": {
-    "_%n comment_::_%n comments_": [
-      "%n comment",
-      "%n comments"
-    ],
     "_%n album_::_%n albums_": [
       "%n album",
       "%n albums"
+    ],
+    "_%n comment_::_%n comments_": [
+      "%n comment",
+      "%n comments"
     ],
     "_%n folder_::_%n folders_": [
       "%n folder",
@@ -139,6 +139,7 @@
     "Access audit could not be loaded.": "Access audit could not be loaded.",
     "access changed": "access changed",
     "Access map": "Access map",
+    "Access summary": "Access summary",
     "Access, features and defaults": "Access, features and defaults",
     "Actions for {name}": "Actions for {name}",
     "Actions for {title}": "Actions for {title}",
@@ -337,8 +338,6 @@
     "Color": "Color",
     "Color {number}": "Color {number}",
     "Color labels": "Color labels",
-    "Color state": "Color state",
-    "Review state": "Review state",
     "Color state changed": "Color state changed",
     "Color states": "Color states",
     "Color workflow": "Color workflow",
@@ -557,10 +556,10 @@
     "Failed": "Failed",
     "Fast": "Fast",
     "Fastest for links you send privately.": "Fastest for links you send privately.",
+    "Favorite": "Favorite",
     "Feedback": "Feedback",
     "Feedback is shared with reviewers": "Feedback is shared with reviewers",
     "FFmpeg executable": "FFmpeg executable",
-    "Favorite": "Favorite",
     "FFmpeg transcoding": "FFmpeg transcoding",
     "File #{id}": "File #{id}",
     "File conflicts could not be checked. No files were uploaded.": "File conflicts could not be checked. No files were uploaded.",
@@ -595,9 +594,9 @@
     "Follow device": "Follow device",
     "Follow this device": "Follow this device",
     "For a field-wise merge, choose the source of truth for each value.": "For a field-wise merge, choose the source of truth for each value.",
-    "Former user": "Former user",
     "For everyone": "For everyone",
     "For your group": "For your group",
+    "Former user": "Former user",
     "Full frame": "Full frame",
     "Full screen": "Full screen",
     "Fullscreen": "Fullscreen",
@@ -644,11 +643,10 @@
     "Gallery updates for “%s”": "Gallery updates for “%s”",
     "Gallery view": "Gallery view",
     "General": "General",
-    "General comment": "General comment",
     "General comments": "General comments",
     "Generated locally in your browser. The gallery link is not sent to a third party.": "Generated locally in your browser. The gallery link is not sent to a third party.",
-    "German": "German",
     "Generated PIN": "Generated PIN",
+    "German": "German",
     "Give a Nextcloud user or group view-only or editing access.": "Give a Nextcloud user or group view-only or editing access.",
     "Give clients a polished gallery with the downloads they need.": "Give clients a polished gallery with the downloads they need.",
     "Give every audience its own URL, permissions and folder scope. No password or token is written to the audit log.": "Give every audience its own URL, permissions and folder scope. No password or token is written to the audit log.",
@@ -900,8 +898,8 @@
     "No logo uploaded": "No logo uploaded",
     "No matching galleries": "No matching galleries",
     "No matching gallery images.": "No matching gallery images.",
-    "No point comments yet.": "No point comments yet.",
     "No PIN": "No PIN",
+    "No point comments yet.": "No point comments yet.",
     "No presets yet. Enter a name to save the current settings.": "No presets yet. Enter a name to save the current settings.",
     "No review round is active": "No review round is active",
     "No saved selections yet": "No saved selections yet",
@@ -1199,6 +1197,7 @@
     "Review round": "Review round",
     "Review round {round}: {status}": "Review round {round}: {status}",
     "Review rounds could not be loaded.": "Review rounds could not be loaded.",
+    "Review state": "Review state",
     "Review the newer server version before continuing.": "Review the newer server version before continuing.",
     "Review together": "Review together",
     "Review updates are temporarily unavailable.": "Review updates are temporarily unavailable.",

@@ -639,7 +639,6 @@ async function saveEditedComment(commentId: number) {
 
 		<PublicLightboxAnnotations
 			:host="annotationHost"
-			:image-bounds="annotationImageBounds"
 			:comments="activeComments"
 			:draft="annotationDraft"
 			:body="annotationBody"
@@ -656,7 +655,10 @@ async function saveEditedComment(commentId: number) {
 			@cancel="annotations.cancel"
 			@select="annotations.select" />
 
-		<IonModal :is-open="shortcutsOpen" :show-backdrop="false" css-class="proofing-public-overlay lightbox-dialog lightbox-shortcuts-dialog" @did-dismiss="shortcutsOpen = false">
+		<IonModal :is-open="shortcutsOpen"
+			:show-backdrop="false"
+			css-class="proofing-public-overlay lightbox-dialog lightbox-shortcuts-dialog"
+			@did-dismiss="shortcutsOpen = false">
 			<IonHeader>
 				<IonToolbar>
 					<IonTitle>{{ t('proofing_gallery', 'Keyboard shortcuts') }}</IonTitle>

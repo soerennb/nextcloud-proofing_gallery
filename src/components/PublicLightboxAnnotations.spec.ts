@@ -6,22 +6,21 @@ import PublicLightboxAnnotations from './PublicLightboxAnnotations.vue'
 
 vi.mock('@nextcloud/l10n', () => ({ t: (_app: string, message: string, values?: Record<string, number>) => values ? message.replace('{number}', String(values.number)) : message }))
 
-describe('PublicLightboxAnnotations', () => {
-	function props(overrides: Record<string, unknown> = {}) {
-		return {
-			host: null, imageBounds: { left: 100, top: 50, width: 800, height: 400 }, comments: [], draft: null, body: '', anchor: null, composerOpen: false,
-			keyboardPositioning: false, submitting: false, error: '', selectedCommentId: null,
-			viewportWidth: 1200, viewportHeight: 800, ...overrides,
-		}
+function props(overrides: Record<string, unknown> = {}) {
+	return {
+		host: null, comments: [], draft: null, body: '', anchor: null, composerOpen: false,
+		keyboardPositioning: false, submitting: false, error: '', selectedCommentId: null,
+		viewportWidth: 1200, viewportHeight: 800, ...overrides,
 	}
+}
 
+describe('PublicLightboxAnnotations markers', () => {
 	it('numbers markers by creation order and links selection to the comment', async () => {
 		const host = document.createElement('div')
 		document.body.append(host)
 		const wrapper = mount(PublicLightboxAnnotations, {
 			props: {
 				host,
-				imageBounds: { left: 100, top: 50, width: 800, height: 400 },
 				comments: [
 					{ id: 13, fileId: 7, body: 'Second', author: 'B', mine: false, createdAt: 2, deletedAt: null, annotations: [{ x: 3000, y: 4000, width: 800, height: 800 }] },
 					{ id: 12, fileId: 7, body: 'First', author: 'A', mine: false, createdAt: 1, deletedAt: null, annotations: [{ x: 1000, y: 2000, width: 800, height: 800 }] },
@@ -55,7 +54,8 @@ describe('PublicLightboxAnnotations', () => {
 		const marker = host.querySelector<HTMLElement>('.annotation-marker')!
 		expect(marker.style.left).toBe('12.34%')
 		expect(marker.style.top).toBe('56.78%')
-		await wrapper.setProps({ imageBounds: { left: -100, top: -50, width: 1600, height: 800 } })
+		host.style.transform = 'translate(-100px, -50px) scale(2)'
+		await nextTick()
 		expect(marker.style.left).toBe('12.34%')
 		expect(marker.style.top).toBe('56.78%')
 		wrapper.unmount()
@@ -68,7 +68,6 @@ describe('PublicLightboxAnnotations', () => {
 		const wrapper = mount(PublicLightboxAnnotations, {
 			props: props({
 				host,
-				imageBounds: null,
 				comments: [{ id: 12, fileId: 7, body: 'Point', author: 'A', mine: false, createdAt: 1, deletedAt: null, annotations: [{ x: 1234, y: 5678, width: 800, height: 800 }] }],
 			}),
 		})
@@ -84,7 +83,7 @@ describe('PublicLightboxAnnotations', () => {
 	it('renders pins when a delayed collaboration response arrives after the image host', async () => {
 		const host = document.createElement('div')
 		document.body.append(host)
-		const wrapper = mount(PublicLightboxAnnotations, { props: props({ host, imageBounds: null }) })
+		const wrapper = mount(PublicLightboxAnnotations, { props: props({ host }) })
 		await new Promise(resolve => window.setTimeout(resolve, 25))
 		await wrapper.setProps({
 			comments: [{ id: 12, fileId: 7, body: 'Point', author: 'A', mine: false, createdAt: 1, deletedAt: null, annotations: [{ x: 1234, y: 5678, width: 800, height: 800 }] }],
@@ -94,6 +93,9 @@ describe('PublicLightboxAnnotations', () => {
 		host.remove()
 	})
 
+})
+
+describe('PublicLightboxAnnotations composer', () => {
 	it('cancels the open composer with Escape without leaking the key to the lightbox', async () => {
 		const wrapper = mount(PublicLightboxAnnotations, {
 			props: props({
