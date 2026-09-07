@@ -19,6 +19,7 @@ use OCP\IUserSession;
 use OCA\ProofingGallery\Service\FolderService;
 use OCA\ProofingGallery\Db\PresetMapper;
 use OCA\ProofingGallery\Exception\FolderAccessException;
+use OCA\ProofingGallery\Domain\ProjectCreationOptions;
 use OCP\AppFramework\Db\DoesNotExistException;
 
 final class PreferenceController extends Controller {
@@ -42,6 +43,7 @@ final class PreferenceController extends Controller {
 			'preferences' => $this->preferences->get($userId),
 			'effectiveCapabilities' => $this->capabilities->effective(userId: $userId),
 			'instanceDefaultPurpose' => $this->policies->instanceSettings()['workflow']['defaultPurpose'],
+			'projectCreationOptions' => ProjectCreationOptions::all(),
 		]);
 	}
 

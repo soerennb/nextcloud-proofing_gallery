@@ -143,7 +143,7 @@ describe('public lightbox annotation state', () => {
 
 	it.each(['before', 'after'])('attaches to late HTML image insertion with comments arriving %s the image', async arrival => {
 		const { annotations, container, image, photoSwipe, shell, comments, bindZoom } = setup()
-		const slide = photoSwipe.currSlide
+		const slide = photoSwipe.currSlide!
 		const mutableViewer = photoSwipe as unknown as { currSlide: typeof slide | undefined }
 		mutableViewer.currSlide = undefined
 		const { zoom, stop } = bindZoom()

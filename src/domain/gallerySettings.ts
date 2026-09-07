@@ -52,7 +52,7 @@ export interface GalleryPresentation extends GalleryAppearance {
 }
 
 export interface GallerySettings {
-	schemaVersion?: 11
+	schemaVersion?: 12
 	mode: GalleryMode
 	publicLocale: 'auto' | 'en' | 'de'
 	review: {
@@ -67,6 +67,9 @@ export interface GallerySettings {
 		colorLabels: [string, string, string, string]
 		colorEnabled: [boolean, boolean, boolean, boolean]
 		selectionWarningThreshold: number
+		selectionMinimum: number
+		selectionMaximum: number
+		selectionDueDate: string | null
 	}
 	delivery: {
 		downloadScope: 'none' | 'individual' | 'selection' | 'all'
@@ -105,7 +108,7 @@ export type CanonicalGallerySettings = Pick<GallerySettings,
 
 export function canonicalGallerySettings(settings: GallerySettings): CanonicalGallerySettings {
 	return {
-		schemaVersion: 11,
+		schemaVersion: 12,
 		mode: settings.mode,
 		publicLocale: settings.publicLocale,
 		review: structuredClone(settings.review),
@@ -165,7 +168,7 @@ export function createDefaultGallerySettings(): GallerySettings {
 		story: { sections: [], showAllMedia: true },
 	}
 	return {
-		schemaVersion: 11,
+		schemaVersion: 12,
 		mode: 'presentation',
 		publicLocale: 'auto',
 		review: {
@@ -180,6 +183,9 @@ export function createDefaultGallerySettings(): GallerySettings {
 			colorLabels: [...DEFAULT_COLOR_LABELS] as GallerySettings['review']['colorLabels'],
 			colorEnabled: [true, true, true, true],
 			selectionWarningThreshold: 0,
+			selectionMinimum: 0,
+			selectionMaximum: 0,
+			selectionDueDate: null,
 		},
 		delivery: { downloadScope: 'none', contactSheet: true, guestUploads: false },
 		navigation: { folders: true, recursive: false, groupDepth: 1, sortBy: 'name', sortDirection: 'asc', groupBy: 'none' },

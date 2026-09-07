@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-archive="${repo_dir}/build/artifacts/appstore/proofing_gallery.tar.gz"
+archive="${APPSTORE_ARCHIVE:-${repo_dir}/build/artifacts/appstore/proofing_gallery.tar.gz}"
 temporary_dir="$(mktemp -d -t proofing-gallery-package.XXXXXXXX)"
 mode="${1:-}"
 
@@ -23,7 +23,12 @@ build_args=()
 if [[ "${mode}" == "--signed" ]]; then
 	build_args+=(--signed)
 fi
-"${repo_dir}/scripts/build-appstore.sh" "${build_args[@]}"
+if [[ -z "${APPSTORE_ARCHIVE:-}" ]]; then
+	"${repo_dir}/scripts/build-appstore.sh" "${build_args[@]}"
+elif [[ ! -f "${archive}" ]]; then
+	echo "APPSTORE_ARCHIVE does not exist: ${archive}" >&2
+	exit 1
+fi
 tar -xzf "${archive}" -C "${temporary_dir}"
 
 APP_SOURCE="${temporary_dir}/proofing_gallery" \

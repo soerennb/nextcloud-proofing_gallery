@@ -85,11 +85,11 @@ final class HealthService {
 		}
 
 		$previewBytes = 0;
-		try {
-			foreach ($this->appData->getFolder('watermarked-previews')->getDirectoryListing() as $file) {
-				$previewBytes += $file->getSize();
+		foreach (['watermarked-previews', 'web-jpeg-downloads'] as $folderName) {
+			try {
+				foreach ($this->appData->getFolder($folderName)->getDirectoryListing() as $file) $previewBytes += $file->getSize();
+			} catch (\OCP\Files\NotFoundException) {
 			}
-		} catch (\OCP\Files\NotFoundException) {
 		}
 
 		$this->operationalStatus = [

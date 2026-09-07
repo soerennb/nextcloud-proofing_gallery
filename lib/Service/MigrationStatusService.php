@@ -15,6 +15,11 @@ final class MigrationStatusService {
 		'proofing_purge_requests',
 		'proofing_int_outbox',
 		'proofing_retention_log',
+		'proofing_link_roots',
+		'proofing_event_waves',
+		'proofing_pin_handoffs',
+		'proofing_event_roots',
+		'proofing_event_audit',
 	];
 
 	public function __construct(private IDBConnection $db) {

@@ -84,7 +84,7 @@ test('uploaded gallery logos use the authenticated image route', async ({ reques
 	expect(created.status()).toBe(201)
 	const gallery = await created.json() as { id: number; settings: { schemaVersion: number; presentation: { logoBackground: string } } }
 	try {
-		expect(gallery.settings.schemaVersion).toBe(11)
+		expect(gallery.settings.schemaVersion).toBe(12)
 		expect(gallery.settings.presentation.logoBackground).toBe('light')
 		const logo = await request.get(`${baseURL}/apps/proofing_gallery/media/${gallery.id}/asset/logo`, { headers: apiHeaders })
 		expect(logo.status()).toBe(200)

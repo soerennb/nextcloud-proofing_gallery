@@ -35,11 +35,19 @@ final class InvitationService {
 		$url = $this->urlGenerator->linkToRouteAbsolute('files_sharing.sharecontroller.showShare', [
 			'token' => $gallery->getShareToken(),
 		]);
+		$this->sendPublicLink($gallery, $recipient, $url, null, $message);
+	}
+
+	public function sendPublicLink(Gallery $gallery, string $recipient, string $url, ?string $locale = null, string $message = ''): void {
+		if (!str_starts_with($url, 'https://') && !str_starts_with($url, 'http://')) throw new InvalidArgumentException('Invitation URL is invalid');
+		if (!$this->mailer->validateMailAddress($recipient)) throw new InvalidArgumentException('Recipient email address is invalid');
+		$message = trim($message);
+		if (mb_strlen($message) > 2000) throw new InvalidArgumentException('Invitation message may contain at most 2000 characters');
 		$ownerName = $this->users->getDisplayName($gallery->getOwnerUid()) ?? $gallery->getOwnerUid();
 		$settings = \OCA\ProofingGallery\Dto\GallerySettings::fromArray(
 			json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR),
 		);
-		$language = $settings->publicLocale === 'auto' ? null : $settings->publicLocale;
+		$language = $locale ?? ($settings->publicLocale === 'auto' ? null : $settings->publicLocale);
 		$l10n = $this->l10nFactory->get('proofing_gallery', $language);
 		$template = $this->mailer->createEMailTemplate('proofing_gallery.invitation', [
 			'galleryId' => $gallery->getId(),

@@ -47,6 +47,8 @@ const props = withDefaults(defineProps<{
 	canCompare: boolean
 	canSaveSelection: boolean
 	savingSelection: boolean
+	collaboration: boolean
+	albumRoot: boolean
 	theme: 'auto' | 'light' | 'dark'
 	hideChrome?: boolean
 }>(), { hideChrome: false })
@@ -58,6 +60,8 @@ const groupBy = defineModel<'none' | 'type' | 'folder'>('groupBy', { required: t
 const layout = defineModel<Layout>('layout', { required: true })
 const selectionName = defineModel<string>('selectionName', { required: true })
 const selectionMessage = defineModel<string>('selectionMessage', { required: true })
+const downloadPreset = defineModel<'original' | 'web-2048' | 'web-1600'>('downloadPreset', { required: true })
+const downloadWatermark = defineModel<boolean>('downloadWatermark', { required: true })
 
 const emit = defineEmits<{
 	apply: []
@@ -69,13 +73,15 @@ const emit = defineEmits<{
 	'download-selection': []
 	'contact-sheet': []
 	'start-selection': []
+	collaboration: []
 	'compare-selection': []
 	'save-selection': []
 }>()
 
 const searchInput = useTemplateRef<InstanceType<typeof IonSearchbar>>('searchInput')
 const canDownloadSelection = computed(() => ['selection', 'all'].includes(props.downloadScope))
-const actionSheetClass = computed(() => ['gallery-action-sheet', `proofing-action-sheet--${props.theme}`])
+const actionSheetClass = computed(() => ['proofing-public-overlay', 'gallery-action-sheet', `proofing-action-sheet--${props.theme}`])
+const publicPopoverOptions = { cssClass: 'proofing-public-overlay public-select-popover' }
 const jumpPage = ref(props.page)
 const pageNumbers = computed(() => {
 	if (props.pageCount <= 7) return Array.from({ length: props.pageCount }, (_, index) => index + 1)
@@ -92,7 +98,8 @@ const menuButtons = computed(() => props.selectedCount > 0
 		]
 	: [
 			...(props.canSelect ? [{ text: t('proofing_gallery', 'Select'), handler: () => emit('start-selection') }] : []),
-			{ text: t('proofing_gallery', 'Display'), handler: () => emit('update:panel', 'view') },
+			...(!props.albumRoot ? [{ text: t('proofing_gallery', 'Display'), handler: () => emit('update:panel', 'view') }] : []),
+			...(props.collaboration ? [{ text: t('proofing_gallery', 'Review details'), handler: () => emit('collaboration') }] : []),
 			...(props.downloadScope === 'all' ? [{ text: t('proofing_gallery', 'Download entire gallery'), icon: downloadOutline, handler: () => emit('download-gallery') }] : []),
 			...(props.downloadScope !== 'none' ? [{ text: props.downloadScope === 'all' ? t('proofing_gallery', 'More download options') : t('proofing_gallery', 'Download'), handler: () => emit('update:panel', 'download') }] : []),
 			{ text: t('proofing_gallery', 'Cancel'), role: 'cancel' },
@@ -124,7 +131,7 @@ function dismissMenu() {
 		@did-dismiss="dismissMenu" />
 	<IonModal v-if="!hideChrome && panel !== 'menu'"
 		:is-open="panel !== null"
-		class="gallery-sheet"
+		class="gallery-sheet proofing-public-overlay"
 		:initial-breakpoint="mobile ? 0.72 : 1"
 		:breakpoints="mobile ? [0, 0.42, 0.72, 1] : [0, 1]"
 		:handle="mobile"
@@ -169,6 +176,7 @@ function dismissMenu() {
 							:label="t('proofing_gallery', 'Sort')"
 							label-placement="stacked"
 							interface="popover"
+							:interface-options="publicPopoverOptions"
 							@ion-change="emit('apply')">
 							<IonSelectOption value="name">
 								{{ t('proofing_gallery', 'Filename') }}
@@ -187,6 +195,7 @@ function dismissMenu() {
 							:label="t('proofing_gallery', 'Group')"
 							label-placement="stacked"
 							interface="popover"
+							:interface-options="publicPopoverOptions"
 							@ion-change="emit('apply')">
 							<IonSelectOption value="none">
 								{{ t('proofing_gallery', 'None') }}
@@ -247,6 +256,26 @@ function dismissMenu() {
 			</div>
 
 			<IonList v-else inset class="gallery-sheet__downloads">
+				<IonItem lines="full">
+					<IonSelect v-model="downloadPreset"
+						:label="t('proofing_gallery', 'File size')"
+						label-placement="stacked"
+						interface="popover"
+						:interface-options="publicPopoverOptions">
+						<IonSelectOption value="original">
+							{{ t('proofing_gallery', 'Original file') }}
+						</IonSelectOption>
+						<IonSelectOption value="web-2048">
+							{{ t('proofing_gallery', 'Web JPEG · 2048 px') }}
+						</IonSelectOption>
+						<IonSelectOption value="web-1600">
+							{{ t('proofing_gallery', 'Web JPEG · 1600 px') }}
+						</IonSelectOption>
+					</IonSelect>
+				</IonItem>
+				<IonItem v-if="downloadPreset !== 'original'" lines="full">
+					<label><input v-model="downloadWatermark" type="checkbox"> {{ t('proofing_gallery', 'Apply gallery watermark') }}</label>
+				</IonItem>
 				<IonItem v-if="downloadScope === 'all'" button @click="emit('download-gallery')">
 					<IonIcon slot="start" :icon="downloadOutline" /><IonLabel><strong>{{ t('proofing_gallery', 'Download entire gallery') }}</strong><p>{{ t('proofing_gallery', 'Original files in one ZIP archive') }}</p></IonLabel>
 				</IonItem>

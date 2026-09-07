@@ -45,7 +45,9 @@ export function galleryWorkspaceFromReadinessAction(action: string): GalleryWork
 }
 
 export function availableGalleryWorkspaces(gallery: Gallery): GalleryWorkspaceItem[] {
-	return galleryWorkspaces.filter(item => galleryWorkspaceVisible(item.id, gallery))
+	return galleryWorkspaces.filter(item => galleryWorkspaceVisible(item.id, gallery)).map(item => item.id === 'share' && gallery.deliveryMode === 'event'
+		? { ...item, label: t('proofing_gallery', 'Event delivery') }
+		: item)
 }
 
 export function galleryWorkspaceVisible(workspace: GalleryWorkspace, gallery: Gallery): boolean {
@@ -54,7 +56,8 @@ export function galleryWorkspaceVisible(workspace: GalleryWorkspace, gallery: Ga
 	if (workspace === 'privacy') return gallery.permissions.role === 'owner' && gallery.status === 'archived'
 	if (workspace === 'team' || workspace === 'automation' || workspace === 'share') return gallery.permissions.canManageAccess
 	if (workspace === 'review') {
-		return gallery.permissions.canEdit || ['selection', 'proofing', 'uploads'].includes(gallery.purpose)
+		return gallery.settings.mode === 'collaboration'
+			&& (gallery.permissions.canEdit || ['selection', 'proofing', 'uploads'].includes(gallery.purpose))
 	}
 	if (workspace === 'design') return gallery.permissions.canEdit
 	if (workspace === 'history') return true

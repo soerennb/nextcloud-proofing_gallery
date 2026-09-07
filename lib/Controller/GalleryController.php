@@ -18,6 +18,7 @@ use OCA\ProofingGallery\Service\MediaMetadataService;
 use OCA\ProofingGallery\Exception\MetadataConflictException;
 use OCA\ProofingGallery\Exception\GalleryConflictException;
 use OCA\ProofingGallery\Exception\PolicyViolationException;
+use OCA\ProofingGallery\Exception\ProjectCreationException;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCP\AppFramework\Controller;
@@ -151,13 +152,16 @@ final class GalleryController extends Controller {
 		?string $folderName = null,
 		array $settings = [],
 		array $designPreset = ['mode' => 'inherit'],
+		string $deliveryMode = 'standard',
 	): DataResponse {
 		try {
 			$userId = $this->userId();
 			$gallery = $this->galleries->createProject(
-				$userId, $title, $purpose, $sourceMode, $folderId, $parentFolderId, $folderName, $settings, $designPreset,
+				$userId, $title, $purpose, $sourceMode, $folderId, $parentFolderId, $folderName, $settings, $designPreset, $deliveryMode,
 			);
 			return new DataResponse($this->galleries->present($userId, $gallery), Http::STATUS_CREATED);
+		} catch (ProjectCreationException $exception) {
+			return new DataResponse(['code' => 'invalid_project_combination', 'message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		} catch (PolicyViolationException $exception) {
 			return new DataResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
 		} catch (InvalidArgumentException|FolderAccessException $exception) {
@@ -447,6 +451,18 @@ final class GalleryController extends Controller {
 		} catch (InvalidArgumentException|FolderAccessException $exception) {
 			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
+	}
+
+	/** @param list<string> $paths */
+	#[NoAdminRequired]
+	#[ApiRoute(verb: 'POST', url: '/api/v1/galleries/{id}/folders/ensure')]
+	public function ensureFolders(int $id, array $paths): DataResponse {
+		try {
+			$gallery = $this->galleries->get($this->userId(), $id);
+			if ($gallery->getSourceType() !== 'folder') throw new InvalidArgumentException('Folders are unavailable for collections');
+			return new DataResponse(['paths' => $this->folders->ensureFolders($gallery->getOwnerUid(), $gallery->getFolderId(), $paths)]);
+		} catch (DoesNotExistException|AuthorizationException) { return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND); }
+		catch (InvalidArgumentException|FolderAccessException $exception) { return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY); }
 	}
 
 	#[NoAdminRequired]

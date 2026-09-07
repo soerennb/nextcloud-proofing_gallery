@@ -32,6 +32,7 @@ export interface Gallery {
 	ownerUid: string
 	folderId: number
 	sourceType: 'folder' | 'collection'
+	deliveryMode: 'standard' | 'event'
 	title: string
 	slug: string
 	status: 'draft' | 'published' | 'archived'
@@ -114,6 +115,12 @@ export interface MediaItem {
 	sourceGalleryTitle?: string
 	metadata?: MediaMetadata
 	playback?: { state: 'source' | 'disabled' | 'pending' | 'processing' | 'ready' | 'failed' | 'unavailable'; playable: boolean }
+	album?: {
+		role: 'shared' | 'group' | 'private'
+		mediaCount: number
+		folderCount: number
+		covers: Array<Pick<MediaItem, 'id' | 'name' | 'mimeType' | 'etag'>>
+	}
 }
 
 export interface IndexedMediaItem extends MediaItem {
@@ -267,12 +274,17 @@ export interface GalleryPublicLink {
 	primary: boolean
 	policy: PublicLinkPolicy
 	startPath: string
+	allowedRoots?: string[]
+	scopeMode?: 'legacy' | 'nodes' | 'empty'
+	scopeHealth?: { state: 'healthy' | 'degraded' | 'empty'; total: number; available: number; missing: number }
 	viewMode: 'folder' | 'recursive'
 	groupDepth: number
 	minOwnerRating: number
 	publicLocale: 'en' | 'de' | null
 	reviewEnabled: boolean
 	reviewDueDate: string | null
+	reviewSelectionMinimum: number | null
+	reviewSelectionMaximum: number | null
 	review: PublicReviewState
 	createdAt: number
 	updatedAt: number
@@ -287,6 +299,8 @@ export interface ReviewLinkOverview {
 	linkStatus: 'active' | 'revoked'
 	enabled: boolean
 	dueDate: string | null
+	rules: { minimum: number; maximum: number; dueDate: string | null }
+	progress: { count: number; status: 'open' | 'submitted' | 'completed' } | null
 	current: ReviewRound | null
 	history: ReviewRound[]
 }
@@ -320,6 +334,7 @@ export interface GalleryListItem {
 	status: 'draft' | 'published' | 'archived'
 	mode: 'presentation' | 'collaboration'
 	sourceType: 'folder' | 'collection'
+	deliveryMode: 'standard' | 'event'
 	purpose: GalleryPurpose
 	workflowState: Gallery['workflowState']
 	createdAt: number

@@ -17,3 +17,15 @@ export function readableText([red, green, blue]: Rgb): '#000000' | '#ffffff' {
 export function mixHex(source: Rgb, target: Rgb, amount: number): string {
 	return `#${source.map((channel, index) => Math.round(channel + (target[index]! - channel) * amount).toString(16).padStart(2, '0')).join('')}`
 }
+
+export function publicGalleryCssVariables(accent: string, heroFocusX: number, heroFocusY: number): Record<string, string> {
+	const rgb = hexRgb(accent)
+	const contrast = readableText(rgb)
+	return {
+		'--gallery-accent': accent, '--ion-color-primary': accent, '--ion-color-primary-rgb': rgb.join(', '),
+		'--ion-color-primary-contrast': contrast, '--ion-color-primary-contrast-rgb': contrastRgb(contrast),
+		'--ion-color-primary-shade': mixHex(rgb, [0, 0, 0], 0.12),
+		'--ion-color-primary-tint': mixHex(rgb, [255, 255, 255], 0.14),
+		'--hero-focus': `${heroFocusX}% ${heroFocusY}%`,
+	}
+}

@@ -79,6 +79,38 @@ test('gallery action menus stay above cards in every overview', async ({ browser
 	await context.close()
 })
 
+test('project wizard adapts audience and sources to the selected job', async ({ page, request, baseURL }) => {
+	await page.setViewportSize({ width: 390, height: 844 })
+	await login(page, baseURL)
+	await page.getByRole('button', { name: 'New project' }).click()
+	let dialog = page.getByRole('dialog', { name: 'Create a project' })
+	await dialog.getByRole('radio', { name: /Receive files/ }).check()
+	await dialog.getByRole('button', { name: /Continue with Receive files/ }).click()
+	dialog = page.getByRole('dialog', { name: 'Receive files' })
+	await expect(dialog.locator('strong').filter({ hasText: 'One upload inbox' })).toBeVisible()
+	await expect(dialog.getByRole('radio', { name: /Curated collection/ })).toHaveCount(0)
+	await expect(dialog.getByText('Separate client deliveries')).toHaveCount(0)
+	await dialog.getByRole('textbox', { name: 'Project title' }).fill('Remember this title')
+	await dialog.getByRole('button', { name: 'Change' }).click()
+	dialog = page.getByRole('dialog', { name: 'Create a project' })
+	await dialog.getByRole('radio', { name: /Collect a selection/ }).check()
+	await dialog.getByRole('button', { name: /Continue with Collect a selection/ }).click()
+	dialog = page.getByRole('dialog', { name: 'Collect a selection' })
+	await expect(dialog.getByRole('textbox', { name: 'Project title' })).toHaveValue('Remember this title')
+	await expect(dialog.getByRole('radio', { name: /Curated collection/ })).toBeVisible()
+	await dialog.getByRole('radio', { name: /Separate private selections/ }).check()
+	await expect(dialog.getByRole('radio', { name: /Curated collection/ })).toHaveCount(0)
+	expect(await dialog.locator('.project-wizard').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+
+	const headers = { Authorization: `Basic ${Buffer.from('admin:admin').toString('base64')}`, 'OCS-APIRequest': 'true' }
+	const invalid = await request.post(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/projects?format=json`, {
+		headers,
+		data: { title: 'Invalid upload collection', purpose: 'uploads', sourceMode: 'collection', deliveryMode: 'standard' },
+	})
+	expect(invalid.status()).toBe(422)
+	expect((await invalid.json() as { code: string }).code).toBe('invalid_project_combination')
+})
+
 test('gallery archive paginates without losing mobile reachability', async ({ browser, baseURL }) => {
 	const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
 	const page = await context.newPage()
@@ -829,7 +861,7 @@ test('guest and owner complete a link-scoped review round', async ({ page, reque
 		const links = await request.get(linksEndpoint, { headers: apiHeaders }).then(response => response.json()) as { items: Array<{ id: number; name: string; policy: Record<string, unknown> }> }
 		const link = links.items[0]
 		const dueDate = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
-		expect((await request.put(`${linksEndpoint.replace('?format=json', '')}/${link.id}?format=json`, { headers: apiHeaders, data: { name: link.name, policy: link.policy, reviewEnabled: true, reviewDueDate: dueDate } })).ok()).toBe(true)
+		expect((await request.put(`${linksEndpoint.replace('?format=json', '')}/${link.id}?format=json`, { headers: apiHeaders, data: { name: link.name, policy: link.policy, reviewEnabled: true, reviewDueDate: dueDate, reviewSelectionMinimum: 1, reviewSelectionMaximum: 1 } })).ok()).toBe(true)
 
 		await page.setViewportSize({ width: 390, height: 844 })
 		await page.goto(`${baseURL}/s/${token}`)
@@ -847,6 +879,14 @@ test('guest and owner complete a link-scoped review round', async ({ page, reque
 		await lightbox.getByRole('button', { name: 'Close', exact: true }).click()
 		const nonce = await page.evaluate(token => sessionStorage.getItem(`proofing-gallery-nonce:${token}`), token)
 		expect(nonce).toBeTruthy()
+		const draftChecks = await page.evaluate(async ({ token, nonce, fileId }) => {
+			const headers = { 'Content-Type': 'application/json', 'X-Proofing-Nonce': nonce! }
+			const empty = await fetch(`/apps/proofing_gallery/public/${token}/collaboration/selections`, { method: 'POST', headers, body: JSON.stringify({ name: 'Empty draft', fileIds: [] }) })
+			const belowMinimum = await fetch(`/apps/proofing_gallery/public/${token}/review/submit`, { method: 'POST', headers })
+			const valid = await fetch(`/apps/proofing_gallery/public/${token}/collaboration/selections`, { method: 'POST', headers, body: JSON.stringify({ name: 'Final pick', fileIds: [fileId] }) })
+			return { empty: empty.status, belowMinimum: belowMinimum.status, valid: valid.status }
+		}, { token, nonce, fileId: proof!.id })
+		expect(draftChecks).toEqual({ empty: 201, belowMinimum: 422, valid: 201 })
 		const allowedAnnotation = await page.evaluate(async ({ token, nonce, fileId }) => {
 			const response = await fetch(`/apps/proofing_gallery/public/${token}/collaboration/media/${fileId}/comments`, {
 				method: 'POST',
@@ -860,6 +900,10 @@ test('guest and owner complete a link-scoped review round', async ({ page, reque
 		await expect(page.getByText('Review open')).toBeVisible()
 		await page.getByRole('button', { name: 'Submit review' }).click()
 		await expect(page.getByText('Submitted for approval')).toBeVisible()
+		const locked = await page.evaluate(async ({ token, nonce, fileId }) => fetch(`/apps/proofing_gallery/public/${token}/collaboration/selections`, {
+			method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Proofing-Nonce': nonce! }, body: JSON.stringify({ name: 'Too late', fileIds: [fileId] }),
+		}).then(response => response.status), { token, nonce, fileId: proof!.id })
+		expect(locked).toBe(422)
 		expect(await page.locator('#proofing_gallery_public').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
 
 		const restrictedPolicy = { ...link.policy, comments: true, annotations: false }
@@ -887,6 +931,8 @@ test('guest and owner complete a link-scoped review round', async ({ page, reque
 
 		const approved = await request.post(`${galleries.replace('?format=json', '')}/${gallery.id}/public-links/${link.id}/review/approve?format=json`, { headers: apiHeaders })
 		expect(approved.ok()).toBe(true)
+		const approvedOverview = await approved.json() as { items: Array<{ linkId: number; progress: { count: number; status: string } | null }> }
+		expect(approvedOverview.items.find(item => item.linkId === link.id)?.progress).toEqual({ count: 1, status: 'completed' })
 		await page.reload()
 		await page.getByRole('button', { name: 'Review details' }).click()
 		await expect(page.getByText('Approved', { exact: true })).toBeVisible()
@@ -897,6 +943,23 @@ test('guest and owner complete a link-scoped review round', async ({ page, reque
 
 test('public gallery remains usable on a narrow viewport', async ({ page, request, baseURL }) => {
 	const { token } = await state()
+	const publicPage = await request.get(`${baseURL}/apps/proofing_gallery/public/${token}/gallery?limit=100`).then(response => response.json()) as { items: Array<{ id: number; name: string }> }
+	const proof = publicPage.items.find(item => item.name === 'proof.png')
+	expect(proof).toBeTruthy()
+	const original = await request.get(`${baseURL}/apps/proofing_gallery/public/${token}/media/${proof!.id}/download`)
+	expect(original.ok()).toBe(true)
+	expect(original.headers()['content-type']).toContain('image/png')
+	const web = await request.get(`${baseURL}/apps/proofing_gallery/public/${token}/media/${proof!.id}/download?preset=web-1600`)
+	expect(web.ok()).toBe(true)
+	expect(web.headers()).toMatchObject({ 'content-type': 'image/jpeg', 'x-proofing-download-preset': 'web-1600' })
+	const jpeg = await web.body()
+	expect([...jpeg.subarray(0, 2)]).toEqual([0xff, 0xd8])
+	expect(jpeg.toString('latin1')).not.toContain('Exif')
+	expect((await request.get(`${baseURL}/apps/proofing_gallery/public/${token}/media/${proof!.id}/download?preset=unknown`)).status()).toBe(422)
+	const webSelection = await request.get(`${baseURL}/apps/proofing_gallery/public/${token}/download/selection?fileIds=${proof!.id}&preset=web-2048&watermark=1`)
+	expect(webSelection.ok()).toBe(true)
+	expect(webSelection.headers()['content-type']).toContain('application/zip')
+	expect((await webSelection.body()).subarray(0, 2).toString()).toBe('PK')
 	const downloadStatus = await request.get(`${baseURL}/apps/proofing_gallery/public/${token}/download/gallery/status`)
 	expect(downloadStatus.ok()).toBe(true)
 	expect(await downloadStatus.json()).toMatchObject({ available: true, reason: null })
@@ -907,10 +970,25 @@ test('public gallery remains usable on a narrow viewport', async ({ page, reques
 	await page.setViewportSize({ width: 390, height: 844 })
 	await page.goto(`${baseURL}/s/${token}`)
 	await expect(page.locator('#proofing_gallery_public').getByRole('heading', { name: 'E2E Gallery' })).toBeVisible()
+	const dimensions = await page.evaluate(async ({ token, fileId }) => {
+		const size = async (url: string) => {
+			const image = await createImageBitmap(await fetch(url).then(response => response.blob()))
+			const result = { width: image.width, height: image.height }
+			image.close()
+			return result
+		}
+		return { original: await size(`/apps/proofing_gallery/public/${token}/media/${fileId}/download`), web: await size(`/apps/proofing_gallery/public/${token}/media/${fileId}/download?preset=web-2048`) }
+	}, { token, fileId: proof!.id })
+	expect(dimensions.web.width).toBeLessThanOrEqual(dimensions.original.width)
+	expect(dimensions.web.height).toBeLessThanOrEqual(dimensions.original.height)
 	const publicRoot = page.locator('#proofing_gallery_public')
 	expect(await publicRoot.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
 	expect((await publicRoot.boundingBox())?.y).toBe(0)
 	await expect(page.getByRole('button', { name: 'Download', exact: true })).toBeVisible()
+	await page.getByRole('button', { name: 'Download', exact: true }).click()
+	await expect(page.getByText('File size', { exact: true })).toBeVisible()
+	expect(await publicRoot.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+	await page.getByRole('button', { name: 'Close', exact: true }).click()
 	await page.getByRole('button', { name: 'More options', exact: true }).click()
 	const galleryActions = page.locator('ion-action-sheet.gallery-action-sheet').last()
 	await expect(galleryActions.getByRole('button', { name: 'Download entire gallery' })).toBeVisible()
@@ -949,6 +1027,31 @@ test('public gallery remains usable on a narrow viewport', async ({ page, reques
 		// differences while preserving the exact layout and source image.
 		maxDiffPixelRatio: 0.03,
 	})
+})
+
+test('changing a published gallery download policy updates the native share', async ({ request, baseURL }) => {
+	const fixture = await state()
+	const apiHeaders = { Authorization: `Basic ${Buffer.from('admin:admin').toString('base64')}`, 'OCS-APIRequest': 'true' }
+	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
+	const created = await request.post(`${galleries}?format=json`, { headers: apiHeaders, data: { folderId: fixture.folderId, title: 'E2E download policy sync', settings: { mode: 'presentation', publicLocale: 'en' } } })
+	const gallery = await created.json() as { id: number }
+	const galleryEndpoint = `${galleries}/${gallery.id}`
+	try {
+		const media = await request.get(`${galleryEndpoint}/media?format=json&limit=100`, { headers: apiHeaders }).then(response => response.json()) as { items: Array<{ id: number; name: string }> }
+		const proof = media.items.find(item => item.name === 'proof.png')
+		expect(proof).toBeTruthy()
+		const published = await request.post(`${galleryEndpoint}/publish?format=json`, { headers: apiHeaders, data: { allowDownloads: false } })
+		expect(published.ok()).toBe(true)
+		const token = (await published.json() as { gallery: { shareToken: string } }).gallery.shareToken
+		expect((await request.get(`${baseURL}/apps/proofing_gallery/public/${token}/media/${proof!.id}/download`)).status()).toBe(403)
+		const before = await request.get(`${galleryEndpoint}?format=json`, { headers: apiHeaders }).then(response => response.json()) as { revision: number }
+		const updated = await request.put(`${galleryEndpoint}?format=json`, { headers: apiHeaders, data: { settings: { delivery: { downloadScope: 'all' } }, expectedRevision: before.revision } })
+		expect(updated.ok()).toBe(true)
+		const download = await request.get(`${baseURL}/apps/proofing_gallery/public/${token}/media/${proof!.id}/download`)
+		expect(download.status()).toBe(200)
+	} finally {
+		await request.delete(`${galleryEndpoint}?format=json`, { headers: apiHeaders })
+	}
 })
 
 test('large mobile masonry stays reachable and responds to a touch swipe', async ({ browser, baseURL, request }) => {

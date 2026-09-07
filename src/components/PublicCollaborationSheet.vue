@@ -32,7 +32,7 @@ const emit = defineEmits<{
 
 <template>
 	<IonModal :is-open="open"
-		class="collaboration-sheet"
+		class="proofing-public-overlay collaboration-sheet"
 		:initial-breakpoint="mobile ? 0.72 : 1"
 		:breakpoints="mobile ? [0, 0.45, 0.72, 1] : [0, 1]"
 		:handle="mobile"

@@ -11,6 +11,12 @@ use OCA\ProofingGallery\Dto\PublicLinkConfiguration;
 use PHPUnit\Framework\TestCase;
 
 final class PublicLinkConfigurationTest extends TestCase {
+	public function testMultiRootScopeIsParsedWithoutChangingLegacyStartPath(): void {
+		$config = PublicLinkConfiguration::fromArray(['name' => 'Anna', 'allowedRoots' => ['Allgemein', 'Anna']]);
+
+		self::assertSame(['Allgemein', 'Anna'], $config->allowedRoots);
+		self::assertSame('', $config->startPath);
+	}
 	public function testNormalizesAndTypesPublicLinkInput(): void {
 		$config = PublicLinkConfiguration::fromArray([
 			'name' => ' Client review ',
@@ -23,6 +29,8 @@ final class PublicLinkConfigurationTest extends TestCase {
 			'expiresAt' => '2026-12-31',
 			'reviewEnabled' => true,
 			'reviewDueDate' => '2026-11-30',
+			'reviewSelectionMinimum' => 3,
+			'reviewSelectionMaximum' => 12,
 		]);
 
 		self::assertSame('Client review', $config->name);
@@ -32,6 +40,13 @@ final class PublicLinkConfigurationTest extends TestCase {
 		self::assertSame('2026-12-31', $config->expiresAt?->format('Y-m-d'));
 		self::assertTrue($config->reviewEnabled);
 		self::assertSame('2026-11-30', $config->reviewDueDate);
+		self::assertSame(3, $config->reviewSelectionMinimum);
+		self::assertSame(12, $config->reviewSelectionMaximum);
+	}
+
+	public function testRejectsInvertedSelectionLimits(): void {
+		$this->expectException(InvalidArgumentException::class);
+		PublicLinkConfiguration::fromArray(['name' => 'Review', 'reviewSelectionMinimum' => 10, 'reviewSelectionMaximum' => 4]);
 	}
 
 	public function testRejectsInvalidReviewConfiguration(): void {

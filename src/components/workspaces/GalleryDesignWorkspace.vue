@@ -12,24 +12,28 @@ import { applyGalleryTitleMode, galleryTitleMode } from '../../domain/galleryTit
 import type { GalleryTitleMode } from '../../domain/galleryTitlePresentation.ts'
 import { ownerPreviewUrl } from '../../services/galleryApi.ts'
 import type { DesignAsset } from '../../services/galleryApi.ts'
+import type { EventDesignScope } from '../../services/eventApi.ts'
 import type { Gallery, MediaItem } from '../../types.ts'
 import GalleryArtworkPicker from '../GalleryArtworkPicker.vue'
 import GalleryDesignPreview from '../GalleryDesignPreview.vue'
 import GalleryMotionControls from '../GalleryMotionControls.vue'
 import GalleryStoryEditor from '../GalleryStoryEditor.vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
 	gallery: Gallery
 	media: MediaItem[]
 	previewOpen: boolean
 	assetUploading: 'logo' | 'watermark' | null
 	assets: DesignAsset[]
 	missingStoryMediaIds: number[]
+	eventScopes?: EventDesignScope[]
+	eventScope?: string
 	searchMedia(query: string): Promise<MediaItem[]>
-}>()
+}>(), { eventScopes: () => [], eventScope: 'shared' })
 const emit = defineEmits<{
 	'upload-asset': [kind: 'logo' | 'watermark', file: File]
 	'update:preview-open': [open: boolean]
+	'select-event-scope': [scope: string]
 }>()
 const title = defineModel<string>('title', { required: true })
 const settings = defineModel<GallerySettings>('settings', { required: true })
@@ -42,6 +46,13 @@ const watermarkInput = ref<HTMLInputElement | null>(null)
 const logoAssets = computed(() => props.assets.filter(asset => asset.kind === 'logo'))
 const watermarkAssets = computed(() => props.assets.filter(asset => asset.kind === 'watermark'))
 const artworkKind = ref<'heroFileId' | 'logoFileId' | null>(null)
+const eventScopeQuery = ref('')
+const visibleEventScopes = computed(() => {
+	const query = eventScopeQuery.value.trim().toLocaleLowerCase()
+	const preferred = props.eventScopes.filter(scope => scope.kind === 'shared' || scope.id === props.eventScope)
+	const matches = props.eventScopes.filter(scope => scope.kind === 'recipient' && (!query || scope.label.toLocaleLowerCase().includes(query)))
+	return [...new Map([...preferred, ...matches].map(scope => [scope.id, scope])).values()].slice(0, 100)
+})
 
 function selectedUpload(kind: 'logo' | 'watermark', event: Event) {
 	const input = event.target as HTMLInputElement
@@ -69,6 +80,19 @@ function previewUrl(fileId: number, width = 560, height = 360): string {
 				<h2>{{ t('proofing_gallery', 'Appearance') }}</h2>
 				<p>{{ t('proofing_gallery', 'Use a compact opening for fast review or a cinematic cover for final delivery.') }}</p>
 			</div>
+			<label v-if="gallery.deliveryMode === 'event' && eventScopes.length" class="event-preview-scope">
+				<span>{{ t('proofing_gallery', 'Preview as') }}</span>
+				<input v-if="eventScopes.length > 100"
+					v-model="eventScopeQuery"
+					type="search"
+					:placeholder="t('proofing_gallery', 'Search recipients')">
+				<select :value="eventScope" @change="emit('select-event-scope', ($event.target as HTMLSelectElement).value)">
+					<option v-for="scope in visibleEventScopes" :key="scope.id" :value="scope.id">
+						{{ scope.kind === 'shared' ? t('proofing_gallery', 'Shared content') : scope.label }}
+					</option>
+				</select>
+				<small>{{ t('proofing_gallery', 'This changes only the preview, not client access.') }}</small>
+			</label>
 			<label class="select-field">
 				<span>{{ t('proofing_gallery', 'Opening') }}</span>
 				<select v-model="settings.presentation.openerStyle" name="openerStyle">

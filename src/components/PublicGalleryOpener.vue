@@ -11,6 +11,7 @@ const props = defineProps<{
 	total: number
 	settings: GallerySettings
 	heroUrl?: string | null
+	totalLabel?: string
 }>()
 const titleMode = computed(() => galleryTitleMode(props.settings.presentation))
 </script>
@@ -39,7 +40,7 @@ const titleMode = computed(() => galleryTitleMode(props.settings.presentation))
 			:style="{ objectPosition: `${settings.presentation.heroFocusX}% ${settings.presentation.heroFocusY}%` }">
 		<div v-if="settings.presentation.showMediaCount || settings.presentation.welcomeMessage" class="gallery-opener__meta ion-padding-horizontal">
 			<IonNote v-if="settings.presentation.showMediaCount">
-				{{ n('proofing_gallery', '%n photo', '%n photos', total) }}
+				{{ totalLabel ?? n('proofing_gallery', '%n photo', '%n photos', total) }}
 			</IonNote>
 			<p v-if="settings.presentation.welcomeMessage">
 				{{ settings.presentation.welcomeMessage }}

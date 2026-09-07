@@ -10,3 +10,7 @@ app adds presentation, proofing, selection, upload, and delivery workflows.
 
 The user and administrator guides are also bundled into the app, so essential
 documentation remains available when the Nextcloud server cannot reach GitHub.
+
+For the current settings hierarchy, event release waves, privacy boundaries,
+and operational queues, see the repository's architecture, operations, privacy,
+and App Store publishing documents.

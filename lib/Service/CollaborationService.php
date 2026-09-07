@@ -266,8 +266,8 @@ final class CollaborationService {
 	}
 
 	/** @param list<int> $fileIds */
-	public function saveSelection(Gallery $gallery, CollaborationActor $actor, string $name, string $message, array $fileIds): string {
-		return $this->atomic(function () use ($gallery, $actor, $name, $message, $fileIds): string {
+	public function saveSelection(Gallery $gallery, PublicLink $link, CollaborationActor $actor, string $name, string $message, array $fileIds): string {
+		return $this->atomic(function () use ($gallery, $link, $actor, $name, $message, $fileIds): string {
 			$this->capabilities->assertFeature('selections');
 			$this->assertCollaborationMode($gallery);
 			if (!$this->settings($gallery)->review->selections) {
@@ -279,6 +279,14 @@ final class CollaborationService {
 				throw new InvalidArgumentException('Invalid selection name or message');
 			}
 			$fileIds = array_values(array_unique(array_map('intval', $fileIds)));
+			if ($link->getGalleryId() !== $gallery->getId() || $link->getStatus() !== 'active') throw new InvalidArgumentException('Public link not found');
+			if ($link->getReviewEnabled()) {
+				$settings = $this->settings($gallery)->review;
+				$maximum = $link->getReviewSelectionMax() ?? $settings->selectionMaximum;
+				$current = $this->repository->latestSelectionForLink((int)$gallery->getId(), (int)$link->getId(), $actor->guestId(), $actor->userUid());
+				if ($current !== null && $current['status'] !== 'open') throw new InvalidArgumentException('The submitted selection is locked');
+				if ($maximum > 0 && count($fileIds) > $maximum) throw new InvalidArgumentException('Selection exceeds the maximum of ' . $maximum . ' photos');
+			}
 			if (count($fileIds) > 1000) {
 				throw new InvalidArgumentException('Selection is too large');
 			}
@@ -289,7 +297,7 @@ final class CollaborationService {
 			$publicId = $this->uuid();
 			$now = $this->clock->getTime();
 			$this->repository->insertSelection(
-				$gallery->getId(), $actor->guestId(), $actor->userUid(), $publicId, $name, $message, $fileIds, $now,
+				$gallery->getId(), $actor->guestId(), $actor->userUid(), (int)$link->getId(), $publicId, $name, $message, $fileIds, $now,
 			);
 			$this->event($gallery, $actor, 'selection.created', ['selectionId' => $publicId, 'count' => count($fileIds)]);
 			$this->markResponseReceived($gallery, $now);

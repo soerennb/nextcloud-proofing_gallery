@@ -23,51 +23,121 @@ body.proofing-gallery-public-page ion-button {
 	color: var(--ion-color-primary) !important;
 }
 
-ion-action-sheet.gallery-action-sheet,
-ion-action-sheet.lightbox-action-sheet {
-	--background: #fff;
-	--button-color: #1c1c1e;
-	--button-color-hover: #1c1c1e;
-	--button-color-focused: #1c1c1e;
-	--button-color-activated: #1c1c1e;
-	--button-background-hover: #e5e5ea;
-	--button-background-hover-opacity: 1;
-	--button-background-focused: #d1d1d6;
-	--button-background-focused-opacity: 1;
-	--button-background-activated: #d1d1d6;
-	--button-background-activated-opacity: 1;
-	--ion-font-family: "Geist Variable", sans-serif;
+body.proofing-gallery-public-page[data-proofing-public-theme='light'] {
+	--proofing-overlay-surface: #fff;
+	--proofing-overlay-raised: #f2f2f7;
+	--proofing-overlay-hover: #e5e5ea;
+	--proofing-overlay-active: #d1d1d6;
+	--proofing-overlay-text: #1c1c1e;
+	--proofing-overlay-muted: #636366;
+	--proofing-overlay-border: rgb(60 60 67 / 22%);
+	--proofing-overlay-shadow: 0 22px 60px rgb(17 19 24 / 22%);
 }
 
-ion-action-sheet.gallery-action-sheet .action-sheet-button:focus-visible,
-ion-action-sheet.lightbox-action-sheet .action-sheet-button:focus-visible {
-	outline: 2px solid #e85d4a;
+body.proofing-gallery-public-page[data-proofing-public-theme='dark'] {
+	--proofing-overlay-surface: #1c1c1e;
+	--proofing-overlay-raised: #2c2c2e;
+	--proofing-overlay-hover: #3a3a3c;
+	--proofing-overlay-active: #48484a;
+	--proofing-overlay-text: #f2f2f7;
+	--proofing-overlay-muted: #aeaeb2;
+	--proofing-overlay-border: rgb(255 255 255 / 17%);
+	--proofing-overlay-shadow: 0 24px 72px rgb(0 0 0 / 56%);
+}
+
+body.proofing-gallery-public-page .proofing-public-overlay {
+	--background: var(--proofing-overlay-surface);
+	--color: var(--proofing-overlay-text);
+	--ion-background-color: var(--proofing-overlay-surface);
+	--ion-background-color-rgb: 255, 255, 255;
+	--ion-text-color: var(--proofing-overlay-text);
+	--ion-item-background: var(--proofing-overlay-surface);
+	--ion-toolbar-background: var(--proofing-overlay-surface);
+	--ion-toolbar-color: var(--proofing-overlay-text);
+	--ion-border-color: var(--proofing-overlay-border);
+	--ion-color-primary: var(--proofing-public-accent, #e85d4a);
+	--ion-color-primary-rgb: var(--proofing-public-accent-rgb, 232, 93, 74);
+	--ion-color-primary-contrast: var(--proofing-public-accent-contrast, #fff);
+	--ion-color-primary-contrast-rgb: var(--proofing-public-accent-contrast-rgb, 255, 255, 255);
+	--ion-color-primary-shade: var(--proofing-public-accent-shade, #cc5241);
+	--ion-color-primary-tint: var(--proofing-public-accent-tint, #eb6d5c);
+	--ion-color-light: var(--proofing-overlay-raised);
+	--ion-color-medium: var(--proofing-overlay-muted);
+	--gallery-accent: var(--proofing-public-accent, #e85d4a);
+	--gallery-surface: var(--proofing-overlay-surface);
+	--gallery-surface-raised: var(--proofing-overlay-raised);
+	--gallery-border: var(--proofing-overlay-border);
+	--gallery-text: var(--proofing-overlay-text);
+	--gallery-muted: var(--proofing-overlay-muted);
+	--ion-font-family: "Geist Variable", sans-serif;
+	color: var(--proofing-overlay-text);
+}
+
+body.proofing-gallery-public-page[data-proofing-public-theme='dark'] .proofing-public-overlay {
+	--ion-background-color-rgb: 28, 28, 30;
+}
+
+body.proofing-gallery-public-page ion-modal.proofing-public-overlay::part(content),
+body.proofing-gallery-public-page ion-popover.proofing-public-overlay::part(content) {
+	border: 1px solid var(--proofing-overlay-border);
+	background: var(--proofing-overlay-surface);
+	box-shadow: var(--proofing-overlay-shadow);
+	color: var(--proofing-overlay-text);
+}
+
+body.proofing-gallery-public-page ion-action-sheet.proofing-public-overlay {
+	--button-color: var(--proofing-overlay-text);
+	--button-color-hover: var(--proofing-overlay-text);
+	--button-color-focused: var(--proofing-overlay-text);
+	--button-color-activated: var(--proofing-overlay-text);
+	--button-background-hover: var(--proofing-overlay-hover);
+	--button-background-hover-opacity: 1;
+	--button-background-focused: var(--proofing-overlay-active);
+	--button-background-focused-opacity: 1;
+	--button-background-activated: var(--proofing-overlay-active);
+	--button-background-activated-opacity: 1;
+}
+
+/* Nextcloud adds a physical-end margin to native buttons. Ionic action sheets
+ * are width-constrained scroll containers, so that three-pixel margin creates
+ * a misleading horizontal scrollbar unless it is reset on the generated rows. */
+body.proofing-gallery-public-page ion-action-sheet.proofing-public-overlay .action-sheet-button {
+	margin: 0;
+}
+
+body.proofing-gallery-public-page ion-action-sheet.proofing-public-overlay .action-sheet-button:focus-visible {
+	outline: 2px solid var(--proofing-public-accent, #e85d4a);
 	outline-offset: -3px;
 }
 
-ion-action-sheet.proofing-action-sheet--dark {
-	--background: #1c1c1e;
-	--button-color: #f2f2f7;
-	--button-color-hover: #fff;
-	--button-color-focused: #fff;
-	--button-color-activated: #fff;
-	--button-background-hover: #3a3a3c;
-	--button-background-focused: #48484a;
-	--button-background-activated: #48484a;
+body.proofing-gallery-public-page ion-alert.proofing-public-overlay,
+body.proofing-gallery-public-page ion-loading.proofing-public-overlay {
+	--backdrop-opacity: .56;
 }
 
-@media (prefers-color-scheme: dark) {
-	ion-action-sheet.proofing-action-sheet--auto {
-		--background: #1c1c1e;
-		--button-color: #f2f2f7;
-		--button-color-hover: #fff;
-		--button-color-focused: #fff;
-		--button-color-activated: #fff;
-		--button-background-hover: #3a3a3c;
-		--button-background-focused: #48484a;
-		--button-background-activated: #48484a;
-	}
+body.proofing-gallery-public-page ion-alert.proofing-public-overlay::part(content),
+body.proofing-gallery-public-page ion-loading.proofing-public-overlay::part(content) {
+	border: 1px solid var(--proofing-overlay-border);
+	background: var(--proofing-overlay-surface);
+	box-shadow: var(--proofing-overlay-shadow);
+	color: var(--proofing-overlay-text);
 }
+
+ion-popover.public-appearance-popover { --width: 272px; }
+
+ion-popover.public-appearance-popover .public-appearance-list { padding: 7px; background: var(--proofing-overlay-surface); }
+
+ion-popover.public-appearance-popover ion-item { --min-height: 50px; --padding-start: 11px; --inner-padding-end: 10px; border-radius: 9px; }
+
+ion-popover.public-appearance-popover ion-item:hover { --background: var(--proofing-overlay-hover); }
+
+ion-popover.public-appearance-popover ion-label { margin-block: 7px; }
+
+ion-popover.public-appearance-popover .public-appearance-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+
+ion-popover.public-appearance-popover ion-label strong { display: block; font-size: 14px; font-weight: 650; line-height: 1.25; }
+
+ion-popover.public-appearance-popover ion-label small { display: block; color: var(--proofing-overlay-muted); font-size: 11px; line-height: 1.3; }
 
 .public-gallery-app {
 	--ion-font-family: "Geist Variable", sans-serif;

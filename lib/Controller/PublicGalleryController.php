@@ -46,6 +46,7 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		private \OCA\ProofingGallery\Service\ShareAuditService $shareAudit,
 		private VideoTranscodeService $videoTranscodes,
 		private \OCA\ProofingGallery\Service\PublicGalleryDownloadService $galleryDownloads,
+		private \OCA\ProofingGallery\Service\WebJpegDerivativeService $webJpegs,
 	) {
 		parent::__construct($request, $session, $contextResolver);
 	}
@@ -120,13 +121,26 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 	#[NoCSRFRequired]
 	#[AnonRateLimit(limit: 240, period: 3600)]
 	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/media/{fileId}/download')]
-	public function download(int $fileId): Response {
+	public function download(int $fileId, string $preset = 'original', bool $watermark = false): Response {
 		if (!$this->downloadAllowed('individual')) {
 			$this->shareAudit->record($this->resolvedPublicLink(), 'download', fileId: $fileId, outcome: 'denied', reasonCode: 'policy');
 			return new DataDisplayResponse('', Http::STATUS_FORBIDDEN);
 		}
 		$file = $this->fileInShare($fileId);
 		$this->shareAudit->record($this->resolvedPublicLink(), 'download', fileId: $fileId);
+		if ($preset !== 'original') {
+			try {
+				$derivative = $this->webJpegs->derivative($file, $preset, $watermark, $this->publicContext()->settings->presentation, $this->resolvedGallery()->getOwnerUid());
+				return new DataDisplayResponse($derivative->getContent(), Http::STATUS_OK, [
+					'Content-Type' => 'image/jpeg',
+					'Content-Disposition' => 'attachment; filename="' . addcslashes($this->webJpegs->filename($file->getName()), '"\\') . '"',
+					'Content-Length' => (string)$derivative->getSize(), 'Cache-Control' => 'private, no-store',
+					'ETag' => '"' . $derivative->getETag() . '"', 'X-Proofing-Download-Preset' => $preset,
+				]);
+			} catch (\InvalidArgumentException|\RuntimeException) {
+				return new DataDisplayResponse('', Http::STATUS_UNPROCESSABLE_ENTITY);
+			}
+		}
 		return new RangedStreamResponse(
 			$this->request,
 			static fn () => $file->fopen('rb'),
@@ -142,7 +156,7 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 	#[NoCSRFRequired]
 	#[AnonRateLimit(limit: 60, period: 3600)]
 	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/download/selection')]
-	public function downloadSelection(string $fileIds): Response {
+	public function downloadSelection(string $fileIds, string $preset = 'original', bool $watermark = false): Response {
 		if (!$this->downloadAllowed('selection')) {
 			return new DataDisplayResponse('', Http::STATUS_FORBIDDEN);
 		}
@@ -152,13 +166,23 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		}
 		$filename = preg_replace('/[^a-z0-9._-]+/i', '-', $this->resolvedGallery()->getTitle()) ?: 'gallery';
 		$archive = new ZipResponse($this->request, trim($filename, '-') . '-selection.zip');
+		if ($preset !== 'original' && !in_array($preset, $this->webJpegs->presets(), true)) return new DataDisplayResponse('', Http::STATUS_UNPROCESSABLE_ENTITY);
 		foreach ($files as $file) {
 			$name = $this->resolvedGallery()->getSourceType() === 'collection'
 				? $this->collections->downloadPath($this->resolvedGallery(), $file)
 				: $file->getName();
-			$stream = $file->fopen('rb');
+			try {
+				$download = $preset === 'original' ? $file : $this->webJpegs->derivative($file, $preset, $watermark, $this->publicContext()->settings->presentation, $this->resolvedGallery()->getOwnerUid());
+			} catch (\InvalidArgumentException|\RuntimeException) {
+				return new DataDisplayResponse('', Http::STATUS_UNPROCESSABLE_ENTITY);
+			}
+			if ($preset !== 'original') {
+				$directory = pathinfo($name, PATHINFO_DIRNAME);
+				$name = ($directory !== '.' ? $directory . '/' : '') . $this->webJpegs->filename(basename($name));
+			}
+			$stream = $preset === 'original' ? $file->fopen('rb') : $download->read();
 			if (!is_resource($stream)) return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
-			$archive->addResource($stream, $name, (int)$file->getSize(), (int)$file->getMTime());
+			$archive->addResource($stream, $name, (int)$download->getSize(), (int)$file->getMTime());
 		}
 		$this->shareAudit->record($this->resolvedPublicLink(), 'export');
 		return $archive;

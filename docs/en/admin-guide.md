@@ -24,6 +24,25 @@ Back up database, data directory, configuration, and appdata before upgrades.
 Nextcloud runs app migrations while enabling or upgrading. Do not skip supported
 Nextcloud server upgrade steps.
 
+### Recover a failed 0.9.0 upgrade
+
+If a 0.9.0 upgrade left Nextcloud in maintenance mode, keep maintenance mode
+enabled and back up the database, `config/`, data directory, and appdata. Install
+the verified signed 0.9.1 archive by replacing only
+`custom_apps/proofing_gallery`; do not uninstall the app or delete its tables,
+jobs, galleries, links, or feedback. Restart the AIO Nextcloud container or the
+PHP workers to clear OPcache, then run from the Nextcloud root:
+
+```bash
+sudo -u www-data php occ upgrade
+sudo -u www-data php occ status --output=json
+sudo -u www-data php occ app:list --output=json
+```
+
+Recovery is complete when `maintenance` and `needsDbUpgrade` are both `false`
+and Proofing Gallery reports version 0.9.1. If the retry fails, leave maintenance
+mode enabled, retain the backup and logs, and investigate the new error.
+
 ## Access and policy
 
 Administration settings → Additional settings → Proofing Gallery controls which
@@ -36,6 +55,20 @@ authoritative; this app never weakens them.
 Review public-link, mail, and group policy before onboarding users. Keep guest
 downloads and uploads disabled unless required. Set limits according to PHP,
 proxy, storage, and worker capacity rather than relying on browser validation.
+
+The administration UI is divided into **General**, **Media**, **Security**, and
+**Operations**. General contains access policies, feature switches, groups,
+branding, and defaults for new projects. Media contains video processing and
+local or external media search. Security contains upload and delivery limits,
+Live Push, custom-domain requests, and the optional Files Retention handoff.
+Operations contains health, maintenance, domain approval, and the offline admin
+documentation.
+
+The effective public capability is the intersection of the instance policy,
+gallery settings, public-link policy, and— for event delivery—the release-wave
+policy. A more permissive setting at a lower level cannot override a disabled
+instance feature. Existing galleries keep their settings when new defaults are
+changed.
 
 ## Nextcloud ecosystem integrations
 
@@ -99,10 +132,27 @@ Useful example prompts include:
 
 - “Which Proofing Galleries are currently published?”
 - “Is Editorial Edit ready to publish? Do not change anything.”
-- “Find files containing ‘coast’ in the Coastal Vows Proofing Gallery.”
+- “Find files containing ‘coast’ in the Proofing Gallery ‘The Shoreline Edit’.”
 
 The tool names deliberately include `proofing_gallery` so the model does not
 confuse these operations with general Files or Photos searches.
+
+### Event delivery administration
+
+Event projects use one source folder with explicit shared, group, private, or
+not-delivered subfolder roles. The owner prepares recipients in the ledger and
+publishes a release wave. Each generated link is restricted to the shared roots,
+the recipient's group roots, and exactly one private root. Recipient email
+addresses and optional PINs are encrypted; plaintext PIN CSV handoff is
+available only through the short-lived owner action after release.
+
+Waves can be saved as drafts, scheduled, released immediately, cancelled,
+retried for failed recipients, or repaired when a source scope becomes
+unavailable. A release is processed in bounded background batches, so cron must
+run reliably for large events. Link rotation and invitation resend affect only
+the selected recipient. The wave download policy can allow no downloads,
+individual files, saved selections, or the complete gallery, but never escapes
+the recipient's folder scope.
 
 ## Background jobs and monitoring
 
@@ -128,6 +178,11 @@ Capacity planning includes source files in Files, temporary resumable chunks,
 generated previews, video derivatives, database indices, and accepted uploads.
 Cleanup is eventual; reserve headroom for interrupted jobs. Keep database and
 appdata backups consistent if feedback, inbox uploads, or generated state matter.
+
+Monitor event releases through the recipient ledger and failed-job list. A
+partially failed wave is not an all-or-nothing rollback: successful recipients
+remain released and only failed recipients should be retried. Do not treat a
+later, more permissive wave as an update to links from an earlier wave.
 
 ## Video processing
 

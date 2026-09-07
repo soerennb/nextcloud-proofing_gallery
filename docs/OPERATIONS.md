@@ -24,6 +24,40 @@ Nextcloud runs database migrations during enable and upgrade. Back up the
 Nextcloud database and data directory before upgrading. Never skip Nextcloud
 major versions during a server upgrade.
 
+### Recover a failed 0.9.0 upgrade
+
+Some 0.9.0 upgrades can leave Nextcloud in maintenance mode because a persisted
+cleanup job cannot be constructed. The supported recovery keeps the database,
+gallery data, and queued jobs intact:
+
+1. Keep maintenance mode enabled and make a fresh backup of the Nextcloud
+   database, `config/`, data directory, and appdata.
+2. Download `proofing_gallery.tar.gz` and `SHA256SUMS` for the signed 0.9.1
+   release from GitHub and verify the archive before extracting it. Do not use
+   a checkout from `main`.
+3. Stop web/PHP workers, replace only
+   `custom_apps/proofing_gallery` with the verified 0.9.1 directory, and keep
+   the old app directory as a temporary backup until recovery is confirmed.
+   Restart the workers or the AIO Nextcloud container so stale OPcache code is
+   gone.
+4. From the Nextcloud root, run the CLI upgrade as the web user:
+
+   ```bash
+   sudo -u www-data php occ upgrade
+   sudo -u www-data php occ status --output=json
+   sudo -u www-data php occ app:list --output=json
+   ```
+
+   The status must report `maintenance: false` and `needsDbUpgrade: false`, and
+   Proofing Gallery must report version 0.9.1. Run `occ upgrade` again only if
+   Nextcloud reports that migrations are still pending.
+
+Do not uninstall or disable Proofing Gallery, delete its database tables or
+background jobs, turn maintenance mode off before the upgrade succeeds, or
+restore only part of the database/appdata pair. If the retry fails, leave
+maintenance mode enabled, retain the logs and backup, and investigate the new
+error before changing the installation.
+
 ## Jobs, storage, and mail
 
 Run cron at least every five minutes. Monitor Nextcloud's log for
@@ -68,6 +102,23 @@ status before treating them as an upload failure. Keep
 `loglevel_dirty_database_queries` at its normal debug level in production and
 raise it temporarily only while diagnosing replica-consistency paths; do not
 disable required file hooks merely to suppress these diagnostics.
+
+### Event delivery waves
+
+Event releases are queued in bounded batches and can be immediate or scheduled.
+Each recipient is processed independently: successful links remain valid when
+another recipient fails, and a partial-failure wave exposes only the failed
+rows for retry. Link rotation and invitation resend are also recipient-scoped.
+The event policy is captured with the wave and is intersected with the global,
+gallery, and public-link policies. It controls no-download, individual,
+selection, or complete-gallery delivery without ever crossing the recipient's
+assigned folder roots.
+
+Plan capacity for the number of recipient links, native public shares, queued
+mail messages, and temporary PIN handoff data in addition to source media and
+preview derivatives. Run cron continuously during a large release and monitor
+the recipient ledger, event operations endpoint, Nextcloud failed jobs, and
+integration/mail logs until the wave reaches `released` or `partial_failed`.
 
 ### Capacity and backlog monitoring
 

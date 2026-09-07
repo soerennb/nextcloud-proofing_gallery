@@ -5,15 +5,59 @@ The controls available to you can be restricted by your Nextcloud administrator.
 
 ## Create a gallery
 
-1. Store the deliverable images and supported videos in a Nextcloud folder.
-2. Open **Proofing Gallery** and choose **New project**.
-3. Select a folder gallery or a collection, enter a title, and choose the
-   presentation or proofing purpose.
-4. Review the source and media count before configuring delivery.
+1. Open **Proofing Gallery** and choose **New project**.
+2. Choose the purpose that matches the job: **Show photos only**, **Deliver
+   finished photos**, **Collect a selection**, **Review together**, or
+   **Receive files**.
+3. Enter a title, then choose from the audiences and sources that fit that job.
+   Existing folders, new folders, and curated collections remain available
+   where they make sense. Delivery, presentation, selection, and proofing jobs
+   can also create private links from event folders.
+4. Review the source and media count before configuring delivery. A receive-files
+   project starts with one moderated upload inbox and cannot use collections or
+   event delivery.
 
 A folder gallery references one existing folder. A collection combines files
 from several folder galleries without copying them. Collection sources must
 belong to the same owner, and collections cannot accept guest uploads.
+
+The wizard keeps three choices separate: the project purpose describes the
+workflow, the gallery mode is **Presentation** or **Proofing**, and the delivery
+mode is **Standard** or **Event**. Event delivery is available for the delivery,
+showcase, selection, and proofing purposes; receive-files projects use one
+moderated upload inbox and do not support collections or event delivery.
+
+## Deliver a volume event privately
+
+For schools, sports events, and other jobs with many recipients, keep shared
+photos and each participant's photos in separate subfolders of one project
+folder. Choose **Private links from event folders** when creating the project.
+The project opens directly in Event delivery; there is no separate publish step.
+
+Work through **Photos**, **Access**, **Recipients**, and **Release**. Use an
+existing Nextcloud folder, or choose or drop a local event folder while
+retaining its subfolders. Assign each folder exactly one role: everyone, group,
+private, or not delivered. The recipient ledger combines contact editing, exact
+shared/group/private scope, current link, and link history in one row per
+recipient. The final action publishes the hidden technical base when needed and
+creates the client links.
+
+In **Release**, choose the download access for the delivery round: disabled,
+individual files, saved selections, or files plus the entire gallery. The
+setting applies to every shared, group, and private folder in the round, while
+each recipient remains restricted to their assigned folders. Existing released
+links are not broadened automatically when a later round uses a wider policy.
+
+Folder names provide initial recipient names. For large lists, expand the CSV
+import in the recipient step and use `folder`, `name`, `email`, `locale`, `pin`,
+and optional `groups` columns. Drafts, schedules, individual links, exports,
+retries, repairs, and link rotation remain in the recipient and release areas.
+Email addresses are encrypted at rest.
+
+The final **Release** step creates one scoped link per recipient. The link only
+contains the shared folders, any assigned group folders, and that recipient's
+private folder. A successful release can be inspected in the ledger; failed
+recipients can be retried without recreating successful links.
 
 ## Work through a project
 
@@ -32,6 +76,12 @@ The gallery workspace separates the common tasks:
 
 Changes to gallery settings use revision checks. If another browser changed the
 same gallery, reload the current state instead of overwriting it blindly.
+
+Settings are intentionally layered. Administrators define instance policies and
+defaults, owners configure the gallery, each public link can further restrict
+access, and an event release wave can restrict its own recipient links again.
+The most restrictive applicable policy wins; a client cannot use a capability
+that is disabled at an earlier layer.
 
 When an owner uploads files whose names already exist, Proofing Gallery opens
 the standard Nextcloud conflict dialog before transferring them. Each incoming
@@ -89,10 +139,11 @@ rating or decision. Review the UTF-8 CSV preview before downloading or copying i
 
 ## Review rounds and Nextcloud follow-up
 
-Each active client link can have its own review workflow and optional due date.
-The guest submits the current round only after identifying for feedback. The
-gallery owner can approve it, request changes (which opens the next round), or
-reopen an approved result. This is a workflow decision, not an electronic
+Each active client link can inherit or override the gallery's minimum, maximum,
+and due date for selections. Guests may save incomplete drafts, but submission
+enforces those rules and locks the submitted selection. The gallery owner can
+approve it, request changes, or reopen an approved result in the same round.
+This is a workflow decision, not an electronic
 signature or a frozen legal snapshot.
 
 Under **Results**, owners see the current state and traceable round history.
@@ -106,9 +157,17 @@ decisions remain in the Proofing Gallery interface.
 
 ## Downloads and guest uploads
 
-Depending on link policy, guests can download individual originals, a ZIP of a
-saved selection, or a printable contact sheet made from previews. Large
-deliveries are bounded by administrator limits.
+Depending on link policy, guests can have **no downloads**, download individual
+files, download a ZIP of a saved selection, or download the complete gallery.
+The complete-gallery option also includes individual and selection downloads.
+Individual and selection downloads offer the original or metadata-free 2048 px
+and 1600 px JPEGs, optionally with the gallery watermark; smaller images are
+never enlarged. A printable contact sheet contains previews, not originals.
+Administrator limits bound file counts and delivery size.
+
+Event delivery applies this policy to the whole release wave. It still keeps
+each recipient inside their assigned folder scope, and a later wave with a more
+generous policy does not change already released links.
 
 Guest uploads are resumable and enter a hidden moderation inbox. Owners or
 authorized managers accept an upload with a conflict-free filename or reject

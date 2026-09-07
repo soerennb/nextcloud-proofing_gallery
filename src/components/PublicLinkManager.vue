@@ -34,10 +34,10 @@ const permissionLabels: Record<(typeof permissionKeys)[number], string> = {
 	metadata: t('proofing_gallery', 'Metadata'),
 }
 const downloadScopeLabels: Record<PublicLinkPolicy['downloadScope'], string> = {
-	none: t('proofing_gallery', 'Disabled'),
+	none: t('proofing_gallery', 'Downloads disabled'),
 	individual: t('proofing_gallery', 'Individual files'),
 	selection: t('proofing_gallery', 'Saved selections'),
-	all: t('proofing_gallery', 'Files and selections'),
+	all: t('proofing_gallery', 'Files, selections, and entire gallery'),
 }
 const presetLabels: Record<string, string> = {
 	presentation: t('proofing_gallery', 'Presentation'),
@@ -65,6 +65,8 @@ function createDraft() {
 		publicLocale: null as 'en' | 'de' | null,
 		reviewEnabled: ['selection', 'proofing'].includes(props.gallery.purpose),
 		reviewDueDate: '',
+		reviewSelectionMinimum: null as number | null,
+		reviewSelectionMaximum: null as number | null,
 		password: '',
 		expiresAt: '',
 		policy: ({ view: true, likes: false, colors: false, comments: false, annotations: false, selections: false, ratings: false, pick: false, upload: false, export: false, metadata: false, downloadScope: 'none' }) as PublicLinkPolicy,
@@ -90,7 +92,7 @@ function startNew() {
 }
 
 function edit(link: GalleryPublicLink) {
-	draft.value = { ...createDraft(), name: link.name, startPath: link.startPath, viewMode: link.viewMode, groupDepth: link.groupDepth, minOwnerRating: link.minOwnerRating, publicLocale: link.publicLocale, reviewEnabled: link.reviewEnabled, reviewDueDate: link.reviewDueDate ?? '', policy: structuredClone(link.policy) }
+	draft.value = { ...createDraft(), name: link.name, startPath: link.startPath, viewMode: link.viewMode, groupDepth: link.groupDepth, minOwnerRating: link.minOwnerRating, publicLocale: link.publicLocale, reviewEnabled: link.reviewEnabled, reviewDueDate: link.reviewDueDate ?? '', reviewSelectionMinimum: link.reviewSelectionMinimum, reviewSelectionMaximum: link.reviewSelectionMaximum, policy: structuredClone(link.policy) }
 	editingId.value = link.id
 }
 
@@ -206,7 +208,7 @@ onMounted(load)
 				<div class="link-card__top">
 					<div><strong>{{ link.name }}</strong><span v-if="link.primary">{{ t('proofing_gallery', 'PRIMARY') }}</span></div><small>{{ link.status === 'active' ? t('proofing_gallery', 'Active') : t('proofing_gallery', 'Revoked') }}</small>
 				</div>
-				<p>{{ link.viewMode === 'recursive' ? t('proofing_gallery', 'Recursive') : t('proofing_gallery', 'Folder view') }} · {{ link.startPath || t('proofing_gallery', 'Gallery root') }} · {{ downloadScopeLabels[link.policy.downloadScope] }}</p>
+				<p>{{ link.viewMode === 'recursive' ? t('proofing_gallery', 'Recursive') : t('proofing_gallery', 'Folder view') }} · {{ link.allowedRoots?.length ? link.allowedRoots.join(' + ') : (link.startPath || t('proofing_gallery', 'Gallery root')) }} · {{ downloadScopeLabels[link.policy.downloadScope] }}</p>
 				<p v-if="link.reviewEnabled" class="link-card__review">
 					{{ t('proofing_gallery', 'Review round {round}: {status}', { round: link.review.current?.round ?? 1, status: reviewStatusLabels[link.review.current?.status ?? 'awaiting_feedback'] ?? link.review.current?.status ?? '' }) }}<template v-if="link.reviewDueDate">
 						· {{ link.reviewDueDate }}
@@ -265,13 +267,25 @@ onMounted(load)
 				<label><span>{{ t('proofing_gallery', 'Expires on') }}</span><input v-model="draft.expiresAt" name="linkExpiry" type="date"></label>
 				<label class="link-editor__review"><span>{{ t('proofing_gallery', 'Review round') }}</span><span><input v-model="draft.reviewEnabled" name="reviewEnabled" type="checkbox"> {{ t('proofing_gallery', 'Let guests submit this link for approval') }}</span></label>
 				<label v-if="draft.reviewEnabled"><span>{{ t('proofing_gallery', 'Review due date') }}</span><input v-model="draft.reviewDueDate" name="reviewDueDate" type="date"></label>
+				<label v-if="draft.reviewEnabled"><span>{{ t('proofing_gallery', 'Minimum selections') }}</span><input v-model.number="draft.reviewSelectionMinimum"
+					name="reviewSelectionMinimum"
+					type="number"
+					min="0"
+					max="1000"
+					:placeholder="t('proofing_gallery', 'Gallery default')"></label>
+				<label v-if="draft.reviewEnabled"><span>{{ t('proofing_gallery', 'Maximum selections') }}</span><input v-model.number="draft.reviewSelectionMaximum"
+					name="reviewSelectionMaximum"
+					type="number"
+					min="0"
+					max="1000"
+					:placeholder="t('proofing_gallery', 'Gallery default')"></label>
 			</div>
 			<fieldset>
 				<legend>{{ t('proofing_gallery', 'Permissions') }}</legend><label v-for="key in permissionKeys" :key="key"><input :checked="draft.policy[key]"
 					type="checkbox"
 					:name="`policy-${key}`"
 					:disabled="key === 'annotations' && !draft.policy.comments"
-					@change="updatePermission(key, ($event.target as HTMLInputElement).checked)">{{ permissionLabels[key] }}</label><label><span>{{ t('proofing_gallery', 'Downloads') }}</span><select v-model="draft.policy.downloadScope" name="linkDownloads"><option v-for="(label, scope) in downloadScopeLabels" :key="scope" :value="scope">{{ label }}</option></select></label>
+					@change="updatePermission(key, ($event.target as HTMLInputElement).checked)">{{ permissionLabels[key] }}</label><label><span>{{ t('proofing_gallery', 'Download access') }}</span><select v-model="draft.policy.downloadScope" name="linkDownloads"><option v-for="(label, scope) in downloadScopeLabels" :key="scope" :value="scope">{{ label }}</option></select></label>
 			</fieldset>
 			<div class="link-editor__actions">
 				<NcButton type="submit" variant="primary" :disabled="saving">

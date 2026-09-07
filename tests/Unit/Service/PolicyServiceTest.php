@@ -30,7 +30,7 @@ final class PolicyServiceTest extends TestCase {
 		self::assertSame(100, $policies->get('metadataBatchSize'));
 		self::assertSame(1, $policies->get('xmpWritingEnabled'));
 		self::assertSame(25000, $policies->get('maxIndexedMedia'));
-		self::assertSame(10, $policies->get('maxPublicLinks'));
+		self::assertSame(500, $policies->get('maxPublicLinks'));
 		self::assertSame(90, $policies->get('shareAuditRetentionDays'));
 		self::assertSame(30, $policies->get('notificationQueueRetentionDays'));
 		self::assertSame(30, $policies->get('deadLetterRetentionDays'));

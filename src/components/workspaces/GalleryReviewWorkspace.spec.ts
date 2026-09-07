@@ -18,6 +18,7 @@ function gallery(): Gallery {
 		ownerUid: 'owner',
 		folderId: 10,
 		sourceType: 'folder',
+		deliveryMode: 'standard',
 		title: 'Client proof',
 		slug: 'client-proof',
 		status: 'published',

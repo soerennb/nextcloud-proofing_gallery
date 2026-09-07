@@ -13,7 +13,7 @@ defineEmits<{ dismiss: []; submit: [identity: { displayName: string; email: stri
 </script>
 
 <template>
-	<IonModal :is-open="open" class="guest-dialog" @did-dismiss="$emit('dismiss')">
+	<IonModal :is-open="open" class="proofing-public-overlay guest-dialog" @did-dismiss="$emit('dismiss')">
 		<IonHeader>
 			<IonToolbar>
 				<IonTitle>{{ t('proofing_gallery', 'Who is giving feedback?') }}</IonTitle>

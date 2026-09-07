@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: build docs appstore appstore-signed verify-package verify-signed-package test-upgrade watch install lint test test-e2e test-compat dev-up dev-pull dev-down dev-logs dev-install dev-reset dev-migration-status dev-migrate occ studio-up studio-down studio-restart studio-refresh studio-doctor studio-status studio-logs studio-reset studio-occ studio-migration-status studio-migrate studio-library-check studio-seed studio-screenshots studio-browser-check context-agent-eval-up context-agent-eval context-agent-eval-down
+.PHONY: build docs appstore appstore-signed verify-package verify-signed-package test-upgrade public-history-check watch install lint test test-e2e test-compat dev-up dev-pull dev-down dev-logs dev-install dev-reset dev-migration-status dev-migrate occ studio-up studio-down studio-restart studio-refresh studio-doctor studio-status studio-logs studio-reset studio-occ studio-migration-status studio-migrate studio-library-check studio-seed studio-screenshots studio-screenshot-pairs studio-browser-check context-agent-eval-up context-agent-eval context-agent-eval-down
 
 install:
 	npm ci
@@ -26,6 +26,9 @@ verify-signed-package:
 
 test-upgrade:
 	./scripts/test-upgrade.sh
+
+public-history-check:
+	./scripts/test-public-history-sanitizer.sh
 
 watch:
 	npm run watch
@@ -119,6 +122,9 @@ studio-seed: studio-up studio-library-check
 
 studio-screenshots: studio-seed
 	node ./scripts/capture-studio-screenshots.mjs
+
+studio-screenshot-pairs:
+	node ./scripts/create-screenshot-pairs.mjs $(SCREENSHOT_NAMES)
 
 studio-browser-check: studio-seed
 	node ./scripts/verify-studio-browsers.mjs

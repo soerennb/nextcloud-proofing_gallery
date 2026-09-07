@@ -67,6 +67,15 @@ final class PublicGalleryDownloadService {
 			return $this->uniquePaths($entries);
 		}
 		$recursive = $context->settings->navigation->folders;
+		if ($this->linkScopes->isMultiRoot($context->link)) {
+			$entries = [];
+			foreach ($this->linkScopes->roots($context->link) as $rootPath) {
+				$node = $context->root->get($rootPath);
+				if (!$node instanceof Folder || !$context->root->isSubNode($node)) continue;
+				array_push($entries, ...$this->folderEntries($node, $rootPath, true));
+			}
+			return $this->uniquePaths($entries);
+		}
 		return $this->uniquePaths($this->folderEntries($context->root, '', $recursive));
 	}
 

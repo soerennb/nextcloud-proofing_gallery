@@ -68,12 +68,13 @@ final class PublicShareTemplateProvider implements IPublicShareTemplateProvider 
 		$this->initialState->provideInitialState('public-gallery', [
 			'id' => $gallery->getId(),
 			'title' => $gallery->getTitle(),
+			'deliveryMode' => $gallery->getDeliveryMode(),
 			'settings' => $initialPage['gallery']['settings'],
 			'effectiveCapabilities' => $initialPage['gallery']['effectiveCapabilities'],
 			'token' => $token,
 			'path' => $path,
 			'initialPage' => $initialPage,
-			'review' => $this->reviews->publicState($context->link),
+			'review' => $this->reviews->publicState($context->gallery, $context->link),
 			'viewer' => $user === null ? null : [
 				'displayName' => $user->getDisplayName(),
 				'email' => $user->getEMailAddress(),

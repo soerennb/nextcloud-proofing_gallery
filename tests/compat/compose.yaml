@@ -9,7 +9,7 @@ x-nextcloud: &nextcloud
   volumes:
     - ${APP_SOURCE:?Set APP_SOURCE}:/opt/proofing_gallery:ro
   healthcheck:
-    test: ["CMD-SHELL", "su -s /bin/sh www-data -c \"php occ status --output=json\" | grep -q '\"installed\":true'"]
+    test: ["CMD-SHELL", "if test -f /tmp/proofing-gallery-upgrade-healthcheck-ready; then exit 0; fi; su -s /bin/sh www-data -c \"php occ status --output=json\" | grep -q '\"installed\":true'"]
     interval: 5s
     timeout: 10s
     retries: 48

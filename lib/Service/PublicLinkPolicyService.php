@@ -4,9 +4,35 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Service;
 
+use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Domain\PublicLinkPolicy;
+use OCA\ProofingGallery\Dto\GallerySettings;
 
 final class PublicLinkPolicyService {
+	/** @return array<string, bool|string> */
+	public function forGallery(Gallery $gallery): array {
+		$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
+		return $this->forSettings($settings);
+	}
+
+	/** @return array<string, bool|string> */
+	public function forSettings(GallerySettings $settings): array {
+		$review = $settings->review;
+		$delivery = $settings->delivery;
+		return PublicLinkPolicy::fromArray([
+			'likes' => $review->likes,
+			'colors' => $review->colors,
+			'comments' => $review->comments,
+			'annotations' => $review->annotations,
+			'selections' => $review->selections,
+			'ratings' => $review->ratings,
+			'pick' => $review->pick,
+			'upload' => $delivery->guestUploads,
+			'export' => $delivery->downloadScope->value !== 'none',
+			'metadata' => $settings->metadata->publicFields !== [],
+			'downloadScope' => $delivery->downloadScope->value,
+		])->jsonSerialize();
+	}
 
 	/** @return array<string, array<string, bool|string>> */
 	public function presets(): array {

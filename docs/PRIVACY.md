@@ -8,6 +8,8 @@ tracking pixels, or external media services.
 - gallery configuration and the Nextcloud file IDs it references, including
   ordered collection membership and source-gallery IDs
 - optional guest display name and encrypted email address
+- event recipient display names, encrypted email addresses, encrypted PINs,
+  folder assignments, release-wave status, and scoped link history
 - likes, color states, comments, normalized point annotations, selections, and
   private per-client star ratings and pick/reject decisions
 - pending upload metadata and temporary chunks
@@ -25,6 +27,12 @@ tracking pixels, or external media services.
 Guest session secrets and mutation nonces are random, independently hashed, and
 never stored in plaintext. Public share passwords are managed by Nextcloud.
 Optional email addresses use the server's secret-derived encryption.
+
+Event delivery never copies participant photographs. It stores only the folder
+assignment needed to resolve a recipient's scoped public link. PINs are returned
+to the owner only through the short-lived post-release handoff; their persisted
+form is encrypted. A recipient link can expose shared content, assigned group
+content, and exactly one private folder, but never another recipient's folder.
 
 Embedded metadata processing and local filename/metadata search never send
 image content to an external service. The optional HTTPS vision provider is
@@ -91,7 +99,9 @@ comment edits, selection exports, previews, downloads, and ratings are checked
 against that link's folder boundary or explicit collection membership. Guest
 CSV exports expose only filenames and that authenticated guest's own private
 rating values; owner-only culling, aggregates, paths, and comments are removed
-server-side even if requested manually.
+server-side even if requested manually. Event links apply the same checks to
+their shared, group, and private roots, and download policy is evaluated again
+for each request. A permissive later event wave cannot expand an existing link.
 
 Report vulnerabilities privately to the repository maintainer; do not include
 real share tokens, guest data, or images in a public issue.

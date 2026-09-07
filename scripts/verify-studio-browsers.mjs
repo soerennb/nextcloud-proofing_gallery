@@ -18,20 +18,20 @@ for (const [name, engine] of Object.entries(engines)) {
 		const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'en-US', reducedMotion: 'no-preference' })
 		const page = await context.newPage()
 		observe(page)
-		const tapButton = async (label) => {
-			await page.waitForFunction((buttonLabel) => {
-				const button = [...document.querySelectorAll('button')].find((candidate) => candidate.getAttribute('aria-label') === buttonLabel || candidate.textContent?.trim() === buttonLabel)
-				if (!button) return false
-				const rect = button.getBoundingClientRect()
-				return rect.top >= 0 && rect.bottom <= window.innerHeight
-			}, label)
-			const box = await page.getByRole('button', { name: label, exact: true }).boundingBox()
+		const tapTouchButton = async (label) => {
+			const button = page.getByRole('button', { name: label, exact: true }).last()
+			await button.waitFor({ state: 'visible' })
+			const box = await button.boundingBox()
 			if (!box) throw new Error(`${name} could not locate ${label} touch target`)
 			await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2)
 		}
 		await page.goto(publicURL)
-		await page.getByRole('heading', { name: 'Coastal Vows', level: 1 }).last().waitFor()
+		await page.getByRole('heading', { name: 'The Shoreline Edit', level: 1 }).last().waitFor()
+		await page.locator('.media-tile').last().waitFor()
+		await page.waitForFunction(() => [...document.images].every((image) => image.complete))
+		await page.waitForTimeout(500)
 		await page.locator('.media-tile').last().scrollIntoViewIfNeeded()
+		await page.waitForTimeout(300)
 		const gallery = await page.evaluate(() => ({
 			viewport: innerWidth,
 			scrollWidth: document.documentElement.scrollWidth,
@@ -52,7 +52,7 @@ for (const [name, engine] of Object.entries(engines)) {
 		await shell.waitFor({ state: 'visible' })
 		await page.waitForTimeout(4800)
 		if (!(await shell.getAttribute('class'))?.includes('lightbox-shell--chrome-hidden')) { throw new Error(`${name} did not auto-hide lightbox chrome`) }
-		await page.touchscreen.tap(195, 420)
+		await tapTouchButton('Show photo controls')
 		await page.waitForFunction(() => !document.querySelector('.lightbox-shell')?.classList.contains('lightbox-shell--chrome-hidden'))
 		await page.waitForFunction(() => {
 			const strip = document.querySelector('.public-filmstrip')?.getBoundingClientRect()
@@ -62,15 +62,20 @@ for (const [name, engine] of Object.entries(engines)) {
 		if (!mobileStrip || mobileStrip.y < 0 || mobileStrip.y + mobileStrip.height > 844) {
 			throw new Error(`${name} mobile lightbox filmstrip left the viewport: ${JSON.stringify({ mobileStrip, shell: await shell.getAttribute('class') })}`)
 		}
-		await tapButton('Hide thumbnails')
+		const lightboxActions = page.locator('ion-action-sheet.lightbox-action-sheet').last()
+		await tapTouchButton('More options')
+		await lightboxActions.waitFor()
+		await lightboxActions.getByRole('button', { name: 'Hide thumbnails', exact: true }).click()
 		if (await page.locator('.public-filmstrip').count()) { throw new Error(`${name} did not hide guest filmstrip`) }
-		await tapButton('Close')
+		await tapTouchButton('Close')
 		await page.locator('.lightbox-shell').waitFor({ state: 'detached' })
 		await page.locator('.media-tile__open').first().click()
-		await page.getByRole('button', { name: 'Show thumbnails' }).waitFor()
+		await tapTouchButton('More options')
+		await lightboxActions.waitFor()
+		await lightboxActions.getByRole('button', { name: 'Show thumbnails', exact: true }).waitFor()
 		if (await page.locator('.public-filmstrip').count()) { throw new Error(`${name} lost guest filmstrip session preference`) }
-		await tapButton('Show thumbnails')
-		await tapButton('Close')
+		await lightboxActions.getByRole('button', { name: 'Show thumbnails', exact: true }).click()
+		await tapTouchButton('Close')
 		await context.close()
 
 		const desktopContext = await browser.newContext({ viewport: { width: 1440, height: 900 }, locale: 'en-US', reducedMotion: 'no-preference' })

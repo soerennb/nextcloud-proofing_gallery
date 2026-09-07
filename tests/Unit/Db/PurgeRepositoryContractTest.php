@@ -25,4 +25,11 @@ final class PurgeRepositoryContractTest extends TestCase {
 		self::assertStringContainsString("eq('actor_uid'", $source);
 		self::assertStringContainsString("set('submitted_by_actor_uid'", $source);
 	}
+
+	public function testEncryptedPinHandoffsArePurgedBeforeTheirWaves(): void {
+		self::assertLessThan(
+			array_search('proofing_event_waves', PurgeRepository::TABLES, true),
+			array_search('proofing_pin_handoffs', PurgeRepository::TABLES, true),
+		);
+	}
 }

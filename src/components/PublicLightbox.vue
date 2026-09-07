@@ -69,7 +69,7 @@ const autoHideChrome = computed(() => shouldAutoHideLightboxChrome(
 const chromeAutoHideDelay = computed(() => viewportWidth.value <= 760 ? 4500 : 2200)
 const loop = computed(() => props.mediaItems.length > 2), canStepPrevious = computed(() => loop.value || activeIndex.value > 0), canStepNext = computed(() => loop.value || activeIndex.value < props.mediaItems.length - 1)
 const slideshowDuration = computed(() => Math.max(3, Math.min(15, props.settings.presentation?.slideshowInterval ?? 5)) * 1000)
-const actionSheetClass = computed(() => ['lightbox-action-sheet', `proofing-action-sheet--${props.settings.presentation?.theme ?? 'auto'}`])
+const actionSheetClass = computed(() => ['proofing-public-overlay', 'lightbox-action-sheet'])
 const hasPublicMetadata = computed(() => hasReadyPublicMetadata(activeItem.value?.metadata))
 const actionSheetButtons = computed(() => [
 	...(canDownloadIndividual.value
@@ -163,7 +163,7 @@ const feedbackPanelLayout = computed(() => annotationThreadPanelLayout({
 	annotationPoint: selectedAnnotationPoint.value,
 	filmstripSide: filmstripPlacement.value === 'side',
 }))
-const feedbackPanelClass = computed(() => `lightbox-sheet lightbox-feedback-sheet lightbox-feedback-sheet--${feedbackPanelLayout.value.placement}`)
+const feedbackPanelClass = computed(() => `proofing-public-overlay lightbox-sheet lightbox-feedback-sheet lightbox-feedback-sheet--${feedbackPanelLayout.value.placement}`)
 const feedbackPanelStyle = computed(() => ({
 	'--feedback-panel-left': `${feedbackPanelLayout.value.modalLeft}px`,
 	'--feedback-panel-top': `${feedbackPanelLayout.value.modalTop}px`,
@@ -656,7 +656,7 @@ async function saveEditedComment(commentId: number) {
 			@cancel="annotations.cancel"
 			@select="annotations.select" />
 
-		<IonModal :is-open="shortcutsOpen" :show-backdrop="false" css-class="lightbox-dialog lightbox-shortcuts-dialog" @did-dismiss="shortcutsOpen = false">
+		<IonModal :is-open="shortcutsOpen" :show-backdrop="false" css-class="proofing-public-overlay lightbox-dialog lightbox-shortcuts-dialog" @did-dismiss="shortcutsOpen = false">
 			<IonHeader>
 				<IonToolbar>
 					<IonTitle>{{ t('proofing_gallery', 'Keyboard shortcuts') }}</IonTitle>

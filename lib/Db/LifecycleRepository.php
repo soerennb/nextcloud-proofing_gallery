@@ -16,6 +16,7 @@ final class LifecycleRepository {
 		'proofing_managers', 'proofing_semantic_idx', 'proofing_summaries', 'proofing_versions',
 		'proofing_review_rounds', 'proofing_ext_resources', 'proofing_int_outbox',
 		'proofing_retention_log',
+		'proofing_event_recipients', 'proofing_event_waves', 'proofing_event_setups',
 	];
 	private const GALLERY_PRIMARY_KEY_TABLES = ['proofing_collections', 'proofing_summaries', 'proofing_media_scans'];
 
@@ -78,13 +79,16 @@ final class LifecycleRepository {
 	}
 
 	public function cleanupOrphans(): int {
-		$deleted = 0;
+		$deleted = $this->deleteMissingParents('proofing_pin_handoffs', 'wave_id', 'proofing_event_waves');
+		$deleted += $this->deleteMissingParents('proofing_event_roots', 'wave_id', 'proofing_event_waves');
+		$deleted += $this->deleteMissingParents('proofing_event_audit', 'gallery_id', 'proofing_galleries');
 		foreach (self::ORPHAN_TABLES as $table) {
 			$deleted += in_array($table, self::GALLERY_PRIMARY_KEY_TABLES, true)
 				? $this->deleteMissingGalleryPrimaryRows($table)
 				: $this->deleteMissingParents($table, 'gallery_id', 'proofing_galleries');
 		}
 		$deleted += $this->deleteMissingParents('proofing_collection_items', 'collection_id', 'proofing_collections', 'gallery_id');
+		$deleted += $this->deleteMissingParents('proofing_link_roots', 'public_link_id', 'proofing_public_links');
 		$deleted += $this->deleteMissingParents('proofing_selection_items', 'selection_id', 'proofing_selections');
 		$deleted += $this->deleteMissingParents('proofing_annotations', 'comment_id', 'proofing_comments');
 		return $deleted;

@@ -58,6 +58,24 @@ final class FolderServiceTest extends TestCase {
 		self::assertCount(200, $page->items);
 	}
 
+	public function testListsDeduplicatedMediaAcrossEventScopesWithSearchAndPagination(): void {
+		$sharedPhoto = $this->file(11, 'Shared-10.jpg', 'image/jpeg');
+		$matchingPrivatePhoto = $this->file(12, 'shared-2.jpg', 'image/jpeg');
+		$privatePhoto = $this->file(13, 'private.jpg', 'image/jpeg');
+		$shared = $this->folder(21, 'Shared');
+		$shared->method('isReadable')->willReturn(true);
+		$shared->method('getDirectoryListing')->willReturn([$sharedPhoto]);
+		$private = $this->folder(22, 'Private');
+		$private->method('isReadable')->willReturn(true);
+		$private->method('getDirectoryListing')->willReturn([$matchingPrivatePhoto, $privatePhoto, $sharedPhoto]);
+
+		$page = $this->service([$shared, $private])->listScopedMedia('owner', 42, ['Shared', 'Private'], 1, 1, 'SHARED');
+
+		self::assertSame(2, $page->total);
+		self::assertSame(1, $page->limit);
+		self::assertSame(['Shared-10.jpg'], array_map(static fn ($item): string => $item->name, $page->items));
+	}
+
 	public function testSortsFilesByModifiedTimeDescendingWhileKeepingFoldersFirst(): void {
 		$old = $this->file(1, 'old.jpg', 'image/jpeg', 100);
 		$new = $this->file(2, 'new.jpg', 'image/jpeg', 300);
@@ -151,6 +169,7 @@ final class FolderServiceTest extends TestCase {
 	private function service(array $nodes): FolderService {
 		$current = $this->createMock(Folder::class);
 		$current->method('isReadable')->willReturn(true);
+		$current->method('isSubNode')->willReturn(true);
 		$current->method('getDirectoryListing')->willReturn($nodes);
 		$byName = [];
 		foreach ($nodes as $node) $byName[$node->getName()] = $node;
@@ -183,6 +202,7 @@ final class FolderServiceTest extends TestCase {
 		$file->method('getSize')->willReturn(10);
 		$file->method('getMTime')->willReturn($modifiedAt);
 		$file->method('getEtag')->willReturn('etag-' . $id);
+		$file->method('isReadable')->willReturn(true);
 		return $file;
 	}
 

@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 1,
-  "libraryVersion": "v2",
-  "root": ".local/demo-library/v2/generated",
+  "schemaVersion": 2,
+  "libraryVersion": "v3",
+  "root": ".local/demo-library/v3/generated",
   "source": "OpenAI ImageGen",
   "usage": "Local development, automated tests, documentation, and Proofing Gallery marketing screenshots",
   "assets": [
@@ -274,6 +274,168 @@
       "height": 1024,
       "sha256": "0dd2c16ce0fc28f951abe24ae15eccef46e430b42d35ae36580739b7ae70b4e3",
       "prompt": "Landscape group photograph of diverse fictional adult printmakers gathered naturally around an ink-marked table holding finished abstract prints."
+    },
+    {
+      "file": "northline-objects-01-hero.png",
+      "series": "northline-objects",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "c3819d00725f7ec5f0265da74dcd471185901c198dab88a26a94c5e891e3e938",
+      "prompt": "Photorealistic editorial product photograph of a matte ceramic lamp and brushed-aluminum speaker on warm limestone in a quiet contemporary studio; no text, logos, people, or watermark."
+    },
+    {
+      "file": "northline-objects-02-lamp.png",
+      "series": "northline-objects",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "433238e01bf95ad7872251cb415d3e9e440a6bee56af512c511a4486a31d39fe",
+      "prompt": "Portrait product photograph of one sculptural matte ceramic lamp on limestone in soft north-facing daylight; unbranded, text-free, and without people or watermark."
+    },
+    {
+      "file": "northline-objects-03-speaker.png",
+      "series": "northline-objects",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "d11ea283ccd47eb19b10aec799d7d5a48eeca49d6d25932307d7b386dde4981b",
+      "prompt": "Portrait campaign photograph of a brushed-aluminum speaker and matte ceramic object on a limestone plinth; calm European design editorial, no labels, logos, text, people, or watermark."
+    },
+    {
+      "file": "northline-objects-04-materials.png",
+      "series": "northline-objects",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "9ba6faab736df5c523652f1522536f693b43162ad77a1e57b9a66b7090df2e7b",
+      "prompt": "Portrait editorial material study of folded paper, matte ceramic, brushed aluminum, and limestone dust; tactile unbranded design studio, no text, people, or watermark."
+    },
+    {
+      "file": "northline-objects-05-interior.png",
+      "series": "northline-objects",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "4731bc7235770c695c20d005ee62314b8105b29b1eda2b2c46dfc64429910636",
+      "prompt": "Landscape interior campaign photograph of the same matte ceramic lamp and aluminum speaker in a pale plaster room with linen and limestone; no text, logos, people, or watermark."
+    },
+    {
+      "file": "northline-objects-06-still-life.png",
+      "series": "northline-objects",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "514bafdaaeda3555a20e2e32e7a4137c190f11e31e8d83432e8ea2325be63304",
+      "prompt": "Landscape closing still life of unbranded ceramic, aluminum, unprinted paper, limestone, and muted terracotta objects; refined product editorial, no text or watermark."
+    },
+    {
+      "file": "summit-run-01-start.png",
+      "series": "summit-run",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "c257359c4bb355b8786f3c725b0a75183f74b852540626b0819b000ecbaf2b05",
+      "prompt": "Landscape documentary photograph of fictional adult runners gathering at an alpine trailhead before a race; unbranded clothing, no children, readable text, logos, or watermark."
+    },
+    {
+      "file": "summit-run-02-course.png",
+      "series": "summit-run",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "e1f6cb6333a1a3aae1f26ef0b74b23ff6109bfc59b8f085e2d72881623251446",
+      "prompt": "Landscape alpine location photograph of two fictional adult trail runners on a winding meadow path with slate peaks; no signage, text, logos, children, or watermark."
+    },
+    {
+      "file": "summit-run-03-finish.png",
+      "series": "summit-run",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "3e2003d4cfb7e390c3644d266489a7e45a2f643fde5c3458ad95398999b1db02",
+      "prompt": "Landscape documentary photograph of a fictional adult runner crossing a plain finish ribbon in an alpine meadow; authentic adults only, no text, branding, children, or watermark."
+    },
+    {
+      "file": "summit-run-04-aid-station.png",
+      "series": "summit-run",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "35a007c4b87cb24fa2026be27cb82cb3095f2425cbceadb56a29b749733b04c8",
+      "prompt": "Landscape documentary photograph of fictional adult volunteers offering water to adult runners at an alpine aid station; no signs, text, logos, children, or watermark."
+    },
+    {
+      "file": "summit-run-05-marshal.png",
+      "series": "summit-run",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "4c98da7ebb329950fbdd2538e7f9fa5992c4cd7617d70b54d9fb15def0a63579",
+      "prompt": "Landscape environmental photograph of two fictional adult race marshals beside an alpine trail junction; unbranded clothing, no legible map, signage, text, children, or watermark."
+    },
+    {
+      "file": "summit-run-06-press.png",
+      "series": "summit-run",
+      "orientation": "landscape",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "2b912717a309f66aaf984248257644368bfe90e59e77430b46b6a400076b63cc",
+      "prompt": "Landscape documentary photograph of a fictional adult event photographer beside an alpine trail with runners in the background; no camera brand, text, children, or watermark."
+    },
+    {
+      "file": "summit-run-07-press-portrait.png",
+      "series": "summit-run",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "3b8d8bceadc9df8549430e65bde3fbbed953a492af1727d0e808dc3a9dd3b63f",
+      "prompt": "Portrait editorial photograph of a fictional adult documentary photographer reviewing an unbranded camera beside an alpine trail; no readable display, logos, children, or watermark."
+    },
+    {
+      "file": "summit-run-08-runner-portrait.png",
+      "series": "summit-run",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "4973c98f7ad7e5652866b0e6270b4069a9cad58ce6b1ce5ef0bfede8d31f102d",
+      "prompt": "Portrait environmental photograph of a fictional adult trail runner resting after a climb with alpine valley behind; no bib text, logos, children, or watermark."
+    },
+    {
+      "file": "summit-run-09-finish-portrait.png",
+      "series": "summit-run",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "7dd86609b63b68899aa140e08117258070cd9f2a1051bf0341d32889d6097b0b",
+      "prompt": "Portrait outdoor sports photograph of a fictional adult runner after finishing in warm alpine light; plain clothing, no readable text, logos, children, or watermark."
+    },
+    {
+      "file": "summit-run-10-medal-portrait.png",
+      "series": "summit-run",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "996228fc937614278bd2192842fc941d74fd99f6e5df33932e3adee72f76d42f",
+      "prompt": "Portrait editorial photograph of a fictional adult runner holding a blank brushed-metal finisher medal; no engraving, text, logos, children, or watermark."
+    },
+    {
+      "file": "summit-run-11-recovery-portrait.png",
+      "series": "summit-run",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "4d9e13a54605e2ae8fac249f96b65c0255acfc69110a1772764535126d4399f2",
+      "prompt": "Portrait documentary photograph of a fictional adult participant recovering on a lodge terrace at blue hour; no signs, text, logos, children, or watermark."
+    },
+    {
+      "file": "summit-run-12-community-portrait.png",
+      "series": "summit-run",
+      "orientation": "portrait",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "7f3a824351bbad3453b17738cbedd41f37235f414971839e7d4a4dadbb5fbf4a",
+      "prompt": "Portrait candid photograph of two fictional adult participants sharing a laugh after an alpine race; unbranded clothing, no text, logos, children, or watermark."
     }
   ]
 }

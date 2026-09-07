@@ -15,6 +15,7 @@ use OCA\ProofingGallery\BackgroundJob\ContinuePurgeGuestsJob;
 use OCA\ProofingGallery\BackgroundJob\BackfillGalleryListProjectionJob;
 use OCA\ProofingGallery\BackgroundJob\ImportGalleryContextContentJob;
 use OCA\ProofingGallery\BackgroundJob\ContinuePurgeRequestsJob;
+use OCA\ProofingGallery\BackgroundJob\ProcessEventWaveJob;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\Job;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -37,6 +38,7 @@ final class QueuedJobConstructionTest extends TestCase {
 			[BackfillGalleryListProjectionJob::class],
 			[ImportGalleryContextContentJob::class],
 			[ContinuePurgeRequestsJob::class],
+			[ProcessEventWaveJob::class],
 		];
 	}
 

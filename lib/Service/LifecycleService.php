@@ -20,6 +20,7 @@ final class LifecycleService {
 		private IAppData $appData,
 		private PolicyService $policies,
 		private CollectionAnchorReconciler $collectionAnchors,
+		private PublicLinkAnchorReconciler $publicLinkAnchors,
 		private VersionService $versions,
 		private GalleryMapper $galleries,
 		private PublicShareService $shares,
@@ -57,15 +58,17 @@ final class LifecycleService {
 		$agentRequests = $this->repository->deleteOldRows(
 			'proofing_agent_requests', 'expires_at', $now, self::BATCH_SIZE,
 		);
+		$pinHandoffs = $this->repository->deleteOldRows('proofing_pin_handoffs', 'expires_at', $now, self::BATCH_SIZE);
 		$uploads = $this->cleanupUploads($now) + $this->cleanupOwnerUploads(
 			$now - $this->policies->get('pendingUploadRetentionHours') * 3600,
 		);
-		$previews = $this->cleanupPreviewCache(
-			$now - $this->policies->get('previewRetentionDays') * 86400,
-		);
+		$previewBefore = $now - $this->policies->get('previewRetentionDays') * 86400;
+		$previews = $this->cleanupPreviewCache('watermarked-previews', $previewBefore)
+			+ $this->cleanupPreviewCache('web-jpeg-downloads', $previewBefore);
 		$video = $this->cleanupVideoDerivatives($now - $this->policies->get('videoDerivativeRetentionDays') * 86400);
 		$orphans = $this->cleanupOrphanMetadata();
 		$collectionAnchors = $this->collectionAnchors->reconcile(false)['deleted'];
+		$publicLinkAnchors = $this->publicLinkAnchors->reconcile()['deleted'];
 		$versions = $this->versions->cleanupExpired(self::BATCH_SIZE);
 		$suspended = 0;
 		foreach ($this->galleries->findArchivedWithActiveLinks() as $gallery) {
@@ -77,13 +80,14 @@ final class LifecycleService {
 			|| $notificationQueue === self::BATCH_SIZE
 			|| $deadLetters === self::BATCH_SIZE
 			|| $agentRequests === self::BATCH_SIZE
+			|| $pinHandoffs === self::BATCH_SIZE
 			|| $uploads >= self::BATCH_SIZE
 			|| $previews === self::BATCH_SIZE
 			|| $video === self::BATCH_SIZE
 			|| $versions === self::BATCH_SIZE
 			|| $orphans >= self::BATCH_SIZE
 			|| $lifecycleProcessed === 200);
-		return compact('events', 'shareAudit', 'notificationQueue', 'deadLetters', 'agentRequests', 'uploads', 'previews', 'video', 'versions', 'orphans', 'collectionAnchors', 'suspended', 'revoked', 'archived', 'lifecycleProcessed', 'remaining');
+		return compact('events', 'shareAudit', 'notificationQueue', 'deadLetters', 'agentRequests', 'pinHandoffs', 'uploads', 'previews', 'video', 'versions', 'orphans', 'collectionAnchors', 'publicLinkAnchors', 'suspended', 'revoked', 'archived', 'lifecycleProcessed', 'remaining');
 	}
 
 	/** @return array{revoked: int, archived: int, processed: int} */
@@ -185,9 +189,9 @@ final class LifecycleService {
 		return $deleted;
 	}
 
-	private function cleanupPreviewCache(int $before): int {
+	private function cleanupPreviewCache(string $folderName, int $before): int {
 		try {
-			$folder = $this->appData->getFolder('watermarked-previews');
+			$folder = $this->appData->getFolder($folderName);
 		} catch (\OCP\Files\NotFoundException) {
 			return 0;
 		}

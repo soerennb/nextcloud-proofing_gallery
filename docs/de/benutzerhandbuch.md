@@ -6,16 +6,65 @@ Nextcloud-Administration einschränken.
 
 ## Galerie erstellen
 
-1. Lege die auszuliefernden Bilder und unterstützten Videos in einem
-   Nextcloud-Ordner ab.
-2. Öffne **Proofing Gallery** und wähle **Neues Projekt**.
-3. Wähle Ordnergalerie oder Sammlung, vergib einen Titel und entscheide dich
-   für Präsentation oder Abstimmung.
-4. Prüfe Quelle und Medienanzahl, bevor du die Auslieferung konfigurierst.
+1. Öffne **Proofing Gallery** und wähle **Neues Projekt**.
+2. Wähle den passenden Zweck: **Fotos zeigen**, **Fertige Fotos ausliefern**,
+   **Auswahl einsammeln**, **Gemeinsam prüfen** oder **Dateien empfangen**.
+3. Vergib einen Titel und wähle anschließend nur aus den Empfänger- und
+   Quellenoptionen, die zu dieser Aufgabe passen. Vorhandene Ordner, neue Ordner
+   und kuratierte Sammlungen bleiben dort verfügbar, wo sie sinnvoll sind.
+   Auslieferung, Präsentation, Auswahl und Korrektur können außerdem private
+   Links aus Event-Ordnern erzeugen.
+4. Prüfe Quelle und Medienanzahl, bevor du die Auslieferung konfigurierst. Ein
+   Empfangsprojekt beginnt mit genau einer moderierten Upload-Inbox und kann
+   weder Sammlungen noch Event-Auslieferung verwenden.
 
 Eine Ordnergalerie verweist auf einen vorhandenen Ordner. Eine Sammlung fasst
 Dateien aus mehreren eigenen Ordnergalerien ohne Kopien zusammen. Sammlungen
 können keine Gast-Uploads empfangen.
+
+Der Assistent hält drei Entscheidungen getrennt: Der Zweck beschreibt den
+Arbeitsablauf, der Galeriemodus ist **Präsentation** oder **Proofing**, und der
+Auslieferungsmodus ist **Standard** oder **Event**. Event-Auslieferung gibt es
+für Auslieferung, Präsentation, Auswahl und Korrektur; Empfangsprojekte haben
+nur einen moderierten Upload-Eingang und unterstützen weder Sammlungen noch
+Event-Auslieferung.
+
+## Serien-Events privat ausliefern
+
+Für Einschulungen, Sportveranstaltungen und andere Aufträge mit vielen
+Empfängern liegen gemeinsame Fotos und die Fotos jedes Teilnehmers in getrennten
+Unterordnern eines Projektordners. Wähle beim Erstellen **Private Links aus
+Event-Ordnern**. Das Projekt öffnet direkt die Event-Auslieferung; eine
+separate Veröffentlichung ist nicht nötig.
+
+Arbeite die vier Aufgaben **Fotos**, **Zugriff**, **Empfänger** und
+**Freigabe** nacheinander ab. Du kannst einen vorhandenen Nextcloud-Ordner
+verwenden oder einen lokalen Event-Ordner samt Unterordnern auswählen oder
+hineinziehen. Weise jedem Ordner genau eine Rolle zu: für alle, für eine Gruppe,
+privat oder nicht ausliefern. Die Empfängerliste bündelt Kontaktdaten, den
+exakten gemeinsamen, gruppenbezogenen und privaten Umfang, den aktuellen Link
+und den Linkverlauf in einer Zeile je Empfänger. Die abschließende Aktion
+veröffentlicht bei Bedarf automatisch die verborgene technische Basis und
+erstellt die Kundenlinks.
+
+Unter **Freigabe** legst du fest, was Empfänger dieser Lieferwelle laden dürfen:
+keine Downloads, einzelne Dateien, gespeicherte Auswahlen oder Dateien samt
+gesamter Galerie. Die Einstellung gilt für gemeinsame, Gruppen- und private
+Ordner der Welle; jeder Empfänger bleibt auf seine Ordner beschränkt. Bereits
+veröffentlichte Links werden durch eine spätere, großzügigere Einstellung nicht
+automatisch erweitert.
+
+Ordnernamen dienen als Empfängervorschlag. Für große Listen öffnest du beim
+Empfängerschritt den CSV-Import mit den Spalten `folder`, `name`, `email`,
+`locale`, `pin` und optional `groups`. Entwürfe, geplante Auslieferungen,
+einzelne Links, Exporte, Wiederholungen, Reparaturen und Linkwechsel bleiben in
+den Empfänger- und Freigabebereichen verfügbar. E-Mail-Adressen werden
+verschlüsselt gespeichert.
+
+Der abschließende Schritt erzeugt je Empfänger einen beschränkten Link. Dieser
+enthält nur gemeinsame Ordner, zugewiesene Gruppenordner und genau den privaten
+Ordner des Empfängers. Fehlgeschlagene Empfänger können nach einer erfolgreichen
+Auslieferung einzeln wiederholt werden.
 
 ## Projekt bearbeiten
 
@@ -35,6 +84,11 @@ Der Arbeitsbereich ist nach Aufgaben gegliedert:
 
 Änderungen verwenden Revisionsprüfungen. Hat ein anderes Browserfenster die
 Galerie verändert, lade den aktuellen Stand, statt ihn unbemerkt zu überschreiben.
+
+Einstellungen sind bewusst gestaffelt: Die Administration legt Instanzregeln
+und Vorgaben fest, Eigentümer konfigurieren die Galerie, jeder öffentliche Link
+kann Rechte weiter einschränken und eine Event-Auslieferungswelle kann ihre
+Empfängerlinks nochmals begrenzen. Es gilt immer die strengste wirksame Regel.
 
 Lädt ein Eigentümer Dateien hoch, deren Namen bereits vorhanden sind, öffnet
 Proofing Gallery vor der Übertragung den üblichen Nextcloud-Konfliktdialog. Jede
@@ -91,10 +145,11 @@ einer Vorschau bestätigen. XMP wird dadurch nie automatisch verändert.
 
 ## Prüfrunden und Nextcloud-Nachverfolgung
 
-Jeder aktive Kundenlink kann einen eigenen Prüfablauf mit optionaler Frist
-haben. Der Gast reicht die aktuelle Runde nach der Identifikation für Feedback
-ein. Der Eigentümer kann freigeben, Änderungen anfordern (dadurch beginnt die
-nächste Runde) oder eine Freigabe erneut öffnen. Dies ist eine
+Jeder aktive Kundenlink kann Mindestanzahl, Höchstanzahl und Frist der Galerie
+erben oder überschreiben. Gäste dürfen unvollständige Entwürfe speichern; bei
+der Abgabe werden die Regeln geprüft und die Auswahl gesperrt. Der Eigentümer
+kann freigeben, Änderungen anfordern oder die Freigabe in derselben Runde
+erneut öffnen. Dies ist eine
 Workflow-Entscheidung, keine elektronische Signatur oder rechtlich fixierte
 Momentaufnahme.
 
@@ -110,9 +165,17 @@ bleiben in der Oberfläche von Proofing Gallery.
 
 ## Downloads und Gast-Uploads
 
-Abhängig vom Link dürfen Gäste einzelne Originale, ein ZIP ihrer Auswahl oder
-einen Kontaktbogen aus Vorschauen laden. Administrationslimits begrenzen große
-Auslieferungen.
+Abhängig von der Linkregel gibt es **keine Downloads**, einzelne Dateien, ein
+ZIP gespeicherter Auswahlen oder die komplette Galerie. Die komplette Galerie
+schließt Einzel- und Auswahl-Downloads ein. Für einzelne Dateien und
+Auswahl-ZIPs stehen das Original oder metadatenfreie JPEGs mit 2048 px oder
+1600 px bereit, optional mit dem Galerie-Wasserzeichen; kleinere Bilder werden
+nie hochskaliert. Ein Kontaktbogen enthält Vorschauen, keine Originale.
+Administrationslimits begrenzen Dateianzahl und Auslieferungsgröße.
+
+Bei Event-Auslieferungen gilt die Regel für die gesamte Welle. Jeder Empfänger
+bleibt trotzdem auf seinen Ordnerumfang beschränkt; eine spätere großzügigere
+Welle erweitert bereits veröffentlichte Links nicht.
 
 Gast-Uploads sind fortsetzbar und landen zunächst in einem versteckten
 Prüfeingang. Eigentümer oder berechtigte Manager nehmen sie unter konfliktfreien

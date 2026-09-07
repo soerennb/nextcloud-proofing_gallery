@@ -269,7 +269,7 @@ final class CollaborationRepository {
 	}
 
 	/** @param list<int> $fileIds */
-	public function insertSelection(int $galleryId, ?int $guestId, ?string $actorUid, string $publicId, string $name, string $message, array $fileIds, int $now): void {
+	public function insertSelection(int $galleryId, ?int $guestId, ?string $actorUid, ?int $publicLinkId, string $publicId, string $name, string $message, array $fileIds, int $now): void {
 		$ownsTransaction = !$this->db->inTransaction();
 		if ($ownsTransaction) $this->db->beginTransaction();
 		try {
@@ -278,6 +278,7 @@ final class CollaborationRepository {
 				'gallery_id' => $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT),
 				'guest_id' => $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT),
 				'actor_uid' => $qb->createNamedParameter($actorUid),
+				'public_link_id' => $qb->createNamedParameter($publicLinkId, IQueryBuilder::PARAM_INT),
 				'public_id' => $qb->createNamedParameter($publicId),
 				'name' => $qb->createNamedParameter($name),
 				'message' => $qb->createNamedParameter($message),
@@ -299,6 +300,66 @@ final class CollaborationRepository {
 			if ($ownsTransaction) $this->db->rollBack();
 			throw $exception;
 		}
+	}
+
+	/** @return array<string, mixed>|null */
+	public function latestSelectionForLink(int $galleryId, int $publicLinkId, ?int $guestId, ?string $actorUid = null): ?array {
+		if ($guestId === null && $actorUid === null) throw new \InvalidArgumentException('Collaboration identity required');
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('s.*', $qb->func()->count('i.id', 'item_count'))
+			->from('proofing_selections', 's')
+			->leftJoin('s', 'proofing_selection_items', 'i', $qb->expr()->eq('i.selection_id', 's.id'))
+			->where($qb->expr()->eq('s.gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->orX(
+				$qb->expr()->eq('s.public_link_id', $qb->createNamedParameter($publicLinkId, IQueryBuilder::PARAM_INT)),
+				$qb->expr()->isNull('s.public_link_id'),
+			))
+			->groupBy('s.id')->orderBy('s.updated_at', 'DESC')->addOrderBy('s.id', 'DESC')->setMaxResults(1);
+		$this->actorCondition($qb, $guestId, $actorUid, 's.');
+		$row = QueryResult::row($qb->executeQuery());
+		return $row === false ? null : $row;
+	}
+
+	/** @return array<string, mixed>|null */
+	public function latestSubmittedSelectionForLink(int $galleryId, int $publicLinkId): ?array {
+		$qb = $this->db->getQueryBuilder();
+		$row = QueryResult::row($qb->select('s.*', $qb->func()->count('i.id', 'item_count'))
+			->from('proofing_selections', 's')
+			->leftJoin('s', 'proofing_selection_items', 'i', $qb->expr()->eq('i.selection_id', 's.id'))
+			->where($qb->expr()->eq('s.gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('s.public_link_id', $qb->createNamedParameter($publicLinkId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->in('s.status', $qb->createNamedParameter(['submitted', 'completed'], IQueryBuilder::PARAM_STR_ARRAY)))
+			->groupBy('s.id')->orderBy('s.updated_at', 'DESC')->addOrderBy('s.id', 'DESC')->setMaxResults(1)->executeQuery());
+		return $row === false ? null : $row;
+	}
+
+	/** @return array<string, mixed>|null */
+	public function latestSelectionForLinkOwner(int $galleryId, int $publicLinkId): ?array {
+		$qb = $this->db->getQueryBuilder();
+		$row = QueryResult::row($qb->select('s.*', $qb->func()->count('i.id', 'item_count'))
+			->from('proofing_selections', 's')
+			->leftJoin('s', 'proofing_selection_items', 'i', $qb->expr()->eq('i.selection_id', 's.id'))
+			->where($qb->expr()->eq('s.gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('s.public_link_id', $qb->createNamedParameter($publicLinkId, IQueryBuilder::PARAM_INT)))
+			->groupBy('s.id')->orderBy('s.updated_at', 'DESC')->addOrderBy('s.id', 'DESC')->setMaxResults(1)->executeQuery());
+		return $row === false ? null : $row;
+	}
+
+	public function transitionSelection(int $id, string $from, string $to, int $now): bool {
+		$qb = $this->db->getQueryBuilder();
+		return $qb->update('proofing_selections')->set('status', $qb->createNamedParameter($to))
+			->set('updated_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT))
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('status', $qb->createNamedParameter($from)))->executeStatement() === 1;
+	}
+
+	public function submitSelection(int $id, int $publicLinkId, int $now): bool {
+		$qb = $this->db->getQueryBuilder();
+		return $qb->update('proofing_selections')->set('status', $qb->createNamedParameter('submitted'))
+			->set('public_link_id', $qb->createNamedParameter($publicLinkId, IQueryBuilder::PARAM_INT))
+			->set('updated_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT))
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('status', $qb->createNamedParameter('open')))->executeStatement() === 1;
 	}
 
 	public function markResponseReceived(int $galleryId, int $now): void {
@@ -530,11 +591,11 @@ final class CollaborationRepository {
 		return $row['guest_id'] === null ? 'Deleted user' : ($guestNames[(int)$row['guest_id']] ?? 'Deleted guest');
 	}
 
-	private function actorCondition(IQueryBuilder $qb, ?int $guestId, ?string $actorUid): void {
+	private function actorCondition(IQueryBuilder $qb, ?int $guestId, ?string $actorUid, string $prefix = ''): void {
 		if ($guestId !== null) {
-			$qb->andWhere($qb->expr()->eq('guest_id', $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT)));
+			$qb->andWhere($qb->expr()->eq($prefix . 'guest_id', $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT)));
 		} elseif ($actorUid !== null) {
-			$qb->andWhere($qb->expr()->eq('actor_uid', $qb->createNamedParameter($actorUid)));
+			$qb->andWhere($qb->expr()->eq($prefix . 'actor_uid', $qb->createNamedParameter($actorUid)));
 		}
 	}
 

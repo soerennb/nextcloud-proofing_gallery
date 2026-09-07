@@ -13,6 +13,35 @@ const orientations = new Set()
 const orientationCounts = new Map()
 const seriesCounts = new Map()
 
+const profiles = {
+	v2: {
+		root: '.local/demo-library/v2/generated',
+		total: 30,
+		orientations: { portrait: 15, landscape: 15 },
+		series: {
+			'coastal-vows': { total: 6, portrait: 3, landscape: 3 },
+			'studio-no7': { total: 6, portrait: 3, landscape: 3 },
+			'northern-spaces': { total: 6, portrait: 3, landscape: 3 },
+			'live-session': { total: 6, portrait: 3, landscape: 3 },
+			community: { total: 6, portrait: 3, landscape: 3 },
+		},
+	},
+	v3: {
+		root: '.local/demo-library/v3/generated',
+		total: 48,
+		orientations: { portrait: 24, landscape: 24 },
+		series: {
+			'coastal-vows': { total: 6, portrait: 3, landscape: 3 },
+			'studio-no7': { total: 6, portrait: 3, landscape: 3 },
+			'northern-spaces': { total: 6, portrait: 3, landscape: 3 },
+			'live-session': { total: 6, portrait: 3, landscape: 3 },
+			community: { total: 6, portrait: 3, landscape: 3 },
+			'northline-objects': { total: 6, portrait: 3, landscape: 3 },
+			'summit-run': { total: 12, portrait: 6, landscape: 6 },
+		},
+	},
+}
+
 for (const asset of manifest.assets) {
 	const filePath = path.join(libraryRoot, asset.file)
 	let bytes
@@ -34,22 +63,24 @@ for (const asset of manifest.assets) {
 	seriesCounts.set(asset.series, (seriesCounts.get(asset.series) ?? 0) + 1)
 }
 
-if (manifest.libraryVersion === 'v2') {
-	if (manifest.assets.length !== 30) { throw new Error(`Demo library v2 must contain 30 assets, found ${manifest.assets.length}`) }
-	if (orientationCounts.get('portrait') !== 15 || orientationCounts.get('landscape') !== 15) {
-		throw new Error(`Demo library v2 must contain 15 portrait and 15 landscape assets: ${JSON.stringify(Object.fromEntries(orientationCounts))}`)
+const profile = profiles[manifest.libraryVersion]
+if (profile) {
+	if (manifest.assets.length !== profile.total) { throw new Error(`Demo library ${manifest.libraryVersion} must contain ${profile.total} assets, found ${manifest.assets.length}`) }
+	if (orientationCounts.get('portrait') !== profile.orientations.portrait || orientationCounts.get('landscape') !== profile.orientations.landscape) {
+		throw new Error(`Demo library ${manifest.libraryVersion} must contain the expected portrait and landscape assets: ${JSON.stringify(Object.fromEntries(orientationCounts))}`)
 	}
-	if (seriesCounts.size !== 5 || [...seriesCounts.values()].some((count) => count !== 6)) {
-		throw new Error(`Demo library v2 must contain five series with six assets each: ${JSON.stringify(Object.fromEntries(seriesCounts))}`)
+	if (seriesCounts.size !== Object.keys(profile.series).length) {
+		throw new Error(`Demo library ${manifest.libraryVersion} must contain the expected series: ${JSON.stringify(Object.fromEntries(seriesCounts))}`)
 	}
-	for (const series of seriesCounts.keys()) {
+	for (const [series, expected] of Object.entries(profile.series)) {
 		const assets = manifest.assets.filter((asset) => asset.series === series)
-		if (assets.filter((asset) => asset.orientation === 'portrait').length !== 3
-			|| assets.filter((asset) => asset.orientation === 'landscape').length !== 3) {
-			throw new Error(`Demo series must contain three portrait and three landscape assets: ${series}`)
+		if (assets.length !== expected.total
+			|| assets.filter((asset) => asset.orientation === 'portrait').length !== expected.portrait
+			|| assets.filter((asset) => asset.orientation === 'landscape').length !== expected.landscape) {
+			throw new Error(`Demo series has an unexpected shape: ${series}`)
 		}
 	}
-	if (manifest.root !== '.local/demo-library/v2/generated') { throw new Error(`Unexpected v2 library root: ${manifest.root}`) }
+	if (manifest.root !== profile.root) { throw new Error(`Unexpected ${manifest.libraryVersion} library root: ${manifest.root}`) }
 	if (!orientations.has('portrait') || !orientations.has('landscape')) { throw new Error('Demo library must contain portrait and landscape assets') }
 }
 

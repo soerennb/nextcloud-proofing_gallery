@@ -105,7 +105,9 @@ final class PublicLinkController extends Controller {
 		}
 	}
 
-	/** @param array<string, mixed> $policy */
+	/** @param array<string, mixed> $policy
+	 * @param list<string> $allowedRoots
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'POST', url: '/api/v1/galleries/{id}/public-links')]
 	public function createPublicLink(
@@ -113,6 +115,7 @@ final class PublicLinkController extends Controller {
 		string $name,
 		array $policy = [],
 		string $startPath = '',
+		array $allowedRoots = [],
 		string $viewMode = 'folder',
 		int $groupDepth = 0,
 		int $minOwnerRating = 0,
@@ -121,13 +124,15 @@ final class PublicLinkController extends Controller {
 		?string $expiresAt = null,
 		bool $reviewEnabled = false,
 		?string $reviewDueDate = null,
+		?int $reviewSelectionMinimum = null,
+		?int $reviewSelectionMaximum = null,
 	): DataResponse {
 		try {
 			return new DataResponse($this->publicLinks->create(
 				$this->galleries->get($this->userId(), $id),
 				PublicLinkConfiguration::fromArray(compact(
-					'name', 'policy', 'startPath', 'viewMode', 'groupDepth', 'minOwnerRating',
-					'publicLocale', 'password', 'expiresAt', 'reviewEnabled', 'reviewDueDate',
+					'name', 'policy', 'startPath', 'allowedRoots', 'viewMode', 'groupDepth', 'minOwnerRating',
+					'publicLocale', 'password', 'expiresAt', 'reviewEnabled', 'reviewDueDate', 'reviewSelectionMinimum', 'reviewSelectionMaximum',
 				)),
 			), Http::STATUS_CREATED);
 		} catch (DoesNotExistException|AuthorizationException) {
@@ -141,7 +146,9 @@ final class PublicLinkController extends Controller {
 		}
 	}
 
-	/** @param array<string, mixed> $policy */
+	/** @param array<string, mixed> $policy
+	 * @param list<string> $allowedRoots
+	 */
 	#[NoAdminRequired]
 	#[ApiRoute(verb: 'PUT', url: '/api/v1/galleries/{id}/public-links/{linkId}')]
 	public function updatePublicLink(
@@ -150,6 +157,7 @@ final class PublicLinkController extends Controller {
 		string $name,
 		array $policy = [],
 		string $startPath = '',
+		array $allowedRoots = [],
 		string $viewMode = 'folder',
 		int $groupDepth = 0,
 		int $minOwnerRating = 0,
@@ -158,14 +166,16 @@ final class PublicLinkController extends Controller {
 		?string $expiresAt = null,
 		bool $reviewEnabled = false,
 		?string $reviewDueDate = null,
+		?int $reviewSelectionMinimum = null,
+		?int $reviewSelectionMaximum = null,
 	): DataResponse {
 		try {
 			return new DataResponse($this->publicLinks->update(
 				$this->galleries->get($this->userId(), $id),
 				$linkId,
 				PublicLinkConfiguration::fromArray(compact(
-					'name', 'policy', 'startPath', 'viewMode', 'groupDepth', 'minOwnerRating',
-					'publicLocale', 'password', 'expiresAt', 'reviewEnabled', 'reviewDueDate',
+					'name', 'policy', 'startPath', 'allowedRoots', 'viewMode', 'groupDepth', 'minOwnerRating',
+					'publicLocale', 'password', 'expiresAt', 'reviewEnabled', 'reviewDueDate', 'reviewSelectionMinimum', 'reviewSelectionMaximum',
 				)),
 			));
 		} catch (DoesNotExistException|AuthorizationException) {

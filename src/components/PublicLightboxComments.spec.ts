@@ -26,8 +26,8 @@ describe('PublicLightboxComments', () => {
 		})
 		const style = document.createElement('style')
 		const scopeId = Object.keys(wrapper.attributes()).find(name => name.startsWith('data-v-'))!
-		style.textContent = `button:not(.button-vue) { min-height: 34px; margin: 3px; margin-inline-start: 0; }\n`
-			+ compileStyle({ source: parse(commentSource).descriptor.styles[0].content, id: scopeId, scoped: true }).code
+		style.textContent = 'button:not(.button-vue) { min-height: 34px; margin: 3px; margin-inline-start: 0; }\n'
+			+ compileStyle({ source: parse(commentSource).descriptor.styles[0].content, filename: 'PublicLightboxComments.vue', id: scopeId, scoped: true }).code
 		document.head.append(style)
 		try {
 			const actions = wrapper.findAll('.comment-actions button')

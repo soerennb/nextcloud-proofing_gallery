@@ -14,6 +14,8 @@ public_paths_file="${PUBLIC_PATHS_FILE:-}"
 private_author_email="${PRIVATE_AUTHOR_EMAIL:-}"
 private_content_pattern="${PRIVATE_CONTENT_PATTERN:-}"
 
+source "${repo_dir}/scripts/lib/public-history-sanitizer.sh"
+
 if [[ -z "${destination}" || -z "${public_commit_message}" ]]; then
 	echo "Usage: PUBLIC_COMMIT_MESSAGE='Summary' $0 <new-empty-destination>" >&2
 	exit 2
@@ -123,7 +125,8 @@ read -r -a private_email_list <<< "${private_author_email}"
 for email in "${private_email_list[@]}"; do
 	private_pattern+="|${email//./\.}"
 done
-if git -C "${destination}" grep -I -n -E "${private_pattern}"; then
+private_scan_regex="$(public_history_scan_regex "${private_pattern}")"
+if git -C "${destination}" grep -I -n -E "${private_scan_regex}" HEAD; then
 	echo "Private metadata remains in the incremental public tree." >&2
 	exit 1
 fi
@@ -143,12 +146,12 @@ if [[ "$(git -C "${destination}" rev-parse HEAD^)" != "${public_base}" ]]; then
 fi
 git -C "${destination}" merge-base --is-ancestor "${public_base}" "${public_head}"
 
-if git -C "${destination}" show -s --format='%an <%ae>%n%cn <%ce>%n%B' HEAD | grep -Eiq "${private_pattern}"; then
+if git -C "${destination}" show -s --format='%an <%ae>%n%cn <%ce>%n%B' HEAD | grep -Ei "${private_scan_regex}" >/dev/null; then
 	echo "Private metadata remains in the incremental public commit." >&2
 	exit 1
 fi
 if git -C "${destination}" rev-list --objects --all \
-	| grep -Eiq '(^| )(.beads|.agents|.claude|.codex)/|(^| )(AGENTS|CLAUDE)\.md$'; then
+	| grep -Ei '(^| )(.beads|.agents|.claude|.codex)/|(^| )(AGENTS|CLAUDE)\.md$' >/dev/null; then
 	echo "Internal files remain in the reachable public object graph." >&2
 	exit 1
 fi

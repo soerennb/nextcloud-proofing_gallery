@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\AppInfo;
 
+use OCA\ProofingGallery\BackgroundJob\CleanupGalleryDataJob;
+use OCA\ProofingGallery\BackgroundJob\ContinueCleanupGalleryDataJob;
 use OCA\ProofingGallery\Share\PublicShareTemplateProvider;
 use OCA\ProofingGallery\Listener\PrincipalDeletionListener;
 use OCA\ProofingGallery\Db\GalleryMapper;
@@ -12,6 +14,10 @@ use OCA\ProofingGallery\Listener\MediaIndexCacheListener;
 use OCA\ProofingGallery\Listener\FilesLoadAdditionalScriptsListener;
 use OCA\ProofingGallery\Listener\GalleryFilesMetadataProvider;
 use OCA\ProofingGallery\Service\CollectionAnchorReferences;
+use OCA\ProofingGallery\Service\CleanupTelemetryService;
+use OCA\ProofingGallery\Service\LifecycleService;
+use OCA\ProofingGallery\Service\PublicLinkAnchorReferences;
+use OCA\ProofingGallery\Db\PublicLinkRootRepository;
 use OCA\ProofingGallery\Capabilities;
 use OCA\ProofingGallery\Dashboard\GalleryAttentionWidget;
 use OCA\ProofingGallery\Reference\GalleryReferenceProvider;
@@ -21,6 +27,8 @@ use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
+use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\BackgroundJob\IJobList;
 use OCP\Files\Events\FileCacheUpdated;
 use OCP\Files\Events\NodeAddedToCache;
 use OCP\Files\Events\NodeRemovedFromCache;
@@ -40,6 +48,7 @@ use OCA\ProofingGallery\SetupCheck\BackgroundJobsCheck;
 use OCA\ProofingGallery\SetupCheck\RuntimeDependenciesCheck;
 use OCA\ProofingGallery\SetupCheck\SchemaReadinessCheck;
 use OCA\ProofingGallery\UserMigration\ProofingGalleryMigrator;
+use Psr\Container\ContainerInterface;
 
 final class Application extends App implements IBootstrap {
 	public const APP_ID = 'proofing_gallery';
@@ -49,6 +58,22 @@ final class Application extends App implements IBootstrap {
 	}
 
 	public function register(IRegistrationContext $context): void {
+		$context->registerService(CleanupGalleryDataJob::class, static function (ContainerInterface $container): CleanupGalleryDataJob {
+			return new CleanupGalleryDataJob(
+				$container->get(ITimeFactory::class),
+				$container->get(LifecycleService::class),
+				$container->get(CleanupTelemetryService::class),
+				$container->get(IJobList::class),
+			);
+		});
+		$context->registerService(ContinueCleanupGalleryDataJob::class, static function (ContainerInterface $container): ContinueCleanupGalleryDataJob {
+			return new ContinueCleanupGalleryDataJob(
+				$container->get(ITimeFactory::class),
+				$container->get(LifecycleService::class),
+				$container->get(CleanupTelemetryService::class),
+				$container->get(IJobList::class),
+			);
+		});
 		$context->registerCapability(Capabilities::class);
 		$context->registerSearchProvider(GallerySearchProvider::class);
 		$context->registerReferenceProvider(GalleryReferenceProvider::class);
@@ -60,6 +85,7 @@ final class Application extends App implements IBootstrap {
 		$context->registerSetupCheck(RuntimeDependenciesCheck::class);
 		$context->registerUserMigrator(ProofingGalleryMigrator::class);
 		$context->registerServiceAlias(CollectionAnchorReferences::class, GalleryMapper::class);
+		$context->registerServiceAlias(PublicLinkAnchorReferences::class, PublicLinkRootRepository::class);
 		$context->registerEventListener(FileCacheUpdated::class, MediaIndexCacheListener::class);
 		$context->registerEventListener(NodeAddedToCache::class, MediaIndexCacheListener::class);
 		$context->registerEventListener(NodeRemovedFromCache::class, MediaIndexCacheListener::class);

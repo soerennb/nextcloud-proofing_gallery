@@ -22,6 +22,27 @@ Sichere vor Upgrades Datenbank, Datenverzeichnis, Konfiguration und Appdata.
 Nextcloud führt App-Migrationen bei Aktivierung oder Upgrade aus. Überspringe
 keine vorgesehenen Nextcloud-Upgrade-Schritte.
 
+### Fehlgeschlagenes Upgrade von 0.9.0 wiederherstellen
+
+Wenn ein Upgrade von 0.9.0 Nextcloud im Wartungsmodus zurückgelassen hat, lasse
+den Wartungsmodus aktiv und sichere Datenbank, `config/`, Datenverzeichnis und
+Appdata. Installiere das geprüfte signierte 0.9.1-Archiv, indem du nur
+`custom_apps/proofing_gallery` ersetzt. Deinstalliere die App nicht und lösche
+keine Tabellen, Aufträge, Galerien, Links oder Feedbackdaten. Starte den
+Nextcloud-AIO-Container oder die PHP-Worker neu, damit kein alter OPcache-Code
+verwendet wird. Führe anschließend im Nextcloud-Hauptverzeichnis aus:
+
+```bash
+sudo -u www-data php occ upgrade
+sudo -u www-data php occ status --output=json
+sudo -u www-data php occ app:list --output=json
+```
+
+Die Wiederherstellung ist abgeschlossen, wenn `maintenance` und
+`needsDbUpgrade` beide `false` sind und Proofing Gallery die Version 0.9.1
+meldet. Schlägt der erneute Versuch fehl, lasse den Wartungsmodus aktiv und
+bewahre Backup und Logs auf, bevor du den neuen Fehler untersuchst.
+
 ## Zugriff und Richtlinien
 
 Administration → Zusätzliche Einstellungen → Proofing Gallery steuert Gruppen,
@@ -33,6 +54,20 @@ Ablauf und Uploads bleiben maßgeblich und werden niemals gelockert.
 Prüfe Freigabe-, Mail- und Gruppenrichtlinien vor der Einführung. Aktiviere
 Gast-Downloads und -Uploads nur bei Bedarf. Richte Grenzen nach PHP, Proxy,
 Speicher und Worker-Kapazität aus, nicht nach Browservalidierung.
+
+Die Administration ist in **Allgemein**, **Medien**, **Sicherheit** und
+**Betrieb** gegliedert. Allgemein enthält Zugriffsregeln, Funktionsschalter,
+Gruppen, Branding und Vorgaben für neue Projekte. Medien enthält
+Videoverarbeitung sowie lokale oder externe Mediensuche. Sicherheit enthält
+Upload- und Auslieferungsgrenzen, Live Push, eigene Domains und die optionale
+Übergabe an Files Retention. Betrieb enthält Health, Wartung, Domainfreigaben
+und die offline verfügbare Admin-Dokumentation.
+
+Die wirksamen öffentlichen Rechte sind die Schnittmenge aus Instanzregel,
+Galerieeinstellungen, öffentlicher Linkregel und – bei Event-Auslieferungen –
+der Auslieferungswelle. Eine großzügigere Einstellung auf einer unteren Ebene
+kann einen abgeschalteten Instanzschalter nicht überschreiben. Neue Vorgaben
+ändern bestehende Galerien nicht rückwirkend.
 
 ## Integration in den Nextcloud-Kosmos
 
@@ -97,10 +132,28 @@ Geeignete Beispielanfragen sind:
 
 - „Welche Proofing-Galerien sind derzeit veröffentlicht?“
 - „Ist Editorial Edit veröffentlichungsbereit? Ändere nichts.“
-- „Finde Dateien mit ‚coast‘ in der Proofing-Galerie Coastal Vows.“
+- „Finde Dateien mit ‚coast‘ in der Proofing-Galerie „The Shoreline Edit“.“
 
 Die Werkzeugnamen enthalten bewusst `proofing_gallery`, damit das Modell sie
 nicht mit allgemeinen Suchen in Files oder Photos verwechselt.
+
+### Administration der Event-Auslieferung
+
+Event-Projekte verwenden einen Projektordner mit ausdrücklich markierten
+Unterordnern für alle, Gruppen, private Empfänger oder „nicht ausliefern“. Im
+Empfänger-Ledger werden Empfänger vorbereitet und anschließend in einer Welle
+freigegeben. Jeder erzeugte Link enthält gemeinsame Ordner, die Gruppenordner
+des Empfängers und genau einen privaten Ordner. E-Mail-Adressen und optionale
+PINs werden verschlüsselt gespeichert; der Klartext-PIN-CSV-Handoff ist nach
+der Freigabe nur über eine kurzlebige Eigentümeraktion verfügbar.
+
+Wellen können als Entwurf gespeichert, geplant, sofort freigegeben, abgebrochen
+oder für fehlgeschlagene Empfänger wiederholt und repariert werden. Große
+Auslieferungen laufen in begrenzten Hintergrundbatches; Cron muss deshalb
+zuverlässig laufen. Linkwechsel und erneute Einladungen betreffen nur den
+ausgewählten Empfänger. Die Downloadregel einer Welle kann Downloads sperren,
+Einzeldateien, gespeicherte Auswahlen oder die komplette Galerie erlauben, aber
+niemals den Ordnerumfang des Empfängers überschreiten.
 
 ## Hintergrundaufträge und Überwachung
 
@@ -121,6 +174,12 @@ Berücksichtige bei der Kapazitätsplanung Originale in Files, fortsetzbare
 Uploadteile, Vorschauen, Videoderivate, Datenbankindizes und angenommene Uploads.
 Bereinigung wirkt verzögert; halte Reserve für unterbrochene Aufträge vor. Für
 Feedback und Upload-Eingang müssen Datenbank und Appdata konsistent gesichert sein.
+
+Überwache Event-Freigaben im Empfänger-Ledger und in der Liste fehlgeschlagener
+Aufträge. Eine teilweise fehlgeschlagene Welle wird nicht vollständig
+zurückgerollt: Erfolgreiche Empfänger bleiben freigegeben, nur fehlgeschlagene
+Empfänger werden wiederholt. Eine spätere großzügigere Welle aktualisiert ältere
+Links nicht.
 
 Dieselben Prüfungen erscheinen als native Setup-Checks unter
 Administrationseinstellungen → Übersicht. Ab Nextcloud 33 stellt `/metrics`

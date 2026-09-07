@@ -21,7 +21,9 @@ import {
 	searchOutline,
 	shareOutline,
 } from 'ionicons/icons'
+import type { PublicAppearancePreference, PublicEffectiveTheme } from '../composables/usePublicAppearance.ts'
 import type { GalleryTitleMode } from '../domain/galleryTitlePresentation.ts'
+import PublicAppearanceMenu from './PublicAppearanceMenu.vue'
 
 defineProps<{
 	title: string
@@ -35,10 +37,14 @@ defineProps<{
 	canDownload: boolean
 	canCompare: boolean
 	collaboration: boolean
+	configuredTheme: 'auto' | 'light' | 'dark'
+	effectiveTheme: PublicEffectiveTheme
+	searchTarget: 'photos' | 'albums'
 	logoUrl?: string | null
 }>()
 
 const search = defineModel<string>('search', { required: true })
+const appearance = defineModel<PublicAppearancePreference | null>('appearance', { required: true })
 const emit = defineEmits<{
 	search: []
 	'toggle-search': []
@@ -81,7 +87,7 @@ const emit = defineEmits<{
 		<template v-else>
 			<IonToolbar v-if="searching" class="gallery-app-header__search">
 				<IonSearchbar v-model="search"
-					:placeholder="t('proofing_gallery', 'Search photos')"
+					:placeholder="searchTarget === 'albums' ? t('proofing_gallery', 'Search albums') : t('proofing_gallery', 'Search photos')"
 					show-cancel-button="always"
 					@ion-input="emit('search')"
 					@ion-cancel="emit('toggle-search')" />
@@ -99,16 +105,23 @@ const emit = defineEmits<{
 					</h1>
 				</IonTitle>
 				<IonButtons slot="end">
-					<IonButton :aria-label="t('proofing_gallery', 'Search photos')" @click="emit('toggle-search')">
+					<IonButton :aria-label="searchTarget === 'albums' ? t('proofing_gallery', 'Search albums') : t('proofing_gallery', 'Search photos')" @click="emit('toggle-search')">
 						<IonIcon slot="icon-only" :icon="searchOutline" />
 					</IonButton>
-					<IonButton v-if="canDownload" :aria-label="t('proofing_gallery', 'Download')" @click="emit('download')">
+					<IonButton v-if="canDownload"
+						class="gallery-app-header__secondary-action"
+						:aria-label="t('proofing_gallery', 'Download')"
+						@click="emit('download')">
 						<IonIcon slot="icon-only" :icon="downloadOutline" />
 					</IonButton>
 					<IonButton :aria-label="t('proofing_gallery', 'Share')" @click="emit('share')">
 						<IonIcon slot="icon-only" :icon="shareOutline" />
 					</IonButton>
-					<IonButton v-if="collaboration" :aria-label="t('proofing_gallery', 'Review details')" @click="emit('collaboration')">
+					<PublicAppearanceMenu v-model="appearance" :configured-theme="configuredTheme" :effective-theme="effectiveTheme" />
+					<IonButton v-if="collaboration"
+						class="gallery-app-header__secondary-action"
+						:aria-label="t('proofing_gallery', 'Review details')"
+						@click="emit('collaboration')">
 						<IonIcon slot="icon-only" :icon="personCircleOutline" />
 					</IonButton>
 					<IonButton :aria-label="t('proofing_gallery', 'More options')" @click="emit('more')">

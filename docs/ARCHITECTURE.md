@@ -35,6 +35,14 @@ Projects, Flow, Context Chat, and the agent API all project from the same
 owner-or-manager boundary. Optional-app classes are registered only when their
 public interfaces exist, so installations without those apps still boot.
 
+Event delivery adds a second authenticated workflow on top of the same gallery
+source: an event setup maps source subfolders to shared, group, private, or
+excluded roles; an event wave snapshots its policy and recipient assignments;
+and bounded background processing creates one native public link per recipient.
+The resulting link roots are resolved independently for shared, group, and
+private content. A later wave therefore cannot widen an earlier link, and a
+partial failure can retry only the recipients that failed.
+
 Agent mutations are idempotent per user, operation, and request ID and use
 optimistic gallery revisions. The contract intentionally omits permanent
 deletion, password access, arbitrary filesystem operations, guest identities,
@@ -46,7 +54,7 @@ are written to an outbox before dispatch so consumers can deduplicate delivery.
 Doctrine migrations create tables for galleries, collection revisions and
 memberships, managers, guests, feedback, comments/annotations, selections,
 uploads, activity, public-link policies, media indexes, owner culling and guest
-ratings. Foreign identifiers
+ratings, event setups, event waves, recipients, audits, and link roots. Foreign identifiers
 are app-local UUIDs or Nextcloud file IDs. Optional guest email addresses are
 encrypted; cookie secrets and mutation nonces are stored only as hashes.
 
@@ -98,6 +106,12 @@ primary-link change is atomic inside the app database. Updates spanning the
 Nextcloud share API and app data snapshot the native share and compensate it if
 app persistence fails.
 
+Public downloads are resolved only after the effective link policy and the
+resolved folder or collection scope are known. Individual files, saved
+selections, complete-gallery archives, resized JPEGs, contact sheets, and event
+links all use the same containment boundary; the download scope can only be
+restricted as policies are combined.
+
 Gallery settings are a typed aggregate of review, presentation, delivery,
 navigation, security, metadata, and lifecycle sections. Compatibility aliases
 are accepted and emitted only at this boundary. Public responses derive an
@@ -107,9 +121,12 @@ Database reads use `QueryResult`, the app's narrow adapter around OCP's
 
 ## Frontend
 
-Vite builds two Vue 3 entry points: the authenticated owner application and the
-public gallery. The public interface is image-led, responsive, keyboard
-navigable, and supports reduced motion. All visible strings use Nextcloud l10n.
+Vite builds authenticated owner, public gallery, preview, admin, personal,
+Files-adapter, and documentation-aware Vue entry points. The owner application
+is organized into deep-linkable workspaces; event galleries replace the normal
+Share workspace with the event delivery workflow. The public interface is
+image-led, responsive, keyboard navigable, and supports reduced motion. All
+visible strings use Nextcloud l10n.
 Grid geometry and culling shortcuts are pure domain functions shared by runtime
 components and unit tests. Preview loading is a bounded, cancellable priority
 queue with starvation protection; aborting queued or running work always
@@ -128,6 +145,8 @@ renewed boundary and giant-file regressions.
 ## Background work
 
 A daily queued job removes expired guest data, old privacy-minimal activity
-records, abandoned upload chunks, stale preview derivatives, and orphaned
-metadata in bounded batches. Upload activity is also exposed through the native
-Nextcloud Activity provider.
+records, abandoned upload chunks, stale preview derivatives, orphaned metadata,
+and stale integration state in bounded batches. Event release waves use a
+separate bounded queue and remain resumable across cron runs; recipient-level
+failures are recorded for retry without repeating successful links. Upload
+activity is also exposed through the native Nextcloud Activity provider.

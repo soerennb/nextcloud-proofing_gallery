@@ -98,7 +98,7 @@ async function transition(link: ReviewLinkOverview, action: 'approve' | 'request
 	busyLink.value = link.linkId
 	try {
 		overview.value = await transitionReview(props.galleryId, link.linkId, action)
-		showSuccess(action === 'approve' ? t('proofing_gallery', 'Review approved.') : action === 'request-changes' ? t('proofing_gallery', 'A new review round is ready.') : t('proofing_gallery', 'Review reopened.'))
+		showSuccess(action === 'approve' ? t('proofing_gallery', 'Review approved.') : action === 'request-changes' ? t('proofing_gallery', 'Review reopened for changes.') : t('proofing_gallery', 'Review reopened.'))
 	} catch { showError(t('proofing_gallery', 'The review state changed. Reload and try again.')) } finally { busyLink.value = null }
 }
 
@@ -148,7 +148,7 @@ onMounted(load)
 				</div>
 				<div class="review-panel__main">
 					<h4>{{ link.name }}</h4><p v-if="link.current?.submittedBy">
-						{{ t('proofing_gallery', 'Submitted by {name}', { name: link.current.submittedBy }) }}
+						{{ t('proofing_gallery', 'Submitted by {name}', { name: link.current.submittedBy }) }} · {{ t('proofing_gallery', '{count} photos', { count: link.progress?.count ?? 0 }) }}
 					</p><p v-else-if="link.dueDate">
 						{{ t('proofing_gallery', 'Due {date}', { date: formatDate(link.dueDate) }) }}
 					</p>

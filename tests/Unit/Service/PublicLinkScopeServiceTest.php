@@ -35,6 +35,29 @@ final class PublicLinkScopeServiceTest extends TestCase {
 		self::assertFalse($service->contains($link, $settings, 'clients/acme/finals/a.jpg'));
 	}
 
+	public function testMultiRootLinkAllowsSharedAndAssignedFoldersOnly(): void {
+		$link = $this->link('', 'folder');
+		$link->setAllowedRootList(['Allgemein', 'Kinder/Anna']);
+		$service = new PublicLinkScopeService();
+
+		self::assertTrue($service->visiblePath($link, 'Kinder'));
+		self::assertTrue($service->visiblePath($link, 'Kinder/Anna'));
+		self::assertTrue($service->contains($link, GallerySettings::defaults(), 'Allgemein/feier.jpg'));
+		self::assertTrue($service->contains($link, GallerySettings::defaults(), 'Kinder/Anna/portrait.jpg'));
+		self::assertFalse($service->contains($link, GallerySettings::defaults(), 'Kinder/Ben/portrait.jpg'));
+		self::assertFalse($service->visiblePath($link, 'Kinder/Ben'));
+	}
+
+	public function testLegacyRootDetailsExposeNamesAndSafeDefaultRoles(): void {
+		$link = $this->link('', 'folder');
+		$link->setAllowedRootList(['Allgemein', 'Kinder/Anna']);
+
+		self::assertSame([
+			['path' => 'Allgemein', 'name' => 'Allgemein', 'role' => 'shared'],
+			['path' => 'Kinder/Anna', 'name' => 'Anna', 'role' => 'shared'],
+		], (new PublicLinkScopeService())->rootDetails($link));
+	}
+
 	private function link(string $startPath, string $viewMode): PublicLink {
 		$link = new PublicLink();
 		$link->setStartPath($startPath);
