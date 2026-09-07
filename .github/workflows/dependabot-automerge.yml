@@ -1,6 +1,6 @@
 name: Dependabot auto-merge
 
-on:
+on: # zizmor: ignore[dangerous-triggers] no untrusted checkout or code execution; metadata is fetched read-only before merge
   pull_request_target:
     types: [opened, reopened, synchronize]
 

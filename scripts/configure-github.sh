@@ -33,6 +33,27 @@ gh api --method PATCH "repos/${repository}" --input - >/dev/null <<'JSON'
   }
 }
 JSON
+gh api --method PUT "repos/${repository}/actions/permissions" --input - >/dev/null <<'JSON'
+{
+  "enabled": true,
+  "allowed_actions": "selected",
+  "sha_pinning_required": true
+}
+JSON
+gh api --method PUT "repos/${repository}/actions/permissions/selected-actions" --input - >/dev/null <<'JSON'
+{
+  "github_owned_allowed": true,
+  "verified_allowed": true,
+  "patterns_allowed": [
+    "anchore/sbom-action@*",
+    "dependabot/fetch-metadata@*",
+    "reviewdog/action-actionlint@*",
+    "shivammathur/setup-php@*",
+    "zizmorcore/zizmor-action@*",
+    "R0Wi/nextcloud-appstore-push-action@*"
+  ]
+}
+JSON
 gh api --method PUT "repos/${repository}/actions/permissions/workflow" \
 	--raw-field default_workflow_permissions=read \
 	--field can_approve_pull_request_reviews=false >/dev/null
@@ -43,5 +64,5 @@ else
 	gh api --method POST "repos/${repository}/pages" --field build_type=workflow >/dev/null
 fi
 
-echo "Configured repository metadata, community features, security settings, read-only Actions permissions, and Pages."
+echo "Configured repository metadata, community features, security settings, selected SHA-pinned Actions permissions, and Pages."
 echo "Complete environments and rulesets using docs/GITHUB-SETUP.md."

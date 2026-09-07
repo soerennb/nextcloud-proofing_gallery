@@ -44,6 +44,14 @@ export default async function globalSetup(config: FullConfig) {
 	// by make dev-up. This avoids racing Apache during container startup.
 	const status = await e2eFetch(`${baseURL}/status.php`)
 	if (!status.ok) throw new Error(`E2E Nextcloud HTTP endpoint is not ready (${status.status})`)
+	const statusDocument = await status.json() as {
+		installed?: boolean
+		maintenance?: boolean
+		needsDbUpgrade?: boolean
+	}
+	if (statusDocument.installed !== true || statusDocument.maintenance === true || statusDocument.needsDbUpgrade === true) {
+		throw new Error(`E2E Nextcloud health check failed: ${JSON.stringify(statusDocument)}`)
+	}
 
 	const adminProfile = await e2eFetch(`${baseURL}/ocs/v2.php/cloud/users/admin?format=json`, {
 		method: 'PUT',
@@ -64,6 +72,19 @@ export default async function globalSetup(config: FullConfig) {
 		} }),
 	})
 	if (!preferences.ok) throw new Error(`E2E preferences could not be reset (${preferences.status})`)
+	const adminSettings = await e2eFetch(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/admin/settings?format=json`, { headers })
+	if (!adminSettings.ok) throw new Error(`E2E Proofing Gallery health endpoint failed (${adminSettings.status})`)
+	const settingsDocument = await adminSettings.json() as {
+		health?: {
+			maintenance?: {
+				periodicJobs?: { missing?: string[], duplicates?: string[] }
+			}
+		}
+	}
+	const periodicJobs = settingsDocument.health?.maintenance?.periodicJobs
+	if (!periodicJobs || (periodicJobs.missing?.length ?? 0) > 0 || (periodicJobs.duplicates?.length ?? 0) > 0) {
+		throw new Error(`E2E background-job health check failed: ${JSON.stringify(periodicJobs)}`)
+	}
 	const dav = `${baseURL}/remote.php/dav/files/admin/ProofingGalleryE2E`
 	await e2eFetch(dav, { method: 'MKCOL', headers })
 	const fixtureContents = await e2eFetch(dav, {
