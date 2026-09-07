@@ -136,7 +136,8 @@ function authorName(author: string): string {
 
 .comment-list li:hover .comment-actions, .comment-actions:focus-within { opacity: .9; }
 
-.comment-actions button { display: grid; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--ion-color-medium); place-items: center; }
+/* Keep Nextcloud's global button minimum height and margins out of the inline header. */
+.comment-actions button { display: grid; width: 24px; min-height: 24px; height: 24px; margin: 0; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--ion-color-medium); place-items: center; }
 
 .comment-actions button:hover { background: var(--ion-color-light); color: var(--ion-text-color); }
 

@@ -1,7 +1,9 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
+import { compileStyle, parse } from 'vue/compiler-sfc'
 
 import PublicLightboxComments from './PublicLightboxComments.vue'
+import commentSource from './PublicLightboxComments.vue?raw'
 
 vi.mock('@nextcloud/l10n', () => ({ getLocale: () => 'en_US', t: (_app: string, message: string, values?: Record<string, number>) => values ? message.replace('{number}', String(values.number)) : message }))
 
@@ -14,6 +16,39 @@ const pointReply = {
 }
 
 describe('PublicLightboxComments', () => {
+	it('keeps inline actions compact despite Nextcloud global button sizing', async () => {
+		const wrapper = mount(PublicLightboxComments, {
+			attachTo: document.body,
+			props: {
+				comments: [pointComment, pointReply], annotationNumbers: new Map([[12, [2]], [13, [2]]]), selectedCommentId: 12,
+				editingCommentId: null, editingCommentBody: '',
+			},
+		})
+		const style = document.createElement('style')
+		const scopeId = Object.keys(wrapper.attributes()).find(name => name.startsWith('data-v-'))!
+		style.textContent = `button:not(.button-vue) { min-height: 34px; margin: 3px; margin-inline-start: 0; }\n`
+			+ compileStyle({ source: parse(commentSource).descriptor.styles[0].content, id: scopeId, scoped: true }).code
+		document.head.append(style)
+		try {
+			const actions = wrapper.findAll('.comment-actions button')
+			expect(actions).toHaveLength(2)
+			for (const action of actions) {
+				const computed = getComputedStyle(action.element)
+				expect(computed.minHeight).toBe('24px')
+				expect(computed.height).toBe('24px')
+				expect(computed.marginTop).toBe('0px')
+				expect(computed.marginBottom).toBe('0px')
+			}
+			await actions[0].trigger('click')
+			await actions[1].trigger('click')
+			expect(wrapper.emitted('edit')).toEqual([[pointComment]])
+			expect(wrapper.emitted('delete')).toEqual([[pointComment.id]])
+		} finally {
+			wrapper.unmount()
+			style.remove()
+		}
+	})
+
 	it('renders a selected annotation as one self-contained comment card', () => {
 		const wrapper = mount(PublicLightboxComments, {
 			props: {
