@@ -45,12 +45,12 @@ gh api --method PUT "repos/${repository}/actions/permissions/selected-actions" -
   "github_owned_allowed": true,
   "verified_allowed": true,
   "patterns_allowed": [
-    "anchore/sbom-action",
-    "dependabot/fetch-metadata",
-    "reviewdog/action-actionlint",
-    "shivammathur/setup-php",
-    "zizmorcore/zizmor-action",
-    "R0Wi/nextcloud-appstore-push-action"
+    "anchore/sbom-action@*",
+    "dependabot/fetch-metadata@*",
+    "reviewdog/action-actionlint@*",
+    "shivammathur/setup-php@*",
+    "zizmorcore/zizmor-action@*",
+    "R0Wi/nextcloud-appstore-push-action@*"
   ]
 }
 JSON
