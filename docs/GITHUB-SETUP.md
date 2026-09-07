@@ -13,9 +13,11 @@ them.
    `nextcloud`, `gallery`, `photography`, `proofing`, and `vue`.
 2. Enable Issues and Discussions and disable the wiki.
 3. Under Pages, select **GitHub Actions** as the build and deployment source.
-4. Under Actions → General, set the default workflow token to read-only. Permit
-   GitHub-owned actions plus the pinned PHP, Gitleaks, and Anchore actions used
-   by the workflows.
+4. Under Actions → General, set the default workflow token to read-only. Allow
+   only selected actions, permit GitHub-owned and verified actions plus the
+   explicitly listed third-party actions used by the workflows, and require
+   every action to be pinned to a full-length commit SHA. The repository script
+   configures this policy and the workflow-policy check audits workflow changes.
 5. Enable Dependabot alerts and security updates, secret scanning, push
    protection, code scanning, and private vulnerability reporting.
 6. Create a `release` environment with `soerennb` as required reviewer. Allow
@@ -43,23 +45,33 @@ metadata in `appinfo/info.xml`.
 
 For later updates, use `scripts/prepare-incremental-public-history.sh` with the
 same private metadata inputs and an explicit public commit message. Both scripts
-accept a space-separated list of private author emails in
-`PRIVATE_AUTHOR_EMAIL` so that historical and current identities are mapped to
-the same public author. It starts
+accept a space-separated list of author emails in
+`PRIVATE_AUTHOR_EMAIL` for compatibility with the existing sanitizer interface.
+Historical author and committer emails already present in the public history
+are allowed to remain; the sanitizer checks commit messages and repository
+contents for private tokens instead. It starts
 from the existing public `main`, replaces its working tree with the fully
 sanitized internal end state, and creates exactly one deterministic public sync
 commit. The result must remain a fast-forward of the fetched public branch.
+The public `main` branch is pull-request protected: push the prepared commit to
+a temporary public feature branch and merge it through a PR; do not push it
+directly to `main`. If internal history is behind public history, use an
+explicit `PUBLIC_PATHS_FILE` containing only the reviewed paths to avoid
+replacing newer public release or dependency files.
 
 Content alternatives are matched as standalone tokens. This is important when
 a private name is a prefix of the public repository identity: for example,
 `internal.example.invalid` removes a standalone private name without changing the public
 `soerennb` GitHub and Pages URLs. Email addresses listed in
-`PRIVATE_AUTHOR_EMAIL` are replaced independently.
+`PRIVATE_AUTHOR_EMAIL` are retained as historical metadata and are not treated
+as content matches.
 
 Run the incremental preparation twice into separate new destinations and
 require identical public head hashes. Review the complete diff, retain a full
-Gitleaks history scan, and push `main` only from one of those prepared clones.
-The automation removes unreachable sanitizer objects before review. Never
+Gitleaks history scan, and push the result to a temporary public feature branch
+from one of those prepared clones. Open a PR, wait for `CI Gate` and
+`Workflow policy`, then merge with the repository's linear-history policy. The
+automation removes unreachable sanitizer objects before review. Never
 cherry-pick internal commits, reuse internal tags, or force-push public history.
 
 ```bash
@@ -72,10 +84,14 @@ PUBLIC_COMMIT_MESSAGE="release: prepare X.Y.Z" \
 ## Rulesets
 
 Create an active branch ruleset for the default branch that requires linear
-history and blocks deletion and force pushes. Pull requests are encouraged but
-not required, matching the project's selected direct-push policy. Actions still
-run after every push, and a release cannot proceed until its own complete test
-and compatibility gates pass.
+history and blocks deletion and force pushes. Require the `CI Gate` and
+`Workflow policy` status checks for pull requests. All public changes,
+including sanitized-history synchronization, go through a pull request. When
+enabling this setup for the first time, merge one CI-gated bootstrap PR that
+installs `workflow-policy.yml`; enable the `Workflow policy` required check
+immediately afterward because `pull_request_target` can only run the workflow
+from the base branch. Actions still run after every push, and a release cannot
+proceed until its own complete test and compatibility gates pass.
 
 Create a second active tag ruleset for `refs/tags/v*` that blocks update and
 deletion. Create release tags only after the version commit is on `main`.

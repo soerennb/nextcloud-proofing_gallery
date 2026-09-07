@@ -1,0 +1,86 @@
+name: Workflow policy
+
+on: # zizmor: ignore[dangerous-triggers] no pull-request code is checked out or executed; only file contents are linted
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  policy:
+    name: Workflow policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fetch changed workflow and local action files
+        id: files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          target="${RUNNER_TEMP}/pr-workflows"
+          mkdir -p "${target}"
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100" \
+            --jq '.[] | select((.filename | startswith(".github/workflows/")) or (.filename | startswith(".github/actions/"))) | [.filename, .status] | @tsv' \
+            > "${RUNNER_TEMP}/changed-workflow-files.tsv"
+
+          while IFS=$'\t' read -r path status; do
+            test -n "${path}" || continue
+            case "${path}" in
+              .github/workflows/*.yml|.github/workflows/*.yaml|.github/actions/*/action.yml|.github/actions/*/action.yaml) ;;
+              *) continue ;;
+            esac
+            test "${status}" != removed || continue
+            case "${path}" in
+              /*|*..*) echo "Unsafe workflow path: ${path}" >&2; exit 1 ;;
+            esac
+            mkdir -p "${target}/$(dirname "${path}")"
+            gh api "repos/${GITHUB_REPOSITORY}/contents/${path}?ref=${HEAD_SHA}" --jq '.content' \
+              | tr -d '\n' | base64 --decode > "${target}/${path}"
+          done < "${RUNNER_TEMP}/changed-workflow-files.tsv"
+
+          if find "${target}/.github/workflows" -type f -print -quit 2>/dev/null | grep -q .; then
+            echo "has_workflows=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "has_workflows=false" >> "${GITHUB_OUTPUT}"
+          fi
+          if find "${target}/.github/actions" -type f -print -quit 2>/dev/null | grep -q .; then
+            echo "has_actions=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "has_actions=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Lint changed workflows with actionlint
+        if: steps.files.outputs.has_workflows == 'true'
+        run: |
+          set -euo pipefail
+          workflow_args=()
+          while IFS= read -r -d '' path; do
+            relative="${path#"${RUNNER_TEMP}/pr-workflows/"}"
+            workflow_args+=("/github/workspace/${relative}")
+          done < <(find "${RUNNER_TEMP}/pr-workflows/.github/workflows" -type f \( -name '*.yml' -o -name '*.yaml' \) -print0)
+          test "${#workflow_args[@]}" -gt 0
+          docker run --rm \
+            --entrypoint actionlint \
+            -v "${RUNNER_TEMP}/pr-workflows:/github/workspace:ro" \
+            -w /github/workspace \
+            ghcr.io/reviewdog/action-actionlint:v1.73.4@sha256:0a3b73c58e1a6eb9d050e97996364f8ae1b3995d6d2b2f1c48beecfd3c32b4c2 \
+            -oneline "${workflow_args[@]}"
+
+      - name: Audit changed workflows and local actions with zizmor
+        if: steps.files.outputs.has_workflows == 'true' || steps.files.outputs.has_actions == 'true'
+        uses: zizmorcore/zizmor-action@70fb788f84895a7701f5643d103d587e460b5c99 # v0.6.3
+        with:
+          inputs: ${{ runner.temp }}/pr-workflows
+          collect: all
+          online-audits: false
+          persona: regular
+          version: 1.30.0
+          min-severity: high
+          advanced-security: false
+          annotations: true
+          fail-on-no-inputs: false

@@ -7,6 +7,8 @@ updates:
       day: monday
       time: "05:00"
       timezone: Europe/Berlin
+    cooldown:
+      default-days: 7
     groups:
       ionic:
         patterns: ["@ionic/core", "@ionic/vue"]
@@ -39,6 +41,8 @@ updates:
       day: monday
       time: "05:20"
       timezone: Europe/Berlin
+    cooldown:
+      default-days: 7
     groups:
       composer-development:
         dependency-type: development
@@ -51,6 +55,8 @@ updates:
       day: monday
       time: "05:40"
       timezone: Europe/Berlin
+    cooldown:
+      default-days: 7
     groups:
       github-actions-safe:
         patterns: ["*"]
