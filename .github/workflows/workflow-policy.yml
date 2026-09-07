@@ -48,6 +48,11 @@ jobs:
           else
             echo "has_workflows=false" >> "${GITHUB_OUTPUT}"
           fi
+          if find "${target}/.github/actions" -type f -print -quit 2>/dev/null | grep -q .; then
+            echo "has_actions=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "has_actions=false" >> "${GITHUB_OUTPUT}"
+          fi
 
       - name: Lint changed workflows with actionlint
         if: steps.files.outputs.has_workflows == 'true'
@@ -60,6 +65,7 @@ jobs:
           -oneline
 
       - name: Audit changed workflows and local actions with zizmor
+        if: steps.files.outputs.has_workflows == 'true' || steps.files.outputs.has_actions == 'true'
         uses: zizmorcore/zizmor-action@70fb788f84895a7701f5643d103d587e460b5c99 # v0.6.3
         with:
           inputs: ${{ runner.temp }}/pr-workflows
