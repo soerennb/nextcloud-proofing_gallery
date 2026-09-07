@@ -13,32 +13,14 @@ export type AnnotationThreadPanelPlacement = 'left' | 'right' | 'center'
 
 export interface AnnotationThreadPanelLayout {
 	placement: AnnotationThreadPanelPlacement
-	modalEdgeInset: number
-}
-
-export interface AnnotationThreadLeaderLine {
-	x1: number
-	y1: number
-	x2: number
-	y2: number
+	modalLeft: number
+	modalTop: number
 }
 
 function annotationPointIsOnScreen(point: ScreenPoint | null, viewportWidth: number, viewportHeight: number): point is ScreenPoint {
 	return point !== null
 		&& point.x >= 0 && point.x <= viewportWidth
 		&& point.y >= 0 && point.y <= viewportHeight
-}
-
-function preferredPanel(
-	preferred: AnnotationThreadPanelLayout,
-	preferredFits: boolean,
-	fallback: AnnotationThreadPanelLayout,
-	fallbackFits: boolean,
-	centered: AnnotationThreadPanelLayout,
-): AnnotationThreadPanelLayout {
-	if (preferredFits) return preferred
-	if (fallbackFits) return fallback
-	return centered
 }
 
 export function annotationThreadPanelLayout({
@@ -52,57 +34,25 @@ export function annotationThreadPanelLayout({
 	annotationPoint: ScreenPoint | null
 	filmstripSide: boolean
 }): AnnotationThreadPanelLayout {
-	const baseLeft = viewportWidth <= 640 ? 8 : 72
-	const baseRight = filmstripSide ? 104 : viewportWidth <= 640 ? 8 : 72
-	const centered = { placement: 'center' as const, modalEdgeInset: 0 }
+	const centered = { placement: 'center' as const, modalLeft: 0, modalTop: 0 }
 	if (viewportWidth <= 520 || !annotationPointIsOnScreen(annotationPoint, viewportWidth, viewportHeight)) return centered
 
 	const panelWidth = Math.min(400, Math.max(0, viewportWidth - 32))
-	const panelMargin = 16
-	const panelGap = 24
-	const minimumMediaWidth = 320
-	const rightEdgeInset = filmstripSide ? 108 : panelMargin
-	const leftPadding = Math.max(baseLeft, panelMargin + panelWidth + panelGap)
-	const rightPadding = Math.max(baseRight, rightEdgeInset + panelWidth + panelGap)
-	const leftMediaWidth = viewportWidth - leftPadding - baseRight
-	const rightMediaWidth = viewportWidth - baseLeft - rightPadding
-	const leftFits = leftMediaWidth >= minimumMediaWidth
-	const rightFits = rightMediaWidth >= minimumMediaWidth
-
-	const left = { placement: 'left' as const, modalEdgeInset: panelMargin }
-	const right = { placement: 'right' as const, modalEdgeInset: rightEdgeInset }
-	if (annotationPoint.x < viewportWidth / 2) return preferredPanel(right, rightFits, left, leftFits, centered)
-	if (annotationPoint.x > viewportWidth / 2) return preferredPanel(left, leftFits, right, rightFits, centered)
-	if (leftFits && rightFits) return right
-	return preferredPanel(left, leftFits, right, rightFits, centered)
-}
-
-/** A visual connection for an edge-docked point thread; centered sheets stay unconnected. */
-export function annotationThreadLeaderLine({
-	viewportWidth,
-	viewportHeight,
-	annotationPoint,
-	filmstripSide,
-}: {
-	viewportWidth: number
-	viewportHeight: number
-	annotationPoint: ScreenPoint | null
-	filmstripSide: boolean
-}): AnnotationThreadLeaderLine | null {
-	const layout = annotationThreadPanelLayout({ viewportWidth, viewportHeight, annotationPoint, filmstripSide })
-	if (layout.placement === 'center' || !annotationPointIsOnScreen(annotationPoint, viewportWidth, viewportHeight)) return null
-	const panelWidth = Math.min(400, Math.max(0, viewportWidth - 32))
 	const panelHeight = Math.min(680, Math.max(0, viewportHeight - 48))
-	const panelTop = (viewportHeight - panelHeight) / 2
-	const panelBottom = panelTop + panelHeight
-	return {
-		x1: annotationPoint.x,
-		y1: annotationPoint.y,
-		x2: layout.placement === 'left'
-			? layout.modalEdgeInset + panelWidth
-			: viewportWidth - layout.modalEdgeInset - panelWidth,
-		y2: Math.max(panelTop + 24, Math.min(panelBottom - 24, annotationPoint.y)),
-	}
+	const margin = 16
+	const gap = 18
+	const topEdge = 64
+	const bottomReserve = viewportWidth <= 760 ? 100 : margin
+	const rightReserve = filmstripSide ? 108 : margin
+	const rightEdge = Math.max(margin + panelWidth, viewportWidth - rightReserve)
+	const leftRoom = annotationPoint.x - margin - gap
+	const rightRoom = rightEdge - annotationPoint.x - gap
+	const opensRight = rightRoom >= panelWidth || (rightRoom >= leftRoom && rightRoom > 0)
+	const modalLeft = Math.max(margin, Math.min(rightEdge - panelWidth,
+		opensRight ? annotationPoint.x + gap : annotationPoint.x - gap - panelWidth))
+	const maxTop = Math.max(topEdge, viewportHeight - bottomReserve - panelHeight)
+	const modalTop = Math.max(topEdge, Math.min(maxTop, annotationPoint.y - panelHeight / 2))
+	return { placement: opensRight ? 'right' : 'left', modalLeft, modalTop }
 }
 
 export function shouldAutoHideLightboxChrome(

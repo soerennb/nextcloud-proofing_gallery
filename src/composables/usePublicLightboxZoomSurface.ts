@@ -27,7 +27,7 @@ const DRAG_THRESHOLD = 3
  * their zoom transform, so a zoom frame never promotes an image resolution or
  * changes its layout dimensions.
  */
-export function usePublicLightboxZoomSurface(photoSwipe: () => PhotoSwipe | null, onUpdate: () => void) {
+export function usePublicLightboxZoomSurface(photoSwipe: () => PhotoSwipe | null, onUpdate: () => void, onImageChange: () => void = () => {}) {
 	let state: ZoomState = { scale: 1, panX: 0, panY: 0 }
 	let surface: HTMLElement | null = null
 	let image: HTMLImageElement | null = null
@@ -76,20 +76,24 @@ export function usePublicLightboxZoomSurface(photoSwipe: () => PhotoSwipe | null
 	}
 	function refresh() { apply() }
 	function mount() {
-		touches.clear()
-		pinchDistance = 0
-		drag = null
 		const pswp = photoSwipe()
 		const nextImage = pswp?.currSlide?.container.querySelector<HTMLImageElement>('.proofing-zoom-image') ?? null
 		const nextSurface = pswp?.currSlide?.container.querySelector<HTMLElement>('.proofing-zoom-surface') ?? null
+		// Annotation DOM updates must not remount or reset an already active image.
+		if (nextImage === image && nextSurface === surface) return
+		touches.clear()
+		pinchDistance = 0
+		drag = null
 		if (!nextImage || !nextSurface) {
 			surface = null
 			image = null
+			onImageChange()
 			return
 		}
 		image = nextImage
 		surface = nextSurface
 		reset()
+		onImageChange()
 	}
 	function onWheel(event: WheelEvent) {
 		if (!image || !(event.target instanceof Node) || !image.parentElement?.contains(event.target)) return
@@ -150,6 +154,11 @@ export function usePublicLightboxZoomSurface(photoSwipe: () => PhotoSwipe | null
 	function bind() {
 		const element = photoSwipe()?.element
 		if (!element) return () => {}
+		// HTML slide content can be inserted/replaced after PhotoSwipe startup.
+		// Observe availability for the viewer lifetime, independent of fetch timing.
+		const imageObserver = new MutationObserver(mount)
+		imageObserver.observe(element, { childList: true, subtree: true })
+		mount()
 		element.addEventListener('wheel', onWheel, { capture: true, passive: false })
 		element.addEventListener('pointerdown', onPointerDown, true)
 		element.addEventListener('pointermove', onPointerMove, true)
@@ -157,6 +166,7 @@ export function usePublicLightboxZoomSurface(photoSwipe: () => PhotoSwipe | null
 		element.addEventListener('pointercancel', finishDrag, true)
 		element.addEventListener('contextmenu', onContextMenu, true)
 		return () => {
+			imageObserver.disconnect()
 			element.removeEventListener('wheel', onWheel, true)
 			element.removeEventListener('pointerdown', onPointerDown, true)
 			element.removeEventListener('pointermove', onPointerMove, true)

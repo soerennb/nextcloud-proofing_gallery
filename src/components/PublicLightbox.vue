@@ -12,7 +12,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { usePublicLightboxAnnotations } from '../composables/usePublicLightboxAnnotations.ts'
 import { usePublicLightboxZoomSurface } from '../composables/usePublicLightboxZoomSurface.ts'
 import type { GallerySettings } from '../domain/gallerySettings.ts'
-import { annotationNumbersByComment, annotationScreenPoint, annotationThreadLeaderLine, annotationThreadPanelLayout, commentsForAnnotationThread, findSelectedAnnotationComment, hasReadyPublicMetadata, resolvedFilmstripPlacement, shouldAutoHideLightboxChrome } from '../domain/lightboxReview.ts'
+import { annotationNumbersByComment, annotationScreenPoint, annotationThreadPanelLayout, commentsForAnnotationThread, findSelectedAnnotationComment, hasReadyPublicMetadata, resolvedFilmstripPlacement, shouldAutoHideLightboxChrome } from '../domain/lightboxReview.ts'
 import type { CollaborationState, MediaItem } from '../publicTypes.ts'
 import PublicLightboxAnnotations from './PublicLightboxAnnotations.vue'
 import PublicLightboxComments from './PublicLightboxComments.vue'
@@ -132,7 +132,7 @@ const annotations = usePublicLightboxAnnotations({
 zoomSurface = usePublicLightboxZoomSurface(() => pswp, () => {
 	annotations.syncMarkerScale()
 	annotations.scheduleGeometry(false)
-})
+}, () => annotations.syncHost())
 const {
 	host: annotationHost,
 	imageBounds: annotationImageBounds,
@@ -164,15 +164,10 @@ const feedbackPanelLayout = computed(() => annotationThreadPanelLayout({
 	filmstripSide: filmstripPlacement.value === 'side',
 }))
 const feedbackPanelClass = computed(() => `lightbox-sheet lightbox-feedback-sheet lightbox-feedback-sheet--${feedbackPanelLayout.value.placement}`)
-const feedbackPanelStyle = computed(() => ({ '--feedback-panel-edge-inset': `${feedbackPanelLayout.value.modalEdgeInset}px` }))
-const annotationLeaderLine = computed(() => selectedAnnotationComment.value
-	? annotationThreadLeaderLine({
-		viewportWidth: viewportWidth.value,
-		viewportHeight: viewportHeight.value,
-		annotationPoint: selectedAnnotationPoint.value,
-		filmstripSide: filmstripPlacement.value === 'side',
-	})
-	: null)
+const feedbackPanelStyle = computed(() => ({
+	'--feedback-panel-left': `${feedbackPanelLayout.value.modalLeft}px`,
+	'--feedback-panel-top': `${feedbackPanelLayout.value.modalTop}px`,
+}))
 
 function showAllFeedback() { selectedCommentId.value = null; feedbackTab.value = 'comments' }
 function openFeedback() { showAllFeedback(); feedbackOpen.value = true; metadataOpen.value = false }
@@ -683,14 +678,6 @@ async function saveEditedComment(commentId: number) {
 			</IonContent>
 		</IonModal>
 		<PublicLightboxMetadata :open="metadataOpen" :item="activeItem" @close="metadataOpen = false" />
-		<svg v-if="annotationLeaderLine"
-			class="annotation-thread-leader"
-			aria-hidden="true"
-			:viewBox="`0 0 ${viewportWidth} ${viewportHeight}`"
-			preserveAspectRatio="none">
-			<line :x1="annotationLeaderLine.x1" :y1="annotationLeaderLine.y1" :x2="annotationLeaderLine.x2" :y2="annotationLeaderLine.y2" class="annotation-thread-leader__outline" />
-			<line :x1="annotationLeaderLine.x1" :y1="annotationLeaderLine.y1" :x2="annotationLeaderLine.x2" :y2="annotationLeaderLine.y2" class="annotation-thread-leader__line" />
-		</svg>
 		<IonModal :is-open="settings.mode === 'collaboration' && feedbackOpen"
 			:animated="false"
 			:show-backdrop="false"

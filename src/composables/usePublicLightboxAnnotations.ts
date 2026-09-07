@@ -1,7 +1,7 @@
 import { t } from '@nextcloud/l10n'
 import type PhotoSwipe from 'photoswipe'
 import type { ComputedRef, Ref } from 'vue'
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 
 import type { NormalizedAnnotation } from '../domain/collaboration.ts'
 import type { GallerySettings } from '../domain/gallerySettings.ts'
@@ -42,6 +42,12 @@ function createOverlay(options: Options, state: AnnotationState) {
 	let contentWidth: number | null = null
 	let contentHeight: number | null = null
 	let markerScale: number | null = null
+	let pendingImage: HTMLImageElement | null = null
+	let pendingImageLoad: (() => void) | null = null
+	let imageLayoutObserver: ResizeObserver | null = null
+	let imageReadyFrame: number | null = null
+	let imageReadyGeneration = 0
+	let hostImage: HTMLImageElement | null = null
 
 	function activeImage(): HTMLImageElement | null {
 		const image = options.zoomSurfaceImage?.() ?? options.photoSwipe()?.currSlide?.content.element
@@ -111,24 +117,86 @@ function createOverlay(options: Options, state: AnnotationState) {
 		geometryFrame = null
 	}
 
+	function cancelPendingHostSync() {
+		if (pendingImage && pendingImageLoad) pendingImage.removeEventListener('load', pendingImageLoad)
+		pendingImage = null
+		pendingImageLoad = null
+		imageLayoutObserver?.disconnect()
+		imageLayoutObserver = null
+		if (imageReadyFrame !== null) window.cancelAnimationFrame(imageReadyFrame)
+		imageReadyFrame = null
+		imageReadyGeneration += 1
+	}
+
+	/**
+	 * The slide shell can exist before the browser has decoded and painted its
+	 * image. Keep the immediate overlay attach, then perform one guarded,
+	 * post-decode refresh so a slow image cannot leave its already-fetched pins
+	 * waiting for a later slide change.
+	 */
+	function refreshAfterImageReady(image: HTMLImageElement, element: HTMLElement) {
+		const generation = ++imageReadyGeneration
+		const refresh = () => {
+			if (generation !== imageReadyGeneration) return
+			imageReadyFrame = window.requestAnimationFrame(() => {
+				imageReadyFrame = null
+				if (generation !== imageReadyGeneration || activeImage() !== image || state.host.value !== element) return
+				syncContentSize()
+				syncGeometry()
+			})
+		}
+		if (typeof image.decode === 'function') void image.decode().then(refresh, refresh)
+		else refresh()
+	}
+
 	function syncHost() {
+		const pswp = options.photoSwipe()
+		const image = activeImage()
+		const target = image?.parentElement ?? pswp?.currSlide?.container
+		if (image && image === hostImage && state.host.value?.parentElement === target) {
+			syncContentSize()
+			syncGeometry()
+			return
+		}
+		cancelPendingHostSync()
 		state.host.value?.remove()
 		state.host.value = null
 		contentWidth = null
 		contentHeight = null
 		markerScale = null
-		const pswp = options.photoSwipe()
+		hostImage = null
 		if (!pswp?.currSlide || !options.activeItem.value?.mimeType.startsWith('image/')) return
+		if (!image) return
 		const element = document.createElement('div')
 		element.className = 'proofing-annotation-layer'
-		const target = activeImage()?.parentElement ?? pswp.currSlide.container
-		target.append(element)
+		target!.append(element)
 		state.host.value = element
-		syncContentSize()
-		syncGeometry(true)
+		hostImage = image
+		if (typeof ResizeObserver !== 'undefined') {
+			imageLayoutObserver = new ResizeObserver(() => {
+				if (state.host.value !== element || activeImage() !== image) return
+				syncContentSize()
+				syncGeometry()
+			})
+			imageLayoutObserver.observe(image)
+		}
+		const syncWhenReady = () => {
+			if (state.host.value !== element || activeImage() !== image) return
+			pendingImage = null
+			pendingImageLoad = null
+			syncContentSize()
+			syncGeometry(true)
+		}
+		if (image.complete) syncWhenReady()
+		else {
+			pendingImage = image
+			pendingImageLoad = syncWhenReady
+			image.addEventListener('load', pendingImageLoad, { once: true })
+		}
+		refreshAfterImageReady(image, element)
 	}
 
-	return { activeImage, updateAnchor, syncMarkerScale, syncContentSize, syncGeometry, scheduleGeometry, cancelScheduledGeometry, syncHost }
+	return { activeImage, updateAnchor, syncMarkerScale, syncContentSize, syncGeometry, scheduleGeometry, cancelScheduledGeometry, cancelPendingHostSync, syncHost }
 }
 
 function createDraftActions(options: Options, state: AnnotationState, overlay: ReturnType<typeof createOverlay>) {
@@ -230,6 +298,9 @@ export function usePublicLightboxAnnotations(options: Options) {
 		&& options.activeItem.value?.mimeType.startsWith('image/') === true)
 	const overlay = createOverlay(options, state)
 	const actions = createDraftActions(options, state, overlay)
+	watch(options.activeComments, comments => {
+		if (comments.length > 0) nextTick(() => overlay.syncHost())
+	})
 
 	function select(commentId: number) {
 		state.selectedCommentId.value = commentId
@@ -259,6 +330,7 @@ export function usePublicLightboxAnnotations(options: Options) {
 
 	function destroy() {
 		overlay.cancelScheduledGeometry()
+		overlay.cancelPendingHostSync()
 		state.host.value?.remove()
 		state.host.value = null
 		state.imageBounds.value = null

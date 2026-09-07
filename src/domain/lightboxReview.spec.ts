@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { annotationAtImagePoint, annotationNumbersByComment, annotationScreenPoint, annotationThreadLeaderLine, annotationThreadPanelLayout, commentsForAnnotationThread, findSelectedAnnotationComment, moveAnnotationPoint, shouldAutoHideLightboxChrome } from './lightboxReview.ts'
+import { annotationAtImagePoint, annotationNumbersByComment, annotationScreenPoint, annotationThreadPanelLayout, commentsForAnnotationThread, findSelectedAnnotationComment, moveAnnotationPoint, shouldAutoHideLightboxChrome } from './lightboxReview.ts'
 
 describe('lightbox review interaction', () => {
 	it('keeps review chrome visible while respecting presentation behavior', () => {
@@ -51,18 +51,18 @@ describe('lightbox review interaction', () => {
 		expect(commentsForAnnotationThread(comments, 4)).toEqual([])
 	})
 
-	it('places selected annotation threads on a clear desktop edge', () => {
+	it('places selected annotation threads immediately beside the visible pin', () => {
 		const leftPin = annotationThreadPanelLayout({ viewportWidth: 1280, viewportHeight: 800, annotationPoint: { x: 320, y: 300 }, filmstripSide: true })
-		expect(leftPin).toEqual({ placement: 'right', modalEdgeInset: 108 })
+		expect(leftPin).toEqual({ placement: 'right', modalLeft: 338, modalTop: 64 })
 		const rightPin = annotationThreadPanelLayout({ viewportWidth: 1280, viewportHeight: 800, annotationPoint: { x: 960, y: 300 }, filmstripSide: true })
-		expect(rightPin).toEqual({ placement: 'left', modalEdgeInset: 16 })
+		expect(rightPin).toEqual({ placement: 'left', modalLeft: 542, modalTop: 64 })
 	})
 
-	it('uses the available side before falling back to center', () => {
-		expect(annotationThreadPanelLayout({ viewportWidth: 920, viewportHeight: 700, annotationPoint: { x: 230, y: 300 }, filmstripSide: true }).placement).toBe('left')
-		expect(annotationThreadPanelLayout({ viewportWidth: 800, viewportHeight: 700, annotationPoint: { x: 200, y: 300 }, filmstripSide: false }).placement).toBe('center')
+	it('falls back to the other side while retaining a visible, close panel', () => {
+		expect(annotationThreadPanelLayout({ viewportWidth: 920, viewportHeight: 700, annotationPoint: { x: 230, y: 300 }, filmstripSide: true }).placement).toBe('right')
+		expect(annotationThreadPanelLayout({ viewportWidth: 800, viewportHeight: 700, annotationPoint: { x: 200, y: 300 }, filmstripSide: false }).placement).toBe('right')
 		expect(annotationThreadPanelLayout({ viewportWidth: 390, viewportHeight: 700, annotationPoint: { x: 100, y: 300 }, filmstripSide: false })).toEqual({
-			placement: 'center', modalEdgeInset: 0,
+			placement: 'center', modalLeft: 0, modalTop: 0,
 		})
 	})
 
@@ -76,11 +76,4 @@ describe('lightbox review interaction', () => {
 		expect(annotationThreadPanelLayout({ viewportWidth: 1280, viewportHeight: 800, annotationPoint: { x: 400, y: 801 }, filmstripSide: true }).placement).toBe('center')
 	})
 
-	it('connects an edge-docked selected thread without drawing through centered or mobile sheets', () => {
-		expect(annotationThreadLeaderLine({ viewportWidth: 1280, viewportHeight: 800, annotationPoint: { x: 320, y: 300 }, filmstripSide: true })).toEqual({
-			x1: 320, y1: 300, x2: 772, y2: 300,
-		})
-		expect(annotationThreadLeaderLine({ viewportWidth: 390, viewportHeight: 700, annotationPoint: { x: 100, y: 300 }, filmstripSide: false })).toBeNull()
-		expect(annotationThreadLeaderLine({ viewportWidth: 1280, viewportHeight: 800, annotationPoint: { x: -1, y: 300 }, filmstripSide: true })).toBeNull()
-	})
 })

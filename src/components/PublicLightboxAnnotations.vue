@@ -56,7 +56,6 @@ const selectedThreadKey = computed(() => {
 	return comment?.annotations[0] ? annotationThreadKey(comment.annotations[0]) : null
 })
 function markerStyle(annotation: NormalizedAnnotation) {
-	if (!props.imageBounds) return { display: 'none' }
 	const percent = (value: number) => `${(value / ANNOTATION_COORDINATE_SCALE * 100).toFixed(2)}%`
 	return { left: percent(annotation.x), top: percent(annotation.y) }
 }
