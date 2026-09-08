@@ -11,7 +11,10 @@ public_author_email="${PUBLIC_AUTHOR_EMAIL:-soerennb@users.noreply.github.com}"
 
 # Content alternatives are matched as standalone tokens. This keeps a private
 # token such as "internal.example.invalid" from rewriting the public "soerennb" repository
-# identity while still removing standalone private names and domains.
+# identity while still removing standalone private names and domains. Existing
+# author and committer addresses are intentionally not part of this content
+# scan: the public history already contains those identities and they are
+# allowed to remain historical metadata.
 source "${repo_dir}/scripts/lib/public-history-sanitizer.sh"
 
 if [[ -z "${destination}" ]]; then
@@ -73,12 +76,8 @@ git filter-repo --force \
 
 public_history_clear_replace_refs
 
-private_pattern="${private_content_pattern}"
-for email in "${private_email_list[@]}"; do
-	private_pattern+="|${email//./\\.}"
-done
-private_scan_regex="$(public_history_scan_regex "${private_pattern}")"
-if git log --all --format='%an <%ae>%n%cn <%ce>%n%B' | grep -Ei "${private_scan_regex}" >/dev/null; then
+private_scan_regex="$(public_history_scan_regex "${private_content_pattern}")"
+if git log --all --format='%B' | grep -Ei "${private_scan_regex}" >/dev/null; then
 	echo "Private metadata remains in commit metadata or messages." >&2
 	exit 1
 fi

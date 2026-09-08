@@ -10,6 +10,7 @@ import PublicReviewBar from './PublicReviewBar.vue'
 
 defineProps<{
 	open: boolean
+	mobile: boolean
 	guest: GuestIdentity | null
 	review: PublicReviewState
 	nonce: string
@@ -32,8 +33,9 @@ const emit = defineEmits<{
 <template>
 	<IonModal :is-open="open"
 		class="proofing-public-overlay collaboration-sheet"
-		:initial-breakpoint="0.72"
-		:breakpoints="[0, 0.45, 0.72, 1]"
+		:initial-breakpoint="mobile ? 0.72 : 1"
+		:breakpoints="mobile ? [0, 0.45, 0.72, 1] : [0, 1]"
+		:handle="mobile"
 		@did-dismiss="emit('dismiss')">
 		<IonHeader>
 			<IonToolbar>
@@ -46,12 +48,15 @@ const emit = defineEmits<{
 			</IonToolbar>
 		</IonHeader>
 		<IonContent class="ion-padding">
+			<p v-if="allowUploads && guest?.kind === 'user'">
+				{{ t('proofing_gallery', 'Uploads require a guest session. Open this link in a private browser window to upload files.') }}
+			</p>
 			<PublicGuestIdentity v-if="guest"
 				:guest="guest"
 				:token="token"
 				:nonce="nonce"
 				:private-feedback="privateFeedback"
-				:allow-uploads="allowUploads"
+				:allow-uploads="allowUploads && guest.kind !== 'user'"
 				:request="request"
 				@deleted="emit('deleted')"
 				@error="emit('error', $event)" />
@@ -72,8 +77,12 @@ const emit = defineEmits<{
 </template>
 
 <style scoped>
-.collaboration-sheet { --width: min(100%, 640px); }
+.collaboration-sheet { --width: min(calc(100% - 32px), 640px); --height: min(76dvh, 680px); --border-radius: 16px; }
 
 .collaboration-sheet :deep(.guest-identity),
 .collaboration-sheet :deep(.public-review-bar) { position: static; width: 100%; margin: 0 0 16px; box-shadow: none; }
+
+@media (max-width: 520px) {
+	.collaboration-sheet { --width: 100%; --height: min(76dvh, 680px); --border-radius: 18px 18px 0 0; }
+}
 </style>

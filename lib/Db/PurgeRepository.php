@@ -165,24 +165,47 @@ final class PurgeRepository {
 	}
 
 	public function deletePrincipal(string $type, string $id): int {
-		$qb = $this->db->getQueryBuilder();
-		$deleted = $qb->delete('proofing_managers')
-			->where($qb->expr()->eq('principal_type', $qb->createNamedParameter($type)))
-			->andWhere($qb->expr()->eq('user_uid', $qb->createNamedParameter($id)))->executeStatement();
-		if ($type !== 'user') return $deleted;
-		foreach ([
-			['proofing_presets', 'owner_uid'],
-			['proofing_inv_templates', 'owner_uid'],
-			['proofing_media_cull', 'owner_uid'],
-			['proofing_agent_requests', 'user_uid'],
-			['proofing_notify_subs', 'user_uid'],
-			['proofing_native_notify', 'user_uid'],
-			['proofing_ext_resources', 'user_uid'],
-		] as [$table, $column]) {
+		$this->db->beginTransaction();
+		try {
+			$resetGalleryIds = $type === 'user' ? $this->actorGalleryIds($id) : [];
 			$qb = $this->db->getQueryBuilder();
-			$deleted += $qb->delete($table)->where($qb->expr()->eq($column, $qb->createNamedParameter($id)))->executeStatement();
+			$deleted = $qb->delete('proofing_managers')
+				->where($qb->expr()->eq('principal_type', $qb->createNamedParameter($type)))
+				->andWhere($qb->expr()->eq('user_uid', $qb->createNamedParameter($id)))->executeStatement();
+			if ($type === 'user') {
+				$comments = $this->preserveThreadRoots($this->actorParentIds('proofing_comments', $id));
+				$selections = $this->actorParentIds('proofing_selections', $id);
+				$deleted += $this->deleteIds('proofing_annotations', 'comment_id', $comments)
+					+ $this->deleteIds('proofing_selection_items', 'selection_id', $selections);
+				foreach (['proofing_feedback', 'proofing_comments', 'proofing_selections', 'proofing_guest_ratings', 'proofing_events', 'proofing_share_audit'] as $table) {
+					$qb = $this->db->getQueryBuilder();
+					$deleted += $qb->delete($table)->where($qb->expr()->eq('actor_uid', $qb->createNamedParameter($id)))->executeStatement();
+				}
+				$qb = $this->db->getQueryBuilder();
+				$deleted += $qb->delete('proofing_events')->where($qb->expr()->eq('recipient_uid', $qb->createNamedParameter($id)))->executeStatement();
+				$qb = $this->db->getQueryBuilder();
+				$qb->update('proofing_review_rounds')->set('submitted_by_actor_uid', $qb->createNamedParameter(null))
+					->where($qb->expr()->eq('submitted_by_actor_uid', $qb->createNamedParameter($id)))->executeStatement();
+				foreach ([
+					['proofing_presets', 'owner_uid'],
+					['proofing_inv_templates', 'owner_uid'],
+					['proofing_media_cull', 'owner_uid'],
+					['proofing_agent_requests', 'user_uid'],
+					['proofing_notify_subs', 'user_uid'],
+					['proofing_native_notify', 'user_uid'],
+					['proofing_ext_resources', 'user_uid'],
+				] as [$table, $column]) {
+					$qb = $this->db->getQueryBuilder();
+					$deleted += $qb->delete($table)->where($qb->expr()->eq($column, $qb->createNamedParameter($id)))->executeStatement();
+				}
+			}
+			$this->insertPrivacyResetEvents($resetGalleryIds, time());
+			$this->db->commit();
+			return $deleted;
+		} catch (\Throwable $exception) {
+			$this->db->rollBack();
+			throw $exception;
 		}
-		return $deleted;
 	}
 
 	/** @return array<string, list<array<string, mixed>>> */
@@ -204,10 +227,10 @@ final class PurgeRepository {
 			->where($qb->expr()->eq('guest_id', $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT)))->executeQuery()));
 	}
 
-	public function deleteGuestData(int $guestId): int {
+	public function deleteGuestData(int $guestId, int $galleryId): int {
 		$this->db->beginTransaction();
 		try {
-			$comments = $this->guestParentIds('proofing_comments', $guestId);
+			$comments = $this->preserveThreadRoots($this->guestParentIds('proofing_comments', $guestId));
 			$selections = $this->guestParentIds('proofing_selections', $guestId);
 			$deleted = $this->deleteIds('proofing_annotations', 'comment_id', $comments)
 				+ $this->deleteIds('proofing_selection_items', 'selection_id', $selections);
@@ -217,6 +240,7 @@ final class PurgeRepository {
 			}
 			$qb = $this->db->getQueryBuilder();
 			$deleted += $qb->delete('proofing_guests')->where($qb->expr()->eq('id', $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT)))->executeStatement();
+			$this->insertPrivacyResetEvents([$galleryId], time());
 			$this->db->commit();
 			return $deleted;
 		} catch (\Throwable $exception) {
@@ -225,11 +249,79 @@ final class PurgeRepository {
 		}
 	}
 
+	/** Keep anonymous roots for surviving replies; return comments safe to remove.
+	 * @param list<int> $commentIds
+	 * @return list<int>
+	 */
+	private function preserveThreadRoots(array $commentIds): array {
+		$keep = [];
+		foreach (array_chunk($commentIds, 500) as $chunk) {
+			$qb = $this->db->getQueryBuilder();
+			$replies = QueryResult::rows($qb->select('id', 'parent_id')->from('proofing_comments')
+				->where($qb->expr()->in('parent_id', $qb->createNamedParameter($chunk, IQueryBuilder::PARAM_INT_ARRAY)))->executeQuery());
+			foreach ($replies as $reply) {
+				if (!in_array((int)$reply['id'], $commentIds, true)) $keep[(int)$reply['parent_id']] = true;
+			}
+		}
+		foreach (array_chunk(array_keys($keep), 500) as $chunk) {
+			$qb = $this->db->getQueryBuilder();
+			$qb->update('proofing_comments')->set('actor_uid', $qb->createNamedParameter(null))
+				->set('guest_id', $qb->createNamedParameter(null, IQueryBuilder::PARAM_INT))
+				->set('body', $qb->createNamedParameter(''))
+				->set('deleted_at', $qb->createNamedParameter(time(), IQueryBuilder::PARAM_INT))
+				->where($qb->expr()->in('id', $qb->createNamedParameter($chunk, IQueryBuilder::PARAM_INT_ARRAY)))->executeStatement();
+		}
+		return array_values(array_diff($commentIds, array_keys($keep)));
+	}
+
 	/** @return list<int> */
 	private function guestParentIds(string $table, int $guestId): array {
 		$qb = $this->db->getQueryBuilder();
 		return array_map('intval', QueryResult::column($qb->select('id')->from($table)
 			->where($qb->expr()->eq('guest_id', $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT)))->executeQuery()));
+	}
+
+	/** @return list<int> */
+	private function actorParentIds(string $table, string $actorUid): array {
+		$qb = $this->db->getQueryBuilder();
+		return array_map('intval', QueryResult::column($qb->select('id')->from($table)
+			->where($qb->expr()->eq('actor_uid', $qb->createNamedParameter($actorUid)))->executeQuery()));
+	}
+
+	/** @return list<int> */
+	private function actorGalleryIds(string $actorUid): array {
+		$galleryIds = [];
+		foreach ([
+			['proofing_feedback', 'actor_uid'],
+			['proofing_comments', 'actor_uid'],
+			['proofing_selections', 'actor_uid'],
+			['proofing_guest_ratings', 'actor_uid'],
+			['proofing_events', 'actor_uid'],
+			['proofing_events', 'recipient_uid'],
+			['proofing_share_audit', 'actor_uid'],
+			['proofing_review_rounds', 'submitted_by_actor_uid'],
+		] as [$table, $column]) {
+			$qb = $this->db->getQueryBuilder();
+			$galleryIds = array_merge($galleryIds, QueryResult::column($qb->selectDistinct('gallery_id')->from($table)
+				->where($qb->expr()->eq($column, $qb->createNamedParameter($actorUid)))->executeQuery()));
+		}
+		return array_values(array_unique(array_map('intval', $galleryIds)));
+	}
+
+	/** @param list<int> $galleryIds */
+	private function insertPrivacyResetEvents(array $galleryIds, int $now): void {
+		foreach (array_values(array_unique(array_map('intval', $galleryIds))) as $galleryId) {
+			$qb = $this->db->getQueryBuilder();
+			$qb->insert('proofing_events')->values([
+				'gallery_id' => $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT),
+				'guest_id' => $qb->createNamedParameter(null, IQueryBuilder::PARAM_INT),
+				'actor_uid' => $qb->createNamedParameter(null),
+				'recipient_uid' => $qb->createNamedParameter(null),
+				'event_type' => $qb->createNamedParameter('collaboration.reset'),
+				'payload' => $qb->createNamedParameter(json_encode(['reason' => 'privacy_erasure'], JSON_THROW_ON_ERROR)),
+				'created_at' => $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT),
+			])->executeStatement();
+		}
 	}
 
 	/** @param list<int> $ids */

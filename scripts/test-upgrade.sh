@@ -244,8 +244,17 @@ compose exec -T -e PG_BASELINE_HAS_LEGACY_REPAIR="${baseline_has_legacy_repair}"
 	}
 '
 
+compose exec -T --user www-data "${service}" php /dev/stdin seed < "${repo_dir}/tests/smoke/UpgradeCollaboration.php"
+
 run_upgrade() {
 	run_sqlite_retry exec -T --user www-data "${service}" php occ upgrade
+	# A successful retry inherits maintenance mode from the failed attempt.
+	# Leave it only after Nextcloud confirms that no DB upgrade remains.
+	compose exec -T --user www-data "${service}" php -r '
+		require "/var/www/html/lib/base.php";
+		if (\OCP\Util::needUpgrade()) throw new RuntimeException("Database upgrade remains pending");
+	'
+	compose exec -T --user www-data "${service}" php occ maintenance:mode --off
 }
 run_app_update() {
 	run_sqlite_retry exec -T --user www-data "${service}" php -r 'require "/var/www/html/lib/base.php"; \OC_App::updateApp("proofing_gallery");'
@@ -303,6 +312,7 @@ else
 fi
 run_upgrade
 status_json="$(compose exec -T --user www-data "${service}" php occ status --output=json)"
+compose exec -T --user www-data "${service}" php /dev/stdin verify < "${repo_dir}/tests/smoke/UpgradeCollaboration.php"
 php -r '
 	$status = json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR);
 	if (($status["maintenance"] ?? true) || ($status["needsDbUpgrade"] ?? true)) {

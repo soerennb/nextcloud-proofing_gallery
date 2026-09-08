@@ -460,7 +460,7 @@ onBeforeUnmount(() => {
 			</div>
 		</header>
 
-		<div class="culling-toolbar" aria-label="Culling tools">
+		<div class="culling-toolbar" :aria-label="t('proofing_gallery', 'Culling tools')">
 			<div class="culling-toolbar__primary">
 				<NcButton variant="tertiary" :disabled="!undoStack.length || saving" @click="undo">
 					{{ t('proofing_gallery', 'Undo') }}
@@ -536,7 +536,7 @@ onBeforeUnmount(() => {
 			</div>
 		</div>
 		<div v-if="showShortcuts" class="shortcut-sheet">
-			<span><kbd>←</kbd><kbd>→</kbd> {{ t('proofing_gallery', 'Navigate') }}</span><span><kbd>0–5</kbd> {{ t('proofing_gallery', 'Rate') }}</span><span><kbd>P</kbd> {{ t('proofing_gallery', 'Pick') }}</span><span><kbd>X</kbd> {{ t('proofing_gallery', 'Reject') }}</span><span><kbd>F</kbd> {{ t('proofing_gallery', 'Focus') }}</span><span><kbd>Space</kbd> {{ t('proofing_gallery', 'Select') }}</span><span><kbd>Ctrl/⌘ Z</kbd> {{ t('proofing_gallery', 'Undo') }}</span>
+			<span><kbd>←</kbd><kbd>→</kbd> {{ t('proofing_gallery', 'Navigate') }}</span><span><kbd>0–5</kbd> {{ t('proofing_gallery', 'Rate') }}</span><span><kbd>P</kbd> {{ t('proofing_gallery', 'Pick') }}</span><span><kbd>X</kbd> {{ t('proofing_gallery', 'Reject') }}</span><span><kbd>F</kbd> {{ t('proofing_gallery', 'Focus') }}</span><span><kbd>{{ t('proofing_gallery', 'Space') }}</kbd> {{ t('proofing_gallery', 'Select') }}</span><span><kbd>{{ t('proofing_gallery', 'Ctrl/⌘ Z') }}</kbd> {{ t('proofing_gallery', 'Undo') }}</span>
 		</div>
 		<section v-if="xmpOpen" class="xmp-sync" aria-labelledby="xmp-sync-title">
 			<header>
@@ -562,7 +562,7 @@ onBeforeUnmount(() => {
 					</li>
 				</ul>
 				<div class="xmp-sync__merge">
-					<p>{{ t('proofing_gallery', 'For a field-wise merge, choose the source of truth for each value.') }}</p><label>{{ t('proofing_gallery', 'Rating') }}<select v-model="xmpChoices.rating" name="xmpRatingSource"><option value="app">App</option><option value="xmp">XMP</option></select></label><label>{{ t('proofing_gallery', 'Color') }}<select v-model="xmpChoices.color" name="xmpColorSource"><option value="app">App</option><option value="xmp">XMP</option></select></label><label>{{ t('proofing_gallery', 'Decision') }}<select v-model="xmpChoices.pick" name="xmpPickSource"><option value="app">App</option><option value="xmp">XMP</option></select></label>
+					<p>{{ t('proofing_gallery', 'For a field-wise merge, choose the source of truth for each value.') }}</p><label>{{ t('proofing_gallery', 'Rating') }}<select v-model="xmpChoices.rating" name="xmpRatingSource"><option value="app">{{ t('proofing_gallery', 'App') }}</option><option value="xmp">{{ t('proofing_gallery', 'XMP') }}</option></select></label><label>{{ t('proofing_gallery', 'Color') }}<select v-model="xmpChoices.color" name="xmpColorSource"><option value="app">{{ t('proofing_gallery', 'App') }}</option><option value="xmp">{{ t('proofing_gallery', 'XMP') }}</option></select></label><label>{{ t('proofing_gallery', 'Decision') }}<select v-model="xmpChoices.pick" name="xmpPickSource"><option value="app">{{ t('proofing_gallery', 'App') }}</option><option value="xmp">{{ t('proofing_gallery', 'XMP') }}</option></select></label>
 				</div>
 				<div class="xmp-sync__actions">
 					<NcButton :disabled="xmpWorking" @click="runXmp('app', false)">
@@ -604,7 +604,7 @@ onBeforeUnmount(() => {
 						<button type="button" :aria-pressed="selectedIds.includes(aggregate.fileId)" @click="toggleSelected(aggregate.fileId)">
 							<span><strong>{{ items.find(item => item.id === aggregate.fileId)?.name || `#${aggregate.fileId}` }}</strong><small>{{ aggregate.count }} · Ø {{ aggregate.average.toFixed(1) }} <StarIcon :size="11" class="inline-star" /> · {{ aggregate.picks.pick }} <CheckIcon :size="11" class="inline-pick" /> · {{ aggregate.picks.reject }} <CloseIcon :size="11" class="inline-reject" /></small></span><b>{{ Math.round(aggregate.average) }}<StarIcon :size="11" class="inline-star" /></b>
 						</button>
-						<details><summary>{{ t('proofing_gallery', 'Show individual ratings') }}</summary><span v-for="individual in aggregate.individuals" :key="individual.guestId">{{ individual.name }} · {{ individual.rating }} <StarIcon :size="10" class="inline-star" /> · {{ individual.pick }}</span></details>
+						<details><summary>{{ t('proofing_gallery', 'Show individual ratings') }}</summary><span v-for="individual in aggregate.individuals" :key="`${individual.actorKind}:${individual.actorUid ?? individual.guestId ?? 'unknown'}`">{{ individual.name }} · {{ individual.rating }} <StarIcon :size="10" class="inline-star" /> · {{ individual.pick }}</span></details>
 					</li>
 				</ul>
 				<NcButton v-if="guestRatingsCursor"

@@ -9,6 +9,7 @@ import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import { computed, ref } from 'vue'
 
+import { galleryPurposeLabels } from '../domain/gallerySettingsOptions.ts'
 import SettingsSaveBar from './SettingsSaveBar.vue'
 
 interface NotificationChannel { enabled: boolean; events: string[]; frequency?: string }
@@ -68,7 +69,7 @@ async function save() {
 		<header><h2>{{ t('proofing_gallery', 'Proofing Gallery') }}</h2><p>{{ t('proofing_gallery', 'Your defaults follow you across devices and keep new projects consistent.') }}</p></header>
 		<NcSettingsSection :name="t('proofing_gallery', 'New projects')" :description="t('proofing_gallery', 'Choose a small set of defaults. Every project can still be adjusted later.')">
 			<div class="personal-fields">
-				<label>{{ t('proofing_gallery', 'Preferred purpose') }}<select v-model="draft.defaultPurpose"><option :value="null">{{ t('proofing_gallery', 'Use instance default') }} ({{ initialState.instanceSettings.workflow.defaultPurpose }})</option><option v-for="purpose in ['delivery', 'showcase', 'selection', 'proofing', 'uploads', 'custom']" :key="purpose" :value="purpose">{{ purpose }}</option></select></label><label>{{ t('proofing_gallery', 'Public language') }}<select v-model="draft.publicLocale"><option value="auto">{{ t('proofing_gallery', 'Automatic') }}</option><option value="de">Deutsch</option><option value="en">English</option></select></label><label>{{ t('proofing_gallery', 'Preferred design preset') }}<select v-model="draft.designPresetId"><option :value="null">{{ t('proofing_gallery', 'Use instance design') }}</option><option v-for="preset in initialState.presets" :key="preset.id" :value="preset.id">{{ preset.name }}</option></select></label>
+				<label>{{ t('proofing_gallery', 'Preferred purpose') }}<select v-model="draft.defaultPurpose"><option :value="null">{{ t('proofing_gallery', 'Use instance default') }} ({{ galleryPurposeLabels[initialState.instanceSettings.workflow.defaultPurpose as keyof typeof galleryPurposeLabels] ?? initialState.instanceSettings.workflow.defaultPurpose }})</option><option v-for="(label, purpose) in galleryPurposeLabels" :key="purpose" :value="purpose">{{ label }}</option></select></label><label>{{ t('proofing_gallery', 'Public language') }}<select v-model="draft.publicLocale"><option value="auto">{{ t('proofing_gallery', 'Automatic') }}</option><option value="de">{{ t('proofing_gallery', 'German') }}</option><option value="en">{{ t('proofing_gallery', 'English') }}</option></select></label><label>{{ t('proofing_gallery', 'Preferred design preset') }}<select v-model="draft.designPresetId"><option :value="null">{{ t('proofing_gallery', 'Use instance design') }}</option><option v-for="preset in initialState.presets" :key="preset.id" :value="preset.id">{{ preset.name }}</option></select></label>
 			</div>
 			<div class="personal-folder">
 				<div><strong>{{ t('proofing_gallery', 'Default parent folder') }}</strong><span>{{ draft.parentFolder?.name || t('proofing_gallery', 'No folder selected') }}</span></div><NcButton @click="chooseFolder">

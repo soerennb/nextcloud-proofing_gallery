@@ -6,15 +6,15 @@ import PublicLightboxAnnotations from './PublicLightboxAnnotations.vue'
 
 vi.mock('@nextcloud/l10n', () => ({ t: (_app: string, message: string, values?: Record<string, number>) => values ? message.replace('{number}', String(values.number)) : message }))
 
-describe('PublicLightboxAnnotations', () => {
-	function props(overrides: Record<string, unknown> = {}) {
-		return {
-			host: null, comments: [], draft: null, body: '', anchor: null, composerOpen: false,
-			keyboardPositioning: false, submitting: false, error: '', selectedCommentId: null,
-			viewportWidth: 1200, viewportHeight: 800, ...overrides,
-		}
+function props(overrides: Record<string, unknown> = {}) {
+	return {
+		host: null, comments: [], draft: null, body: '', anchor: null, composerOpen: false,
+		keyboardPositioning: false, submitting: false, error: '', selectedCommentId: null,
+		viewportWidth: 1200, viewportHeight: 800, ...overrides,
 	}
+}
 
+describe('PublicLightboxAnnotations markers', () => {
 	it('numbers markers by creation order and links selection to the comment', async () => {
 		const host = document.createElement('div')
 		document.body.append(host)
@@ -24,6 +24,7 @@ describe('PublicLightboxAnnotations', () => {
 				comments: [
 					{ id: 13, fileId: 7, body: 'Second', author: 'B', mine: false, createdAt: 2, deletedAt: null, annotations: [{ x: 3000, y: 4000, width: 800, height: 800 }] },
 					{ id: 12, fileId: 7, body: 'First', author: 'A', mine: false, createdAt: 1, deletedAt: null, annotations: [{ x: 1000, y: 2000, width: 800, height: 800 }] },
+					{ id: 14, threadId: 12, fileId: 7, body: 'Reply', author: 'C', mine: false, createdAt: 3, deletedAt: null, annotations: [{ x: 1000, y: 2000, width: 800, height: 800 }] },
 				],
 				draft: null, body: '', anchor: null, composerOpen: false, keyboardPositioning: false,
 				submitting: false, error: '', selectedCommentId: 13, viewportWidth: 1200, viewportHeight: 800,
@@ -40,6 +41,61 @@ describe('PublicLightboxAnnotations', () => {
 		host.remove()
 	})
 
+	it('anchors pins directly to normalized image percentages through zoom and pan', async () => {
+		const host = document.createElement('div')
+		document.body.append(host)
+		const wrapper = mount(PublicLightboxAnnotations, {
+			props: props({
+				host,
+				comments: [{ id: 12, fileId: 7, body: 'Point', author: 'A', mine: false, createdAt: 1, deletedAt: null, annotations: [{ x: 1234, y: 5678, width: 800, height: 800 }] }],
+			}),
+		})
+		await nextTick()
+		const marker = host.querySelector<HTMLElement>('.annotation-marker')!
+		expect(marker.style.left).toBe('12.34%')
+		expect(marker.style.top).toBe('56.78%')
+		host.style.transform = 'translate(-100px, -50px) scale(2)'
+		await nextTick()
+		expect(marker.style.left).toBe('12.34%')
+		expect(marker.style.top).toBe('56.78%')
+		wrapper.unmount()
+		host.remove()
+	})
+
+	it('renders fetched pins before screen geometry is available', async () => {
+		const host = document.createElement('div')
+		document.body.append(host)
+		const wrapper = mount(PublicLightboxAnnotations, {
+			props: props({
+				host,
+				comments: [{ id: 12, fileId: 7, body: 'Point', author: 'A', mine: false, createdAt: 1, deletedAt: null, annotations: [{ x: 1234, y: 5678, width: 800, height: 800 }] }],
+			}),
+		})
+		await nextTick()
+		const marker = host.querySelector<HTMLElement>('.annotation-marker')
+		expect(marker).not.toBeNull()
+		expect(marker?.style.left).toBe('12.34%')
+		expect(marker?.style.top).toBe('56.78%')
+		wrapper.unmount()
+		host.remove()
+	})
+
+	it('renders pins when a delayed collaboration response arrives after the image host', async () => {
+		const host = document.createElement('div')
+		document.body.append(host)
+		const wrapper = mount(PublicLightboxAnnotations, { props: props({ host }) })
+		await new Promise(resolve => window.setTimeout(resolve, 25))
+		await wrapper.setProps({
+			comments: [{ id: 12, fileId: 7, body: 'Point', author: 'A', mine: false, createdAt: 1, deletedAt: null, annotations: [{ x: 1234, y: 5678, width: 800, height: 800 }] }],
+		})
+		expect(host.querySelector('.annotation-marker')).not.toBeNull()
+		wrapper.unmount()
+		host.remove()
+	})
+
+})
+
+describe('PublicLightboxAnnotations composer', () => {
 	it('cancels the open composer with Escape without leaking the key to the lightbox', async () => {
 		const wrapper = mount(PublicLightboxAnnotations, {
 			props: props({
@@ -65,6 +121,21 @@ describe('PublicLightboxAnnotations', () => {
 		await wrapper.setProps({ composerOpen: true })
 		await new Promise(resolve => requestAnimationFrame(resolve))
 		expect(document.activeElement).toBe(wrapper.find('textarea').element)
+		wrapper.unmount()
+	})
+
+	it('keeps the floating composer inside desktop chrome reserves', async () => {
+		const wrapper = mount(PublicLightboxAnnotations, {
+			props: props({
+				draft: { x: 9800, y: 9800, width: 800, height: 800 },
+				anchor: { x: 1190, y: 790 },
+				composerOpen: true,
+			}),
+		})
+		const style = wrapper.find('form').attributes('style')
+		expect(style).toContain('left: 752px')
+		expect(style).toContain('top: 524px')
+		expect(style).toContain('max-height: 712px')
 		wrapper.unmount()
 	})
 })

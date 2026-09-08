@@ -36,7 +36,7 @@ final class ReviewSettings implements JsonSerializable {
 		return [
 			'visibility' => 'collaborative', 'likes' => true, 'colors' => true, 'comments' => true,
 			'annotations' => true, 'selections' => true, 'ratings' => false, 'pick' => false,
-			'colorLabels' => ['Favorit', 'Auswahl', 'Überarbeiten', 'Ablehnen'],
+			'colorLabels' => ['Favorite', 'Selected', 'Needs changes', 'Rejected'],
 			'colorEnabled' => [true, true, true, true], 'selectionWarningThreshold' => 0,
 			'selectionMinimum' => 0, 'selectionMaximum' => 0, 'selectionDueDate' => null,
 		];

@@ -7,6 +7,7 @@ namespace OCA\ProofingGallery\Controller;
 use InvalidArgumentException;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Service\GuestService;
+use OCA\ProofingGallery\Service\AuthenticatedCollaborationSession;
 use OCA\ProofingGallery\Service\PublicShareContextResolver;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http;
@@ -24,6 +25,7 @@ final class GuestController extends ResolvedPublicShareController {
 		ISession $session,
 		PublicShareContextResolver $contextResolver,
 		private GuestService $guests,
+		private AuthenticatedCollaborationSession $authenticated,
 	) {
 		parent::__construct($request, $session, $contextResolver);
 	}
@@ -34,6 +36,16 @@ final class GuestController extends ResolvedPublicShareController {
 	#[FrontpageRoute(verb: 'POST', url: '/public/{token}/session')]
 	public function create(string $displayName = '', ?string $email = null): JSONResponse {
 		try {
+			$authenticated = $this->authenticated->current($this->gallery());
+			if ($authenticated !== null) {
+				$response = new JSONResponse([
+					'guest' => $authenticated['actor'],
+					'nonce' => $authenticated['nonce'],
+					'expiresIn' => null,
+				]);
+				$response->addHeader('Cache-Control', 'private, no-store');
+				return $response;
+			}
 			$session = $this->guests->create($this->gallery(), $displayName, $email);
 			$response = new JSONResponse([
 				'guest' => $session['guest'],
@@ -52,7 +64,19 @@ final class GuestController extends ResolvedPublicShareController {
 	#[NoCSRFRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/session')]
 	public function current(): JSONResponse {
+		$scopedCookieName = GuestService::cookieName($this->gallery());
+		$scopedCookiePresent = $this->request->getCookie($scopedCookieName) !== null;
 		try {
+			$authenticated = $this->authenticated->current($this->gallery());
+			if ($authenticated !== null) {
+				$response = new JSONResponse([
+					'guest' => $authenticated['actor'],
+					'nonce' => $authenticated['nonce'],
+					'expiresIn' => null,
+				]);
+				$response->addHeader('Cache-Control', 'private, no-store');
+				return $response;
+			}
 			$secret = $this->guestSecret($this->gallery());
 			$session = $this->guests->resume($this->gallery(), $secret);
 			$response = new JSONResponse(['guest' => $session['guest'], 'nonce' => $session['nonce'], 'expiresIn' => 2592000]);
@@ -63,7 +87,10 @@ final class GuestController extends ResolvedPublicShareController {
 			// An anonymous visitor is the normal initial state of a public gallery.
 			$response = new JSONResponse(['guest' => null]);
 			$response->addHeader('Cache-Control', 'private, no-store');
-			$response->invalidateCookie(GuestService::cookieName($this->gallery()));
+			// Do not emit a deletion for a cookie that was absent from this request.
+			// A just-created session can otherwise be overwritten by a late
+			// anonymous bootstrap request from the public app.
+			if ($scopedCookiePresent) $response->invalidateCookie($scopedCookieName);
 			return $response;
 		}
 	}

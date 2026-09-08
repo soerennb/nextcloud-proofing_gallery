@@ -33,6 +33,8 @@ Automation, Privacy, and History workspaces.
   and server-rendered preview watermarks
 - likes, color states, comments, image annotations, named selections, and
   CSV/plain-text exports
+- separate general comments and expandable pin conversations, with panels beside
+  the selected detail, color-labelled review states, and account-aware authorship
 - individual downloads, selected ZIP files, and printable contact sheets
 - resumable guest uploads to a hidden moderation inbox
 - user/group gallery managers, activity filters, and opt-in event digests for

@@ -29,6 +29,11 @@ export default [
 			'vue/custom-event-name-casing': ['error', 'kebab-case'],
 			'vue/define-macros-order': 'off',
 			'vue/first-attribute-linebreak': 'off',
+			'vue/no-bare-strings-in-template': ['error', {
+				// Numbers, icons, punctuation, units and protocol tokens are not prose.
+				// Everything containing translatable words must use the l10n helpers.
+				allowlist: ['/^[^\\p{L}]+$/u', '/^[A-Z]$/u', 'Ø', 'TXT', 'px'],
+			}],
 			'vue/v-on-event-hyphenation': ['error', 'always'],
 		},
 	},

@@ -122,6 +122,27 @@ pick, reject, label, comment, annotate, and save named selections. Guests do
 not need Nextcloud accounts. Their identity and mutation token are stored in a
 private browser session; clearing site data ends access to private feedback.
 
+If you are signed in to Nextcloud, new feedback uses your account identity.
+Earlier guest comments remain linked to their original guest identity; signing
+in does not claim them. Account identity does not bypass gallery or link rules.
+Uploads still require a guest session; signed-in reviewers can open the link
+in a private browser window when they need to upload files.
+
+**Feedback** opens **General comments**, newest first beneath the input.
+The **Pins** tab groups point conversations into expandable rows. Expand a row
+to read its replies, or use its separate open button to show the conversation
+beside the pin. These panels do not dim the image. **Review state** shows both
+the configured state name and its color indicator.
+Each pin has its own conversation, even when two pins share the same position.
+Replies remain available when the original comment is deleted; its text is
+replaced with a deletion notice.
+
+Zoom with the viewer controls, mouse wheel, or a touch pinch. On desktop, hold
+the right mouse button and drag the zoomed image to pan. A right-click without
+dragging keeps the browser context menu. Pins retain their image-relative
+positions while zooming and panning. On touchscreens, drag with one finger
+after zooming to reach the image edges. Dragging does not create a new pin.
+
 Click or tap an image to place a numbered point and open its comment editor.
 For keyboard placement, choose **Add point comment**, move the point with the
 arrow keys, press Enter to write, or Escape to cancel. Unpinned comments remain

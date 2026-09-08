@@ -110,4 +110,13 @@ final class IntegrationContractTest extends TestCase {
 		self::assertStringNotContainsString('mutations->archive($gallery->getOwnerUid()', $source);
 		self::assertStringNotContainsString('mutations->publish($gallery->getOwnerUid()', $source);
 	}
+
+	public function testAccountCollaborationMigrationKeepsGuestCompatibility(): void {
+		$source = file_get_contents(__DIR__ . '/../../../lib/Migration/Version000130Date20260903.php');
+		self::assertIsString($source);
+		self::assertStringContainsString('proof_feedback_actor_kind', $source);
+		self::assertStringContainsString('submitted_by_actor_uid', $source);
+		self::assertStringContainsString('proof_actor_rating_file', $source);
+		self::assertStringContainsString("changeColumn('guest_id', ['notnull' => false])", $source);
+	}
 }
