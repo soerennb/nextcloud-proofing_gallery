@@ -22,8 +22,7 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          # zizmor-action mounts only GITHUB_WORKSPACE into its scanner container.
-          target="${GITHUB_WORKSPACE}/pr-workflows"
+          target="${GITHUB_WORKSPACE}/.policy-workflows"
           mkdir -p "${target}"
           gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files?per_page=100" \
             --jq '.[] | select((.filename | startswith(".github/workflows/")) or (.filename | startswith(".github/actions/"))) | [.filename, .status] | @tsv' \
@@ -55,19 +54,26 @@ jobs:
             echo "has_actions=false" >> "${GITHUB_OUTPUT}"
           fi
 
+      - name: Verify isolated audit workspace
+        if: steps.files.outputs.has_workflows == 'true' || steps.files.outputs.has_actions == 'true'
+        run: |
+          set -euo pipefail
+          test -d "${GITHUB_WORKSPACE}/.policy-workflows"
+          find "${GITHUB_WORKSPACE}/.policy-workflows" -type f -print -quit | grep -q .
+
       - name: Lint changed workflows with actionlint
         if: steps.files.outputs.has_workflows == 'true'
         run: |
           set -euo pipefail
           workflow_args=()
           while IFS= read -r -d '' path; do
-            relative="${path#"${GITHUB_WORKSPACE}/pr-workflows/"}"
+            relative="${path#"${GITHUB_WORKSPACE}/.policy-workflows/"}"
             workflow_args+=("/github/workspace/${relative}")
-          done < <(find "${GITHUB_WORKSPACE}/pr-workflows/.github/workflows" -type f \( -name '*.yml' -o -name '*.yaml' \) -print0)
+          done < <(find "${GITHUB_WORKSPACE}/.policy-workflows/.github/workflows" -type f \( -name '*.yml' -o -name '*.yaml' \) -print0)
           test "${#workflow_args[@]}" -gt 0
           docker run --rm \
             --entrypoint actionlint \
-            -v "${GITHUB_WORKSPACE}/pr-workflows:/github/workspace:ro" \
+            -v "${GITHUB_WORKSPACE}/.policy-workflows:/github/workspace:ro" \
             -w /github/workspace \
             ghcr.io/reviewdog/action-actionlint:v1.73.4@sha256:0a3b73c58e1a6eb9d050e97996364f8ae1b3995d6d2b2f1c48beecfd3c32b4c2 \
             -oneline "${workflow_args[@]}"
@@ -76,7 +82,7 @@ jobs:
         if: steps.files.outputs.has_workflows == 'true' || steps.files.outputs.has_actions == 'true'
         uses: zizmorcore/zizmor-action@70fb788f84895a7701f5643d103d587e460b5c99 # v0.6.3
         with:
-          inputs: pr-workflows
+          inputs: .policy-workflows
           collect: all
           online-audits: false
           persona: regular
