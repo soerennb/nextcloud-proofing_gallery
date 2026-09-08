@@ -1163,7 +1163,7 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 	await page.getByRole('button', { name: 'Close', exact: true }).click()
 
 	await page.getByRole('button', { name: `Open ${firstName}` }).click()
-	const shell = page.getByRole('dialog', { name: firstName })
+	const shell = page.getByRole('dialog', { name: firstName, exact: true })
 	await expect(shell).toBeVisible()
 	await expect(page.getByRole('navigation', { name: 'Photo filmstrip' })).toBeVisible()
 	await expect(page.getByRole('button', { name: 'Previous' })).toBeVisible()
@@ -1187,6 +1187,7 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 	await shell.getByRole('button', { name: 'More options' }).click()
 	await expect(lightboxActions).toBeVisible()
 	await lightboxActions.getByRole('button', { name: 'Hide thumbnails' }).click()
+	await expect(lightboxActions).toBeHidden()
 	await expect(page.getByRole('navigation', { name: 'Photo filmstrip' })).toHaveCount(0)
 	await shell.getByRole('button', { name: 'Close' }).click()
 	await page.getByRole('button', { name: `Open ${firstName}` }).click()
@@ -1194,6 +1195,8 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 	await shell.getByRole('button', { name: 'More options' }).click()
 	await expect(lightboxActions.getByRole('button', { name: 'Show thumbnails' })).toBeVisible()
 	await lightboxActions.getByRole('button', { name: 'Show thumbnails' }).click()
+	// The filmstrip changes before Ionic finishes dismissing its dialog.
+	await expect(lightboxActions).toBeHidden()
 	await expect(page.getByRole('navigation', { name: 'Photo filmstrip' })).toBeVisible()
 
 	const activeImage = page.locator(`.pswp__img[alt="${firstName}"]`)
@@ -1218,8 +1221,9 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 	expect(afterPinch).not.toBeNull()
 	expect(afterPinch!.width).toBeGreaterThan(beforePinch!.width * 1.1)
 	await tapLightboxControl('Close')
+	await expect(page.getByRole('dialog')).toHaveCount(0)
 	await page.getByRole('button', { name: `Open ${firstName}` }).click()
-	await expect(page.getByRole('dialog', { name: firstName })).toBeVisible()
+	await expect(shell).toBeVisible()
 	await page.waitForTimeout(900)
 
 	const swipe = async (fromX: number, toX: number) => {
