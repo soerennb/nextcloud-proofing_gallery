@@ -17,3 +17,16 @@ for (const path of [...workflows, ...localActions]) {
 	}
 	console.log(`valid: ${path}`)
 }
+
+const workflowPolicy = await readFile('.github/workflows/workflow-policy.yml', 'utf8')
+const policyContract = [
+	['workspace-visible policy staging', /target="\$\{GITHUB_WORKSPACE\}\/\.policy-workflows"/],
+	['explicit actionlint file arguments', /workflow_args=\(\)[\s\S]*-oneline "\$\{workflow_args\[@\]\}"/],
+	['relative zizmor input', /inputs: \.policy-workflows/],
+]
+for (const [name, pattern] of policyContract) {
+	if (!pattern.test(workflowPolicy)) throw new Error(`workflow-policy.yml: missing ${name} contract`)
+}
+if (workflowPolicy.includes('${{ runner.temp }}/pr-workflows')) {
+	throw new Error('workflow-policy.yml: zizmor must not receive an inaccessible runner.temp path')
+}
