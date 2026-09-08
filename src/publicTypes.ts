@@ -35,6 +35,7 @@ export interface PublicGallery {
 	settings: GallerySettings
 	initialPage?: PublicGalleryPage
 	review?: PublicReviewState
+	viewer?: { displayName: string; email: string | null } | null
 }
 
 export type ReviewStatus = 'awaiting_feedback' | 'submitted' | 'changes_requested' | 'approved'
@@ -59,6 +60,7 @@ export interface PublicReviewState {
 
 export interface GuestIdentity {
 	id: string
+	kind?: 'guest' | 'user'
 	displayName: string
 	createdAt: number
 }
@@ -78,12 +80,14 @@ export interface CollaborationState {
 			selections: boolean
 		}
 	}
+	reset?: boolean
 	guest: GuestIdentity | null
 	likes: Record<number, { count: number; mine: boolean }>
 	colors: Record<number, string>
 	colorStates: Record<number, Record<string, number>>
 	comments: Array<{
 		id: number
+		threadId?: number
 		fileId: number
 		body: string
 		author: string
@@ -94,6 +98,6 @@ export interface CollaborationState {
 	}>
 	selections: Array<{ id: string; name: string; message: string; status: 'open' | 'completed'; fileIds: number[]; author: string; mine: boolean; updatedAt: number }>
 	ratings: Array<{ fileId: number; rating: number; pick: 'none' | 'pick' | 'reject'; updatedAt: number }>
-	events?: Array<{ id: number; type: string; payload: { fileId?: number; commentId?: number; selectionId?: string; deleted?: boolean }; createdAt: number }>
+	events?: Array<{ id: number; type: string; payload: { fileId?: number; commentId?: number; selectionId?: string; deleted?: boolean; reason?: string }; createdAt: number }>
 	cursor: number
 }

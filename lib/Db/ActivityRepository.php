@@ -12,12 +12,12 @@ final class ActivityRepository {
 	}
 
 	/** @param array<string, mixed> $payload */
-	public function insert(int $galleryId, ?int $guestId, string $type, array $payload, int $now): int {
+	public function insert(int $galleryId, ?int $guestId, string $type, array $payload, int $now, ?string $actorUid = null): int {
 		$qb = $this->db->getQueryBuilder();
 		$qb->insert('proofing_events')->values([
 			'gallery_id' => $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT),
 			'guest_id' => $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT),
-			'actor_uid' => $qb->createNamedParameter(null),
+			'actor_uid' => $qb->createNamedParameter($actorUid),
 			'event_type' => $qb->createNamedParameter($type),
 			'payload' => $qb->createNamedParameter(json_encode($payload, JSON_THROW_ON_ERROR)),
 			'created_at' => $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT),

@@ -35,6 +35,6 @@ describe('createDefaultGallerySettings', () => {
 
 		first.review.colorLabels[0] = 'Changed'
 
-		expect(second.review.colorLabels[0]).toBe('Favorit')
+		expect(second.review.colorLabels[0]).toBe('Favorite')
 	})
 })

@@ -57,9 +57,14 @@ and workflow labels even if those values exist in Files or an XMP sidecar.
 
 ## Visibility and retention
 
-Private proofing exposes a guest's feedback only to that guest and gallery
+Private proofing exposes an author's feedback only to that guest or account and gallery
 managers. Collaborative proofing deliberately shares feedback with other
 reviewers. The chosen policy should be communicated before inviting guests.
+
+Signed-in feedback records the existing Nextcloud UID. Historical guest
+authorship is not transferred on sign-in. Owner-originated selection events
+retain the owner's UID and a separate private account recipient where needed;
+neither identity field is added to the public event response.
 
 Guest identities expire after 30 days unless renewed by product behavior.
 Scheduled cleanup removes expired identities, abandoned chunks, stale derived
@@ -72,6 +77,9 @@ identity and contributions and can erase those records from the gallery. The
 mutation requires both the guest cookie and its independent nonce. Gallery
 exports omit session hashes, nonces, public-link and verification tokens,
 unsubscribe tokens, encrypted email ciphertext, and Live Push password hashes.
+Open collaboration viewers receive a privacy-neutral reset signal and
+re-hydrate their permitted state after such an erasure; the signal contains no
+deleted identity or contribution data.
 
 After archiving, an owner may schedule deletion of that gallery's app records
 with a 30-day cancellation period. The dry-run reports affected row categories

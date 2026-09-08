@@ -1,12 +1,12 @@
 import { t } from '@nextcloud/l10n'
 import type PhotoSwipe from 'photoswipe'
 import type { ComputedRef, Ref } from 'vue'
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 
 import type { NormalizedAnnotation } from '../domain/collaboration.ts'
 import type { GallerySettings } from '../domain/gallerySettings.ts'
 import { annotationAtImagePoint, annotationScreenPoint, moveAnnotationPoint } from '../domain/lightboxReview.ts'
-import type { ScreenPoint } from '../domain/lightboxReview.ts'
+import type { ScreenBounds, ScreenPoint } from '../domain/lightboxReview.ts'
 import type { CollaborationState, MediaItem } from '../publicTypes.ts'
 
 interface Options {
@@ -16,6 +16,8 @@ interface Options {
 	hasIdentity(): boolean
 	mutate(path: string, method: 'POST', body: unknown): Promise<boolean>
 	photoSwipe(): PhotoSwipe | null
+	zoomSurfaceImage?(): HTMLImageElement | null
+	markerScale?(): number
 	feedbackOpen: Ref<boolean>
 	metadataOpen: Ref<boolean>
 	shell: Ref<HTMLElement | null>
@@ -23,6 +25,7 @@ interface Options {
 
 interface AnnotationState {
 	host: Ref<HTMLElement | null>
+	imageBounds: Ref<ScreenBounds | null>
 	draft: Ref<NormalizedAnnotation | null>
 	anchor: Ref<ScreenPoint | null>
 	body: Ref<string>
@@ -34,40 +37,184 @@ interface AnnotationState {
 	returnFocus: Ref<HTMLElement | null>
 }
 
-function createOverlay(options: Options, state: AnnotationState) {
+function createOverlayGeometry(options: Options, state: AnnotationState) {
+	let geometryFrame: number | null = null
+	let contentWidth: number | null = null
+	let contentHeight: number | null = null
+	let markerScale: number | null = null
+
 	function activeImage(): HTMLImageElement | null {
-		const image = options.photoSwipe()?.currSlide?.content.element
+		const image = options.zoomSurfaceImage?.() ?? options.photoSwipe()?.currSlide?.content.element
 		return image instanceof HTMLImageElement ? image : null
 	}
 
-	function updateAnchor(bounds = activeImage()?.getBoundingClientRect() ?? null) {
+	function updateAnchor(bounds: ScreenBounds | null = activeImage()?.getBoundingClientRect() ?? null) {
 		state.anchor.value = state.draft.value && bounds ? annotationScreenPoint(state.draft.value, bounds) : null
 	}
 
-	function syncGeometry() {
-		const slide = options.photoSwipe()?.currSlide
+	function syncMarkerScale() {
+		const host = state.host.value
+		if (!host) return
+		const nextMarkerScale = options.markerScale?.() ?? 1
+		if (!Number.isFinite(nextMarkerScale) || nextMarkerScale <= 0 || nextMarkerScale === markerScale) return
+		markerScale = nextMarkerScale
+		host.style.setProperty('--annotation-marker-scale', String(nextMarkerScale))
+	}
+
+	function syncContentSize(width?: number, height?: number) {
 		const image = activeImage()
-		if (!image || !state.host.value || !slide) return
-		state.host.value.style.width = `${image.offsetWidth}px`
-		state.host.value.style.height = `${image.offsetHeight}px`
-		const transformScale = slide.currZoomLevel / (slide.currentResolution || slide.zoomLevels.initial || 1)
-		state.host.value.style.setProperty('--annotation-marker-scale', `${1 / Math.max(0.01, transformScale)}`)
-		updateAnchor(image.getBoundingClientRect())
+		const host = state.host.value
+		if (!image || !host) return
+		const nextWidth = width ?? image.offsetWidth
+		const nextHeight = height ?? image.offsetHeight
+		if (Number.isFinite(nextWidth) && nextWidth > 0 && nextWidth !== contentWidth) {
+			contentWidth = nextWidth
+			host.style.width = `${nextWidth}px`
+		}
+		if (Number.isFinite(nextHeight) && nextHeight > 0 && nextHeight !== contentHeight) {
+			contentHeight = nextHeight
+			host.style.height = `${nextHeight}px`
+		}
+		syncMarkerScale()
+	}
+
+	function needsScreenGeometry() {
+		return state.draft.value !== null || (state.selectedCommentId.value !== null && options.feedbackOpen.value)
+	}
+
+	function syncGeometry(force = false) {
+		if (!force && !needsScreenGeometry()) return
+		const image = activeImage()
+		if (!image || !state.host.value) return
+		const bounds = image.getBoundingClientRect()
+		if (bounds.width <= 0 || bounds.height <= 0) return
+		const nextBounds = { left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height }
+		const previousBounds = state.imageBounds.value
+		if (previousBounds?.left === nextBounds.left && previousBounds.top === nextBounds.top
+			&& previousBounds.width === nextBounds.width && previousBounds.height === nextBounds.height) return
+		state.imageBounds.value = nextBounds
+		updateAnchor(state.imageBounds.value)
+	}
+
+	function scheduleGeometry(force = false) {
+		if (!force && !needsScreenGeometry()) return
+		if (geometryFrame !== null) return
+		geometryFrame = window.requestAnimationFrame(() => {
+			geometryFrame = null
+			syncGeometry(force)
+		})
+	}
+
+	function cancelScheduledGeometry() {
+		if (geometryFrame === null) return
+		window.cancelAnimationFrame(geometryFrame)
+		geometryFrame = null
+	}
+
+	function resetContentSize() {
+		contentWidth = null
+		contentHeight = null
+		markerScale = null
+	}
+
+	return { activeImage, updateAnchor, syncMarkerScale, syncContentSize, syncGeometry, scheduleGeometry, cancelScheduledGeometry, resetContentSize }
+}
+
+function createOverlay(options: Options, state: AnnotationState) {
+	const geometry = createOverlayGeometry(options, state)
+	const { activeImage, syncContentSize, syncGeometry } = geometry
+	let pendingImage: HTMLImageElement | null = null
+	let pendingImageLoad: (() => void) | null = null
+	let imageLayoutObserver: ResizeObserver | null = null
+	let imageReadyFrame: number | null = null
+	let imageReadyGeneration = 0
+	let hostImage: HTMLImageElement | null = null
+
+	function cancelPendingHostSync() {
+		if (pendingImage && pendingImageLoad) pendingImage.removeEventListener('load', pendingImageLoad)
+		pendingImage = null
+		pendingImageLoad = null
+		imageLayoutObserver?.disconnect()
+		imageLayoutObserver = null
+		if (imageReadyFrame !== null) window.cancelAnimationFrame(imageReadyFrame)
+		imageReadyFrame = null
+		imageReadyGeneration += 1
+	}
+
+	/**
+	 * The slide shell can exist before the browser has decoded and painted its
+	 * image. Keep the immediate overlay attach, then perform one guarded,
+	 * post-decode refresh so a slow image cannot leave its already-fetched pins
+	 * waiting for a later slide change.
+	 *
+	 * @param image - Active image being decoded.
+	 * @param element - Annotation host attached to that image.
+	 */
+	function refreshAfterImageReady(image: HTMLImageElement, element: HTMLElement) {
+		const generation = ++imageReadyGeneration
+		const refresh = () => {
+			if (generation !== imageReadyGeneration) return
+			imageReadyFrame = window.requestAnimationFrame(() => {
+				imageReadyFrame = null
+				if (generation !== imageReadyGeneration || activeImage() !== image || state.host.value !== element) return
+				syncContentSize()
+				syncGeometry()
+			})
+		}
+		if (typeof image.decode === 'function') void image.decode().then(refresh, refresh)
+		else refresh()
+	}
+
+	function watchImage(image: HTMLImageElement, element: HTMLElement) {
+		if (typeof ResizeObserver !== 'undefined') {
+			imageLayoutObserver = new ResizeObserver(() => {
+				if (state.host.value !== element || activeImage() !== image) return
+				syncContentSize()
+				syncGeometry()
+			})
+			imageLayoutObserver.observe(image)
+		}
+		const syncWhenReady = () => {
+			if (state.host.value !== element || activeImage() !== image) return
+			pendingImage = null
+			pendingImageLoad = null
+			syncContentSize()
+			syncGeometry(true)
+		}
+		if (image.complete) syncWhenReady()
+		else {
+			pendingImage = image
+			pendingImageLoad = syncWhenReady
+			image.addEventListener('load', pendingImageLoad, { once: true })
+		}
+		refreshAfterImageReady(image, element)
 	}
 
 	function syncHost() {
+		const pswp = options.photoSwipe()
+		const image = activeImage()
+		const target = image?.parentElement ?? pswp?.currSlide?.container
+		if (image && image === hostImage && state.host.value?.parentElement === target) {
+			syncContentSize()
+			syncGeometry()
+			return
+		}
+		cancelPendingHostSync()
 		state.host.value?.remove()
 		state.host.value = null
-		const pswp = options.photoSwipe()
+		geometry.resetContentSize()
+		hostImage = null
 		if (!pswp?.currSlide || !options.activeItem.value?.mimeType.startsWith('image/')) return
+		if (!image) return
 		const element = document.createElement('div')
 		element.className = 'proofing-annotation-layer'
-		pswp.currSlide.container.append(element)
+		target!.append(element)
 		state.host.value = element
-		syncGeometry()
+		hostImage = image
+		watchImage(image, element)
 	}
 
-	return { activeImage, updateAnchor, syncGeometry, syncHost }
+	return { ...geometry, cancelPendingHostSync, syncHost }
 }
 
 function createDraftActions(options: Options, state: AnnotationState, overlay: ReturnType<typeof createOverlay>) {
@@ -120,7 +267,7 @@ function createDraftActions(options: Options, state: AnnotationState, overlay: R
 	): boolean {
 		event.preventDefault()
 		const target = event.originalEvent.target as HTMLElement | null
-		return canTargetImage && target?.classList.contains('pswp__img') === true && startAt({
+		return canTargetImage && (target?.classList.contains('pswp__img') === true || target?.classList.contains('proofing-zoom-image') === true) && startAt({
 			x: event.point.x ?? event.originalEvent.clientX,
 			y: event.point.y ?? event.originalEvent.clientY,
 		}, options.shell.value)
@@ -159,7 +306,7 @@ function createDraftActions(options: Options, state: AnnotationState, overlay: R
 
 export function usePublicLightboxAnnotations(options: Options) {
 	const state: AnnotationState = {
-		host: ref(null), draft: ref(null), anchor: ref(null), body: ref(''), error: ref(''),
+		host: ref(null), imageBounds: ref(null), draft: ref(null), anchor: ref(null), body: ref(''), error: ref(''),
 		composerOpen: ref(false), keyboardPositioning: ref(false), submitting: ref(false), selectedCommentId: ref(null),
 		returnFocus: ref(null),
 	}
@@ -169,11 +316,15 @@ export function usePublicLightboxAnnotations(options: Options) {
 		&& options.activeItem.value?.mimeType.startsWith('image/') === true)
 	const overlay = createOverlay(options, state)
 	const actions = createDraftActions(options, state, overlay)
+	watch(options.activeComments, comments => {
+		if (comments.length > 0) nextTick(() => overlay.syncHost())
+	})
 
 	function select(commentId: number) {
 		state.selectedCommentId.value = commentId
 		options.feedbackOpen.value = true
 		options.metadataOpen.value = false
+		overlay.syncGeometry(true)
 		window.setTimeout(() => options.shell.value
 			?.querySelector<HTMLElement>(`[data-comment-id="${commentId}"] button[data-point-link]`)
 			?.focus(), 250)
@@ -196,8 +347,11 @@ export function usePublicLightboxAnnotations(options: Options) {
 	}
 
 	function destroy() {
+		overlay.cancelScheduledGeometry()
+		overlay.cancelPendingHostSync()
 		state.host.value?.remove()
 		state.host.value = null
+		state.imageBounds.value = null
 		actions.cancel(false)
 	}
 

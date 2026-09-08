@@ -408,7 +408,7 @@ onBeforeUnmount(() => { if (pollTimer) clearTimeout(pollTimer) })
 							{{ t('proofing_gallery', 'Organize folder access') }}
 						</h3><p>{{ t('proofing_gallery', 'Give every folder one clear audience. The colors remain visible throughout delivery.') }}</p>
 					</header>
-					<div class="folder-role-legend" aria-label="Access summary">
+					<div class="folder-role-legend" :aria-label="t('proofing_gallery', 'Access summary')">
 						<span data-role="shared"><strong>{{ sharedFolders.length }}</strong>{{ t('proofing_gallery', 'Everyone') }}</span><span data-role="group"><strong>{{ groupFolders.length }}</strong>{{ t('proofing_gallery', 'Selected groups') }}</span><span data-role="private"><strong>{{ privateFolders.length }}</strong>{{ t('proofing_gallery', 'One client') }}</span><span data-role="ignored"><strong>{{ setup.folders.filter(folder => role(folder) === 'ignored').length }}</strong>{{ t('proofing_gallery', 'Not delivered') }}</span>
 					</div>
 					<div class="event-list-toolbar">

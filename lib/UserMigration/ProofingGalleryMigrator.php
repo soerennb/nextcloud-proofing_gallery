@@ -248,7 +248,8 @@ final class ProofingGalleryMigrator implements IMigrator, ISizeEstimationMigrato
 
 	/** @return array<string, mixed> */
 	private function object(mixed $value): array {
-		if (!is_array($value) || array_is_list($value)) throw new UserMigrationException('Invalid Proofing Gallery manifest object');
+		// Associative JSON decoding represents an empty object as an empty array.
+		if (!is_array($value) || ($value !== [] && array_is_list($value))) throw new UserMigrationException('Invalid Proofing Gallery manifest object');
 		return $value;
 	}
 

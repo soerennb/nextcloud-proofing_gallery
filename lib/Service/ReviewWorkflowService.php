@@ -6,12 +6,12 @@ namespace OCA\ProofingGallery\Service;
 
 use OCA\ProofingGallery\Db\CollaborationRepository;
 use OCA\ProofingGallery\Db\Gallery;
-use OCA\ProofingGallery\Db\Guest;
 use OCA\ProofingGallery\Db\PublicLink;
 use OCA\ProofingGallery\Db\PublicLinkMapper;
 use OCA\ProofingGallery\Db\ReviewRoundRepository;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCA\ProofingGallery\Exception\ReviewConflictException;
+use OCA\ProofingGallery\Domain\CollaborationActor;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Db\TTransactional;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -33,9 +33,9 @@ final class ReviewWorkflowService {
 	}
 
 	/** @return array<string, mixed> */
-	public function publicState(Gallery $gallery, PublicLink $link, ?Guest $guest = null): array {
+	public function publicState(Gallery $gallery, PublicLink $link, ?CollaborationActor $actor = null): array {
 		$rules = $this->rules($gallery, $link);
-		$selection = $guest === null ? null : $this->collaboration->latestSelectionForLink((int)$gallery->getId(), (int)$link->getId(), (int)$guest->getId());
+		$selection = $actor === null ? null : $this->collaboration->latestSelectionForLink((int)$gallery->getId(), (int)$link->getId(), $actor->guestId(), $actor->userUid());
 		return [
 			'enabled' => $link->getReviewEnabled(),
 			'dueDate' => $rules['dueDate'],
@@ -73,28 +73,28 @@ final class ReviewWorkflowService {
 	}
 
 	/** @return array<string, mixed> */
-	public function submit(Gallery $gallery, PublicLink $link, Guest $guest): array {
+	public function submit(Gallery $gallery, PublicLink $link, CollaborationActor $actor): array {
 		$this->assertLink($gallery, $link);
 		if (!$link->getReviewEnabled()) throw new \InvalidArgumentException('Review submission is disabled for this link');
 		$current = $this->ensure($link);
 		$rules = $this->rules($gallery, $link);
 		$now = $this->clock->getTime();
 		if ($rules['dueDate'] !== null && gmdate('Y-m-d', $now) > $rules['dueDate']) throw new \InvalidArgumentException('The selection deadline has passed');
-		$selection = $this->collaboration->latestSelectionForLink((int)$gallery->getId(), (int)$link->getId(), (int)$guest->getId());
+		$selection = $this->collaboration->latestSelectionForLink((int)$gallery->getId(), (int)$link->getId(), $actor->guestId(), $actor->userUid());
 		if ($selection === null || $selection['status'] !== 'open') throw new \InvalidArgumentException('Save a selection draft before submitting');
 		$count = (int)$selection['item_count'];
 		if ($count < $rules['minimum']) throw new \InvalidArgumentException('Select at least ' . $rules['minimum'] . ' photos before submitting');
 		if ($rules['maximum'] > 0 && $count > $rules['maximum']) throw new \InvalidArgumentException('Select no more than ' . $rules['maximum'] . ' photos before submitting');
-		$this->atomic(function () use ($selection, $link, $current, $guest, $now): void {
+		$this->atomic(function () use ($selection, $link, $current, $actor, $now): void {
 			if (!$this->collaboration->submitSelection((int)$selection['id'], (int)$link->getId(), $now)
-				|| !$this->rounds->submit((int)$current['id'], (int)$guest->getId(), $now)) {
+				|| !$this->rounds->submit((int)$current['id'], $actor->guestId(), $actor->userUid(), $now)) {
 				throw new ReviewConflictException('This review round is no longer open');
 			}
 		}, $this->db);
 		$this->collaboration->markResponseReceived((int)$gallery->getId(), $now);
-		$this->activity->record($gallery, $guest, 'review.submitted', ['publicLinkId' => (int)$link->getId(), 'round' => (int)$current['round_number']]);
+		$this->activity->recordActor($gallery, $actor, 'review.submitted', ['publicLinkId' => (int)$link->getId(), 'round' => (int)$current['round_number']]);
 		$this->integrations->emit('review.submitted', (int)$gallery->getId(), ['publicLinkId' => (int)$link->getId(), 'round' => (int)$current['round_number']]);
-		return $this->publicState($gallery, $link, $guest);
+		return $this->publicState($gallery, $link, $actor);
 	}
 
 	/** @return array<string, mixed> */

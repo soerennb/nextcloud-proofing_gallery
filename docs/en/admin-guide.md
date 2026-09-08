@@ -52,6 +52,19 @@ the server, including existing galleries where a capability must fail closed.
 Native Nextcloud sharing, password, expiration, and upload restrictions remain
 authoritative; this app never weakens them.
 
+Public reviewers may use guest identities or existing signed-in Nextcloud
+accounts. Account UIDs establish authorship, not additional permissions. Earlier
+guest contributions are not reassigned by matching names or email addresses.
+Private feedback stays private to its author and authorized gallery managers;
+owner changes to an account's selection are delivered only to the permitted
+review audience. Guest uploads remain a separate guest-only workflow.
+
+The account-attribution migration retains the highest-ID duplicate account
+feedback row before adding uniqueness constraints; guest comments and pins are
+not reassigned. A subsequent migration adds a nullable event recipient UID so
+owner attribution remains distinct from private account delivery. Complete the
+normal database upgrade before serving the new application code.
+
 Review public-link, mail, and group policy before onboarding users. Keep guest
 downloads and uploads disabled unless required. Set limits according to PHP,
 proxy, storage, and worker capacity rather than relying on browser validation.

@@ -253,9 +253,9 @@ jobs:
       matrix:
         include:
           - suite: ui
-            specs: tests/e2e/collection.spec.ts tests/e2e/event.spec.ts tests/e2e/gallery.spec.ts
+            specs: tests/e2e/collection.spec.ts tests/e2e/event.spec.ts tests/e2e/gallery.spec.ts tests/e2e/review-viewer.spec.ts
           - suite: api
-            specs: tests/e2e/ecosystem.spec.ts tests/e2e/regression.spec.ts tests/e2e/security.spec.ts
+            specs: tests/e2e/ecosystem.spec.ts tests/e2e/regression.spec.ts tests/e2e/security.spec.ts tests/e2e/review-identity.spec.ts
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -272,11 +272,11 @@ jobs:
           key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-playwright-
-      - name: Install Chromium and runner dependencies
+      - name: Install browsers and runner dependencies
         run: |
-          if ! timeout --kill-after=30s 5m npx playwright install --with-deps chromium; then
+          if ! timeout --kill-after=30s 5m npx playwright install --with-deps chromium firefox webkit; then
             echo "::warning::System dependency installation stalled; using runner-provided browser libraries."
-            npx playwright install chromium
+            npx playwright install chromium firefox webkit
           fi
       - run: make dev-up
       - run: make occ CMD="app:list --enabled --output=json" | grep -q '"proofing_gallery"'
@@ -287,6 +287,7 @@ jobs:
         run: |
           ./scripts/test-context-agent.sh
           ./scripts/test-user-migration.sh
+          docker compose exec -T --user www-data nextcloud php /var/www/html/custom_apps/proofing_gallery/tests/smoke/CollaborationSelectionSync.php
       - name: Verify protected public routes
         if: matrix.suite == 'api'
         env:

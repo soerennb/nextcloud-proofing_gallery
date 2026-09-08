@@ -1,44 +1,24 @@
 <script setup lang="ts">
 /* eslint-disable vue/no-deprecated-slot-attribute -- Ionic Vue maps Web Component slots through the slot attribute. */
-import {
-	IonActionSheet,
-	IonButton,
-	IonButtons,
-	IonContent,
-	IonHeader,
-	IonIcon,
-	IonModal,
-	IonTitle,
-	IonToolbar,
-} from '@ionic/vue'
-import { n, t } from '@nextcloud/l10n'
-import {
-	chevronBackOutline,
-	chevronForwardOutline,
-	closeOutline,
-	contractOutline,
-	downloadOutline,
-	expandOutline,
-	gridOutline,
-	helpCircleOutline,
-	pauseOutline,
-	playOutline,
-} from 'ionicons/icons'
+import { IonActionSheet, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar } from '@ionic/vue'
+import { t } from '@nextcloud/l10n'
+import { chevronBackOutline, chevronForwardOutline, closeOutline, contractOutline, downloadOutline, expandOutline, gridOutline, heart, heartOutline, helpCircleOutline, pauseOutline, playOutline } from 'ionicons/icons'
 import { useReducedMotion } from 'motion-v'
 import type PhotoSwipe from 'photoswipe'
 import type { SlideData } from 'photoswipe'
 import 'photoswipe/style.css'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import CloseIcon from 'vue-material-design-icons/Close.vue'
-import StarIcon from 'vue-material-design-icons/Star.vue'
-import StarOutlineIcon from 'vue-material-design-icons/StarOutline.vue'
 
 import { usePublicLightboxAnnotations } from '../composables/usePublicLightboxAnnotations.ts'
+import { usePublicLightboxZoomSurface } from '../composables/usePublicLightboxZoomSurface.ts'
 import type { GallerySettings } from '../domain/gallerySettings.ts'
-import { annotationNumbersByComment, shouldAutoHideLightboxChrome } from '../domain/lightboxReview.ts'
+import { annotationNumbersByComment, annotationScreenPoint, annotationThreadPanelLayout, commentsForAnnotationThread, findSelectedAnnotationComment, hasReadyPublicMetadata, resolvedFilmstripPlacement, shouldAutoHideLightboxChrome } from '../domain/lightboxReview.ts'
 import type { CollaborationState, MediaItem } from '../publicTypes.ts'
 import PublicLightboxAnnotations from './PublicLightboxAnnotations.vue'
+import PublicLightboxComments from './PublicLightboxComments.vue'
 import PublicLightboxFilmstrip from './PublicLightboxFilmstrip.vue'
+import PublicLightboxFeedbackTabs from './PublicLightboxFeedbackTabs.vue'
+import PublicLightboxGeneralFeedback from './PublicLightboxGeneralFeedback.vue'
 import PublicLightboxHeader from './PublicLightboxHeader.vue'
 import PublicLightboxMetadata from './PublicLightboxMetadata.vue'
 
@@ -60,9 +40,12 @@ const emit = defineEmits<{ close: []; 'active-change': [item: MediaItem] }>()
 
 const activeIndex = ref(props.initialIndex)
 const activeItem = computed(() => props.mediaItems[activeIndex.value] ?? null)
-const activeComments = computed(() => props.collaboration?.comments.filter(comment => comment.fileId === activeItem.value?.id && comment.deletedAt === null) ?? [])
+const activeComments = computed(() => {
+	const comments = props.collaboration?.comments.filter(comment => comment.fileId === activeItem.value?.id) ?? []
+	const liveThreads = new Set(comments.filter(comment => comment.deletedAt === null).map(comment => comment.threadId ?? comment.id))
+	return comments.filter(comment => comment.deletedAt === null || (comment.id === comment.threadId && liveThreads.has(comment.id)))
+})
 const canDownloadIndividual = computed(() => ['individual', 'all'].includes(props.settings.delivery.downloadScope))
-const enabledColorLabels = computed(() => props.settings.review.colorLabels.filter((_, index) => props.settings.review.colorEnabled[index]))
 const activeGuestRating = computed(() => props.collaboration?.ratings?.find(value => value.fileId === activeItem.value?.id)
 	?? { rating: 0, pick: 'none' as const })
 
@@ -71,20 +54,15 @@ const slideshowSuspended = ref(false), slideshowCycle = ref(0)
 const touchHint = ref(false), chromeVisible = ref(true), fullscreen = ref(Boolean(document.fullscreenElement))
 const filmstripSessionKey = `proofing-gallery-filmstrip:${window.location.pathname}`
 const guestFilmstripHidden = ref(sessionStorage.getItem(filmstripSessionKey) === 'hidden')
-const viewportWidth = ref(window.innerWidth), viewportHeight = ref(window.innerHeight)
-const commentBody = ref('')
-const editingCommentId = ref<number | null>(null)
-const editingCommentBody = ref('')
+const viewportWidth = ref(window.innerWidth), viewportHeight = ref(window.visualViewport?.height ?? window.innerHeight)
+const viewportTop = ref(window.visualViewport?.offsetTop ?? 0), viewportBottom = ref(0)
+const commentBody = ref(''), annotationReplyBody = ref('')
+const feedbackTab = ref<'comments' | 'pins'>('comments')
+const editingCommentId = ref<number | null>(null), editingCommentBody = ref('')
 const guestExportFields = ref(['filename', 'rating', 'pick'])
 const reduceMotion = useReducedMotion()
 const motionPreset = computed(() => reduceMotion.value ? 'off' : props.settings.presentation?.motionPreset ?? 'expressive')
-const configuredFilmstripPlacement = computed<'side' | 'bottom' | 'hidden'>(() => {
-	const configured = props.settings.presentation?.lightboxFilmstripPlacement ?? 'auto'
-	if (configured === 'hidden') return 'hidden'
-	if (configured === 'side') return viewportWidth.value > 900 ? 'side' : 'bottom'
-	if (configured === 'bottom') return 'bottom'
-	return viewportWidth.value >= 1180 ? 'side' : 'bottom'
-})
+const configuredFilmstripPlacement = computed(() => resolvedFilmstripPlacement(props.settings.presentation?.lightboxFilmstripPlacement ?? 'auto', viewportWidth.value))
 const filmstripAllowed = computed(() => props.mediaItems.length > 1 && configuredFilmstripPlacement.value !== 'hidden')
 const filmstripPlacement = computed<'side' | 'bottom' | 'hidden'>(() => guestFilmstripHidden.value
 	? 'hidden'
@@ -94,15 +72,10 @@ const autoHideChrome = computed(() => shouldAutoHideLightboxChrome(
 	props.settings.presentation?.lightboxChromeBehavior ?? 'autoHide',
 ))
 const chromeAutoHideDelay = computed(() => viewportWidth.value <= 760 ? 4500 : 2200)
-const loop = computed(() => props.mediaItems.length > 2)
-const canStepPrevious = computed(() => loop.value || activeIndex.value > 0)
-const canStepNext = computed(() => loop.value || activeIndex.value < props.mediaItems.length - 1)
+const loop = computed(() => props.mediaItems.length > 2), canStepPrevious = computed(() => loop.value || activeIndex.value > 0), canStepNext = computed(() => loop.value || activeIndex.value < props.mediaItems.length - 1)
 const slideshowDuration = computed(() => Math.max(3, Math.min(15, props.settings.presentation?.slideshowInterval ?? 5)) * 1000)
 const actionSheetClass = computed(() => ['proofing-public-overlay', 'lightbox-action-sheet'])
-const hasPublicMetadata = computed(() => {
-	const metadata = activeItem.value?.metadata
-	return metadata?.state === 'ready' && Object.keys(metadata).some(key => key !== 'state')
-})
+const hasPublicMetadata = computed(() => hasReadyPublicMetadata(activeItem.value?.metadata))
 const actionSheetButtons = computed(() => [
 	...(canDownloadIndividual.value
 		? [{
@@ -140,6 +113,8 @@ const actionSheetButtons = computed(() => [
 ])
 
 let pswp: PhotoSwipe | null = null
+let unbindZoomSurface: (() => void) | null = null
+let zoomSurface: ReturnType<typeof usePublicLightboxZoomSurface> | null = null
 let slideshowTimer: number | undefined, hintTimer: number | undefined, chromeTimer: number | undefined
 let lastTouchPointerUpAt = 0, lastChromeToggleAt = 0
 let previousBodyOverflow = ''
@@ -153,12 +128,19 @@ const annotations = usePublicLightboxAnnotations({
 	hasIdentity: () => props.collaboration?.guest !== null,
 	mutate: props.mutate,
 	photoSwipe: () => pswp,
+	zoomSurfaceImage: () => zoomSurface?.activeImage() ?? null,
+	markerScale: () => zoomSurface?.markerScale() ?? 1,
 	feedbackOpen,
 	metadataOpen,
 	shell,
 })
+zoomSurface = usePublicLightboxZoomSurface(() => pswp, () => {
+	annotations.syncMarkerScale()
+	annotations.scheduleGeometry(false)
+}, () => annotations.syncHost())
 const {
 	host: annotationHost,
+	imageBounds: annotationImageBounds,
 	draft: annotationDraft,
 	anchor: annotationAnchor,
 	body: annotationBody,
@@ -171,6 +153,32 @@ const {
 } = annotations
 
 const annotationNumbers = computed(() => annotationNumbersByComment(activeComments.value))
+const selectedAnnotationComment = computed(() => findSelectedAnnotationComment(activeComments.value, selectedCommentId.value))
+const visibleComments = computed(() => commentsForAnnotationThread(activeComments.value, selectedCommentId.value))
+const generalComments = computed(() => activeComments.value.filter(comment => comment.annotations.length === 0))
+const selectedAnnotationPoint = computed(() => {
+	const annotation = selectedAnnotationComment.value?.annotations[0]
+	return feedbackOpen.value && annotation && annotationImageBounds.value
+		? annotationScreenPoint(annotation, annotationImageBounds.value)
+		: null
+})
+const feedbackPanelLayout = computed(() => annotationThreadPanelLayout({
+	viewportWidth: viewportWidth.value,
+	viewportHeight: viewportHeight.value,
+	annotationPoint: selectedAnnotationPoint.value,
+	filmstripSide: filmstripPlacement.value === 'side',
+	filmstripBottom: filmstripPlacement.value === 'bottom',
+}))
+const feedbackPanelClass = computed(() => `proofing-public-overlay lightbox-sheet lightbox-feedback-sheet lightbox-feedback-sheet--${feedbackPanelLayout.value.placement}`)
+const feedbackPanelStyle = computed(() => ({
+	'--feedback-panel-left': `${feedbackPanelLayout.value.modalLeft}px`,
+	'--feedback-panel-top': `${feedbackPanelLayout.value.modalTop + viewportTop.value}px`,
+	'--feedback-panel-height': `${feedbackPanelLayout.value.modalHeight}px`,
+	'--feedback-panel-bottom': `${viewportBottom.value}px`,
+}))
+
+function showAllFeedback() { selectedCommentId.value = null; feedbackTab.value = 'comments' }
+function openFeedback() { showAllFeedback(); feedbackOpen.value = true; metadataOpen.value = false }
 
 function bindPhotoSwipeEvents() {
 	if (!pswp) return
@@ -184,7 +192,7 @@ function bindPhotoSwipeEvents() {
 		selectedCommentId.value = null
 		if (slideshow.value) scheduleSlideshow()
 		wakeChrome()
-		nextTick(annotations.syncHost)
+		nextTick(() => { zoomSurface?.mount(); annotations.syncHost() })
 	})
 	pswp.on('pointerMove', ({ originalEvent }) => {
 		if (originalEvent.pointerType === 'mouse' || originalEvent.pointerType === 'pen') wakeChrome()
@@ -193,9 +201,11 @@ function bindPhotoSwipeEvents() {
 		if (originalEvent.pointerType === 'touch') lastTouchPointerUpAt = Date.now()
 	})
 	pswp.on('tapAction', event => {
+		if (zoomSurface?.suppressTap()) { event.preventDefault(); return }
 		if (!annotations.handleAction(event, true) && props.settings.mode === 'presentation') toggleChrome()
 	})
 	pswp.on('imageClickAction', event => {
+		if (zoomSurface?.suppressTap()) { event.preventDefault(); return }
 		if (Date.now() - lastTouchPointerUpAt >= 700
 			&& !annotations.handleAction(event, true)
 			&& props.settings.mode === 'presentation') toggleChrome()
@@ -206,14 +216,16 @@ function bindPhotoSwipeEvents() {
 			if (props.settings.mode === 'presentation') toggleChrome()
 		}
 	})
-	pswp.on('imageSizeChange', ({ slide }) => { if (slide === pswp?.currSlide) annotations.syncGeometry() })
-	pswp.on('zoomPanUpdate', ({ slide }) => { if (slide === pswp?.currSlide) annotations.syncGeometry() })
-	pswp.on('resize', annotations.syncGeometry)
+	pswp.on('afterSetContent', ({ slide }) => {
+		if (slide === pswp?.currSlide) nextTick(() => { zoomSurface?.mount(); annotations.syncHost() })
+	})
+	pswp.on('resize', () => { zoomSurface?.refresh(); annotations.scheduleGeometry(true) })
 	pswp.on('afterInit', () => {
 		pswp?.element?.removeAttribute('role')
 		pswp?.element?.removeAttribute('aria-modal')
 		pswp?.element?.removeAttribute('aria-label')
-		nextTick(annotations.syncHost)
+		unbindZoomSurface = zoomSurface?.bind() ?? (() => {})
+		nextTick(() => { zoomSurface?.mount(); annotations.syncHost() })
 		if (window.matchMedia('(pointer: coarse)').matches
 			&& localStorage.getItem('proofing-gallery-touch-hint') !== 'seen') {
 			touchHint.value = true
@@ -222,6 +234,8 @@ function bindPhotoSwipeEvents() {
 		}
 	})
 	pswp.on('destroy', () => {
+		unbindZoomSurface?.()
+		unbindZoomSurface = null
 		pswp = null
 		if (!unmounting) emit('close')
 	})
@@ -231,6 +245,8 @@ function bindPhotoSwipeEvents() {
 }
 
 onMounted(async () => {
+	window.visualViewport?.addEventListener('resize', updateViewport)
+	window.visualViewport?.addEventListener('scroll', updateViewport)
 	previouslyFocused = document.activeElement as HTMLElement | null
 	previousBodyOverflow = document.body.style.overflow
 	document.body.style.overflow = 'hidden'
@@ -247,14 +263,14 @@ onMounted(async () => {
 		appendToEl: shell.value,
 		bgOpacity: 0.97,
 		loop: loop.value,
-		wheelToZoom: true,
+		wheelToZoom: false,
 		pinchToClose: false,
 		closeOnVerticalDrag: true,
 		clickToCloseNonZoomable: false,
 		imageClickAction: false,
 		bgClickAction: false,
 		tapAction: false,
-		doubleTapAction: 'zoom',
+		doubleTapAction: false,
 		showHideAnimationType: motionPreset.value === 'off' ? 'none' : 'zoom',
 		showAnimationDuration: motionPreset.value === 'off' ? 0 : motionPreset.value === 'subtle' ? 180 : 360,
 		hideAnimationDuration: motionPreset.value === 'off' ? 0 : motionPreset.value === 'subtle' ? 150 : 260,
@@ -273,7 +289,9 @@ onMounted(async () => {
 			top: 64,
 			bottom: window.innerWidth <= 760 ? (props.mediaItems.length > 1 && filmstripPlacement.value === 'bottom' ? 154 : 70) : props.mediaItems.length > 1 && filmstripPlacement.value === 'bottom' ? 108 : 18,
 			left: window.innerWidth <= 640 ? 8 : 72,
-			right: window.innerWidth > 760 && (feedbackOpen.value || metadataOpen.value) ? 392 : filmstripPlacement.value === 'side' ? 104 : window.innerWidth <= 640 ? 8 : 72,
+			right: window.innerWidth > 760 && metadataOpen.value
+				? 392
+				: filmstripPlacement.value === 'side' ? 104 : window.innerWidth <= 640 ? 8 : 72,
 		}),
 	})
 	bindPhotoSwipeEvents()
@@ -283,20 +301,23 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+	window.visualViewport?.removeEventListener('resize', updateViewport)
+	window.visualViewport?.removeEventListener('scroll', updateViewport)
 	unmounting = true
 	window.removeEventListener('keydown', onKeydown, true); window.removeEventListener('resize', updateViewport)
 	document.removeEventListener('visibilitychange', onSlideshowVisibility); document.removeEventListener('fullscreenchange', onFullscreenChange)
 	window.clearTimeout(slideshowTimer); window.clearTimeout(hintTimer); window.clearTimeout(chromeTimer)
-	annotations.destroy(); releaseWakeLock(); pswp?.destroy()
+	annotations.destroy(); releaseWakeLock(); unbindZoomSurface?.(); unbindZoomSurface = null; pswp?.destroy()
 	pswp = null
 	document.body.style.overflow = previousBodyOverflow
 	previouslyFocused?.focus()
 })
 
-watch(feedbackOpen, () => { wakeChrome(); nextTick(() => pswp?.updateSize(true)) })
+watch(feedbackOpen, wakeChrome)
 watch(metadataOpen, () => { wakeChrome(); nextTick(() => pswp?.updateSize(true)) })
 watch(shortcutsOpen, wakeChrome)
 watch(actionMenuOpen, wakeChrome)
+watch(selectedCommentId, () => { annotationReplyBody.value = '' })
 watch(autoHideChrome, value => {
 	if (value) wakeChrome()
 	else {
@@ -337,16 +358,11 @@ function toSlideData(item: MediaItem, index: number): SlideData {
 		: 3 / 2
 	const width = ratio >= 1 ? 2400 : Math.max(1, Math.round(2400 * ratio))
 	const height = ratio >= 1 ? Math.max(1, Math.round(2400 / ratio)) : 2400
+	const src = escapeHtml(props.previewUrl(item, 2400, 2400, 'fit'))
 	return {
-		src: props.previewUrl(item, 2400, 2400, 'fit'),
-		srcset: [960, 1600, 2400]
-			.map(size => `${props.previewUrl(item, size, size, 'fit')} ${size}w`)
-			.join(', '),
+		html: `<div class="proofing-zoom-surface"><img class="pswp__img proofing-zoom-image" src="${src}" alt="${escapeHtml(item.name)}"></div>`,
 		width,
 		height,
-		alt: item.name,
-		msrc: props.previewUrl(item, 320, 320, 'fit'),
-		thumbCropped: true,
 		element: index === props.initialIndex ? props.initialElement ?? undefined : undefined,
 	}
 }
@@ -361,7 +377,9 @@ function downloadActive() { if (activeItem.value) window.location.assign(props.d
 
 function updateViewport() {
 	viewportWidth.value = window.innerWidth
-	viewportHeight.value = window.innerHeight
+	viewportHeight.value = window.visualViewport?.height ?? window.innerHeight
+	viewportTop.value = window.visualViewport?.offsetTop ?? 0
+	viewportBottom.value = Math.max(0, window.innerHeight - viewportHeight.value - viewportTop.value)
 	annotations.updateAnchor()
 }
 
@@ -405,14 +423,7 @@ function goTo(index: number) {
 }
 
 function zoom(direction: number) {
-	const slide = pswp?.currSlide
-	if (!slide?.isZoomable()) return
-	const increment = Math.max(0.25, slide.zoomLevels.initial * 0.55)
-	const target = Math.min(
-		slide.zoomLevels.max,
-		Math.max(slide.zoomLevels.initial, slide.currZoomLevel + increment * direction),
-	)
-	slide.zoomTo(target, undefined, reduceMotion.value ? 0 : 180)
+	zoomSurface?.zoom(direction)
 }
 
 function setSlideshow(enabled: boolean) {
@@ -510,7 +521,7 @@ async function toggleLike() {
 	await props.mutate(`media/${item.id}/like`, 'POST')
 }
 
-async function openFeedbackAndLike() { feedbackOpen.value = true; await toggleLike() }
+async function openFeedbackAndLike() { openFeedback(); await toggleLike() }
 
 async function setColor(value: string) {
 	const item = activeItem.value
@@ -532,6 +543,18 @@ async function addComment() {
 		annotation: null,
 	})) {
 		commentBody.value = ''
+	}
+}
+
+async function addAnnotationReply() {
+	const item = activeItem.value
+	const comment = selectedAnnotationComment.value
+	if (!item || !comment || !annotationReplyBody.value.trim()) return
+	if (await props.mutate(`media/${item.id}/comments`, 'POST', {
+		body: annotationReplyBody.value,
+		parentId: comment.threadId ?? comment.id,
+	})) {
+		annotationReplyBody.value = ''
 	}
 }
 
@@ -574,7 +597,7 @@ async function saveEditedComment(commentId: number) {
 			@close="close"
 			@zoom="zoom"
 			@like="openFeedbackAndLike"
-			@feedback="feedbackOpen = true; metadataOpen = false"
+			@feedback="openFeedback"
 			@info="metadataOpen = true; feedbackOpen = false"
 			@more="actionMenuOpen = true" />
 		<div v-if="slideshow && !slideshowSuspended"
@@ -648,7 +671,10 @@ async function saveEditedComment(commentId: number) {
 			@cancel="annotations.cancel"
 			@select="annotations.select" />
 
-		<IonModal :is-open="shortcutsOpen" css-class="proofing-public-overlay lightbox-dialog lightbox-shortcuts-dialog" @did-dismiss="shortcutsOpen = false">
+		<IonModal :is-open="shortcutsOpen"
+			:show-backdrop="false"
+			css-class="proofing-public-overlay lightbox-dialog lightbox-shortcuts-dialog"
+			@did-dismiss="shortcutsOpen = false">
 			<IonHeader>
 				<IonToolbar>
 					<IonTitle>{{ t('proofing_gallery', 'Keyboard shortcuts') }}</IonTitle>
@@ -662,19 +688,36 @@ async function saveEditedComment(commentId: number) {
 			<IonContent class="ion-padding lightbox-shortcuts">
 				<dl>
 					<div><dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>{{ t('proofing_gallery', 'Previous or next photograph') }}</dd></div>
-					<div><dt><kbd>Space</kbd></dt><dd>{{ t('proofing_gallery', 'Start or pause slideshow') }}</dd></div>
-					<div><dt><kbd>Esc</kbd></dt><dd>{{ t('proofing_gallery', 'Close panel or lightbox') }}</dd></div>
+					<div><dt><kbd>{{ t('proofing_gallery', 'Space') }}</kbd></dt><dd>{{ t('proofing_gallery', 'Start or pause slideshow') }}</dd></div>
+					<div><dt><kbd>{{ t('proofing_gallery', 'Esc') }}</kbd></dt><dd>{{ t('proofing_gallery', 'Close panel or lightbox') }}</dd></div>
 					<div><dt><kbd>?</kbd></dt><dd>{{ t('proofing_gallery', 'Show this help') }}</dd></div>
 				</dl>
 				<small>{{ t('proofing_gallery', 'Slideshow interval: {seconds} seconds', { seconds: settings.presentation?.slideshowInterval ?? 5 }) }}</small>
 			</IonContent>
 		</IonModal>
 		<PublicLightboxMetadata :open="metadataOpen" :item="activeItem" @close="metadataOpen = false" />
-		<IonModal :is-open="settings.mode === 'collaboration' && feedbackOpen" css-class="proofing-public-overlay lightbox-sheet lightbox-feedback-sheet" @did-dismiss="feedbackOpen = false">
+		<IonModal :is-open="settings.mode === 'collaboration' && feedbackOpen"
+			:animated="false"
+			:show-backdrop="false"
+			:css-class="feedbackPanelClass"
+			:style="feedbackPanelStyle"
+			@did-dismiss="feedbackOpen = false">
 			<IonHeader>
 				<IonToolbar>
-					<IonTitle>{{ t('proofing_gallery', 'Feedback') }}</IonTitle>
+					<IonTitle>
+						{{ selectedAnnotationComment
+							? t('proofing_gallery', 'Point comment {number}', { number: annotationNumbers.get(selectedAnnotationComment.id)?.[0] ?? 0 })
+							: t('proofing_gallery', 'Feedback') }}
+					</IonTitle>
 					<IonButtons slot="end">
+						<IonButton v-if="!selectedAnnotationComment && settings.review.likes"
+							:aria-label="t('proofing_gallery', 'Like')"
+							:aria-pressed="collaboration?.likes[activeItem.id]?.mine ?? false"
+							@click="toggleLike">
+							<IonIcon slot="icon-only"
+								:icon="collaboration?.likes[activeItem.id]?.mine ? heart : heartOutline"
+								aria-hidden="true" />
+						</IonButton>
 						<IonButton :aria-label="t('proofing_gallery', 'Close feedback')" @click="feedbackOpen = false">
 							<IonIcon slot="icon-only" :icon="closeOutline" aria-hidden="true" />
 						</IonButton>
@@ -683,119 +726,70 @@ async function saveEditedComment(commentId: number) {
 			</IonHeader>
 			<IonContent class="lightbox-feedback">
 				<div class="lightbox-feedback__body ion-padding">
-					<p class="lightbox-sheet__filename">
+					<p v-if="!selectedAnnotationComment" class="lightbox-sheet__filename lightbox-sheet__filename--feedback">
 						{{ activeItem.name }}
 					</p>
-					<div class="feedback-actions">
-						<button v-if="settings.review?.likes !== false" type="button" @click="toggleLike">
-							{{ collaboration?.likes[activeItem.id]?.mine ? '♥' : '♡' }} {{ t('proofing_gallery', 'Like') }} {{ collaboration?.likes[activeItem.id]?.count || '' }}
-						</button>
-						<label v-if="settings.review?.colors !== false">
-							<span>{{ t('proofing_gallery', 'Color state') }}</span>
-							<select name="colorState" :value="collaboration?.colors[activeItem.id] || ''" @change="setColor(($event.target as HTMLSelectElement).value)">
-								<option value="">{{ t('proofing_gallery', 'No state') }}</option>
-								<option v-for="label in enabledColorLabels" :key="label" :value="label">{{ label }}</option>
-							</select>
-						</label>
-					</div>
-					<div v-if="settings.review?.ratings || settings.review?.pick" class="guest-rating" aria-label="Private rating">
-						<div v-if="settings.review?.ratings" class="guest-rating__stars">
-							<span>{{ t('proofing_gallery', 'Your private rating') }}</span>
-							<button v-for="rating in 6"
-								:key="rating - 1"
-								type="button"
-								:aria-pressed="activeGuestRating.rating === rating - 1"
-								:aria-label="n('proofing_gallery', '%n star', '%n stars', rating - 1)"
-								@click="setGuestRating(rating - 1)">
-								<CloseIcon v-if="rating === 1" :size="16" />
-								<StarIcon v-else-if="activeGuestRating.rating >= rating - 1" class="guest-star--filled" :size="18" />
-								<StarOutlineIcon v-else :size="18" />
-							</button>
-						</div>
-						<div v-if="settings.review?.pick" class="guest-rating__decision">
-							<button type="button" :aria-pressed="activeGuestRating.pick === 'pick'" @click="setGuestRating(activeGuestRating.rating, activeGuestRating.pick === 'pick' ? 'none' : 'pick')">
-								{{ t('proofing_gallery', 'Pick') }}
-							</button>
-							<button type="button" :aria-pressed="activeGuestRating.pick === 'reject'" @click="setGuestRating(activeGuestRating.rating, activeGuestRating.pick === 'reject' ? 'none' : 'reject')">
-								{{ t('proofing_gallery', 'Reject') }}
-							</button>
-						</div>
-						<small>{{ t('proofing_gallery', 'Only you and the gallery owner can see this rating.') }}</small>
-					</div>
-					<form v-if="settings.review?.comments !== false" class="comment-form" @submit.prevent="addComment">
-						<button v-if="canAnnotate" type="button" @click="annotations.startKeyboard">
-							{{ t('proofing_gallery', 'Add point comment') }}
-						</button>
-						<small v-if="canAnnotate">{{ t('proofing_gallery', 'Click the image anywhere to add a point comment.') }}</small>
-						<textarea v-model="commentBody"
-							name="comment"
-							required
-							maxlength="5000"
-							:placeholder="t('proofing_gallery', 'Write a comment…')"
-							:aria-label="t('proofing_gallery', 'Comment')" />
-						<button type="submit">
-							{{ t('proofing_gallery', 'Comment') }}
-						</button>
-					</form>
-					<ul v-if="settings.review?.comments !== false" class="comment-list">
-						<li v-for="comment in activeComments"
-							:id="`point-comment-${comment.id}`"
-							:key="comment.id"
-							:data-comment-id="comment.id"
-							:class="{ 'comment-list__item--selected': selectedCommentId === comment.id }">
-							<form v-if="editingCommentId === comment.id" class="comment-edit" @submit.prevent="saveEditedComment(comment.id)">
-								<textarea v-model="editingCommentBody" required maxlength="5000" />
-								<button type="submit">
-									{{ t('proofing_gallery', 'Save') }}
-								</button>
-								<button type="button" @click="editingCommentId = null">
-									{{ t('proofing_gallery', 'Cancel') }}
-								</button>
-							</form>
-							<p v-else>
-								{{ comment.body }}
-							</p>
-							<button v-if="annotationNumbers.get(comment.id)?.[0]"
-								type="button"
-								data-point-link
-								:aria-pressed="selectedCommentId === comment.id"
-								@click="selectedCommentId = comment.id">
-								{{ t('proofing_gallery', 'Point comment {number}', { number: annotationNumbers.get(comment.id)?.[0] ?? 0 }) }}
-							</button>
-							<small>{{ comment.author }} · {{ new Date(comment.createdAt * 1000).toLocaleString() }}</small>
-							<div v-if="comment.mine && editingCommentId !== comment.id" class="comment-actions">
-								<button type="button" @click="editComment(comment)">
-									{{ t('proofing_gallery', 'Edit') }}
-								</button>
-								<button type="button" @click="mutate(`comments/${comment.id}`, 'DELETE')">
-									{{ t('proofing_gallery', 'Delete') }}
-								</button>
-							</div>
-						</li>
-					</ul>
-					<section v-if="collaboration?.selections.length" class="saved-selections">
-						<h2>{{ t('proofing_gallery', 'Saved selections') }}</h2>
-						<article v-for="selection in collaboration.selections" :key="selection.id">
-							<strong>{{ selection.name }}</strong>
-							<small>{{ selection.author }} · {{ n('proofing_gallery', '%n image', '%n images', selection.fileIds.length) }}</small>
-							<p v-if="selection.message">
-								{{ selection.message }}
-							</p>
-							<div>
-								<details class="guest-export-composer">
-									<summary>{{ t('proofing_gallery', 'Customize CSV') }}</summary>
-									<label><input checked disabled type="checkbox"> {{ t('proofing_gallery', 'Filename') }}</label>
-									<label><input v-model="guestExportFields" type="checkbox" value="rating"> {{ t('proofing_gallery', 'My rating') }}</label>
-									<label><input v-model="guestExportFields" type="checkbox" value="pick"> {{ t('proofing_gallery', 'My pick') }}</label>
-									<a :href="selectionExportUrl(selection.id, 'csv', ['filename', ...guestExportFields.filter(field => field !== 'filename')])">{{ t('proofing_gallery', 'Download UTF-8 CSV') }}</a>
-								</details>
-								<a :href="selectionExportUrl(selection.id, 'plain')">{{ t('proofing_gallery', 'List') }}</a>
-								<a :href="selectionExportUrl(selection.id, 'search')">{{ t('proofing_gallery', 'Search') }}</a>
-							</div>
-						</article>
-					</section>
+					<PublicLightboxFeedbackTabs v-if="!selectedAnnotationComment"
+						v-model="feedbackTab"
+						:can-annotate="canAnnotate"
+						:comments="activeComments"
+						:annotation-numbers="annotationNumbers"
+						:editing-comment-id="editingCommentId"
+						:editing-comment-body="editingCommentBody"
+						@start-annotation="annotations.startKeyboard"
+						@open-thread="annotations.select"
+						@edit="editComment"
+						@save="saveEditedComment"
+						@update:editing-comment-body="editingCommentBody = $event"
+						@cancel-edit="editingCommentId = null"
+						@delete="mutate(`comments/${$event}`, 'DELETE')">
+						<template #comments>
+							<PublicLightboxGeneralFeedback
+								v-model:comment-body="commentBody"
+								v-model:guest-export-fields="guestExportFields"
+								:item="activeItem"
+								:settings="settings"
+								:collaboration="collaboration"
+								:active-guest-rating="activeGuestRating"
+								:comments="generalComments"
+								:annotation-numbers="annotationNumbers"
+								:editing-comment-id="editingCommentId"
+								:editing-comment-body="editingCommentBody"
+								:selection-export-url="selectionExportUrl"
+								@set-color="setColor"
+								@set-rating="setGuestRating"
+								@submit-comment="addComment"
+								@edit="editComment"
+								@save="saveEditedComment"
+								@update:editing-comment-body="editingCommentBody = $event"
+								@cancel-edit="editingCommentId = null"
+								@delete="mutate(`comments/${$event}`, 'DELETE')" />
+						</template>
+					</PublicLightboxFeedbackTabs>
+					<PublicLightboxComments v-else-if="settings.review?.comments !== false"
+						:editing-comment-body="editingCommentBody"
+						:comments="visibleComments"
+						:annotation-numbers="annotationNumbers"
+						:selected-comment-id="selectedCommentId"
+						:editing-comment-id="editingCommentId"
+						@edit="editComment"
+						@save="saveEditedComment"
+						@update:editing-comment-body="editingCommentBody = $event"
+						@cancel-edit="editingCommentId = null"
+						@delete="mutate(`comments/${$event}`, 'DELETE')" />
 				</div>
 			</IonContent>
+			<form v-if="selectedAnnotationComment && settings.review?.comments !== false" class="annotation-reply-form" @submit.prevent="addAnnotationReply">
+				<textarea v-model="annotationReplyBody"
+					name="annotationReply"
+					required
+					maxlength="5000"
+					:placeholder="t('proofing_gallery', 'Write a comment…')"
+					:aria-label="t('proofing_gallery', 'Comment')" />
+				<button type="submit" :disabled="!annotationReplyBody.trim()">
+					{{ t('proofing_gallery', 'Comment') }}
+				</button>
+			</form>
 		</IonModal>
 	</div>
 </template>

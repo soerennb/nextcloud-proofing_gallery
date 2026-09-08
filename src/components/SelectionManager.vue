@@ -192,7 +192,7 @@ onMounted(load)
 						{{ t('proofing_gallery', 'Delete') }}
 					</NcButton>
 				</div>
-				<section v-if="composerId === selection.id" class="export-composer" aria-label="Export composer">
+				<section v-if="composerId === selection.id" class="export-composer" :aria-label="t('proofing_gallery', 'Export composer')">
 					<header><div><h3>{{ t('proofing_gallery', 'Export composer') }}</h3><p>{{ t('proofing_gallery', 'Choose exactly which fields leave the gallery, then inspect the UTF-8 CSV before downloading it.') }}</p></div></header>
 					<div class="export-composer__fields">
 						<label v-for="option in exportOptions" :key="option[0]"><input v-model="exportFields" type="checkbox" :value="option[0]"> <span>{{ option[1] }}</span></label>

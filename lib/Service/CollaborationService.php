@@ -11,6 +11,7 @@ use OCA\ProofingGallery\Db\Guest;
 use OCA\ProofingGallery\Db\GuestRating;
 use OCA\ProofingGallery\Db\PublicLink;
 use OCA\ProofingGallery\Domain\CollaborationReadScope;
+use OCA\ProofingGallery\Domain\CollaborationActor;
 use OCA\ProofingGallery\Domain\FeedbackVisibility;
 use OCA\ProofingGallery\Domain\GalleryMode;
 use OCA\ProofingGallery\Dto\GallerySettings;
@@ -41,12 +42,12 @@ final class CollaborationService {
 
 	/** @param list<int> $visibleFileIds
 	 * @return array<string, mixed> */
-	public function publicState(Gallery $gallery, ?Guest $guest, int $cursor, array $visibleFileIds = []): array {
+	public function publicState(Gallery $gallery, ?CollaborationActor $actor, int $cursor, array $visibleFileIds = []): array {
 		$settings = $this->settings($gallery);
 		$scope = $settings->review->visibility === FeedbackVisibility::Collaborative
 			? CollaborationReadScope::all()
-			: ($guest === null ? CollaborationReadScope::none() : CollaborationReadScope::guest($guest->getId()));
-		return $this->state($gallery, $guest, $scope, $cursor, $visibleFileIds, false);
+			: ($actor === null ? CollaborationReadScope::none() : $this->actorScope($actor));
+		return $this->state($gallery, $actor, $scope, $cursor, $visibleFileIds, false);
 	}
 
 	/** @param list<int> $visibleFileIds
@@ -57,7 +58,7 @@ final class CollaborationService {
 
 	/** @param list<int> $visibleFileIds
 	 * @return array<string, mixed> */
-	private function state(Gallery $gallery, ?Guest $guest, CollaborationReadScope $scope, int $cursor, array $visibleFileIds, bool $allFiles): array {
+	private function state(Gallery $gallery, ?CollaborationActor $actor, CollaborationReadScope $scope, int $cursor, array $visibleFileIds, bool $allFiles): array {
 		$settings = $this->settings($gallery);
 		$visibleFileIds = array_values(array_unique(array_filter(array_map('intval', $visibleFileIds), static fn (int $id): bool => $id > 0)));
 		if (count($visibleFileIds) > 200) throw new InvalidArgumentException('Too many visible media IDs');
@@ -97,11 +98,11 @@ final class CollaborationService {
 			if ($row['kind'] === 'like') {
 				$likes[$fileId] ??= ['count' => 0, 'mine' => false];
 				$likes[$fileId]['count']++;
-				if ($guest !== null && (int)$row['guest_id'] === $guest->getId()) {
+				if ($actor !== null && $actor->owns($row)) {
 					$likes[$fileId]['mine'] = true;
 				}
 			}
-			if ($row['kind'] === 'color' && $guest !== null && (int)$row['guest_id'] === $guest->getId()) {
+			if ($row['kind'] === 'color' && $actor !== null && $actor->owns($row)) {
 				$colors[$fileId] = $row['value'];
 			}
 			if ($row['kind'] === 'color') {
@@ -115,7 +116,7 @@ final class CollaborationService {
 				'enabled' => $settings->mode === GalleryMode::Collaboration,
 				'visibility' => $settings->review->visibility->value,
 				'colorLabels' => $settings->review->colorLabels,
-				'requiresSession' => $guest === null,
+				'requiresSession' => $actor === null,
 				'features' => [
 					'likes' => $settings->review->likes && $this->capabilities->feature('likes'),
 					'colors' => $settings->review->colors && $this->capabilities->feature('colors'),
@@ -124,15 +125,16 @@ final class CollaborationService {
 					'selections' => $settings->review->selections && $this->capabilities->feature('selections'),
 				],
 			],
-			'guest' => $guest,
+			'guest' => $actor,
 			'likes' => $likes,
 			'colors' => $colors,
 			'colorStates' => $colorStates,
-			'comments' => $this->presentComments($comments, $guest),
-			'selections' => $this->presentSelections($selections, $guest),
+			'comments' => $this->presentComments($comments, $actor),
+			'selections' => $this->presentSelections($selections, $actor),
 			'events' => $events,
 			'cursor' => $nextCursor,
 			'delta' => (bool)($state['delta'] ?? false),
+			'reset' => (bool)($state['reset'] ?? false),
 		];
 	}
 
@@ -140,7 +142,7 @@ final class CollaborationService {
 	public function ownerSelectionPage(Gallery $gallery, int $limit, ?string $cursor, ScopedCursorCodec $cursors): array {
 		$limit = max(1, min(100, $limit));
 		$scope = 'owner-selections:' . $gallery->getId();
-		$rows = $this->repository->selectionPage($gallery->getId(), null, $cursors->decode($cursor, $scope), $limit + 1);
+		$rows = $this->repository->selectionPage($gallery->getId(), null, null, $cursors->decode($cursor, $scope), $limit + 1);
 		$hasMore = count($rows) > $limit;
 		if ($hasMore) array_pop($rows);
 		$this->repository->decorateSelections($rows);
@@ -149,37 +151,38 @@ final class CollaborationService {
 		return ['items' => $items, 'total' => $this->repository->selectionCount($gallery->getId()), 'nextCursor' => $hasMore && $last !== null ? $cursors->encode($scope, (int)$last['id']) : null];
 	}
 
-	public function toggleLike(Gallery $gallery, Guest $guest, int $fileId): bool {
-		return $this->atomic(function () use ($gallery, $guest, $fileId): bool {
+	public function toggleLike(Gallery $gallery, CollaborationActor $actor, int $fileId): bool {
+		return $this->atomic(function () use ($gallery, $actor, $fileId): bool {
 			$this->capabilities->assertFeature('likes');
 			$settings = $this->assertCollaboration($gallery, $fileId);
 			if (!$settings->review->likes) {
 				throw new InvalidArgumentException('Likes are disabled');
 			}
-			$existing = $this->repository->feedbackId($gallery->getId(), $guest->getId(), $fileId, 'like');
+			$existing = $this->repository->feedbackId($gallery->getId(), $actor->guestId(), $actor->userUid(), $fileId, 'like');
 			if ($existing !== null) {
 				$this->repository->deleteFeedback($existing);
 				$liked = false;
 			} else {
-				$this->assertQuota('proofing_feedback', $gallery->getId(), $guest->getId(), self::MAX_FEEDBACK_PER_GALLERY, self::MAX_FEEDBACK_PER_GALLERY);
-				$this->repository->insertFeedback($gallery->getId(), $guest->getId(), $fileId, 'like', '1', $this->clock->getTime());
+				$this->assertQuota('proofing_feedback', $gallery->getId(), $actor, self::MAX_FEEDBACK_PER_GALLERY, self::MAX_FEEDBACK_PER_GALLERY);
+				$this->repository->insertFeedback($gallery->getId(), $actor->guestId(), $actor->userUid(), $fileId, 'like', '1', $this->clock->getTime());
 				$liked = true;
 			}
-			$this->event($gallery, $guest, 'like.changed', ['fileId' => $fileId, 'liked' => $liked]);
+			$this->event($gallery, $actor, 'like.changed', ['fileId' => $fileId, 'liked' => $liked]);
 			return $liked;
 		});
 	}
 
-	public function saveRating(PublicLink $link, Gallery $gallery, Guest $guest, int $fileId, int $rating, string $pick): GuestRating {
-		return $this->atomic(function () use ($link, $gallery, $guest, $fileId, $rating, $pick): GuestRating {
-			$value = $this->guestRatings->save($link, $guest, $fileId, $rating, $pick);
-			$this->event($gallery, $guest, 'rating.changed', ['fileId' => $fileId]);
+	public function saveRating(PublicLink $link, Gallery $gallery, CollaborationActor $actor, int $fileId, int $rating, string $pick): GuestRating {
+		if ($link->getGalleryId() !== $gallery->getId()) throw new InvalidArgumentException('Public link does not belong to this gallery');
+		return $this->atomic(function () use ($link, $gallery, $actor, $fileId, $rating, $pick): GuestRating {
+			$value = $this->guestRatings->saveForActor($link, $actor, $fileId, $rating, $pick);
+			$this->event($gallery, $actor, 'rating.changed', ['fileId' => $fileId]);
 			return $value;
 		});
 	}
 
-	public function setColor(Gallery $gallery, Guest $guest, int $fileId, ?string $value): void {
-		$this->atomic(function () use ($gallery, $guest, $fileId, $value): void {
+	public function setColor(Gallery $gallery, CollaborationActor $actor, int $fileId, ?string $value): void {
+		$this->atomic(function () use ($gallery, $actor, $fileId, $value): void {
 			$this->capabilities->assertFeature('colors');
 			$settings = $this->assertCollaboration($gallery, $fileId);
 			if (!$settings->review->colors) {
@@ -193,28 +196,29 @@ final class CollaborationService {
 			if ($value !== null && !in_array($value, $enabledLabels, true)) {
 				throw new InvalidArgumentException('Unknown color workflow state');
 			}
-			$id = $this->repository->feedbackId($gallery->getId(), $guest->getId(), $fileId, 'color');
+			$id = $this->repository->feedbackId($gallery->getId(), $actor->guestId(), $actor->userUid(), $fileId, 'color');
 			if ($value === null && $id !== null) {
 				$this->repository->deleteFeedback($id);
 			} elseif ($value !== null && $id === null) {
-				$this->assertQuota('proofing_feedback', $gallery->getId(), $guest->getId(), self::MAX_FEEDBACK_PER_GALLERY, self::MAX_FEEDBACK_PER_GALLERY);
-				$this->repository->insertFeedback($gallery->getId(), $guest->getId(), $fileId, 'color', $value, $this->clock->getTime());
+				$this->assertQuota('proofing_feedback', $gallery->getId(), $actor, self::MAX_FEEDBACK_PER_GALLERY, self::MAX_FEEDBACK_PER_GALLERY);
+				$this->repository->insertFeedback($gallery->getId(), $actor->guestId(), $actor->userUid(), $fileId, 'color', $value, $this->clock->getTime());
 			} elseif ($value !== null) {
 				$this->repository->updateFeedback($id, $value, $this->clock->getTime());
 			}
-			$this->event($gallery, $guest, 'color.changed', ['fileId' => $fileId, 'value' => $value]);
+			$this->event($gallery, $actor, 'color.changed', ['fileId' => $fileId, 'value' => $value]);
 		});
 	}
 
 	/** @param array<string, int>|null $annotation */
-	public function addComment(Gallery $gallery, Guest $guest, int $fileId, string $body, ?array $annotation): int {
-		return $this->atomic(function () use ($gallery, $guest, $fileId, $body, $annotation): int {
-			$this->capabilities->assertFeature('comments');
-			if ($annotation !== null) $this->capabilities->assertFeature('annotations');
-			$settings = $this->assertCollaboration($gallery, $fileId);
-			if (!$settings->review->comments) {
-				throw new InvalidArgumentException('Comments are disabled');
+	public function addComment(Gallery $gallery, CollaborationActor $actor, int $fileId, string $body, ?array $annotation, ?int $parentId = null): int {
+		return $this->atomic(function () use ($gallery, $actor, $fileId, $body, $annotation, $parentId): int {
+			$settings = $this->assertCommentingEnabled($gallery);
+			if ($parentId !== null) {
+				$scope = $settings->review->visibility === FeedbackVisibility::Private ? $this->actorScope($actor) : CollaborationReadScope::all();
+				$annotation = $this->repository->threadAnnotation($gallery->getId(), $fileId, $parentId, $scope);
 			}
+			if ($annotation !== null) $this->capabilities->assertFeature('annotations');
+			$this->resolveMedia($gallery, $fileId);
 			if ($annotation !== null && !$settings->review->annotations) {
 				throw new InvalidArgumentException('Image annotations are disabled');
 			}
@@ -225,50 +229,50 @@ final class CollaborationService {
 			if ($body === '' || mb_strlen($body) > 5000) {
 				throw new InvalidArgumentException('Comment must contain between 1 and 5000 characters');
 			}
-			$this->assertQuota('proofing_comments', $gallery->getId(), $guest->getId(), self::MAX_COMMENTS_PER_GALLERY, self::MAX_COMMENTS_PER_GUEST);
+			$this->assertQuota('proofing_comments', $gallery->getId(), $actor, self::MAX_COMMENTS_PER_GALLERY, self::MAX_COMMENTS_PER_GUEST);
 			$commentId = $this->repository->insertComment(
-				$gallery->getId(), $guest->getId(), $fileId, $body, $annotation, $this->clock->getTime(),
+				$gallery->getId(), $actor->guestId(), $actor->userUid(), $fileId, $body, $annotation, $this->clock->getTime(), $parentId,
 			);
-			$this->event($gallery, $guest, 'comment.created', ['fileId' => $fileId, 'commentId' => $commentId]);
+			$this->event($gallery, $actor, 'comment.created', ['fileId' => $fileId, 'commentId' => $commentId]);
 			return $commentId;
 		});
 	}
 
-	public function deleteComment(Gallery $gallery, Guest $guest, int $commentId): void {
-		$this->atomic(function () use ($gallery, $guest, $commentId): void {
-			$this->capabilities->assertFeature('comments');
-			$fileId = $this->ownedCommentFileId($gallery, $guest, $commentId);
-			if (!$this->repository->deleteComment($gallery->getId(), $guest->getId(), $commentId, $this->clock->getTime())) {
+	public function deleteComment(Gallery $gallery, CollaborationActor $actor, int $commentId): void {
+		$this->atomic(function () use ($gallery, $actor, $commentId): void {
+			$this->assertCommentingEnabled($gallery);
+			$fileId = $this->ownedCommentFileId($gallery, $actor, $commentId);
+			if (!$this->repository->deleteComment($gallery->getId(), $actor->guestId(), $actor->userUid(), $commentId, $this->clock->getTime())) {
 				throw new InvalidArgumentException('Comment cannot be deleted');
 			}
-			$this->event($gallery, $guest, 'comment.deleted', ['fileId' => $fileId, 'commentId' => $commentId]);
+			$this->event($gallery, $actor, 'comment.deleted', ['fileId' => $fileId, 'commentId' => $commentId]);
 		});
 	}
 
-	public function ownedCommentFileId(Gallery $gallery, Guest $guest, int $commentId): int {
-		$fileId = $this->repository->ownedCommentFileId($gallery->getId(), $guest->getId(), $commentId);
+	public function ownedCommentFileId(Gallery $gallery, CollaborationActor $actor, int $commentId): int {
+		$fileId = $this->repository->ownedCommentFileId($gallery->getId(), $actor->guestId(), $actor->userUid(), $commentId);
 		if ($fileId === null) throw new InvalidArgumentException('Comment not found');
 		return $fileId;
 	}
 
-	public function updateComment(Gallery $gallery, Guest $guest, int $commentId, string $body): void {
-		$this->atomic(function () use ($gallery, $guest, $commentId, $body): void {
-			$this->capabilities->assertFeature('comments');
-			$fileId = $this->ownedCommentFileId($gallery, $guest, $commentId);
+	public function updateComment(Gallery $gallery, CollaborationActor $actor, int $commentId, string $body): void {
+		$this->atomic(function () use ($gallery, $actor, $commentId, $body): void {
+			$this->assertCommentingEnabled($gallery);
+			$fileId = $this->ownedCommentFileId($gallery, $actor, $commentId);
 			$body = trim($body);
 			if ($body === '' || mb_strlen($body) > 5000) {
 				throw new InvalidArgumentException('Comment must contain between 1 and 5000 characters');
 			}
-			if (!$this->repository->updateComment($gallery->getId(), $guest->getId(), $commentId, $body, $this->clock->getTime())) {
+			if (!$this->repository->updateComment($gallery->getId(), $actor->guestId(), $actor->userUid(), $commentId, $body, $this->clock->getTime())) {
 				throw new InvalidArgumentException('Comment cannot be edited');
 			}
-			$this->event($gallery, $guest, 'comment.updated', ['fileId' => $fileId, 'commentId' => $commentId]);
+			$this->event($gallery, $actor, 'comment.updated', ['fileId' => $fileId, 'commentId' => $commentId]);
 		});
 	}
 
 	/** @param list<int> $fileIds */
-	public function saveSelection(Gallery $gallery, PublicLink $link, Guest $guest, string $name, string $message, array $fileIds): string {
-		return $this->atomic(function () use ($gallery, $link, $guest, $name, $message, $fileIds): string {
+	public function saveSelection(Gallery $gallery, PublicLink $link, CollaborationActor $actor, string $name, string $message, array $fileIds): string {
+		return $this->atomic(function () use ($gallery, $link, $actor, $name, $message, $fileIds): string {
 			$this->capabilities->assertFeature('selections');
 			$this->assertCollaborationMode($gallery);
 			if (!$this->settings($gallery)->review->selections) {
@@ -284,7 +288,7 @@ final class CollaborationService {
 			if ($link->getReviewEnabled()) {
 				$settings = $this->settings($gallery)->review;
 				$maximum = $link->getReviewSelectionMax() ?? $settings->selectionMaximum;
-				$current = $this->repository->latestSelectionForLink((int)$gallery->getId(), (int)$link->getId(), (int)$guest->getId());
+				$current = $this->repository->latestSelectionForLink((int)$gallery->getId(), (int)$link->getId(), $actor->guestId(), $actor->userUid());
 				if ($current !== null && $current['status'] !== 'open') throw new InvalidArgumentException('The submitted selection is locked');
 				if ($maximum > 0 && count($fileIds) > $maximum) throw new InvalidArgumentException('Selection exceeds the maximum of ' . $maximum . ' photos');
 			}
@@ -294,13 +298,13 @@ final class CollaborationService {
 			foreach ($fileIds as $fileId) {
 				$this->resolveMedia($gallery, $fileId);
 			}
-			$this->assertQuota('proofing_selections', $gallery->getId(), $guest->getId(), self::MAX_SELECTIONS_PER_GALLERY, self::MAX_SELECTIONS_PER_GUEST);
+			$this->assertQuota('proofing_selections', $gallery->getId(), $actor, self::MAX_SELECTIONS_PER_GALLERY, self::MAX_SELECTIONS_PER_GUEST);
 			$publicId = $this->uuid();
 			$now = $this->clock->getTime();
 			$this->repository->insertSelection(
-				$gallery->getId(), $guest->getId(), (int)$link->getId(), $publicId, $name, $message, $fileIds, $now,
+				$gallery->getId(), $actor->guestId(), $actor->userUid(), (int)$link->getId(), $publicId, $name, $message, $fileIds, $now,
 			);
-			$this->event($gallery, $guest, 'selection.created', ['selectionId' => $publicId, 'count' => count($fileIds)]);
+			$this->event($gallery, $actor, 'selection.created', ['selectionId' => $publicId, 'count' => count($fileIds)]);
 			$this->markResponseReceived($gallery, $now);
 			return $publicId;
 		});
@@ -373,18 +377,69 @@ final class CollaborationService {
 		return $this->repository->selectionFileIds((int)$row['id']);
 	}
 
+	/** @return list<int> */
+	public function actorSelectionFileIds(Gallery $gallery, CollaborationActor $actor, string $publicId): array {
+		$row = $this->repository->selection($gallery->getId(), $publicId);
+		if ($row === null || ($this->settings($gallery)->review->visibility === FeedbackVisibility::Private && !$actor->owns($row))) {
+			throw new InvalidArgumentException('Selection not found');
+		}
+		return $this->repository->selectionFileIds((int)$row['id']);
+	}
+
+	/**
+	 * Authenticated reviewers export their selection without being treated as
+	 * either a guest-rating principal or a gallery owner.
+	 * @param list<string> $requestedFields
+	 * @return array{content: string, filename: string, mimeType: string}
+	 */
+	public function exportActorSelection(Gallery $gallery, CollaborationActor $actor, string $publicId, string $format, array $requestedFields = []): array {
+		$this->capabilities->assertFeature('selections');
+		$row = $this->repository->selection($gallery->getId(), $publicId);
+		if ($row === null || ($this->settings($gallery)->review->visibility === FeedbackVisibility::Private && !$actor->owns($row))) {
+			throw new InvalidArgumentException('Selection not found');
+		}
+		$fileIds = [];
+		$names = [];
+		foreach ($this->repository->selectionFileIds((int)$row['id']) as $fileId) {
+			try {
+				$fileIds[] = $fileId;
+				$names[] = $this->resolveMedia($gallery, $fileId)->getName();
+			} catch (\Throwable) {}
+		}
+		$base = preg_replace('/[^a-z0-9._-]+/i', '-', (string)$row['name']) ?: 'selection';
+		if ($format === 'csv' || $format === 'preview') {
+			$fields = array_values(array_unique(array_intersect(['filename', 'rating', 'pick'], array_map('strval', $requestedFields))));
+			if ($fields === []) $fields = ['filename'];
+			$rows = $this->composeExportRows($gallery, null, $fileIds, $fields, (string)$row['name'], $actor);
+			$content = "\xEF\xBB\xBF" . $this->csv->encode([$fields, ...array_map(
+				static fn (array $values): array => array_map(static fn (string $field): string => (string)($values[$field] ?? ''), $fields),
+				$rows,
+			)]);
+			return ['content' => $content, 'filename' => $base . ($format === 'preview' ? '-preview.csv' : '.csv'), 'mimeType' => 'text/csv; charset=utf-8'];
+		}
+		return match ($format) {
+			'search' => ['content' => implode(' OR ', array_map(static fn (string $name): string => 'name:"' . str_replace('"', '\\"', $name) . '"', $names)), 'filename' => $base . '-search.txt', 'mimeType' => 'text/plain'],
+			'plain' => ['content' => implode("\n", $names) . "\n", 'filename' => $base . '.txt', 'mimeType' => 'text/plain'],
+			default => throw new InvalidArgumentException('Unknown export format'),
+		};
+	}
+
 	/**
 	 * @param list<int> $fileIds
 	 * @param list<string> $fields
 	 * @return list<array<string, int|float|string>>
 	 */
-	private function composeExportRows(Gallery $gallery, ?Guest $guest, array $fileIds, array $fields, string $selectionName): array {
+	private function composeExportRows(Gallery $gallery, ?Guest $guest, array $fileIds, array $fields, string $selectionName, ?CollaborationActor $actor = null): array {
 		if ($fileIds === []) return [];
-		$culls = $guest === null ? $this->culling->forFiles($gallery->getOwnerUid(), $fileIds) : [];
-		$aggregates = $guest === null ? array_column($this->guestRatings->aggregate($gallery, $fileIds)['items'], null, 'fileId') : [];
-		$guestValues = $guest === null ? [] : array_column(array_map(static fn (\OCA\ProofingGallery\Db\GuestRating $value): array => $value->jsonSerialize(), $this->guestRatings->forGuest($guest)), null, 'fileId');
+		$isOwner = $guest === null && $actor === null;
+		$culls = $isOwner ? $this->culling->forFiles($gallery->getOwnerUid(), $fileIds) : [];
+		$aggregates = $isOwner ? array_column($this->guestRatings->aggregate($gallery, $fileIds)['items'], null, 'fileId') : [];
+		$ratingValues = $guest !== null
+			? $this->guestRatings->forGuestFiles($guest, $fileIds)
+			: ($actor === null ? [] : $this->guestRatings->forActorFiles($gallery->getId(), $actor, $fileIds));
+		$guestValues = array_column(array_map(static fn (\OCA\ProofingGallery\Db\GuestRating $value): array => $value->jsonSerialize(), $ratingValues), null, 'fileId');
 		$comments = [];
-		if ($guest === null && in_array('comments', $fields, true)) {
+		if ($isOwner && in_array('comments', $fields, true)) {
 			$comments = $this->repository->commentsByFileIds($gallery->getId(), $fileIds);
 		}
 		$root = $gallery->getSourceType() === 'folder' ? $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId()) : null;
@@ -440,8 +495,8 @@ final class CollaborationService {
 				throw new InvalidArgumentException('Selection not found');
 			}
 			$this->repository->insertOwnerEvent(
-				$gallery->getId(), (int)$selection['guest_id'], $gallery->getOwnerUid(),
-				'selection.updated', ['selectionId' => $publicId], $now,
+				$gallery->getId(), $selection['guest_id'] === null ? null : (int)$selection['guest_id'], $gallery->getOwnerUid(),
+				'selection.updated', ['selectionId' => $publicId], $now, $selection['actor_uid'],
 			);
 		});
 	}
@@ -452,8 +507,8 @@ final class CollaborationService {
 			if ($selection === null) throw new InvalidArgumentException('Selection not found');
 			if (!$this->repository->deleteSelection($gallery->getId(), $publicId)) throw new InvalidArgumentException('Selection not found');
 			$this->repository->insertOwnerEvent(
-				$gallery->getId(), (int)$selection['guest_id'], $gallery->getOwnerUid(),
-				'selection.deleted', ['selectionId' => $publicId, 'deleted' => true], $this->clock->getTime(),
+				$gallery->getId(), $selection['guest_id'] === null ? null : (int)$selection['guest_id'], $gallery->getOwnerUid(),
+				'selection.deleted', ['selectionId' => $publicId, 'deleted' => true], $this->clock->getTime(), $selection['actor_uid'],
 			);
 		});
 	}
@@ -462,9 +517,9 @@ final class CollaborationService {
 		return GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
 	}
 
-	private function assertQuota(string $table, int $galleryId, int $guestId, int $galleryLimit, int $guestLimit): void {
+	private function assertQuota(string $table, int $galleryId, CollaborationActor $actor, int $galleryLimit, int $guestLimit): void {
 		if ($this->repository->hasAtLeastRows($table, $galleryId, $galleryLimit)
-			|| $this->repository->hasAtLeastRows($table, $galleryId, $guestLimit, $guestId)) {
+			|| $this->repository->hasAtLeastRows($table, $galleryId, $guestLimit, $actor->guestId(), $actor->userUid())) {
 			throw new InvalidArgumentException('Collaboration data limit reached');
 		}
 	}
@@ -472,6 +527,15 @@ final class CollaborationService {
 	private function assertCollaboration(Gallery $gallery, int $fileId): GallerySettings {
 		$settings = $this->assertCollaborationMode($gallery);
 		$this->resolveMedia($gallery, $fileId);
+		return $settings;
+	}
+
+	private function assertCommentingEnabled(Gallery $gallery): GallerySettings {
+		$this->capabilities->assertFeature('comments');
+		$settings = $this->assertCollaborationMode($gallery);
+		if (!$settings->review->comments) {
+			throw new InvalidArgumentException('Comments are disabled');
+		}
 		return $settings;
 	}
 
@@ -500,16 +564,17 @@ final class CollaborationService {
 	/** @param list<array<string, mixed>> $rows
 	 * @return list<array<string, mixed>>
 	 */
-	private function presentComments(array $rows, ?Guest $viewer): array {
+	private function presentComments(array $rows, ?CollaborationActor $viewer): array {
 		return array_map(
 			static fn (array $row): array => [
 				'id' => (int)$row['id'],
 				'fileId' => (int)$row['file_id'],
 				'body' => $row['body'],
+				'threadId' => $row['parent_id'] === null ? (int)$row['id'] : (int)$row['parent_id'],
 				'createdAt' => (int)$row['created_at'],
 				'editedAt' => $row['edited_at'] === null ? null : (int)$row['edited_at'],
 				'deletedAt' => $row['deleted_at'] === null ? null : (int)$row['deleted_at'],
-				'mine' => $viewer !== null && (int)$row['guest_id'] === $viewer->getId(),
+				'mine' => $viewer !== null && $viewer->owns($row),
 				'author' => (string)$row['author'],
 				'annotations' => $row['annotations'],
 			],
@@ -520,7 +585,7 @@ final class CollaborationService {
 	/** @param list<array<string, mixed>> $rows
 	 * @return list<array<string, mixed>>
 	 */
-	private function presentSelections(array $rows, ?Guest $viewer): array {
+	private function presentSelections(array $rows, ?CollaborationActor $viewer): array {
 		return array_map(static fn (array $row): array => [
 			'id' => $row['public_id'],
 			'name' => $row['name'],
@@ -528,15 +593,15 @@ final class CollaborationService {
 			'status' => $row['status'],
 			'fileIds' => $row['fileIds'],
 			'updatedAt' => (int)$row['updated_at'],
-			'mine' => $viewer !== null && (int)$row['guest_id'] === $viewer->getId(),
+			'mine' => $viewer !== null && $viewer->owns($row),
 			'author' => (string)$row['author'],
 		], $rows);
 	}
 
 	/** @param array<string, mixed> $payload */
-	private function event(Gallery $gallery, Guest $guest, string $type, array $payload): void {
+	private function event(Gallery $gallery, CollaborationActor $actor, string $type, array $payload): void {
 		$now = $this->clock->getTime();
-		$eventId = $this->repository->insertEvent($gallery->getId(), $guest->getId(), $type, $payload, $now);
+		$eventId = $this->repository->insertEvent($gallery->getId(), $actor->guestId(), $actor->userUid(), $type, $payload, $now);
 		$staged = $this->notifications->stage($gallery, $eventId, $type, $now);
 		$this->stagedActivities[] = [
 			'gallery' => $gallery,
@@ -545,6 +610,12 @@ final class CollaborationService {
 			'recipients' => $staged['recipients'],
 			'nativeStateIds' => $staged['nativeStateIds'],
 		];
+	}
+
+	private function actorScope(CollaborationActor $actor): CollaborationReadScope {
+		return $actor->guestId() !== null
+			? CollaborationReadScope::guest($actor->guestId())
+			: CollaborationReadScope::user($actor->userUid() ?? '');
 	}
 
 	private function atomic(callable $callback): mixed {

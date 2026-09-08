@@ -45,7 +45,7 @@ async function deleteData() {
 			<span>{{ t('proofing_gallery', 'Reviewing as {name}', { name: guest.displayName }) }}</span>
 			<small>{{ privateFeedback ? t('proofing_gallery', 'Your feedback is private') : t('proofing_gallery', 'Feedback is shared with reviewers') }}</small>
 		</div>
-		<div class="guest-identity__actions">
+		<div v-if="guest.kind !== 'user'" class="guest-identity__actions">
 			<a :href="endpoint('privacy/export')">{{ t('proofing_gallery', 'Export my data') }}</a>
 			<button type="button" @click="deleteData">
 				{{ t('proofing_gallery', 'Delete my data') }}

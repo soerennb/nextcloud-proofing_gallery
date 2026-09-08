@@ -14,20 +14,33 @@ final class GuestRatingServiceTest extends TestCase {
 			$this->rating(10, 91, 5, 'pick', 100),
 			$this->rating(11, 91, 3, 'reject', 120),
 			$this->rating(12, 91, 4, 'pick', 110),
-		], [10 => 'Ada', 11 => 'Grace', 12 => 'Lin']);
+			$this->accountRating('ncadmin', 91, 4, 'pick', 115),
+		], ['guest:10' => 'Ada', 'guest:11' => 'Grace', 'guest:12' => 'Lin', 'user:ncadmin' => 'Nextcloud Admin']);
 
 		self::assertSame(91, $summary['fileId']);
-		self::assertSame(3, $summary['count']);
+		self::assertSame(4, $summary['count']);
 		self::assertSame(4.0, $summary['average']);
-		self::assertSame([0, 0, 0, 1, 1, 1], $summary['distribution']);
-		self::assertSame(['none' => 0, 'pick' => 2, 'reject' => 1], $summary['picks']);
+		self::assertSame([0, 0, 0, 1, 2, 1], $summary['distribution']);
+		self::assertSame(['none' => 0, 'pick' => 3, 'reject' => 1], $summary['picks']);
 		self::assertSame(120, $summary['updatedAt']);
-		self::assertSame(['Ada', 'Grace', 'Lin'], array_column($summary['individuals'], 'name'));
+		self::assertSame(['Ada', 'Grace', 'Lin', 'Nextcloud Admin'], array_column($summary['individuals'], 'name'));
+		self::assertSame(['guest', 'guest', 'guest', 'user'], array_column($summary['individuals'], 'actorKind'));
+		self::assertSame('ncadmin', $summary['individuals'][3]['actorUid']);
 	}
 
 	private function rating(int $guestId, int $fileId, int $rating, string $pick, int $updatedAt): GuestRating {
 		$value = new GuestRating();
 		$value->setGuestId($guestId);
+		$value->setFileId($fileId);
+		$value->setRating($rating);
+		$value->setPickState($pick);
+		$value->setUpdatedAt($updatedAt);
+		return $value;
+	}
+
+	private function accountRating(string $uid, int $fileId, int $rating, string $pick, int $updatedAt): GuestRating {
+		$value = new GuestRating();
+		$value->setActorUid($uid);
 		$value->setFileId($fileId);
 		$value->setRating($rating);
 		$value->setPickState($pick);

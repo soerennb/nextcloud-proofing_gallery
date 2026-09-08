@@ -36,7 +36,7 @@
 
 .gallery-sheet__downloads { padding-top: 16px; }
 
-@media (max-width: 640px) {
+@media (max-width: 520px) {
 	.gallery-sheet { --width: 100%; }
 	.gallery-sheet__pages > div { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }

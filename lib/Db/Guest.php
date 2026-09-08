@@ -44,10 +44,11 @@ final class Guest extends Entity implements \JsonSerializable {
 		}
 	}
 
-	/** @return array{id: string, displayName: string, createdAt: int} */
+	/** @return array{id: string, kind: 'guest', displayName: string, createdAt: int} */
 	public function jsonSerialize(): array {
 		return [
 			'id' => $this->getPublicId(),
+			'kind' => 'guest',
 			'displayName' => $this->getDisplayName(),
 			'createdAt' => $this->getCreatedAt(),
 		];

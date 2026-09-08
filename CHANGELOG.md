@@ -2,16 +2,19 @@
 
 ## Unreleased
 
-## 0.9.2 — 2026-09-07
-
-- make the mobile gallery and lightbox easier to use with more reliable overlays,
-  touch interaction, navigation, and action controls
-- make success feedback and file-conflict resolution clearer and more accessible,
-  including improved screen-reader announcements and a simpler conflict dialog
-- improve project settings and reusable preset controls with updated Nextcloud
-  interface components
-- harden client-side input handling against case and whitespace variants of
-  malicious `onload` attributes
+- separate general feedback and pin conversations beside the image without
+  dimming the artwork, with labelled review colors and localized comment headers
+- attribute signed-in reviews to Nextcloud accounts while retaining guest
+  authorship, private ratings, link restrictions, and private selection updates
+- identify pin replies by their root comment rather than matching coordinates;
+  retain conversations when their initial comment is deleted
+- invalidate live collaboration cursors after account or guest data erasure so
+  open viewers refresh without exposing deleted identity data
+- keep annotations attached during zoom and support bounded touch panning
+- add account attribution and private event recipient migrations; complete the
+  database upgrade before serving the updated application
+- accept empty settings during user migration and fail migration smoke checks
+  with a nonzero exit status
 
 ## 0.9.1 — 2026-09-06
 

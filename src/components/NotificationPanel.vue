@@ -172,8 +172,8 @@ defineExpose({ load })
 						<span>{{ t('proofing_gallery', 'Email language') }}</span>
 						<select v-model="locale" name="notificationLocale">
 							<option value="auto">{{ t('proofing_gallery', 'Gallery language') }}</option>
-							<option value="en">English</option>
-							<option value="de">Deutsch</option>
+							<option value="en">{{ t('proofing_gallery', 'English') }}</option>
+							<option value="de">{{ t('proofing_gallery', 'German') }}</option>
 						</select>
 					</label>
 				</div>

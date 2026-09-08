@@ -15,10 +15,17 @@ final class CollaborationReadScopeTest extends TestCase {
 		self::assertFalse(CollaborationReadScope::all()->isEmpty());
 		self::assertNull(CollaborationReadScope::all()->guestId());
 		self::assertSame(42, CollaborationReadScope::guest(42)->guestId());
+		self::assertSame('ncadmin', CollaborationReadScope::user('ncadmin')->actorUid());
+		self::assertNull(CollaborationReadScope::user('ncadmin')->guestId());
 	}
 
 	public function testGuestScopeRejectsInvalidIds(): void {
 		$this->expectException(InvalidArgumentException::class);
 		CollaborationReadScope::guest(0);
+	}
+
+	public function testUserScopeRejectsEmptyUids(): void {
+		$this->expectException(InvalidArgumentException::class);
+		CollaborationReadScope::user('');
 	}
 }

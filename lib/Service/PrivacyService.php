@@ -55,7 +55,7 @@ final class PrivacyService {
 		foreach ($this->repository->guestUploadIds((int)$guest->getId()) as $uploadId) {
 			try { $this->appData->getFolder('guest-uploads')->getFolder($uploadId)->delete(); } catch (\Throwable) {}
 		}
-		return $this->repository->deleteGuestData((int)$guest->getId());
+		return $this->repository->deleteGuestData((int)$guest->getId(), (int)$guest->getGalleryId());
 	}
 
 	/** @return array<string, mixed> */

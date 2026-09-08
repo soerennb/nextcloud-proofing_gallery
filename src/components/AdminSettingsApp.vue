@@ -12,6 +12,7 @@ import { computed, onBeforeUnmount, onMounted, ref, toRaw, watch } from 'vue'
 
 import { adminSettingsCategoryPath, normalizeAdminSettingsCategory } from '../domain/adminSettingsNavigation.ts'
 import type { AdminSettingsCategory as Category } from '../domain/adminSettingsNavigation.ts'
+import { galleryPurposeLabels } from '../domain/gallerySettingsOptions.ts'
 import type { AdminDomain, AdminDomainPage, AdminSettingsState } from '../types/adminSettings.ts'
 import AdminDocumentation from './AdminDocumentation.vue'
 import AdminGalleryRollout from './AdminGalleryRollout.vue'
@@ -307,8 +308,8 @@ onBeforeUnmount(() => {
 				</NcSettingsSection>
 				<NcSettingsSection :name="t('proofing_gallery', 'Defaults for new galleries')" :description="t('proofing_gallery', 'Existing galleries keep their current configuration.')">
 					<div class="admin-field-grid">
-						<label>{{ t('proofing_gallery', 'Default purpose') }}<select v-model="settings.workflow.defaultPurpose"><option v-for="purpose in ['delivery', 'showcase', 'selection', 'proofing', 'uploads', 'custom']" :key="purpose" :value="purpose">{{ purpose }}</option></select></label>
-						<label>{{ t('proofing_gallery', 'Public language') }}<select v-model="defaults.publicLocale"><option value="auto">{{ t('proofing_gallery', 'Automatic') }}</option><option value="de">Deutsch</option><option value="en">English</option></select></label>
+						<label>{{ t('proofing_gallery', 'Default purpose') }}<select v-model="settings.workflow.defaultPurpose"><option v-for="(label, purpose) in galleryPurposeLabels" :key="purpose" :value="purpose">{{ label }}</option></select></label>
+						<label>{{ t('proofing_gallery', 'Public language') }}<select v-model="defaults.publicLocale"><option value="auto">{{ t('proofing_gallery', 'Automatic') }}</option><option value="de">{{ t('proofing_gallery', 'German') }}</option><option value="en">{{ t('proofing_gallery', 'English') }}</option></select></label>
 						<label>{{ t('proofing_gallery', 'Theme') }}<select v-model="defaults.presentation.theme"><option value="auto">{{ t('proofing_gallery', 'Automatic') }}</option><option value="light">{{ t('proofing_gallery', 'Light') }}</option><option value="dark">{{ t('proofing_gallery', 'Dark') }}</option></select></label>
 						<label>{{ t('proofing_gallery', 'Layout') }}<select v-model="defaults.presentation.layout"><option value="grid">{{ t('proofing_gallery', 'Grid') }}</option><option value="masonry">{{ t('proofing_gallery', 'Masonry') }}</option><option value="list">{{ t('proofing_gallery', 'List') }}</option><option value="story">{{ t('proofing_gallery', 'Story') }}</option></select></label>
 						<label>{{ t('proofing_gallery', 'Tile size') }}<select v-model="defaults.presentation.tileSize"><option value="small">{{ t('proofing_gallery', 'Small') }}</option><option value="medium">{{ t('proofing_gallery', 'Medium') }}</option><option value="large">{{ t('proofing_gallery', 'Large') }}</option></select></label>

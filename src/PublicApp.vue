@@ -6,7 +6,7 @@ import { IonAlert, IonApp, IonContent, IonLoading, IonPage } from '@ionic/vue'
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { calculateMediaLayout } from './domain/mediaGridLayout.ts'
-import { publicGalleryCssVariables } from './domain/galleryTheme.ts'
+import { publicGalleryThemeStyle } from './domain/publicGalleryThemeStyle.ts'
 import { PUBLIC_GALLERY_PAGE_SIZE, readPublicGalleryLocation, writePublicGalleryLocation } from './domain/publicGalleryNavigation.ts'
 import { continuationStorageKey, layoutSessionStorageKey, loadPublicGalleryCompareIds, loadPublicGalleryContinuation, loadPublicGallerySavedView, loadPublicGallerySessionLayout, viewStorageKey } from './domain/publicGalleryPreferences.ts'
 import { serialTask } from './domain/serialTask.ts'
@@ -56,7 +56,7 @@ const title = ref(props.gallery.initialPage?.gallery.title ?? props.gallery.titl
 const deliveryMode = ref(props.gallery.initialPage?.gallery.deliveryMode ?? props.gallery.deliveryMode ?? 'standard'), accentColor = computed(() => settings.value.presentation.accentColor || '#E85D4A')
 const { visitorPreference, effectiveTheme, setVisitorPreference } = usePublicAppearance(computed(() => settings.value.presentation.theme), accentColor)
 const appearancePreference = computed({ get: () => visitorPreference.value, set: setVisitorPreference })
-const pageStyle = computed(() => publicGalleryCssVariables(accentColor.value, settings.value.presentation.heroFocusX, settings.value.presentation.heroFocusY))
+const pageStyle = computed(() => publicGalleryThemeStyle(settings.value))
 
 const mediaItems = computed(() => items.value.filter(item => !item.folder))
 const eventAlbumRoot = computed(() => deliveryMode.value === 'event' && currentPath.value === '' && scope.value?.viewMode === 'folder'), openerTotalLabel = computed(() => eventAlbumRoot.value ? n('proofing_gallery', '%n album', '%n albums', total.value) : undefined)
@@ -71,7 +71,6 @@ const compareOpen = ref(false)
 const compareItems = computed(() => compareIds.value.map(id => mediaItems.value.find(item => item.id === id)).filter((item): item is MediaItem => !!item))
 let collaborationTimer: number | undefined
 const { guest, collaboration, hydratedIds: collaborationHydratedIds, nonce, restoreIdentity, clearIdentity } = usePublicCollaborationIdentity(props.gallery.token)
-const [guestName, guestEmail] = [ref(''), ref('')]
 const joining = ref(false)
 const collaborationError = ref('')
 const galleryDownloadBusy = ref(false)
@@ -108,7 +107,9 @@ const activePanel = ref<'menu' | 'search' | 'view' | 'pages' | 'download' | 'sel
 const searchOpen = ref(false)
 const collaborationSheetOpen = ref(false)
 const mediaDimensions = ref<Record<number, { width: number; height: number }>>({})
-const mobileViewportQuery = window.matchMedia('(max-width: 640px)')
+// Panel mode changes only on phone-sized viewports. Narrow desktop windows keep
+// centered dialogs and floating annotation controls instead of mobile sheets.
+const mobileViewportQuery = window.matchMedia('(max-width: 520px)')
 const mobileViewport = ref(mobileViewportQuery.matches)
 const viewportWidth = ref(window.innerWidth)
 let searchTimer: number | undefined
@@ -425,7 +426,7 @@ function onVisibilityChange() {
 	startCollaborationPolling()
 }
 
-async function joinCollaboration() {
+async function joinCollaboration(identity: { displayName: string; email: string }) {
 	joining.value = true
 	collaborationError.value = ''
 	try {
@@ -433,11 +434,11 @@ async function joinCollaboration() {
 			method: 'POST',
 			credentials: 'same-origin',
 			headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-			body: JSON.stringify({ displayName: guestName.value, email: guestEmail.value || null }),
+			body: JSON.stringify({ displayName: identity.displayName, email: identity.email || null }),
 		})
 		const payload = await response.json() as { guest?: GuestIdentity, nonce?: string, message?: string }
 		if (!response.ok || !payload.guest || !payload.nonce) {
-			throw new Error(payload.message || t('proofing_gallery', 'Could not start review session'))
+			throw new Error(t('proofing_gallery', 'Could not start review session'))
 		}
 		restoreIdentity(payload.guest, payload.nonce)
 		await loadCollaboration()
@@ -450,21 +451,18 @@ async function joinCollaboration() {
 	}
 }
 
-async function performCollaborationLoad() {
+async function performCollaborationLoad(forceHydration = false): Promise<void> {
 	try {
-		const visibleIds = mediaItems.value.slice(0, 200).map(item => item.id)
-		const unhydratedIds = visibleIds.filter(id => !collaborationHydratedIds.has(id))
-		const hydration = unhydratedIds.length > 0
-		const query = new URLSearchParams({
-			cursor: String(hydration ? 0 : collaboration.value?.cursor ?? 0),
-			fileIds: (hydration ? unhydratedIds : visibleIds).join(','),
-		})
-		const response = await fetch(publicEndpoint(`collaboration?${query}`), {
-			headers: { Accept: 'application/json' },
-		})
-		if (!response.ok) throw response
-		const payload = await response.json() as CollaborationState | { unchanged: true; cursor: number }
+		const visibleIds = mediaItems.value.slice(0, 200).map(item => item.id); const unhydratedIds = visibleIds.filter(id => !collaborationHydratedIds.has(id))
+		const hydration = forceHydration || unhydratedIds.length > 0
+		const query = new URLSearchParams({ cursor: String(hydration ? 0 : collaboration.value?.cursor ?? 0), fileIds: (hydration ? unhydratedIds : visibleIds).join(',') })
+		const response = await fetch(publicEndpoint(`collaboration?${query}`), { headers: { Accept: 'application/json' } })
+		if (!response.ok) throw response; const payload = await response.json() as CollaborationState | { unchanged: true; cursor: number }
 		if (!('unchanged' in payload)) {
+			if (payload.reset === true) {
+				collaboration.value = null; collaborationHydratedIds.clear()
+				return performCollaborationLoad(true)
+			}
 			const { mergeCollaborationState } = await import('./domain/collaboration.ts')
 			collaboration.value = collaboration.value === null ? payload : mergeCollaborationState(collaboration.value, payload, hydration ? unhydratedIds : [])
 			for (const id of unhydratedIds) collaborationHydratedIds.add(id)
@@ -502,7 +500,7 @@ async function performMutation(path: string, method: 'POST' | 'PUT' | 'DELETE', 
 			if (response.status === 401 || payload.code === 'invalid_nonce') {
 				if (!deferredMutation.isCompleting()) return deferredMutation.defer(path, method, body)
 			}
-			collaborationError.value = payload.message || t('proofing_gallery', 'The review change could not be saved.')
+			collaborationError.value = t('proofing_gallery', 'The review change could not be saved.')
 			return false
 		}
 		await loadCollaboration()
@@ -869,7 +867,7 @@ function upOneLevel() {
 						<p v-else-if="scope?.viewMode === 'recursive' && indexState?.state === 'unindexed'" class="gallery-index-warning" role="status">
 							{{ t('proofing_gallery', 'This recursive gallery is still being indexed. Reload shortly or ask the gallery owner to rebuild the media index.') }}
 						</p>
-						<div v-if="loading" class="public-gallery__skeleton" aria-label="Loading gallery">
+						<div v-if="loading" class="public-gallery__skeleton" :aria-label="t('proofing_gallery', 'Loading gallery')">
 							<span v-for="index in 12" :key="index" />
 						</div>
 
@@ -968,6 +966,7 @@ function upOneLevel() {
 
 					<PublicCollaborationSheet v-if="settings.mode === 'collaboration'"
 						:open="collaborationSheetOpen"
+						:mobile="mobileViewport"
 						:guest="guest"
 						:review="review"
 						:nonce="nonce"
@@ -982,10 +981,9 @@ function upOneLevel() {
 						@updated="review = $event"
 						@error="collaborationError = $event" />
 
-					<PublicGuestDialog v-model:name="guestName"
-						v-model:email="guestEmail"
-						:open="guestDialogOpen"
+					<PublicGuestDialog :open="guestDialogOpen"
 						:joining="joining"
+						:viewer="gallery.viewer"
 						@dismiss="cancelPendingMutation"
 						@submit="joinCollaboration" />
 

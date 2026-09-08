@@ -30,10 +30,10 @@ function selectLanguage(value: DocumentationLanguage) {
 			</div>
 			<div class="proofing-help__languages" :aria-label="t('proofing_gallery', 'Documentation language')">
 				<button type="button" :aria-pressed="language === 'en'" @click="selectLanguage('en')">
-					English
+					{{ t('proofing_gallery', 'English') }}
 				</button>
 				<button type="button" :aria-pressed="language === 'de'" @click="selectLanguage('de')">
-					Deutsch
+					{{ t('proofing_gallery', 'German') }}
 				</button>
 			</div>
 		</header>

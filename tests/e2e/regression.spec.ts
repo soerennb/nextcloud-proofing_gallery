@@ -500,6 +500,7 @@ test('owner upload conflicts can replace a file without retransmitting stale chu
 })
 
 test('parallel guest uploads finalize into the inbox with conflict-free names', async ({ request, baseURL }) => {
+	const guestRequest = await requestFactory.newContext()
 	const stable = await state()
 	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
 	const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
@@ -519,32 +520,33 @@ test('parallel guest uploads finalize into the inbox with conflict-free names', 
 		expect(published.status()).toBe(200)
 		const token = (await published.json() as { gallery: { shareToken: string } }).gallery.shareToken
 		const publicEndpoint = `${baseURL}/index.php/apps/proofing_gallery/public/${token}`
-		const session = await request.post(`${publicEndpoint}/session`, { data: { displayName: 'Parallel uploader' } })
+		const session = await guestRequest.post(`${publicEndpoint}/session`, { data: { displayName: 'Parallel uploader' } })
 		expect(session.status()).toBe(201)
 		const nonce = (await session.json() as { nonce: string }).nonce
 		const headers = { 'Content-Type': 'application/json', 'X-Proofing-Nonce': nonce }
 		const uploads = await Promise.all(Array.from({ length: 3 }, async () => {
-			const initiated = await request.post(`${publicEndpoint}/uploads`, {
+			const initiated = await guestRequest.post(`${publicEndpoint}/uploads`, {
 				headers,
 				data: { filename: 'guest-proof.png', mimeType: 'image/png', size: image.length },
 			})
 			expect(initiated.status()).toBe(201)
 			const upload = await initiated.json() as { id: string }
 			uploadIds.push(upload.id)
-			expect((await request.put(`${publicEndpoint}/uploads/${upload.id}/chunks/0`, {
+			expect((await guestRequest.put(`${publicEndpoint}/uploads/${upload.id}/chunks/0`, {
 				headers: { 'Content-Type': 'application/octet-stream', 'X-Proofing-Nonce': nonce },
 				data: image,
 			})).status()).toBe(200)
 			return upload
 		}))
 
-		const finalized = await Promise.all(uploads.map(upload => request.post(`${publicEndpoint}/uploads/${upload.id}/finalize`, { headers })))
+		const finalized = await Promise.all(uploads.map(upload => guestRequest.post(`${publicEndpoint}/uploads/${upload.id}/finalize`, { headers })))
 		expect(finalized.map(response => response.status())).toEqual([200, 200, 200])
 		const inbox = await request.get(`${galleries}/${galleryId}/inbox?format=json`, { headers: apiHeaders }).then(response => response.json()) as Array<{ upload_id: string; filename: string }>
 		const rows = inbox.filter(row => uploadIds.includes(row.upload_id))
 		expect(rows).toHaveLength(3)
 		expect(new Set(rows.map(row => row.filename)).size).toBe(3)
 	} finally {
+		await guestRequest.dispose()
 		if (galleryId !== null) {
 			for (const uploadId of uploadIds) await request.delete(`${galleries}/${galleryId}/inbox/${uploadId}?format=json`, { headers: apiHeaders })
 			await request.delete(`${galleries}/${galleryId}/publish?format=json`, { headers: apiHeaders })
