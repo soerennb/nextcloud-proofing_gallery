@@ -2,19 +2,18 @@
 
 ## Unreleased
 
-- separate general feedback and pin conversations beside the image without
-  dimming the artwork, with labelled review colors and localized comment headers
-- attribute signed-in reviews to Nextcloud accounts while retaining guest
-  authorship, private ratings, link restrictions, and private selection updates
-- identify pin replies by their root comment rather than matching coordinates;
-  retain conversations when their initial comment is deleted
-- invalidate live collaboration cursors after account or guest data erasure so
-  open viewers refresh without exposing deleted identity data
-- keep annotations attached during zoom and support bounded touch panning
-- add account attribution and private event recipient migrations; complete the
-  database upgrade before serving the updated application
-- accept empty settings during user migration and fail migration smoke checks
-  with a nonzero exit status
+## 0.10.0 — 2026-09-10
+
+- make collaborative reviews clearer with separate general feedback and image
+  discussions, labelled review colors, localized headers, and account
+  attribution for signed-in reviewers while retaining guest authorship
+- keep ratings, selections, and link restrictions private, and safely refresh
+  open viewers after a user or guest is removed
+- preserve image discussions across replies and deletions, while keeping
+  annotations aligned during zoom and improving touch panning
+- make updates safer for existing galleries and event deliveries by completing
+  required data updates before the new version becomes active
+- update bundled third-party libraries to address known security advisories
 
 ## 0.9.1 — 2026-09-06
 
