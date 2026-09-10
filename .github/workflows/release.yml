@@ -268,9 +268,15 @@ jobs:
           test "${tar_version}" = "${version}"
           jq -e '.spdxVersion and (.packages | length > 0)' proofing_gallery.spdx.json >/dev/null
           digest="$(sha256sum proofing_gallery.tar.gz | awk '{print $1}')"
-          gh api "repos/${GITHUB_REPOSITORY}/attestations/sha256:${digest}" \
+          attestation_json="$(gh api "repos/${GITHUB_REPOSITORY}/attestations/sha256:${digest}")"
+          printf '%s' "${attestation_json}" | jq -e '.attestations | length >= 1' >/dev/null
+          statement="$(
+            printf '%s' "${attestation_json}" \
+              | jq -er '.attestations[0].bundle.dsseEnvelope.payload' \
+              | base64 --decode
+          )"
+          printf '%s' "${statement}" \
             | jq -e --arg digest "${digest}" --arg ref "refs/tags/${GITHUB_REF_NAME}" '
-              (.count >= 1) and
-              any(.attestation.subject[]; .name == "proofing_gallery.tar.gz" and .digest.sha256 == $digest) and
-              .attestation.workflow.ref == $ref
-            ' >/dev/null
+                any(.subject[]?; .name == "proofing_gallery.tar.gz" and .digest.sha256 == $digest) and
+                .predicate.buildDefinition.externalParameters.workflow.ref == $ref
+              ' >/dev/null
