@@ -240,18 +240,23 @@ test('event recipient recovery keeps private and shared scopes and the master an
 test('conflicting share lifecycle operations return 409 while recovery owns the gallery lock', async ({ request }) => {
 	const created = await gallery(request)
 	let child: ReturnType<typeof spawn> | undefined
+	let workerOutput = ''
 	try {
 		await publish(request, created.id)
 		const [link] = await links(request, created.id)
-		const php = 'require "/var/www/html/lib/base.php"; $l=\\OC::$server->get(\\OCP\\Lock\\ILockingProvider::class); $k="proofing-gallery:public-shares:".$argv[1]; $l->acquireLock($k,2); echo "LOCKED\\n"; fflush(STDOUT); try { fgets(STDIN); } finally { $l->releaseLock($k,2); }'
+		const php = 'require "/var/www/html/lib/base.php"; $m=\\OC::$server->get(\\OCA\\ProofingGallery\\Db\\PublicLinkMapper::class); $p=$m->findPrimary((int)$argv[1]); $p->setUpdatedAt(1); $m->update($p); $l=\\OC::$server->get(\\OCP\\Lock\\ILockingProvider::class); $k="proofing-gallery:public-shares:".$argv[1]; $l->acquireLock($k,2); echo "LOCKED\\n"; fflush(STDOUT); try { fgets(STDIN); } finally { $l->releaseLock($k,2); } echo "UPDATED:".$m->findPrimary((int)$argv[1])->getUpdatedAt();'
 		child = spawn('docker', ['compose', 'exec', '-T', '--user', 'www-data', 'nextcloud', 'php', '-r', php, String(created.id)], { stdio: ['pipe', 'pipe', 'pipe'] })
 		await new Promise<void>((resolve, reject) => {
 			const timer = setTimeout(() => reject(new Error('Share lock worker did not start')), 10_000)
-			child!.stdout!.on('data', data => { if (String(data).includes('LOCKED')) { clearTimeout(timer); resolve() } })
+			child!.stdout!.on('data', data => { workerOutput += String(data); if (String(data).includes('LOCKED')) { clearTimeout(timer); resolve() } })
 			child!.on('exit', code => { clearTimeout(timer); reject(new Error(`Lock worker exited: ${code}`)) })
 		})
+		const reads = await Promise.all([
+			request.get(`${api}/${created.id}/public-links?format=json`, { headers }),
+			request.get(`${api}/${created.id}/public-links?format=json`, { headers }),
+		])
+		for (const response of reads) expect(await checked<{ items: Link[] }>(response)).toMatchObject({ items: [{ id: link.id }] })
 		const responses = [
-			await request.get(`${api}/${created.id}/public-links?format=json`, { headers }),
 			await request.post(`${api}/${created.id}/publish?format=json`, { headers }),
 			await request.delete(`${api}/${created.id}/publish?format=json`, { headers }),
 			await request.delete(`${api}/${created.id}?format=json`, { headers }),
@@ -266,6 +271,7 @@ test('conflicting share lifecycle operations return 409 while recovery owns the 
 		if (child && child.exitCode === null) {
 			const exited = new Promise<void>(resolve => child!.once('exit', () => resolve()))
 			child.stdin!.end('release\n'); await exited
+			expect(workerOutput).toContain('UPDATED:1')
 		}
 		await cleanup(request, created.id)
 	}
