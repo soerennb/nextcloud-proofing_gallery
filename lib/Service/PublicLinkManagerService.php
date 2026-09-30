@@ -50,11 +50,19 @@ final class PublicLinkManagerService {
 		private PublicLinkAnchorService $anchors,
 		private PublicLinkRootRepository $rootRows,
 		private PolicyService $instancePolicies,
+		private PublicShareRecoveryService $recovery,
+		private PublicShareTargetService $targets,
 	) {
 	}
 
 	/** @return array{items: list<array<string, mixed>>, presets: array<string, array<string, bool|string>>} */
 	public function list(Gallery $gallery): array {
+		// Listing also synchronizes the primary app row; serialize that write.
+		return $this->recovery->locked((int)$gallery->getId(), fn (): array => $this->listLocked($this->galleries->find((int)$gallery->getId())));
+	}
+
+	/** @return array{items: list<array<string, mixed>>, presets: array<string, array<string, bool|string>>} */
+	private function listLocked(Gallery $gallery): array {
 		return [
 			'items' => array_map(fn (PublicLink $link): array => $this->present($gallery, $link), $this->primaryLinks->list($gallery)),
 			'presets' => $this->policies->presets(),
@@ -65,6 +73,13 @@ final class PublicLinkManagerService {
 	 * @return array<string, mixed>
 	 */
 	public function create(Gallery $gallery, PublicLinkConfiguration $config, bool $eventOperation = false, ?string $privateRoot = null, array $groupRoots = []): array {
+		return $this->recovery->locked((int)$gallery->getId(), fn (): array => $this->createLocked($this->galleries->find((int)$gallery->getId()), $config, $eventOperation, $privateRoot, $groupRoots));
+	}
+
+	/** @param list<string> $groupRoots
+	 * @return array<string, mixed>
+	 */
+	private function createLocked(Gallery $gallery, PublicLinkConfiguration $config, bool $eventOperation, ?string $privateRoot, array $groupRoots): array {
 		if ($gallery->getDeliveryMode() === 'event' && !$eventOperation) {
 			throw new \InvalidArgumentException('Event links are managed by event delivery');
 		}
@@ -120,9 +135,9 @@ final class PublicLinkManagerService {
 	}
 
 	/** @return array<string, mixed> */
-	public function update(Gallery $gallery, int $linkId, PublicLinkConfiguration $config): array {
+	public function update(Gallery $gallery, int $linkId, PublicLinkConfiguration $config, bool $recoverMissingShare = false): array {
 		if ($gallery->getDeliveryMode() === 'event') throw new \InvalidArgumentException('Event links are managed by event delivery');
-		return $this->updateInternal($gallery, $linkId, $config);
+		return $this->updateInternal($gallery, $linkId, $config, recoverMissingShare: $recoverMissingShare);
 	}
 
 	/**
@@ -130,9 +145,9 @@ final class PublicLinkManagerService {
 	 * @param list<string> $groupRoots
 	 * @return array<string, mixed>
 	 */
-	public function updateEvent(Gallery $gallery, int $linkId, PublicLinkConfiguration $config, string $privateRoot, array $groupRoots = []): array {
+	public function updateEvent(Gallery $gallery, int $linkId, PublicLinkConfiguration $config, string $privateRoot, array $groupRoots = [], bool $recoverMissingShare = false): array {
 		if ($gallery->getDeliveryMode() !== 'event') throw new \InvalidArgumentException('Event link operation requires an event project');
-		return $this->updateInternal($gallery, $linkId, $config, $privateRoot, $groupRoots);
+		return $this->updateInternal($gallery, $linkId, $config, $privateRoot, $groupRoots, $recoverMissingShare);
 	}
 
 	/**
@@ -140,13 +155,26 @@ final class PublicLinkManagerService {
 	 * @param list<string> $groupRoots
 	 * @return array<string, mixed>
 	 */
-	public function updateEventRecipient(Gallery $gallery, int $linkId, string $name, array $allowedRoots, string $privateRoot, ?string $locale, ?string $password = null, array $groupRoots = []): array {
+	public function updateEventRecipient(Gallery $gallery, int $linkId, string $name, array $allowedRoots, string $privateRoot, ?string $locale, ?string $password = null, array $groupRoots = [], bool $recoverMissingShare = false, ?string $expiresAt = null): array {
+		return $this->recovery->locked((int)$gallery->getId(), fn (): array => $this->updateEventRecipientLocked($this->galleries->find((int)$gallery->getId()), $linkId, $name, $allowedRoots, $privateRoot, $locale, $password, $groupRoots, $recoverMissingShare, $expiresAt));
+	}
+
+	/** @param list<string> $allowedRoots
+	 * @param list<string> $groupRoots
+	 * @return array<string, mixed>
+	 */
+	private function updateEventRecipientLocked(Gallery $gallery, int $linkId, string $name, array $allowedRoots, string $privateRoot, ?string $locale, ?string $password, array $groupRoots, bool $recoverMissingShare, ?string $expiresAt): array {
 		$link = $this->owned($gallery, $linkId);
-		return $this->updateEvent($gallery, $linkId, $this->eventConfiguration($link, $name, $allowedRoots, $locale, $password), $privateRoot, $groupRoots);
+		return $this->updateEvent($gallery, $linkId, $this->eventConfiguration($link, $name, $allowedRoots, $locale, $password, $recoverMissingShare, $expiresAt), $privateRoot, $groupRoots, $recoverMissingShare);
 	}
 
 	/** @return array{updated: int, skipped: int} */
 	public function applyEventDownloadPolicy(Gallery $gallery, string $downloadScope): array {
+		return $this->recovery->locked((int)$gallery->getId(), fn (): array => $this->applyEventDownloadPolicyLocked($this->galleries->find((int)$gallery->getId()), $downloadScope));
+	}
+
+	/** @return array{updated: int, skipped: int} */
+	private function applyEventDownloadPolicyLocked(Gallery $gallery, string $downloadScope): array {
 		if ($gallery->getDeliveryMode() !== 'event') throw new \InvalidArgumentException('Download policy application requires an event project');
 		$scope = DownloadScope::tryFrom($downloadScope);
 		if ($scope === null) throw new \InvalidArgumentException('Invalid event download scope');
@@ -192,24 +220,43 @@ final class PublicLinkManagerService {
 	/** @param list<string> $groupRoots
 	 * @return array<string, mixed>
 	 */
-	private function updateInternal(Gallery $gallery, int $linkId, PublicLinkConfiguration $config, ?string $privateRoot = null, array $groupRoots = []): array {
+	private function updateInternal(Gallery $gallery, int $linkId, PublicLinkConfiguration $config, ?string $privateRoot = null, array $groupRoots = [], bool $recoverMissingShare = false): array {
+		return $this->recovery->locked((int)$gallery->getId(), fn (): array => $this->updateLocked($this->galleries->find((int)$gallery->getId()), $linkId, $config, $privateRoot, $groupRoots, $recoverMissingShare));
+	}
+
+	/** @param list<string> $groupRoots
+	 * @return array<string, mixed>
+	 */
+	private function updateLocked(Gallery $gallery, int $linkId, PublicLinkConfiguration $config, ?string $privateRoot, array $groupRoots, bool $recoverMissingShare): array {
 		$link = $this->owned($gallery, $linkId);
 		$this->assertLinkManagementAllowed($gallery, $config, false);
 		if (!$link->getIsPrimary()) $this->capabilities->assertFeature('multiplePublicLinks');
 		if ($link->getStatus() !== 'active') throw new \InvalidArgumentException('Revoked links cannot be edited');
 		$config = $this->validateScope($gallery, $config);
-		$share = $this->shareManager->getShareByToken($link->getToken());
-		$snapshot = $this->shareSnapshot($share);
 		$oldAnchor = $link->getScopeAnchorId() === null ? null : $this->anchors->resolve($gallery->getOwnerUid(), $link->getScopeAnchorId());
+		$expectedNode = $this->targets->resolve($gallery, $link);
+		$previousToken = $link->getToken();
+		$recreated = false;
+		try {
+			$share = $this->recovery->resolve($gallery, $link, $previousToken, (int)$expectedNode->getId());
+		} catch (\OCA\ProofingGallery\Exception\PublicShareMissingException $exception) {
+			if (!$recoverMissingShare) throw $exception;
+			if ($config->password === null) throw new \InvalidArgumentException('Choose a replacement password or no password');
+			$share = $this->newShare($gallery);
+			$recreated = true;
+		}
+		$snapshot = $recreated ? null : $this->shareSnapshot($share);
 		$newAnchor = $config->allowedRoots === [] ? null : ($oldAnchor ?? $this->anchors->create($gallery->getOwnerUid()));
 		try {
-			$this->applyShare($share, $gallery, $config, false, $newAnchor);
-			$this->shareManager->updateShare($share);
+			$this->applyShare($share, $gallery, $config, $recreated, $newAnchor);
+			$share = $recreated ? $this->recovery->create($share, $previousToken) : $this->shareManager->updateShare($share);
 		} catch (\Throwable $exception) {
 			if ($oldAnchor === null && $newAnchor !== null) $this->deleteAnchor($newAnchor, $exception);
 			throw $exception;
 		}
 		$link->setName($config->name);
+		$link->setCoreShareId((int)$share->getId());
+		$link->setToken($share->getToken());
 		$link->setPolicy(json_encode($config->policy, JSON_THROW_ON_ERROR));
 		$link->setStartPath($config->startPath);
 		$link->setAllowedRootList($config->allowedRoots);
@@ -225,32 +272,58 @@ final class PublicLinkManagerService {
 		$link->setReviewSelectionMax($config->reviewEnabled ? $config->reviewSelectionMaximum : null);
 		$link->setUpdatedAt($this->clock->getTime());
 		try {
-			$link = $this->links->update($link);
-			$this->rootRows->replace((int)$link->getId(), $this->stableRoots($gallery, $config->allowedRoots, $privateRoot, $groupRoots));
-			$this->reviews->synchronize($gallery, $link);
+			$link = $this->atomic(function () use ($gallery, $link, $config, $privateRoot, $groupRoots): PublicLink {
+				$link = $this->links->update($link);
+				$this->rootRows->replace((int)$link->getId(), $this->stableRoots($gallery, $config->allowedRoots, $privateRoot, $groupRoots));
+				$this->reviews->synchronize($gallery, $link);
+				if ($link->getIsPrimary()) {
+					$gallery->setShareToken($link->getToken());
+					$gallery->setUpdatedAt($this->clock->getTime());
+					$gallery->setRevision($gallery->getRevision() + 1);
+					$this->galleries->update($gallery);
+				}
+				return $link;
+			}, $this->db);
 		} catch (\Throwable $exception) {
-			$this->compensateShare($share, $snapshot, $exception);
+			if ($recreated) {
+				if (!$this->recovery->discard($share, $exception)) {
+					try {
+						$link->setStatus('suspended');
+						$this->links->update($link);
+					} catch (\Throwable $compensation) { $this->logCompensationFailure('register a disabled replacement public share', $compensation, $exception); }
+				}
+			} elseif ($snapshot !== null) $this->compensateShare($share, $snapshot, $exception);
 			if ($oldAnchor === null && $newAnchor !== null) $this->deleteAnchor($newAnchor, $exception);
 			throw $exception;
 		}
 		if ($oldAnchor !== null && $newAnchor === null) $this->deleteAnchor($oldAnchor);
-		return $this->present($gallery, $link);
+		return [...$this->present($gallery, $link), 'recovery' => $recreated ? ($link->getToken() === $previousToken ? 'restored' : 'replaced') : null];
 	}
 
 	/** @param list<string> $allowedRoots */
-	private function eventConfiguration(PublicLink $link, string $name, array $allowedRoots, ?string $locale, ?string $password): PublicLinkConfiguration {
-		$share = $this->shareManager->getShareByToken($link->getToken());
+	private function eventConfiguration(PublicLink $link, string $name, array $allowedRoots, ?string $locale, ?string $password, bool $recoverMissingShare = false, ?string $expiresAt = null): PublicLinkConfiguration {
+		$gallery = $this->galleries->find($link->getGalleryId());
+		$node = $this->targets->resolve($gallery, $link);
+		$share = null;
+		try { $share = $this->recovery->resolve($gallery, $link, $link->getToken(), (int)$node->getId()); }
+		catch (\OCA\ProofingGallery\Exception\PublicShareMissingException $exception) { if (!$recoverMissingShare) throw $exception; }
+		if ($recoverMissingShare && ($password === null || $expiresAt === null)) throw new \InvalidArgumentException('Choose a replacement password or no password, and an expiry or no expiry');
 		return PublicLinkConfiguration::fromArray([
 			'name' => $name, 'policy' => json_decode($link->getPolicy(), true, flags: JSON_THROW_ON_ERROR),
 			'startPath' => '', 'allowedRoots' => $allowedRoots, 'viewMode' => 'folder', 'groupDepth' => $link->getGroupDepth(),
 			'minOwnerRating' => $link->getMinOwnerRating(), 'publicLocale' => $locale, 'password' => $password,
-			'expiresAt' => $share->getExpirationDate()?->format('Y-m-d'), 'reviewEnabled' => $link->getReviewEnabled(), 'reviewDueDate' => $link->getReviewDueDate(),
+			'expiresAt' => $recoverMissingShare ? $expiresAt : $share?->getExpirationDate()?->format('Y-m-d'), 'reviewEnabled' => $link->getReviewEnabled(), 'reviewDueDate' => $link->getReviewDueDate(),
 			'reviewSelectionMinimum' => $link->getReviewSelectionMin(), 'reviewSelectionMaximum' => $link->getReviewSelectionMax(),
 		]);
 	}
 
 	/** @return array<string, mixed> */
 	public function makePrimary(Gallery $gallery, int $linkId): array {
+		return $this->recovery->locked((int)$gallery->getId(), fn (): array => $this->makePrimaryLocked($this->galleries->find((int)$gallery->getId()), $linkId));
+	}
+
+	/** @return array<string, mixed> */
+	private function makePrimaryLocked(Gallery $gallery, int $linkId): array {
 		if ($gallery->getDeliveryMode() === 'event') throw new \InvalidArgumentException('The event master link cannot be replaced');
 		$this->capabilities->assertCanPublish($gallery->getOwnerUid());
 		$this->capabilities->assertFeature('multiplePublicLinks');
@@ -272,11 +345,16 @@ final class PublicLinkManagerService {
 
 	/** @return array<string, mixed> */
 	public function revoke(Gallery $gallery, int $linkId, string $actorUid): array {
+		return $this->recovery->locked((int)$gallery->getId(), fn (): array => $this->revokeLocked($this->galleries->find((int)$gallery->getId()), $linkId, $actorUid));
+	}
+
+	/** @return array<string, mixed> */
+	private function revokeLocked(Gallery $gallery, int $linkId, string $actorUid): array {
 		$link = $this->owned($gallery, $linkId);
 		if ($link->getIsPrimary()) throw new \InvalidArgumentException('Use the legacy revoke action for the primary link');
 		if ($link->getStatus() === 'active') {
 			try {
-				$this->shareManager->deleteShare($this->shareManager->getShareByToken($link->getToken()));
+				$this->recovery->revoke($gallery, $link);
 			} catch (ShareNotFound) {
 				// An already absent native share is safe to finalize as revoked locally.
 			}
@@ -313,6 +391,13 @@ final class PublicLinkManagerService {
 
 	/** @param list<string> $sharedRoots */
 	public function configureEventPrimary(Gallery $gallery, array $sharedRoots): void {
+		$this->recovery->locked((int)$gallery->getId(), function () use ($gallery, $sharedRoots): void {
+			$this->configureEventPrimaryLocked($this->galleries->find((int)$gallery->getId()), $sharedRoots);
+		});
+	}
+
+	/** @param list<string> $sharedRoots */
+	private function configureEventPrimaryLocked(Gallery $gallery, array $sharedRoots): void {
 		if ($gallery->getDeliveryMode() !== 'event' || $gallery->getShareToken() === null) return;
 		$link = $this->links->findPrimary((int)$gallery->getId());
 		// New event projects use a deliberately empty technical base share. Existing
@@ -430,7 +515,7 @@ final class PublicLinkManagerService {
 		$root = $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId());
 		if ($config->allowedRoots !== [] && $anchor === null) throw new \LogicException('Multi-folder links require a native share anchor');
 		$share->setNode($config->allowedRoots !== [] ? $anchor : ($config->startPath === '' ? $root : $root->get($config->startPath)));
-		$share->setLabel($gallery->getTitle() . ' · ' . $config->name);
+		$share->setLabel($this->recovery->label($gallery, $config->name));
 		$share->setPermissions(Constants::PERMISSION_READ);
 		$share->setHideDownload(!$config->policy->downloadScope->allowsIndividual());
 		if ($creating || $config->password !== null) $share->setPassword($config->password === '' ? null : $config->password);
