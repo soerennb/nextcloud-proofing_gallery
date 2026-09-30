@@ -213,6 +213,8 @@ final class GalleryController extends Controller {
 				$userId,
 				$this->galleries->rebindSource($userId, $id, $folderId),
 			));
+		} catch (GalleryConflictException $exception) {
+			return new DataResponse(['code' => 'revision_conflict', 'message' => $exception->getMessage()], Http::STATUS_CONFLICT);
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
 		} catch (InvalidArgumentException|FolderAccessException $exception) {
@@ -226,6 +228,8 @@ final class GalleryController extends Controller {
 		try {
 			$userId = $this->userId();
 			return new DataResponse($this->galleries->present($userId, $this->galleries->archive($userId, $id)));
+		} catch (GalleryConflictException $exception) {
+			return new DataResponse(['code' => 'revision_conflict', 'message' => $exception->getMessage()], Http::STATUS_CONFLICT);
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
 		} catch (InvalidArgumentException $exception) {
@@ -239,6 +243,8 @@ final class GalleryController extends Controller {
 		try {
 			$userId = $this->userId();
 			return new DataResponse($this->galleries->present($userId, $this->galleries->restore($userId, $id)));
+		} catch (GalleryConflictException $exception) {
+			return new DataResponse(['code' => 'revision_conflict', 'message' => $exception->getMessage()], Http::STATUS_CONFLICT);
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
 		} catch (InvalidArgumentException $exception) {

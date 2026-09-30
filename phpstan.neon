@@ -4,6 +4,9 @@ parameters:
         - lib
     bootstrapFiles:
         - tests/bootstrap.php
+    scanFiles:
+        # The OCP package exposes traits through our runtime autoloader only.
+        - vendor/nextcloud/ocp/OCP/AppFramework/Db/TTransactional.php
     tmpDir: .cache/phpstan
     treatPhpDocTypesAsCertain: false
     reportUnmatchedIgnoredErrors: true

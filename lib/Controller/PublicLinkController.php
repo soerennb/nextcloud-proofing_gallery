@@ -100,6 +100,8 @@ final class PublicLinkController extends Controller {
 	public function publicLinks(int $id): DataResponse {
 		try {
 			return new DataResponse($this->publicLinks->list($this->galleries->get($this->userId(), $id)));
+		} catch (\OCA\ProofingGallery\Exception\GalleryConflictException $exception) {
+			return new DataResponse(['code' => 'revision_conflict', 'message' => $exception->getMessage()], Http::STATUS_CONFLICT);
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
 		}
@@ -135,6 +137,8 @@ final class PublicLinkController extends Controller {
 					'publicLocale', 'password', 'expiresAt', 'reviewEnabled', 'reviewDueDate', 'reviewSelectionMinimum', 'reviewSelectionMaximum',
 				)),
 			), Http::STATUS_CREATED);
+		} catch (\OCA\ProofingGallery\Exception\GalleryConflictException $exception) {
+			return new DataResponse(['code' => 'revision_conflict', 'message' => $exception->getMessage()], Http::STATUS_CONFLICT);
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
 		} catch (PolicyViolationException $exception) {
@@ -168,8 +172,10 @@ final class PublicLinkController extends Controller {
 		?string $reviewDueDate = null,
 		?int $reviewSelectionMinimum = null,
 		?int $reviewSelectionMaximum = null,
+		bool $recoverMissingShare = false,
 	): DataResponse {
 		try {
+			if ($recoverMissingShare && ($password === null || $expiresAt === null)) throw new InvalidArgumentException('Choose a replacement password or no password, and an expiry or no expiry');
 			return new DataResponse($this->publicLinks->update(
 				$this->galleries->get($this->userId(), $id),
 				$linkId,
@@ -177,13 +183,20 @@ final class PublicLinkController extends Controller {
 					'name', 'policy', 'startPath', 'allowedRoots', 'viewMode', 'groupDepth', 'minOwnerRating',
 					'publicLocale', 'password', 'expiresAt', 'reviewEnabled', 'reviewDueDate', 'reviewSelectionMinimum', 'reviewSelectionMaximum',
 				)),
+				$recoverMissingShare,
 			));
+		} catch (\OCA\ProofingGallery\Exception\PublicShareMissingException $exception) {
+			return new DataResponse(['code' => 'public_share_missing', 'message' => $exception->getMessage()], Http::STATUS_CONFLICT);
+		} catch (\OCA\ProofingGallery\Exception\GalleryConflictException $exception) {
+			return new DataResponse(['code' => 'revision_conflict', 'message' => $exception->getMessage()], Http::STATUS_CONFLICT);
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
 		} catch (PolicyViolationException $exception) {
 			return new DataResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
 		} catch (GalleryNotReadyException $exception) {
 			return new DataResponse(['code' => 'gallery_not_ready', 'message' => $exception->getMessage(), ...$exception->report], Http::STATUS_UNPROCESSABLE_ENTITY);
+		} catch (\OCP\HintException|\OCP\Share\Exceptions\GenericShareException $exception) {
+			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		} catch (InvalidArgumentException $exception) {
 			return new DataResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
@@ -194,6 +207,8 @@ final class PublicLinkController extends Controller {
 	public function makePublicLinkPrimary(int $id, int $linkId): DataResponse {
 		try {
 			return new DataResponse($this->publicLinks->makePrimary($this->galleries->get($this->userId(), $id), $linkId));
+		} catch (\OCA\ProofingGallery\Exception\GalleryConflictException $exception) {
+			return new DataResponse(['code' => 'revision_conflict', 'message' => $exception->getMessage()], Http::STATUS_CONFLICT);
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
 		} catch (PolicyViolationException $exception) {
@@ -208,6 +223,8 @@ final class PublicLinkController extends Controller {
 	public function revokePublicLink(int $id, int $linkId): DataResponse {
 		try {
 			return new DataResponse($this->publicLinks->revoke($this->galleries->get($this->userId(), $id), $linkId, $this->userId()));
+		} catch (\OCA\ProofingGallery\Exception\GalleryConflictException $exception) {
+			return new DataResponse(['code' => 'revision_conflict', 'message' => $exception->getMessage()], Http::STATUS_CONFLICT);
 		} catch (DoesNotExistException|AuthorizationException) {
 			return new DataResponse(['message' => 'Gallery not found'], Http::STATUS_NOT_FOUND);
 		} catch (InvalidArgumentException $exception) {
