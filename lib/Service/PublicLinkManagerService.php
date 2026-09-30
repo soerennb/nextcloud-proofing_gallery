@@ -57,14 +57,20 @@ final class PublicLinkManagerService {
 
 	/** @return array{items: list<array<string, mixed>>, presets: array<string, array<string, bool|string>>} */
 	public function list(Gallery $gallery): array {
-		// Listing also synchronizes the primary app row; serialize that write.
-		return $this->recovery->locked((int)$gallery->getId(), fn (): array => $this->listLocked($this->galleries->find((int)$gallery->getId())));
-	}
-
-	/** @return array{items: list<array<string, mixed>>, presets: array<string, array<string, bool|string>>} */
-	private function listLocked(Gallery $gallery): array {
+		$gallery = $this->galleries->find((int)$gallery->getId());
+		if ($gallery->getShareToken() !== null) {
+			try {
+				$this->links->findPrimary((int)$gallery->getId());
+			} catch (DoesNotExistException) {
+				// Legacy galleries may need a primary row. Only this write needs a
+				// lifecycle lock; ordinary parallel GETs read persisted link state.
+				$this->recovery->locked((int)$gallery->getId(), function () use ($gallery): void {
+					$this->primaryLinks->ensurePrimary($this->galleries->find((int)$gallery->getId()));
+				});
+			}
+		}
 		return [
-			'items' => array_map(fn (PublicLink $link): array => $this->present($gallery, $link), $this->primaryLinks->list($gallery)),
+			'items' => array_map(fn (PublicLink $link): array => $this->present($gallery, $link), $this->links->findForGallery((int)$gallery->getId())),
 			'presets' => $this->policies->presets(),
 		];
 	}
