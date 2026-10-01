@@ -272,7 +272,7 @@ export interface GalleryPublicLink {
 	id: number
 	galleryId: number
 	name: string
-	status: 'active' | 'revoked'
+	status: 'active' | 'suspended' | 'revoked'
 	primary: boolean
 	policy: PublicLinkPolicy
 	startPath: string
@@ -417,4 +417,9 @@ export interface NotificationSubscription {
 		nextcloud: { enabled: boolean; available: boolean; eventTypes: NotificationEventType[] }
 		email: { enabled: boolean; available: boolean; eventTypes: NotificationEventType[]; frequency: 'immediate' | 'daily'; locale: 'auto' | 'en' | 'de' }
 	}
+}
+
+export interface SourceRebindReport {
+	missingScopes: Array<{ linkId: number; linkName: string; path: string }>
+	suspendedLinkIds: number[]
 }

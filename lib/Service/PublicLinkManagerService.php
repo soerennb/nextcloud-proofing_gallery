@@ -235,10 +235,12 @@ final class PublicLinkManagerService {
 	 */
 	private function updateLocked(Gallery $gallery, int $linkId, PublicLinkConfiguration $config, ?string $privateRoot, array $groupRoots, bool $recoverMissingShare): array {
 		$link = $this->owned($gallery, $linkId);
-		$this->assertLinkManagementAllowed($gallery, $config, false);
+		$repairingScope = $gallery->getDeliveryMode() !== 'event' && $link->getStatus() === 'suspended' && $link->getScopeMode() === 'empty';
+		$this->assertLinkManagementAllowed($gallery, $config, false, $repairingScope);
 		if (!$link->getIsPrimary()) $this->capabilities->assertFeature('multiplePublicLinks');
-		if ($link->getStatus() !== 'active') throw new \InvalidArgumentException('Revoked links cannot be edited');
+		if ($link->getStatus() !== 'active' && !$repairingScope) throw new \InvalidArgumentException('Revoked links cannot be edited');
 		$config = $this->validateScope($gallery, $config);
+		if ($repairingScope && $config->startPath === '' && $config->allowedRoots === []) throw new \InvalidArgumentException('Choose valid restricted folders before activating this link');
 		$oldAnchor = $link->getScopeAnchorId() === null ? null : $this->anchors->resolve($gallery->getOwnerUid(), $link->getScopeAnchorId());
 		$expectedNode = $this->targets->resolve($gallery, $link);
 		$previousToken = $link->getToken();
@@ -261,6 +263,7 @@ final class PublicLinkManagerService {
 			throw $exception;
 		}
 		$link->setName($config->name);
+		if ($repairingScope) $link->setStatus('active');
 		$link->setCoreShareId((int)$share->getId());
 		$link->setToken($share->getToken());
 		$link->setPolicy(json_encode($config->policy, JSON_THROW_ON_ERROR));
@@ -278,12 +281,13 @@ final class PublicLinkManagerService {
 		$link->setReviewSelectionMax($config->reviewEnabled ? $config->reviewSelectionMaximum : null);
 		$link->setUpdatedAt($this->clock->getTime());
 		try {
-			$link = $this->atomic(function () use ($gallery, $link, $config, $privateRoot, $groupRoots): PublicLink {
+			$link = $this->atomic(function () use ($gallery, $link, $config, $privateRoot, $groupRoots, $repairingScope): PublicLink {
 				$link = $this->links->update($link);
 				$this->rootRows->replace((int)$link->getId(), $this->stableRoots($gallery, $config->allowedRoots, $privateRoot, $groupRoots));
 				$this->reviews->synchronize($gallery, $link);
-				if ($link->getIsPrimary()) {
-					$gallery->setShareToken($link->getToken());
+				if ($link->getIsPrimary() || ($repairingScope && $gallery->getStatus() === 'draft')) {
+					if ($link->getIsPrimary()) $gallery->setShareToken($link->getToken());
+					if ($repairingScope) $gallery->setStatus('published');
 					$gallery->setUpdatedAt($this->clock->getTime());
 					$gallery->setRevision($gallery->getRevision() + 1);
 					$this->galleries->update($gallery);
@@ -358,7 +362,7 @@ final class PublicLinkManagerService {
 	private function revokeLocked(Gallery $gallery, int $linkId, string $actorUid): array {
 		$link = $this->owned($gallery, $linkId);
 		if ($link->getIsPrimary()) throw new \InvalidArgumentException('Use the legacy revoke action for the primary link');
-		if ($link->getStatus() === 'active') {
+		if (in_array($link->getStatus(), ['active', 'suspended'], true)) {
 			try {
 				$this->recovery->revoke($gallery, $link);
 			} catch (ShareNotFound) {
@@ -497,11 +501,11 @@ final class PublicLinkManagerService {
 		return $config->withScope($allowedRoots === [] ? $startPath : '', $allowedRoots);
 	}
 
-	private function assertLinkManagementAllowed(Gallery $gallery, PublicLinkConfiguration $config, bool $creating): void {
+	private function assertLinkManagementAllowed(Gallery $gallery, PublicLinkConfiguration $config, bool $creating, bool $repairingScope = false): void {
 		$this->capabilities->assertCanPublish($gallery->getOwnerUid());
 		if ($creating) $this->capabilities->assertFeature('multiplePublicLinks');
 		if ($config->viewMode === 'recursive') $this->capabilities->assertFeature('recursiveGalleries');
-		if ($gallery->getStatus() !== \OCA\ProofingGallery\Domain\GalleryStatus::Published->value
+		if ((!$repairingScope && $gallery->getStatus() !== \OCA\ProofingGallery\Domain\GalleryStatus::Published->value) || $gallery->getStatus() === 'archived'
 			|| $gallery->getArchivedAt() !== null) {
 			throw new \InvalidArgumentException('Only published galleries can manage active public links');
 		}

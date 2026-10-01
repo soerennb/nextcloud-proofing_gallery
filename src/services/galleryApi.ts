@@ -2,7 +2,7 @@ import type { PublicShareRecovery } from '../domain/publicShareRecovery.ts'
 import axios from '@nextcloud/axios'
 import { generateOcsUrl, generateUrl } from '@nextcloud/router'
 
-import type { CollectionDocument, CullingXmpReport, Gallery, GalleryCursorPage, GalleryPage, GalleryPublicLink, GalleryReadiness, GuestRatingAggregate, GuestRatingPromotion, IndexedMediaPage, InvitationTemplate, LivePushCredential, LivePushOverview, MediaCull, MediaItem, MediaMetadata, MediaPage, MediaVersion, OwnerSelection, PublicLinkPolicy, ReviewOverview, ShareAuditItem } from '../types'
+import type { CollectionDocument, CullingXmpReport, Gallery, GalleryCursorPage, GalleryPage, GalleryPublicLink, GalleryReadiness, GuestRatingAggregate, GuestRatingPromotion, IndexedMediaPage, InvitationTemplate, LivePushCredential, LivePushOverview, MediaCull, MediaItem, MediaMetadata, MediaPage, MediaVersion, OwnerSelection, PublicLinkPolicy, ReviewOverview, ShareAuditItem, SourceRebindReport } from '../types'
 import type { CanonicalGallerySettings, GallerySettings } from '../domain/gallerySettings'
 
 export { fetchOwnerUploadConflicts, ownerUploadConcurrency, prepareOwnerUploadSessions, uploadGalleryMedia } from './ownerUploadApi.ts'
@@ -125,8 +125,8 @@ export async function updateGallery(
 	return data
 }
 
-export async function updateGallerySource(id: number, folderId: number): Promise<Gallery> {
-	const { data } = await axios.put<Gallery>(`${galleriesUrl}/${id}/source`, { folderId })
+export async function updateGallerySource(id: number, folderId: number): Promise<Gallery & { sourceRebind: SourceRebindReport }> {
+	const { data } = await axios.put<Gallery & { sourceRebind: SourceRebindReport }>(`${galleriesUrl}/${id}/source`, { folderId })
 	return data
 }
 

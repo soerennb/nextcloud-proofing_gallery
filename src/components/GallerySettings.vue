@@ -19,11 +19,12 @@ import { completeGallery, fetchCollection, fetchDesignAssets, fetchGalleryMedia,
 import type { DesignAsset } from '../services/galleryApi.ts'
 import { fetchEventDesignMedia, fetchEventSetup } from '../services/eventApi.ts'
 import type { EventDesignScope, EventSetup } from '../services/eventApi.ts'
-import type { Gallery, GalleryReadiness, MediaItem } from '../types.ts'
+import type { Gallery, GalleryReadiness, MediaItem, SourceRebindReport } from '../types.ts'
 import CollectionContent from './CollectionContent.vue'
 import CullingWorkspace from './CullingWorkspace.vue'
 import FolderContent from './FolderContent.vue'
 import SharingModal from './SharingModal.vue'
+import SourceRebindNotice from './SourceRebindNotice.vue'
 import GalleryAutomationWorkspace from './workspaces/GalleryAutomationWorkspace.vue'
 import GalleryDesignWorkspace from './workspaces/GalleryDesignWorkspace.vue'
 import GalleryHistoryWorkspace from './workspaces/GalleryHistoryWorkspace.vue'
@@ -53,6 +54,7 @@ const serverRevision = ref(props.gallery.revision)
 const conflictGallery = ref<Gallery | null>(null)
 let savePromise: Promise<boolean> | null = null
 const rebinding = ref(false)
+const sourceRebind = ref<SourceRebindReport | null>(null)
 const showSharing = ref(false)
 const designPreviewOpen = ref(false)
 const designAssetUploading = ref<'logo' | 'watermark' | null>(null)
@@ -334,6 +336,7 @@ async function chooseSource() {
 	try {
 		const nodes = await getFilePickerBuilder(t('proofing_gallery', 'Choose source folder'))
 			.setMultiSelect(false)
+			.allowDirectories()
 			.setType(FilePickerType.Choose)
 			.setCanPick(node => node.type === 'folder')
 			.build()
@@ -345,9 +348,10 @@ async function chooseSource() {
 		}
 		rebinding.value = true
 		const gallery = await updateGallerySource(props.gallery.id, folder.fileid)
+		sourceRebind.value = gallery.sourceRebind
 		emit('updated', gallery)
 		await loadMedia()
-		showSuccess(t('proofing_gallery', 'Source folder updated. The public link remains unchanged.'))
+		showSuccess(t('proofing_gallery', 'Source folder updated.'))
 	} catch {
 		if (rebinding.value) {
 			showError(t('proofing_gallery', 'The source folder could not be updated.'))
@@ -578,6 +582,8 @@ onBeforeUnmount(() => {
 				</div>
 			</details>
 		</nav>
+
+		<SourceRebindNotice v-if="sourceRebind" :report="sourceRebind" />
 
 		<AnimatePresence mode="wait">
 			<motion.div

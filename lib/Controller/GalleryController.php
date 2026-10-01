@@ -209,10 +209,11 @@ final class GalleryController extends Controller {
 	public function source(int $id, int $folderId): DataResponse {
 		try {
 			$userId = $this->userId();
-			return new DataResponse($this->galleries->present(
-				$userId,
-				$this->galleries->rebindSource($userId, $id, $folderId),
-			));
+			$result = $this->galleries->rebindSource($userId, $id, $folderId);
+			return new DataResponse([
+				...$this->galleries->present($userId, $result->gallery),
+				'sourceRebind' => $result->report(),
+			]);
 		} catch (GalleryConflictException $exception) {
 			return new DataResponse(['code' => 'revision_conflict', 'message' => $exception->getMessage()], Http::STATUS_CONFLICT);
 		} catch (DoesNotExistException|AuthorizationException) {
