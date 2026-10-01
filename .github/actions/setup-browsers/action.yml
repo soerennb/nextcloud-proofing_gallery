@@ -1,0 +1,28 @@
+name: Set up browser runtimes
+description: Install and verify all required Playwright engines before starting Nextcloud
+runs:
+  using: composite
+  steps:
+    - name: Install browsers and system dependencies
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Avoid the Azure mirror that has stalled dependency installation.
+        if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+          sudo sed -i 's@azure.archive.ubuntu.com@archive.ubuntu.com@g' /etc/apt/sources.list.d/ubuntu.sources
+        fi
+        browser_install_ready=false
+        for attempt in 1 2; do
+          if timeout --kill-after=30s 5m npx playwright install --with-deps chromium firefox webkit; then
+            browser_install_ready=true
+            break
+          fi
+          echo "::warning::Browser dependency installation attempt ${attempt} failed."
+        done
+        if [ "${browser_install_ready}" != true ]; then
+          echo "::error::Browser and system dependency installation failed after two bounded attempts."
+          exit 1
+        fi
+    - name: Verify browser runtimes
+      shell: bash
+      run: node scripts/check-browser-runtimes.mjs
