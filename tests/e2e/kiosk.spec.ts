@@ -10,29 +10,45 @@ const root = '/ocs/v2.php/apps/proofing_gallery/api/v1'
 const adminHeaders = { Authorization: `Basic ${Buffer.from('admin:admin').toString('base64')}`, 'OCS-APIRequest': 'true' }
 let headers = adminHeaders
 let jpeg: Buffer
+let parentFolderId: number
+let originalPreferences: { parentFolder: { id: number; name: string } | null; designPresetId: number | null }
+const galleryIds = new Set<number>()
+const folderName = `ProofingGalleryKioskE2E-${randomUUID()}`
 const tokenName = `kiosk-e2e-${randomUUID()}`
 async function php(code: string) {
 	return await run('docker', ['compose', 'exec', '-T', '--user', 'www-data', 'nextcloud', 'php', '-r', `require '/var/www/html/lib/base.php'; ${code}`])
 }
 async function create(request: APIRequestContext, eventId = randomUUID()) {
-	const { folderId } = JSON.parse(await readFile('test-results-e2e-state.json', 'utf8'))
-	const payload = { eventId, title: 'E2E Fotobox', parentFolderId: folderId }
+	const payload = { eventId, title: 'E2E Fotobox', parentFolderId }
 	const response = await request.post(`${root}/kiosk/galleries?format=json`, { headers, data: payload })
 	expect(response.status(), await response.text()).toBe(201)
-	return { payload, connection: (await response.json()).ocs.data }
+	const connection = (await response.json()).ocs.data
+	galleryIds.add(connection.gallery.id)
+	return { payload, connection }
 }
 function upload(request: APIRequestContext, connection: { upload: { urlTemplate: string } }, photoId: string, body = jpeg) {
 	return request.put(connection.upload.urlTemplate.replace('PHOTO_ID', photoId), { headers: { ...headers, 'Content-Type': 'image/jpeg' }, data: body })
 }
-test.beforeAll(async () => {
+test.beforeAll(async ({ request }) => {
 	jpeg = await readFile('tests/e2e/fixtures/kiosk.jpg')
 	const result = await run('docker', ['compose', 'exec', '-T', '-e', 'NC_PASS=admin', '--user', 'www-data', 'nextcloud', 'php', 'occ', 'user:auth-tokens:add', 'admin', '--password-from-env', `--name=${tokenName}`, '--no-interaction'])
 	const token = result.stdout.trim().split('\n').at(-1)!
 	headers = { ...adminHeaders, Authorization: `Basic ${Buffer.from(`admin:${token}`).toString('base64')}` }
+	// Keep event folders outside the image fixture shared by other suites.
+	const folder = await php(`echo \\OC::$server->get(\\OCP\\Files\\IRootFolder::class)->getUserFolder('admin')->newFolder('${folderName}')->getId();`)
+	parentFolderId = Number(folder.stdout)
+	originalPreferences = (await (await request.get(`${root}/user/preferences?format=json`, { headers })).json()).preferences
+	const preferences = await request.put(`${root}/user/preferences?format=json`, { headers, data: { preferences: { parentFolder: { id: parentFolderId, name: folderName }, designPresetId: null } } })
+	expect(preferences.ok()).toBe(true)
 })
-test.afterAll(async () => {
-	// Remove only the test-owned app password, without logging its value.
-	await php(`$db=\\OC::$server->get(\\OCP\\IDBConnection::class); $q=$db->getQueryBuilder(); $q->delete('authtoken')->where($q->expr()->eq('name',$q->createNamedParameter('${tokenName}')))->executeStatement();`)
+test.afterAll(async ({ request }) => {
+	try {
+		if (originalPreferences) await request.put(`${root}/user/preferences?format=json`, { headers, data: { preferences: { parentFolder: originalPreferences.parentFolder, designPresetId: originalPreferences.designPresetId } } })
+		for (const id of galleryIds) expect((await request.delete(`${root}/galleries/${id}?format=json`, { headers })).ok()).toBe(true)
+	} finally {
+		// Remove only this suite's folder and app password, without logging credentials.
+		await php(`$root=\\OC::$server->get(\\OCP\\Files\\IRootFolder::class)->getUserFolder('admin');if($root->nodeExists('${folderName}'))$root->get('${folderName}')->delete();$db=\\OC::$server->get(\\OCP\\IDBConnection::class);$q=$db->getQueryBuilder();$q->delete('authtoken')->where($q->expr()->eq('name',$q->createNamedParameter('${tokenName}')))->executeStatement();`)
+	}
 })
 
 test('app-password provisioning, durable replay, concurrent uploads and QR URLs', async ({ request }) => {
@@ -134,6 +150,7 @@ test('wizard creates and exports a Fotobox gallery', async ({ page }) => {
 	await page.getByRole('radio', { name: /^Fotobox/ }).check()
 	await page.getByRole('button', { name: 'Continue with Fotobox', exact: true }).click()
 	const dialog = page.getByRole('dialog', { name: 'Fotobox', exact: true })
+	await expect(dialog.getByRole('button', { name: new RegExp(folderName) })).toBeVisible()
 	await dialog.getByRole('textbox', { name: 'Event title' }).fill('E2E Wizard Fotobox')
 	await dialog.getByRole('button', { name: 'Create and publish' }).click()
 	await expect(dialog.getByText('Your Fotobox gallery is ready')).toBeVisible()
@@ -142,6 +159,7 @@ test('wizard creates and exports a Fotobox gallery', async ({ page }) => {
 	await dialog.getByRole('button', { name: 'Download configuration' }).click()
 	const download = await saved
 	const config = JSON.parse(await readFile((await download.path())!, 'utf8'))
+	galleryIds.add(config.galleryId)
 	expect(config.schemaVersion).toBe(1)
 	expect(config.upload.authentication).toBe('nextcloud-app-password')
 	expect(config.password).toBeUndefined()
@@ -163,22 +181,24 @@ test('ownership checks and ordinary empty-gallery publishing remain enforced', a
 		const denied = await otherContext.put(connection.upload.urlTemplate.replace('PHOTO_ID', randomUUID()), { headers: other, data: jpeg })
 		expect(denied.status()).toBe(404)
 	} finally { await otherContext.dispose(); await run('docker', ['compose', 'exec', '-T', '--user', 'www-data', 'nextcloud', 'php', 'occ', 'user:delete', '--no-interaction', user]) }
-	const { folderId } = JSON.parse(await readFile('test-results-e2e-state.json', 'utf8'))
-	const ordinary = await request.post(`${root}/projects?format=json`, { headers, data: { title: 'Ordinary empty gallery', purpose: 'delivery', sourceMode: 'new', parentFolderId: folderId, folderName: `ordinary-${randomUUID()}` } })
+	const ordinary = await request.post(`${root}/projects?format=json`, { headers, data: { title: 'Ordinary empty gallery', purpose: 'delivery', sourceMode: 'new', parentFolderId, folderName: `ordinary-${randomUUID()}` } })
 	expect(ordinary.status()).toBe(201)
 	const gallery = await ordinary.json()
+	galleryIds.add(gallery.id)
 	const published = await request.post(`${root}/galleries/${gallery.id}/publish?format=json`, { headers, data: { password: '', expiresAt: '' } })
 	expect(published.status()).toBe(422)
 })
 
 test('provisioning resumes an unbound folder after interruption', async ({ request }) => {
-	const { folderId } = JSON.parse(await readFile('test-results-e2e-state.json', 'utf8'))
+	const folderId = parentFolderId
 	const eventId = randomUUID()
 	const payload = { eventId, title: 'Resume Fotobox', parentFolderId: folderId, designPresetId: 0, password: '', expiresAt: '' }
 	const seeded = await php(`$id='${eventId}';$title='Resume Fotobox';$parentFolderId=${folderId};$designPresetId=0;$password='';$expiresAt='';$r=\\OC::$server->get(\\OCA\\ProofingGallery\\Db\\KioskRepository::class);$hash=hash_hmac('sha256',json_encode(compact('title','parentFolderId','designPresetId','password','expiresAt'),JSON_THROW_ON_ERROR),\\OC::$server->get(\\OCP\\IConfig::class)->getSystemValueString('secret'));$r->reserveEvent('admin',$id,$hash,compact('title','parentFolderId','designPresetId','expiresAt'),time());$name='Fotobox-'.substr(hash('sha256','admin'.chr(0).hash('sha256',$id)),0,24);$f=\\OC::$server->get(\\OCA\\ProofingGallery\\Service\\FolderService::class)->createProjectFolder('admin',$parentFolderId,$name);echo $f->getId();`)
 	const response = await request.post(`${root}/kiosk/galleries?format=json`, { headers, data: payload })
 	expect(response.status(), await response.text()).toBe(201)
-	expect((await response.json()).ocs.data.gallery.folderId).toBe(Number(seeded.stdout))
+	const connection = (await response.json()).ocs.data
+	galleryIds.add(connection.gallery.id)
+	expect(connection.gallery.folderId).toBe(Number(seeded.stdout))
 	const repeat = await request.post(`${root}/kiosk/galleries?format=json`, { headers, data: payload })
 	expect(repeat.status()).toBe(200)
 })
@@ -186,13 +206,14 @@ test('provisioning resumes an unbound folder after interruption', async ({ reque
 test('owner defaults freeze on reservation and password-protected uploads return gated QR links', async ({ request, browser }) => {
 	const preferencesUrl = `${root}/user/preferences?format=json`
 	const before = (await (await request.get(preferencesUrl, { headers })).json()).preferences
-	const { folderId } = JSON.parse(await readFile('test-results-e2e-state.json', 'utf8'))
+	const folderId = parentFolderId
 	try {
 		await request.put(preferencesUrl, { headers, data: { preferences: { parentFolder: { id: folderId, name: 'E2E' }, designPresetId: null } } })
 		const payload = { eventId: randomUUID(), title: 'Protected Fotobox', password: 'Kiosk-Access-2026!' }
 		const response = await request.post(`${root}/kiosk/galleries?format=json`, { headers, data: payload })
 		expect(response.status(), await response.text()).toBe(201)
 		const connection = (await response.json()).ocs.data
+		galleryIds.add(connection.gallery.id)
 		await request.put(preferencesUrl, { headers, data: { preferences: { parentFolder: null } } })
 		const repeat = await request.post(`${root}/kiosk/galleries?format=json`, { headers, data: payload })
 		expect(repeat.status()).toBe(200)
