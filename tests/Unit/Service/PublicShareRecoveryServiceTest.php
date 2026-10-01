@@ -60,6 +60,20 @@ final class PublicShareRecoveryServiceTest extends TestCase {
 		self::assertSame($share, $this->service(17)->resolve($this->gallery, $this->link, 'previous-token', 9));
 	}
 
+	public function testSourceRebindReadsIdentityWithoutResolvingDeletedOldNodes(): void {
+		$share = $this->share();
+		$share->expects(self::never())->method('getNode');
+		$this->shares->expects(self::once())->method('getShareById')->with('ocinternal:17', null, false)->willReturn($share);
+		$this->shares->expects(self::never())->method('getShareByToken');
+		self::assertSame($share, $this->service(17)->nativeShare($this->gallery, $this->link, 'previous-token'));
+	}
+
+	public function testSourceRebindDoesNotRecreateAbsentNativeShares(): void {
+		$this->shares->expects(self::never())->method('createShare');
+		$this->shares->expects(self::never())->method('getShareById');
+		self::assertNull($this->service(false)->nativeShare($this->gallery, $this->link, 'previous-token'));
+	}
+
 	#[DataProvider('invalidNativeShares')]
 	public function testExistingInvalidSharesCannotBeRecreated(string $field, mixed $value): void {
 		$share = $this->share([$field => $value]);

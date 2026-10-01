@@ -417,7 +417,7 @@ final class GalleryService {
 		];
 	}
 
-	public function rebindSource(string $ownerUid, int $id, int $folderId): Gallery {
+	public function rebindSource(string $ownerUid, int $id, int $folderId): \OCA\ProofingGallery\Dto\SourceRebindResult {
 		$gallery = $this->access->owner($ownerUid, $id);
 		if ($gallery->getSourceType() !== 'folder') {
 			throw new InvalidArgumentException('Collections do not have a replaceable source folder');

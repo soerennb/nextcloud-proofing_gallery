@@ -54,18 +54,26 @@ final class PublicShareRecoveryService {
 		if (!$this->shares->shareApiEnabled() || !$this->shares->shareApiAllowLinks($owner) || $this->shares->sharingDisabledForUser($gallery->getOwnerUid())) {
 			throw new PolicyViolationException('public_publishing_disabled', 'Public publishing is disabled by the administrator');
 		}
-		$id = $this->nativeId($link, $token);
-		if ($id === null) throw new PublicShareMissingException();
-		try { $share = $this->shares->getShareById('ocinternal:' . $id, onlyValid: false); }
-		catch (ShareNotFound) { throw new \InvalidArgumentException('The native share is unavailable'); }
-		// SharedBy identifies the gallery owner; ShareOwner may own a reshared source.
-		if ($share->getShareType() !== IShare::TYPE_LINK
-			|| $share->getSharedBy() !== $gallery->getOwnerUid() || $share->getToken() !== $token || $share->getNodeId() !== $nodeId) {
+		$share = $this->nativeShare($gallery, $link, $token);
+		if ($share === null) throw new PublicShareMissingException();
+		if ($share->getNodeId() !== $nodeId) {
 			throw new \InvalidArgumentException('The native share no longer matches this gallery link');
 		}
 		if ($share->isExpired()) throw new \InvalidArgumentException('The public share has expired. Revoke it before publishing a new link.');
 		// Keep Nextcloud's disabled-owner and other native validity checks.
 		return $this->shares->getShareByToken($token);
+	}
+
+	/** Read identity-checked shares even when the old source node disappeared. */
+	public function nativeShare(Gallery $gallery, ?PublicLink $link, string $token): ?IShare {
+		$id = $this->nativeId($link, $token);
+		if ($id === null) return null;
+		try { $share = $this->shares->getShareById('ocinternal:' . $id, onlyValid: false); }
+		catch (ShareNotFound $exception) { throw new \InvalidArgumentException('The native share is unavailable', previous: $exception); }
+		if ($share->getShareType() !== IShare::TYPE_LINK || $share->getSharedBy() !== $gallery->getOwnerUid() || $share->getToken() !== $token) {
+			throw new \InvalidArgumentException('The native share no longer matches this gallery link');
+		}
+		return $share;
 	}
 
 	private function nativeId(?PublicLink $link, string $token): ?int {

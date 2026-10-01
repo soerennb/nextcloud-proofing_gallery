@@ -222,9 +222,9 @@ onMounted(load)
 		<div v-else class="link-cards">
 			<article v-for="link in links" :key="link.id" :class="{ 'is-revoked': link.status === 'revoked' }">
 				<div class="link-card__top">
-					<div><strong>{{ link.name }}</strong><span v-if="link.primary">{{ t('proofing_gallery', 'PRIMARY') }}</span></div><small>{{ link.status === 'active' ? t('proofing_gallery', 'Active') : t('proofing_gallery', 'Revoked') }}</small>
+					<div><strong>{{ link.name }}</strong><span v-if="link.primary">{{ t('proofing_gallery', 'PRIMARY') }}</span></div><small>{{ link.status === 'active' ? t('proofing_gallery', 'Active') : link.status === 'suspended' ? t('proofing_gallery', 'Suspended') : t('proofing_gallery', 'Revoked') }}</small>
 				</div>
-				<p>{{ link.viewMode === 'recursive' ? t('proofing_gallery', 'Recursive') : t('proofing_gallery', 'Folder view') }} · {{ link.allowedRoots?.length ? link.allowedRoots.join(' + ') : (link.startPath || t('proofing_gallery', 'Gallery root')) }} · {{ downloadScopeLabels[link.policy.downloadScope] }}</p>
+				<p>{{ link.viewMode === 'recursive' ? t('proofing_gallery', 'Recursive') : t('proofing_gallery', 'Folder view') }} · {{ link.scopeMode === 'empty' ? t('proofing_gallery', 'No folders shared') : link.allowedRoots?.length ? link.allowedRoots.join(' + ') : (link.startPath || t('proofing_gallery', 'Gallery root')) }} · {{ downloadScopeLabels[link.policy.downloadScope] }}</p>
 				<p v-if="link.reviewEnabled" class="link-card__review">
 					{{ t('proofing_gallery', 'Review round {round}: {status}', { round: link.review.current?.round ?? 1, status: reviewStatusLabels[link.review.current?.status ?? 'awaiting_feedback'] ?? link.review.current?.status ?? '' }) }}<template v-if="link.reviewDueDate">
 						· {{ link.reviewDueDate }}
@@ -240,6 +240,15 @@ onMounted(load)
 						{{ t('proofing_gallery', 'Remove domain') }}
 					</NcButton>
 				</div>
+				<p v-if="link.status === 'suspended' && link.scopeMode === 'empty'">
+					{{ t('proofing_gallery', 'Folder access is disabled. Choose valid folders to reactivate this link.') }}
+					<NcButton v-if="gallery.status !== 'archived'" variant="tertiary" @click="edit(link)">
+						{{ t('proofing_gallery', 'Repair folder access') }}
+					</NcButton>
+					<NcButton v-if="!link.primary && gallery.status !== 'archived'" variant="error" @click="revoke(link)">
+						{{ t('proofing_gallery', 'Revoke') }}
+					</NcButton>
+				</p>
 				<div v-if="link.status === 'active'" class="link-card__actions">
 					<NcButton variant="tertiary" @click="copy(link)">
 						{{ t('proofing_gallery', 'Copy') }}

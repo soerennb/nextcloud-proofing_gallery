@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- preserve each public link's folder restrictions when changing a gallery source;
+  report missing folders and disable links without matching folders until repaired
+- recover deleted gallery shares explicitly while retaining link identities and
+  review history, and keep folder names visible in public galleries
+
 ## 0.10.0 — 2026-09-10
 
 - make collaborative reviews clearer with separate general feedback and image

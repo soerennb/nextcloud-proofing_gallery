@@ -18,7 +18,6 @@ use OCP\Share\IShare;
 use OCP\Share\Exceptions\ShareNotFound;
 use OCP\IDBConnection;
 use Throwable;
-use OCA\ProofingGallery\BackgroundJob\RebuildMediaIndexJob;
 use OCP\BackgroundJob\IJobList;
 use OCA\ProofingGallery\BackgroundJob\WarmGalleryPreviewJob;
 
@@ -29,7 +28,6 @@ final class PublicShareService {
 		private IManager $shareManager,
 		private GalleryMapper $galleries,
 		private FolderService $folders,
-		private MediaSummaryService $summaries,
 		private CollectionService $collections,
 		private ITimeFactory $clock,
 		private CapabilityPolicyService $capabilities,
@@ -42,6 +40,7 @@ final class PublicShareService {
 		private PublicLinkAnchorService $linkAnchors,
 		private PublicShareRecoveryService $recovery,
 		private PublicShareTargetService $targets,
+		private GallerySourceRebindingService $sourceRebinding,
 	) {
 	}
 
@@ -75,6 +74,9 @@ final class PublicShareService {
 		$isNewShare = $gallery->getShareToken() === null;
 		$previousToken = $gallery->getShareToken();
 		$existingLink = $isNewShare ? null : $this->publicLinks->ensurePrimary($gallery);
+		if ($gallery->getDeliveryMode() !== 'event' && $existingLink?->getStatus() === 'suspended' && $existingLink->getScopeMode() === 'empty') {
+			throw new InvalidArgumentException('Choose valid folders for the disabled public link before publishing');
+		}
 		$shareTarget = $existingLink === null
 			? ($gallery->getDeliveryMode() === 'event' ? $this->linkAnchors->create($gallery->getOwnerUid()) : $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId()))
 			: $this->targets->resolve($gallery, $existingLink);
@@ -162,7 +164,7 @@ final class PublicShareService {
 
 	private function revokeLocked(Gallery $gallery): Gallery {
 		foreach ($this->publicLinks->list($gallery) as $link) {
-			if ($link->getStatus() !== 'active') continue;
+			if (!in_array($link->getStatus(), ['active', 'suspended'], true)) continue;
 			try {
 				$this->recovery->revoke($gallery, $link);
 			} catch (ShareNotFound) {
@@ -274,7 +276,7 @@ final class PublicShareService {
 		}
 		$links = array_values(array_filter(
 			$this->publicLinks->list($gallery),
-			static fn ($link): bool => $link->getStatus() === 'suspended',
+			static fn ($link): bool => $link->getStatus() === 'suspended' && ($gallery->getDeliveryMode() === 'event' || $link->getScopeMode() !== 'empty'),
 		));
 		/** @var list<array{share: IShare, permissions: int}> $changed */
 		$changed = [];
@@ -343,58 +345,8 @@ final class PublicShareService {
 		}
 	}
 
-	/**
-	 * Move the gallery and its native link share as one logical operation.
-	 *
-	 * The share is moved first so a published gallery never points at a folder
-	 * different from its public token. If persisting the gallery fails, the
-	 * original share node is restored best-effort before the error is rethrown.
-	 */
-	public function rebindSource(Gallery $gallery, int $folderId): Gallery {
-		return $this->recovery->locked((int)$gallery->getId(), fn (): Gallery => $this->rebindSourceLocked($this->galleries->find((int)$gallery->getId()), $folderId));
-	}
-
-	private function rebindSourceLocked(Gallery $gallery, int $folderId): Gallery {
-		if ($gallery->getDeliveryMode() === 'event' && $gallery->getShareToken() !== null) {
-			throw new InvalidArgumentException('Revoke event links before changing the source folder');
-		}
-		$newFolder = $this->folders->resolveFolder($gallery->getOwnerUid(), $folderId);
-		$oldFolderId = $gallery->getFolderId();
-		$share = null;
-		$oldNode = null;
-
-		if ($gallery->getShareToken() !== null) {
-			$share = $this->shareManager->getShareByToken($gallery->getShareToken());
-			try {
-				$oldNode = $share->getNode();
-			} catch (Throwable) {
-				// A missing old source is the primary recovery use case.
-			}
-			$share->setNode($newFolder);
-			$this->shareManager->updateShare($share);
-		}
-
-		try {
-			$gallery->setFolderId($folderId);
-			$gallery->setUpdatedAt($this->clock->getTime());
-			$gallery->setRevision($gallery->getRevision() + 1);
-			$this->lifecycleSchedule->project($gallery, $this->clock->getTime());
-			$updated = $this->galleries->update($gallery);
-			$this->summaries->invalidate($gallery->getId());
-			$this->jobs->add(RebuildMediaIndexJob::class, ['galleryId' => $gallery->getId()]);
-			return $updated;
-		} catch (Throwable $exception) {
-			$gallery->setFolderId($oldFolderId);
-			if ($share !== null && $oldNode !== null) {
-				try {
-					$share->setNode($oldNode);
-					$this->shareManager->updateShare($share);
-				} catch (Throwable) {
-					// Preserve the original persistence exception.
-				}
-			}
-			throw $exception;
-		}
+	public function rebindSource(Gallery $gallery, int $folderId): \OCA\ProofingGallery\Dto\SourceRebindResult {
+		return $this->sourceRebinding->rebind($gallery, $folderId);
 	}
 
 	private function createShare(Gallery $gallery, ?\OCP\Files\Folder $shareRoot = null): IShare {
