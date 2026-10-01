@@ -17,6 +17,13 @@ The controls available to you can be restricted by your Nextcloud administrator.
    project starts with one moderated upload inbox and cannot use collections or
    event delivery.
 
+For a photobooth event, choose **Fotobox** instead. Enter an event title, parent
+folder and design, then choose **Create and publish**. This shared gallery is
+public immediately, even before the first upload. Copy its gallery link and
+copy or download the kiosk connection configuration. Account and app password
+are configured separately in the kiosk. The Fotobox integration reference describes the future kiosk API contract
+and QR workflow.
+
 A folder gallery references one existing folder. A collection combines files
 from several folder galleries without copying them. Collection sources must
 belong to the same owner, and collections cannot accept guest uploads.

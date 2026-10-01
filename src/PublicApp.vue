@@ -17,6 +17,8 @@ import type { CollaborationState, GuestIdentity, MediaItem, PublicGallery, Publi
 import { useDeferredMutation } from './composables/useDeferredMutation.ts'
 import { resumeGuestSession, useGuestRequest } from './composables/useGuestRequest.ts'
 import { usePublicCollaborationIdentity } from './composables/usePublicCollaborationIdentity.ts'
+import { fetchPublicGalleryPage, publicGalleryPageQuery } from './services/publicGalleryApi.ts'
+import { usePublicLiveUpdates } from './composables/usePublicLiveUpdates.ts'
 import { usePublicAppearance } from './composables/usePublicAppearance.ts'
 const PublicGalleryControls = defineAsyncComponent(() => import('./components/PublicGalleryControls.vue'))
 const PublicLightbox = defineAsyncComponent(() => import('./components/PublicLightbox.vue'))
@@ -101,6 +103,19 @@ const sortDirection = ref(initialLocation.sortDirection)
 const groupBy = ref(initialLocation.groupBy)
 const layout = ref<'grid' | 'masonry' | 'list' | 'story'>(initialLocation.layout)
 const lightboxMediaItems = computed(() => layout.value === 'story' ? mediaItems.value.concat(story.value) : mediaItems.value)
+usePublicLiveUpdates({
+	enabled: () => !isStaticPreview && props.gallery.initialPage?.gallery.liveUpdates === true,
+	busy: () => loading.value || compareOpen.value,
+	url: () => publicEndpoint(pageQuery(currentPage.value)),
+	photoId: () => activeIndex.value === null ? null : lightboxMediaItems.value[activeIndex.value]?.id ?? null,
+	apply: (page, photoId) => {
+		applyGalleryPage(page)
+		if (photoId !== null) {
+			const index = lightboxMediaItems.value.findIndex(item => item.id === photoId)
+			activeIndex.value = index < 0 ? null : index
+		}
+	},
+})
 const currentPage = ref(initialLocation.page)
 const pageCount = ref(props.gallery.initialPage?.pageCount ?? Math.max(1, Math.ceil(total.value / PUBLIC_GALLERY_PAGE_SIZE)))
 const activePanel = ref<'menu' | 'search' | 'view' | 'pages' | 'download' | 'selection' | null>(null)
@@ -305,31 +320,17 @@ function deferCollaborationInitialization() {
 	requestAnimationFrame(() => requestAnimationFrame(() => initializeCollaboration()))
 }
 
+function pageQuery(page: number, focusId: number | null = null) {
+	return publicGalleryPageQuery({ limit: PUBLIC_GALLERY_PAGE_SIZE, page, path: currentPath.value, search: search.value, sortBy: sortBy.value, sortDirection: sortDirection.value, groupBy: groupBy.value, focusId })
+}
+
 async function loadPage(page: number, focusId: number | null = null) {
 	pageController?.abort()
 	const controller = new AbortController()
 	pageController = controller
 	loading.value = true
 	try {
-		const query = new URLSearchParams({
-			limit: String(PUBLIC_GALLERY_PAGE_SIZE),
-			page: String(Math.max(1, page)),
-			path: currentPath.value,
-			search: search.value,
-			sortBy: sortBy.value,
-			sortDirection: sortDirection.value,
-			groupBy: groupBy.value,
-		})
-		if (focusId) query.set('focusId', String(focusId))
-		const response = await fetch(publicEndpoint(`gallery?${query}`), {
-			credentials: 'same-origin',
-			headers: { Accept: 'application/json' },
-			signal: controller.signal,
-		})
-		if (!response.ok) {
-			throw new Error('Gallery request failed')
-		}
-		const payload = await response.json() as PublicGalleryPage
+		const payload = await fetchPublicGalleryPage(publicEndpoint(pageQuery(page, focusId)), controller.signal)
 		applyGalleryPage(payload)
 		await nextTick()
 		if (focusId) openPhotoFromLocation(focusId)
@@ -711,6 +712,7 @@ function openPhotoFromLocation(fileId: number) {
 }
 
 function onLightboxActive(item: MediaItem) {
+	activeIndex.value = lightboxMediaItems.value.findIndex(media => media.id === item.id)
 	if (!applyingHistory) updateLocation('replace', item.id, { proofingGalleryPhoto: true })
 }
 

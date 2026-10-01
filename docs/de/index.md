@@ -14,3 +14,5 @@ enthalten und benötigen keine Verbindung zu GitHub.
 Die aktuelle Einstellungs-Hierarchie, Event-Auslieferungswellen,
 Datenschutzgrenzen und Betriebswarteschlangen sind in den Architektur-,
 Betriebs-, Datenschutz- und App-Store-Dokumenten des Repositorys beschrieben.
+
+- [Fotobox-Anbindung](fotobox-integration.md): Galerien erstellen, JPEGs hochladen und Foto-URLs für Kiosk-QR-Codes zurückgeben.

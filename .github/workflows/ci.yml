@@ -255,7 +255,7 @@ jobs:
           - suite: ui
             specs: tests/e2e/collection.spec.ts tests/e2e/event.spec.ts tests/e2e/gallery.spec.ts tests/e2e/review-viewer.spec.ts
           - suite: api
-            specs: tests/e2e/ecosystem.spec.ts tests/e2e/regression.spec.ts tests/e2e/security.spec.ts tests/e2e/review-identity.spec.ts tests/e2e/share-recovery.spec.ts tests/e2e/source-rebinding.spec.ts
+            specs: tests/e2e/ecosystem.spec.ts tests/e2e/regression.spec.ts tests/e2e/security.spec.ts tests/e2e/review-identity.spec.ts tests/e2e/share-recovery.spec.ts tests/e2e/source-rebinding.spec.ts tests/e2e/kiosk.spec.ts
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

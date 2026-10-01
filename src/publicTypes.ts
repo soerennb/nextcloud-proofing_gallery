@@ -3,7 +3,7 @@ import type { MediaItem } from './types.ts'
 export type { MediaItem } from './types.ts'
 
 export interface PublicGalleryPage {
-	gallery: { id: number; title: string; deliveryMode: 'standard' | 'event'; settings: GallerySettings }
+	gallery: { id: number; title: string; deliveryMode: 'standard' | 'event'; liveUpdates?: boolean; settings: GallerySettings }
 	items: MediaItem[]
 	s: MediaItem[]
 	total: number

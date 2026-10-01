@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ProofingGallery\Service;
 
 use OCA\ProofingGallery\Db\Gallery;
+use OCA\ProofingGallery\Db\KioskRepository;
 use OCA\ProofingGallery\Dto\PublicGalleryQuery;
 use OCA\ProofingGallery\Dto\PublicShareContext;
 use OCP\Files\File;
@@ -22,6 +23,7 @@ final class PublicGalleryDataService {
 		private PublicMediaResolver $publicMedia,
 		private MediaTypePolicy $mediaTypes,
 		private VideoTranscodeService $videoTranscodes,
+		private KioskRepository $kiosks,
 	) {
 	}
 
@@ -352,6 +354,7 @@ final class PublicGalleryDataService {
 				'id' => $gallery->getId(),
 				'title' => $gallery->getTitle(),
 				'deliveryMode' => $gallery->getDeliveryMode(),
+				'liveUpdates' => $this->kiosks->forGallery((int)$gallery->getId()) !== null,
 				'settings' => $serialized,
 				'effectiveCapabilities' => $effective,
 			],

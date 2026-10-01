@@ -6,6 +6,9 @@ declare(strict_types=1);
 // available to the first-party web client under /apps/proofing_gallery.
 return [
 	'ocs' => [
+		['name' => 'Kiosk#setup', 'url' => '/api/v1/kiosk/setup', 'verb' => 'GET'],
+		['name' => 'Kiosk#create', 'url' => '/api/v1/kiosk/galleries', 'verb' => 'POST'],
+		['name' => 'Kiosk#upload', 'url' => '/api/v1/kiosk/galleries/{galleryId}/photos/{photoId}', 'verb' => 'PUT'],
 		['name' => 'FileIntegration#open', 'url' => '/api/v1/files/open/{fileId}', 'verb' => 'GET'],
 		['name' => 'FileIntegration#create', 'url' => '/api/v1/files/create/{fileId}', 'verb' => 'POST'],
 		['name' => 'Agent#galleries', 'url' => '/api/v1/agent/galleries', 'verb' => 'GET'],

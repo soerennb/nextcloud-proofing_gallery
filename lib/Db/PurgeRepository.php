@@ -17,7 +17,7 @@ final class PurgeRepository {
 		'proofing_live_push', 'proofing_retention_log', 'proofing_media_scan_queue', 'proofing_media_scans', 'proofing_media_index',
 		'proofing_semantic_idx', 'proofing_versions', 'proofing_ext_resources',
 		'proofing_collection_items', 'proofing_collections', 'proofing_pin_handoffs', 'proofing_event_audit', 'proofing_event_roots', 'proofing_event_recipients', 'proofing_event_waves', 'proofing_event_setups', 'proofing_summaries', 'proofing_guests',
-		'proofing_managers', 'proofing_galleries',
+		'proofing_kiosk_photos', 'proofing_kiosk_events', 'proofing_managers', 'proofing_galleries',
 	];
 
 	public function __construct(private IDBConnection $db) {
@@ -188,6 +188,7 @@ final class PurgeRepository {
 					->where($qb->expr()->eq('submitted_by_actor_uid', $qb->createNamedParameter($id)))->executeStatement();
 				foreach ([
 					['proofing_presets', 'owner_uid'],
+					['proofing_kiosk_events', 'owner_uid'],
 					['proofing_inv_templates', 'owner_uid'],
 					['proofing_media_cull', 'owner_uid'],
 					['proofing_agent_requests', 'user_uid'],
