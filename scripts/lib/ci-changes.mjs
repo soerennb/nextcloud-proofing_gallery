@@ -24,6 +24,7 @@ export function classifyCiChanges(files) {
 		if (match(file, [/^\.github\/workflows\//, /^\.github\/actions\//, /^scripts\/(classify-ci-changes|check-workflows)\.mjs$/, /^scripts\/lib\/ci-changes/])) selected.workflow = true
 		if (match(file, [/^src\//, /^\.github\/(workflows|actions)\//])) selected.codeql = true
 		if (match(file, [/^package(-lock)?\.json$/])) selected.browser = true
+		if (match(file, [/^\.github\/workflows\/ci\.yml$/, /^\.github\/actions\/setup-browsers\//, /^scripts\/check-browser-runtimes\.mjs$/])) selected.integration = true
 		if (match(file, [/^docs\//, /^README\.md$/, /^docs\.config\./, /^scripts\/(build-docs-site|check-docs)\.mjs$/])) selected.docs = true
 		if (match(file, [/^package(-lock)?\.json$/, /^composer\.(json|lock)$/])) selected.dependencies = true
 		if (match(file, [/^src\//, /^lib\//, /^appinfo\//, /^templates\//, /^tests\/(e2e|smoke|context_agent)\//, /^integrations\//, /^compose\.yaml$/, /^scripts\/(run-e2e|test-context-agent|test-user-migration)\./])) selected.integration = true

@@ -27,11 +27,20 @@ test('routes upgrade-sensitive job and repair code through upgrade validation', 
 	}
 })
 
-test('limits workflow-only changes to workflow validation', () => {
-	assert.deepEqual(classifyCiChanges(['.github/workflows/ci.yml']), {
+test('limits unrelated workflow changes to workflow validation', () => {
+	assert.deepEqual(classifyCiChanges(['.github/workflows/docs.yml']), {
 		web: false, php: false, workflow: true, docs: false, dependencies: false,
 		integration: false, compatibility: false, upgrade: false, codeql: true, browser: false,
 	})
+})
+
+test('runs browser suites when their workflow or runtime preparation changes', () => {
+	for (const path of ['.github/workflows/ci.yml', '.github/actions/setup-browsers/action.yml', 'scripts/check-browser-runtimes.mjs']) {
+		const selected = classifyCiChanges([path])
+		assert.equal(selected.integration, true)
+		assert.equal(selected.web, true)
+		assert.equal(selected.php, true)
+	}
 })
 
 test('validates dependency updates with their relevant application baseline', () => {

@@ -245,7 +245,7 @@ jobs:
       (needs.classify.outputs.integration == 'true' || needs.classify.outputs.browser == 'true') &&
       needs.web.result == 'success' &&
       (needs.php.result == 'success' || needs.php.result == 'skipped')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -272,12 +272,7 @@ jobs:
           key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-playwright-
-      - name: Install browsers and runner dependencies
-        run: |
-          if ! timeout --kill-after=30s 5m npx playwright install --with-deps chromium firefox webkit; then
-            echo "::warning::System dependency installation stalled; using runner-provided browser libraries."
-            npx playwright install chromium firefox webkit
-          fi
+      - uses: ./.github/actions/setup-browsers
       - run: make dev-up
       - run: make occ CMD="app:list --enabled --output=json" | grep -q '"proofing_gallery"'
       - name: Run ${{ matrix.suite }} browser suite
