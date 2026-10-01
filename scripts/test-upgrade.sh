@@ -313,6 +313,7 @@ fi
 run_upgrade
 status_json="$(compose exec -T --user www-data "${service}" php occ status --output=json)"
 compose exec -T --user www-data "${service}" php /dev/stdin verify < "${repo_dir}/tests/smoke/UpgradeCollaboration.php"
+compose exec -T --user www-data "${service}" php /dev/stdin < "${repo_dir}/tests/smoke/UpgradeKiosk.php"
 php -r '
 	$status = json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR);
 	if (($status["maintenance"] ?? true) || ($status["needsDbUpgrade"] ?? true)) {

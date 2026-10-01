@@ -13,9 +13,11 @@ const pages = [
 	{ source: 'en/index.md', route: 'en/', language: 'en', label: 'Overview' },
 	{ source: 'en/user-guide.md', route: 'en/user-guide/', language: 'en', label: 'User guide' },
 	{ source: 'en/admin-guide.md', route: 'en/admin-guide/', language: 'en', label: 'Administrator guide' },
+	{ source: 'en/kiosk-integration.md', route: 'en/kiosk-integration/', language: 'en', label: 'Fotobox integration' },
 	{ source: 'en/development.md', route: 'en/development/', language: 'en', label: 'Development' },
 	{ source: 'de/index.md', route: 'de/', language: 'de', label: 'Übersicht' },
 	{ source: 'de/benutzerhandbuch.md', route: 'de/benutzerhandbuch/', language: 'de', label: 'Benutzerhandbuch' },
+	{ source: 'de/fotobox-integration.md', route: 'de/fotobox-integration/', language: 'de', label: 'Fotobox-Anbindung' },
 	{ source: 'de/administrationshandbuch.md', route: 'de/administrationshandbuch/', language: 'de', label: 'Administrationshandbuch' },
 ]
 const routeBySource = new Map(pages.map(page => [page.source, page.route]))
@@ -26,8 +28,8 @@ function escapeHtml(value) {
 
 function template(page, content) {
 	const navigation = page.language === 'de'
-		? [['Übersicht', 'de/'], ['Benutzerhandbuch', 'de/benutzerhandbuch/'], ['Administration', 'de/administrationshandbuch/']]
-		: [['Overview', 'en/'], ['User guide', 'en/user-guide/'], ['Administration', 'en/admin-guide/'], ['Development', 'en/development/']]
+		? [['Übersicht', 'de/'], ['Benutzerhandbuch', 'de/benutzerhandbuch/'], ['Administration', 'de/administrationshandbuch/'], ['Fotobox', 'de/fotobox-integration/']]
+		: [['Overview', 'en/'], ['User guide', 'en/user-guide/'], ['Administration', 'en/admin-guide/'], ['Development', 'en/development/'], ['Fotobox', 'en/kiosk-integration/']]
 	return `<!doctype html>
 <html lang="${page.language}">
 <head>
@@ -64,6 +66,9 @@ markdown.renderer.rules.link_open = (tokens, index, options, environment, render
 	if (/^https?:\/\//i.test(href)) {
 		tokens[index].attrSet('target', '_blank')
 		tokens[index].attrSet('rel', 'noreferrer noopener')
+	} else if (href.endsWith('.yaml')) {
+		const target = path.posix.normalize(path.posix.join(path.posix.dirname(environment.source), href))
+		tokens[index].attrSet('href', `${base}${target}`)
 	} else if (href.endsWith('.md')) {
 		const target = path.posix.normalize(path.posix.join(path.posix.dirname(environment.source), href))
 		const route = routeBySource.get(target)
@@ -116,5 +121,7 @@ input?.addEventListener('input', () => {
 await writeFile(path.join(outputRoot, 'assets', 'site.css'), `
 :root{font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:#17201e;background:#f6f8f7;line-height:1.6}*{box-sizing:border-box}body{margin:0}.skip-link{position:fixed;top:-60px;left:12px;z-index:4;padding:10px;background:#fff}.skip-link:focus{top:12px}.site-header{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:28px;min-height:68px;padding:10px clamp(18px,4vw,56px);border-bottom:1px solid #d8dfdc;background:#fff}.brand{display:flex;align-items:center;gap:10px;margin-right:auto;color:inherit;font-weight:750;text-decoration:none}.brand img{width:36px;height:36px}.site-header nav{display:flex;gap:20px}.site-header a{color:#234b42}.language{display:flex;gap:7px}.layout{display:grid;grid-template-columns:240px minmax(0,780px);justify-content:center;gap:clamp(36px,7vw,96px);padding:54px 24px 90px}aside{position:sticky;top:100px;align-self:start}aside label{display:block;margin-bottom:7px;font-size:13px;font-weight:700}aside input{width:100%;min-height:40px;padding:8px 10px;border:1px solid #aebbb6;border-radius:7px;background:#fff}#search-results{display:grid;gap:7px;padding:12px 0;list-style:none}main{min-width:0;padding:0 0 30px}main h1{font-size:clamp(34px,6vw,54px);line-height:1.08;letter-spacing:-.035em}main h2{margin-top:46px;padding-top:10px;font-size:26px;line-height:1.25}main p,main li{max-width:72ch}main code{padding:2px 5px;border-radius:4px;background:#e9eeec;overflow-wrap:anywhere}main pre{overflow:auto;padding:18px;border-radius:9px;background:#17201e;color:#fff}main pre code{padding:0;background:transparent}main a{color:#126a55}a.header-anchor{color:inherit;text-decoration:none}footer{padding:28px;text-align:center;border-top:1px solid #d8dfdc;color:#55635f;background:#fff}@media(max-width:760px){.site-header{align-items:flex-start;flex-wrap:wrap}.site-header nav{order:3;width:100%;overflow:auto}.layout{display:block;padding-top:32px}aside{position:static;margin-bottom:35px}main h1{font-size:36px}}
 `)
+
+await cp(path.join(docsRoot, 'api'), path.join(outputRoot, 'api'), { recursive: true })
 
 console.log(`Built ${pages.length} documentation pages in ${outputRoot}`)

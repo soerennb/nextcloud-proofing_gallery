@@ -9,14 +9,17 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { fallbackProjectCreationOptions, projectPurposeCopy, validSourceModes } from '../domain/projectCreation.ts'
 import type { BuiltInGalleryPurpose, ProjectCreationOptions, ProjectDeliveryMode, ProjectSourceMode } from '../domain/projectCreation.ts'
 import { createProject, fetchPresets, fetchUserPreferences, updateUserPreferences } from '../services/galleryApi.ts'
+import KioskGallerySetup from './KioskGallerySetup.vue'
 import type { Gallery, GalleryPreset } from '../types.ts'
 
-defineProps<{ show: boolean }>()
+const props = defineProps<{ show: boolean }>()
 const emit = defineEmits<{ close: []; created: [gallery: Gallery] }>()
 
 const purposeOrder: BuiltInGalleryPurpose[] = ['delivery', 'showcase', 'selection', 'proofing', 'uploads']
 const options = ref<ProjectCreationOptions>(fallbackProjectCreationOptions())
 const step = ref<1 | 2>(1)
+const kiosk = ref(false)
+const kioskReady = ref(false)
 const purpose = ref<BuiltInGalleryPurpose>('delivery')
 const sourceMode = ref<ProjectSourceMode>('existing')
 const deliveryMode = ref<ProjectDeliveryMode>('standard')
@@ -94,6 +97,10 @@ onMounted(async () => {
 			localStorage.removeItem('proofing-gallery:last-parent')
 		}
 	} catch { /* Optional preferences do not block project creation. */ }
+})
+
+watch([() => props.show, kioskReady], ([visible, ready]) => {
+	if (!visible && ready) reset()
 })
 
 watch(title, value => {
@@ -190,7 +197,7 @@ function selectedDesignPreset(): { mode: 'inherit' | 'instance' } | { mode: 'pre
 }
 
 function reset() {
-	step.value = 1; purpose.value = 'delivery'; sourceMode.value = 'existing'; deliveryMode.value = 'standard'
+	kioskReady.value = false; kiosk.value = false; step.value = 1; purpose.value = 'delivery'; sourceMode.value = 'existing'; deliveryMode.value = 'standard'
 	title.value = ''; folderId.value = null; folderName.value = ''; newFolderName.value = ''
 	presetMode.value = 'inherit'; presetId.value = null; rememberPreset.value = false; liveMessage.value = ''
 }
@@ -198,10 +205,19 @@ function reset() {
 
 <template>
 	<NcDialog :open="show"
-		:name="step === 1 ? t('proofing_gallery', 'Create a project') : copy.title"
+		:name="step === 1 ? t('proofing_gallery', 'Create a project') : kiosk ? t('proofing_gallery', 'Fotobox') : copy.title"
 		size="large"
 		@update:open="open => !open && emit('close')">
-		<form class="project-wizard" @submit.prevent="submit">
+		<KioskGallerySetup v-if="kiosk && step === 2"
+			:parent-folder-id="parentFolderId"
+			:parent-folder-name="parentFolderName"
+			:presets="presets"
+			:creation-allowed="creationAllowed"
+			@provisioned="kioskReady = true"
+			@back="step = 1"
+			@choose-parent="chooseFolder('parent')"
+			@created="gallery => { emit('created', gallery); reset() }" />
+		<form v-else class="project-wizard" @submit.prevent="submit">
 			<p class="sr-only" aria-live="polite">
 				{{ liveMessage }}
 			</p>
@@ -218,10 +234,15 @@ function reset() {
 						<span>{{ t('proofing_gallery', 'Start with the client’s job') }}</span><h2>{{ t('proofing_gallery', 'What should happen with these photos?') }}</h2><p>{{ t('proofing_gallery', 'Your choice prepares the right tools. Everything can still be refined inside the project.') }}</p>
 					</header>
 					<div class="purpose-list">
-						<label v-for="option in purposeChoices" :key="option.id" :class="{ selected: purpose === option.id }"><input v-model="purpose"
+						<label v-for="option in purposeChoices" :key="option.id" :class="{ selected: !kiosk && purpose === option.id }"><input v-model="purpose"
 							type="radio"
 							name="purpose"
-							:value="option.id"><span class="purpose-marker" aria-hidden="true" /><span><strong>{{ option.title }}</strong><small>{{ option.description }}</small></span><span class="purpose-arrow" aria-hidden="true">→</span></label>
+							:value="option.id"
+							@change="kiosk = false"><span class="purpose-marker" aria-hidden="true" /><span><strong>{{ option.title }}</strong><small>{{ option.description }}</small></span><span class="purpose-arrow" aria-hidden="true">→</span></label>
+						<label :class="{ selected: kiosk }"><input type="radio"
+							name="purpose"
+							:checked="kiosk"
+							@change="kiosk = true"><span class="purpose-marker" aria-hidden="true" /><span><strong>{{ t('proofing_gallery', 'Fotobox') }}</strong><small>{{ t('proofing_gallery', 'Publish an event gallery for continuous uploads and photo QR codes.') }}</small></span><span class="purpose-arrow" aria-hidden="true">→</span></label>
 					</div>
 				</div>
 				<div v-else key="setup" class="source-setup">
@@ -270,7 +291,7 @@ function reset() {
 				</NcButton><NcButton v-else @click="step = 1">
 					{{ t('proofing_gallery', 'Back') }}
 				</NcButton><NcButton v-if="step === 1" variant="primary" @click="continueToSource">
-					{{ t('proofing_gallery', 'Continue with {type}', { type: copy.title }) }}
+					{{ t('proofing_gallery', 'Continue with {type}', { type: kiosk ? t('proofing_gallery', 'Fotobox') : copy.title }) }}
 				</NcButton><NcButton v-else
 					type="submit"
 					variant="primary"

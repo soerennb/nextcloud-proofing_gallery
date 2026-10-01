@@ -20,6 +20,8 @@ final class MigrationStatusService {
 		'proofing_pin_handoffs',
 		'proofing_event_roots',
 		'proofing_event_audit',
+		'proofing_kiosk_events',
+		'proofing_kiosk_photos',
 	];
 
 	public function __construct(private IDBConnection $db) {

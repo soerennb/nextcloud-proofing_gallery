@@ -1,0 +1,313 @@
+openapi: 3.0.3
+info:
+  title: Proofing Gallery Fotobox API
+  version: '1'
+  description: >-
+    Authenticated kiosk provisioning and JPEG uploads. HTTP Basic uses a Nextcloud
+    account and app password. All JSON responses are OCS envelopes; consume ocs.data.
+    Supply OCS-APIRequest true and format=json. IDs persist until gallery purge or account removal.
+servers:
+  - url: https://cloud.example.test
+security:
+  - appPassword: []
+paths:
+  /ocs/v2.php/apps/proofing_gallery/api/v1/kiosk/setup:
+    parameters:
+      - $ref: '#/components/parameters/ocs'
+      - $ref: '#/components/parameters/format'
+    get:
+      operationId: kioskSetup
+      summary: Read owner defaults, capabilities, sharing policy and JPEG limits
+      responses:
+        '200':
+          description: Setup information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetupEnvelope'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+  /ocs/v2.php/apps/proofing_gallery/api/v1/kiosk/galleries:
+    parameters:
+      - $ref: '#/components/parameters/ocs'
+      - $ref: '#/components/parameters/format'
+    post:
+      operationId: kioskCreateGallery
+      summary: Create or resume an immediately published shared event gallery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [eventId, title]
+              properties:
+                eventId:
+                  type: string
+                  pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+                  description: Durable account-scoped identity; preserve original request for retries.
+                title:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                parentFolderId:
+                  type: integer
+                  minimum: 1
+                  nullable: true
+                  description: Omit/null for owner default; folder must be writable.
+                designPresetId:
+                  type: integer
+                  minimum: 0
+                  nullable: true
+                  description: Omit/null for owner default, zero for studio default, positive for owned design.
+                password:
+                  type: string
+                  default: ''
+                  description: Gallery password; Nextcloud may enforce it. Never returned.
+                expiresAt:
+                  type: string
+                  default: ''
+                  description: Future YYYY-MM-DD or empty for Nextcloud default expiration.
+      responses:
+        '201':
+          description: Provisioned (or resumed incomplete provisioning)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionEnvelope'
+        '200':
+          description: Identical ready-gallery replay
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionEnvelope'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
+        '423':
+          $ref: '#/components/responses/Retry'
+  /ocs/v2.php/apps/proofing_gallery/api/v1/kiosk/galleries/{galleryId}/photos/{photoId}:
+    parameters:
+      - $ref: '#/components/parameters/ocs'
+      - $ref: '#/components/parameters/format'
+      - name: galleryId
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+      - name: photoId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+        description: Durable UUID; retries must use identical JPEG bytes. Normalized to lowercase.
+    put:
+      operationId: kioskUploadPhoto
+      summary: Store one JPEG and return an absolute photo-page URL for a QR code
+      description: 60 new uploads/minute/gallery; successful replays do not count. No overwrites.
+      requestBody:
+        required: true
+        content:
+          image/jpeg:
+            schema: { type: string, format: binary }
+      responses:
+        '201':
+          description: Stored or recovered pending receipt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhotoEnvelope'
+        '200':
+          description: Identical stored-photo replay
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhotoEnvelope'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '422':
+          $ref: '#/components/responses/Error'
+        '423':
+          $ref: '#/components/responses/Retry'
+        '429':
+          $ref: '#/components/responses/Retry'
+components:
+  securitySchemes:
+    appPassword:
+      type: http
+      scheme: basic
+      description: Nextcloud account UID and its app password; browser UI uses the Nextcloud session.
+  parameters:
+    ocs:
+      name: OCS-APIRequest
+      in: header
+      required: true
+      schema: { type: string, enum: ['true'] }
+    format:
+      name: format
+      in: query
+      schema: { type: string, enum: [json], default: json }
+  responses:
+    Error:
+      description: Authentication, policy, missing resource, identity/share conflict or invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Retry:
+      description: Busy (423) or new-photo rate limited (429); retry same identity and bytes.
+      headers:
+        Retry-After:
+          schema: { type: integer }
+          description: Seconds to wait; currently 1 for busy, 60 for rate limit.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+  schemas:
+    Meta:
+      type: object
+      required: [status, statuscode, message]
+      properties:
+        status: { type: string }
+        statuscode: { type: integer }
+        message: { type: string }
+    Upload:
+      type: object
+      required: [mimeTypes, maxBytes, perMinute]
+      properties:
+        mimeTypes: { type: array, items: { type: string, enum: [image/jpeg] } }
+        maxBytes: { type: integer }
+        perMinute: { type: integer, enum: [60] }
+    Connection:
+      type: object
+      required: [schemaVersion, eventId, gallery, galleryUrl, upload, replayed]
+      properties:
+        schemaVersion: { type: integer, enum: [1] }
+        eventId: { type: string }
+        gallery:
+          type: object
+          required: [id, title, status, folderId]
+          additionalProperties: true
+          properties:
+            id: { type: integer }
+            folderId: { type: integer }
+            title: { type: string }
+            status: { type: string, enum: [published] }
+        galleryUrl: { type: string, format: uri }
+        replayed: { type: boolean }
+        upload:
+          allOf:
+            - $ref: '#/components/schemas/Upload'
+            - type: object
+              required: [urlTemplate, photoIdPlaceholder, method, authentication]
+              properties:
+                urlTemplate: { type: string }
+                photoIdPlaceholder: { type: string, enum: [PHOTO_ID] }
+                method: { type: string, enum: [PUT] }
+                authentication: { type: string, enum: [nextcloud-app-password] }
+    Photo:
+      type: object
+      required: [photoId, fileId, status, photoUrl, replayed]
+      properties:
+        photoId: { type: string, format: uuid }
+        fileId: { type: integer }
+        status: { type: string, enum: [stored] }
+        photoUrl:
+          type: string
+          format: uri
+          description: Absolute gallery URL with ?photo=Nextcloud-file-ID; shared access, password rules still apply.
+        replayed: { type: boolean }
+    Setup:
+      type: object
+      required: [schemaVersion, defaults, capabilities, sharingPolicy, upload]
+      properties:
+        schemaVersion: { type: integer, enum: [1] }
+        defaults:
+          type: object
+          properties:
+            parentFolder:
+              type: object
+              nullable: true
+              properties:
+                id: { type: integer }
+                name: { type: string }
+            designPresetId: { type: integer, nullable: true }
+        capabilities:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              allowed: { type: boolean }
+              reason: { type: string, nullable: true }
+        sharingPolicy:
+          type: object
+          properties:
+            publicLinksAllowed: { type: boolean }
+            passwordEnforced: { type: boolean }
+            expirationEnabled: { type: boolean }
+            expirationEnforced: { type: boolean }
+            expirationDays: { type: integer, nullable: true }
+            publicUploadsAllowed: { type: boolean }
+        upload:
+          $ref: '#/components/schemas/Upload'
+    SetupEnvelope:
+      type: object
+      required: [ocs]
+      properties:
+        ocs:
+          type: object
+          required: [meta, data]
+          properties:
+            meta: { $ref: '#/components/schemas/Meta' }
+            data: { $ref: '#/components/schemas/Setup' }
+    ConnectionEnvelope:
+      type: object
+      required: [ocs]
+      properties:
+        ocs:
+          type: object
+          required: [meta, data]
+          properties:
+            meta: { $ref: '#/components/schemas/Meta' }
+            data: { $ref: '#/components/schemas/Connection' }
+    PhotoEnvelope:
+      type: object
+      required: [ocs]
+      properties:
+        ocs:
+          type: object
+          required: [meta, data]
+          properties:
+            meta: { $ref: '#/components/schemas/Meta' }
+            data: { $ref: '#/components/schemas/Photo' }
+    ErrorEnvelope:
+      type: object
+      properties:
+        ocs:
+          type: object
+          properties:
+            meta: { $ref: '#/components/schemas/Meta' }
+            data:
+              description: App errors contain code/message; Nextcloud authentication errors may contain an empty array.
+              oneOf:
+                - type: object
+                  properties:
+                    code: { type: string }
+                    message: { type: string }
+                - type: array
+                  maxItems: 0
+                  items: {}

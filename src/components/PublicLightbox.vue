@@ -7,6 +7,7 @@ import { useReducedMotion } from 'motion-v'
 import type PhotoSwipe from 'photoswipe'
 import type { SlideData } from 'photoswipe'
 import 'photoswipe/style.css'
+import { usePublicLightboxLiveMedia } from '../composables/usePublicLightboxLiveMedia.ts'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import { usePublicLightboxAnnotations } from '../composables/usePublicLightboxAnnotations.ts'
@@ -113,6 +114,10 @@ const actionSheetButtons = computed(() => [
 ])
 
 let pswp: PhotoSwipe | null = null
+const mediaUpdates = usePublicLightboxLiveMedia({
+	items: () => props.mediaItems, activeIndex, viewer: () => pswp, toSlide: toSlideData,
+	changed: item => emit('active-change', item), close: () => emit('close'),
+})
 let unbindZoomSurface: (() => void) | null = null
 let zoomSurface: ReturnType<typeof usePublicLightboxZoomSurface> | null = null
 let slideshowTimer: number | undefined, hintTimer: number | undefined, chromeTimer: number | undefined
@@ -183,7 +188,7 @@ function openFeedback() { showAllFeedback(); feedbackOpen.value = true; metadata
 function bindPhotoSwipeEvents() {
 	if (!pswp) return
 	pswp.on('change', () => {
-		if (!pswp) return
+		if (!pswp || mediaUpdates.syncing) return
 		activeIndex.value = pswp.currIndex
 		if (activeItem.value) emit('active-change', activeItem.value)
 		feedbackOpen.value = false

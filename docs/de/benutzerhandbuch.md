@@ -29,6 +29,12 @@ für Auslieferung, Präsentation, Auswahl und Korrektur; Empfangsprojekte haben
 nur einen moderierten Upload-Eingang und unterstützen weder Sammlungen noch
 Event-Auslieferung.
 
+Für Fotobox-Veranstaltungen wähle **Fotobox**, vergib Titel, Zielordner und Design
+und klicke **Erstellen und veröffentlichen**. Die gemeinsame Galerie ist sofort
+öffentlich, auch vor dem ersten Foto. Kopiere den Galerie-Link und kopiere oder
+lade die Verbindungskonfiguration herunter. Konto und App-Passwort werden
+separat am Kiosk eingerichtet. Die Referenz zur Fotobox-Anbindung beschreibt die spätere API-Kommunikation und den QR-Ablauf.
+
 ## Serien-Events privat ausliefern
 
 Für Einschulungen, Sportveranstaltungen und andere Aufträge mit vielen

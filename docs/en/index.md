@@ -14,3 +14,5 @@ documentation remains available when the Nextcloud server cannot reach GitHub.
 For the current settings hierarchy, event release waves, privacy boundaries,
 and operational queues, see the repository's architecture, operations, privacy,
 and App Store publishing documents.
+
+- [Fotobox integration](kiosk-integration.md): Provision galleries, upload JPEGs and return photo URLs for kiosk QR codes.

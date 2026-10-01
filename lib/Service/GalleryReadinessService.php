@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ProofingGallery\Service;
 
 use OCA\ProofingGallery\Db\Gallery;
+use OCA\ProofingGallery\Db\KioskRepository;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCA\ProofingGallery\Exception\FolderAccessException;
 use OCA\ProofingGallery\Exception\GalleryNotReadyException;
@@ -15,6 +16,7 @@ final class GalleryReadinessService {
 		private MediaSummaryService $summaries,
 		private CollectionService $collections,
 		private CapabilityPolicyService $capabilities,
+		private KioskRepository $kiosks,
 	) {
 	}
 
@@ -35,7 +37,10 @@ final class GalleryReadinessService {
 			try {
 				$folder = $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId());
 				$sourceState = 'ready';
-				$mediaState = $this->summaries->forFolder((int)$gallery->getId(), $gallery->getFolderId(), $folder)['total'] > 0
+				$kiosk = $this->kiosks->forGallery((int)$gallery->getId());
+				$allowEmpty = $kiosk !== null && (int)$kiosk['folder_id'] === $gallery->getFolderId()
+					&& $kiosk['owner_uid'] === $gallery->getOwnerUid() && $gallery->getDeliveryMode() === 'standard';
+				$mediaState = $this->summaries->forFolder((int)$gallery->getId(), $gallery->getFolderId(), $folder)['total'] > 0 || $allowEmpty
 					? 'ready' : 'blocked';
 			} catch (FolderAccessException) {
 			}
