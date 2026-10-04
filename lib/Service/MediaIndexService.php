@@ -28,6 +28,8 @@ final class MediaIndexService {
 		private MediaIndexScanRepository $scans,
 		private IJobList $jobs,
 		private ILockingProvider $locks,
+		private MediaMetadataService $metadata,
+		private \OCA\ProofingGallery\Db\MediaSortRepository $sorts,
 	) {
 	}
 
@@ -105,13 +107,16 @@ final class MediaIndexService {
 					$truncated = true;
 					break;
 				}
+				$summary = $this->metadata->cachedSummary($row['file_id'], $row['etag']);
 				$this->index->upsert((int)$gallery->getId(), $row['file_id'], $row['parent'], $relativePath, (int)$folder['depth'], $generation, $now, [
 					'name' => $row['name'], 'mimeType' => $row['mime_type'], 'size' => $row['size'], 'mtime' => $row['mtime'], 'etag' => $row['etag'],
+					'capturedAt' => $summary['capturedAt'] ?? null, 'captureState' => ($summary['state'] ?? '') === 'ready' ? 'ready' : 'pending',
 				]);
 				$indexed++;
 			}
 			if (count($rows) < $queryLimit) $this->scans->completeFolder((int)$folder['id']);
 		}
+		$this->sorts->touch((int)$gallery->getId());
 		$this->scans->progress((int)$gallery->getId(), $indexed, $truncated, $now);
 		$complete = $truncated || $this->scans->nextFolder((int)$gallery->getId(), $generation) === null;
 		if (!$complete) return ['indexed' => $indexed, 'removed' => 0, 'truncated' => false, 'generation' => $generation, 'complete' => false];
@@ -124,6 +129,7 @@ final class MediaIndexService {
 		}
 		$this->scans->deleteQueue((int)$gallery->getId());
 		$this->scans->finish((int)$gallery->getId(), $truncated, $now);
+		$this->jobs->add(\OCA\ProofingGallery\BackgroundJob\IndexGalleryMetadataJob::class, ['galleryId' => (int)$gallery->getId()]);
 		return ['indexed' => $indexed, 'removed' => $removed, 'truncated' => $truncated, 'generation' => $generation, 'complete' => true];
 	}
 
@@ -141,7 +147,7 @@ final class MediaIndexService {
 		$this->jobs->add(RebuildMediaIndexJob::class, ['galleryId' => (int)$gallery->getId(), 'continuation' => true]);
 	}
 
-	/** @return array{items: list<array<string, mixed>>, previousCursor: ?string, nextCursor: ?string, total: int} */
+	/** @return array{items: list<array<string, mixed>>, previousCursor: ?string, nextCursor: ?string, total: int, sortRevision: string} */
 	public function page(
 		Gallery $gallery,
 		int $limit = 60,
@@ -153,7 +159,7 @@ final class MediaIndexService {
 		int $minOwnerRating = 0,
 		int $offset = 0,
 	): array {
-		$query = MediaIndexQuery::fromInput($gallery->getId(), $gallery->getOwnerUid(), $limit, $pathPrefix, $search, $sortBy, $sortDirection, $minOwnerRating);
+		$query = MediaIndexQuery::fromInput($gallery->getId(), $gallery->getOwnerUid(), $limit, $pathPrefix, $search, $sortBy, $sortDirection, $minOwnerRating, $this->sorts->revision((int)$gallery->getId()));
 		$pageQuery = $query->withLimit($query->limit + 1);
 		[$afterValue, $afterFileId, $cursorDirection] = $this->cursors->decode($cursor, $query);
 		$before = $cursorDirection === 'previous';
@@ -183,6 +189,7 @@ final class MediaIndexService {
 			'nextCursor' => $last === null || (!$before && !$hasMore)
 				? null : $this->cursors->encode($last, $query, 'next'),
 			'total' => $this->index->countFiltered($query),
+			'sortRevision' => $query->sortRevision,
 		];
 	}
 
@@ -214,11 +221,11 @@ final class MediaIndexService {
 		string $sortDirection = 'asc',
 		int $minOwnerRating = 0,
 	): ?int {
-		$query = MediaIndexQuery::fromInput($gallery->getId(), $gallery->getOwnerUid(), 1, $pathPrefix, $search, $sortBy, $sortDirection, $minOwnerRating);
+		$query = MediaIndexQuery::fromInput($gallery->getId(), $gallery->getOwnerUid(), 1, $pathPrefix, $search, $sortBy, $sortDirection, $minOwnerRating, $this->sorts->revision((int)$gallery->getId()));
 		return $this->index->positionOf($query, $fileId);
 	}
 
-	/** @return array{groups: array<string, int>, indexed: int, limit: int, limitReached: bool, complete: bool, state: string, lastIndexedAt: ?int} */
+	/** @return array{groups: array<string, int>, indexed: int, limit: int, limitReached: bool, complete: bool, state: string, lastIndexedAt: ?int, sortRevision: string} */
 	public function summary(Gallery $gallery, string $pathPrefix, string $search, string $groupBy, int $groupDepth, int $minOwnerRating = 0): array {
 		$query = MediaIndexQuery::fromInput($gallery->getId(), $gallery->getOwnerUid(), 1, $pathPrefix, $search, 'name', 'asc', $minOwnerRating);
 		$pathPrefix = $query->pathPrefix;
@@ -255,6 +262,7 @@ final class MediaIndexService {
 			'complete' => $state === 'ready',
 			'state' => $state,
 			'lastIndexedAt' => $lastIndexedAt,
+			'sortRevision' => $this->sorts->revision((int)$gallery->getId()),
 		];
 	}
 

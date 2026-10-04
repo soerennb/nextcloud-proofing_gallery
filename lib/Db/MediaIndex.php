@@ -18,6 +18,14 @@ use OCP\DB\Types;
  * @method void setRelativePath(string $relativePath)
  * @method string getSortKey()
  * @method void setSortKey(string $sortKey)
+ * @method string getNaturalName()
+ * @method void setNaturalName(string $naturalName)
+ * @method ?int getCapturedAt()
+ * @method void setCapturedAt(?int $capturedAt)
+ * @method int getCaptureMissing()
+ * @method void setCaptureMissing(int $captureMissing)
+ * @method string getCaptureState()
+ * @method void setCaptureState(string $captureState)
  * @method string getName()
  * @method void setName(string $name)
  * @method string getMimeType()
@@ -41,6 +49,10 @@ final class MediaIndex extends Entity implements \JsonSerializable {
 	protected int $parentFileId = 0;
 	protected string $relativePath = '';
 	protected string $sortKey = '';
+	protected ?string $naturalName = null;
+	protected ?int $capturedAt = null;
+	protected int $captureMissing = 1;
+	protected string $captureState = 'pending';
 	protected string $name = '';
 	protected string $mimeType = '';
 	protected int $size = 0;
@@ -50,11 +62,18 @@ final class MediaIndex extends Entity implements \JsonSerializable {
 	protected string $scanGeneration = '';
 	protected int $seenAt = 0;
 
+	public function getNaturalName(): string {
+		return $this->naturalName ?? \OCA\ProofingGallery\Domain\MediaSort::nameKey($this->name);
+	}
+
 	public function __construct() {
 		foreach (['galleryId', 'fileId', 'parentFileId', 'size', 'mtime', 'seenAt'] as $field) {
 			$this->addType($field, Types::BIGINT);
 		}
 		$this->addType('depth', Types::INTEGER);
+		$this->addType('naturalName', Types::BLOB);
+		$this->addType('capturedAt', Types::BIGINT);
+		$this->addType('captureMissing', Types::INTEGER);
 	}
 
 	/** @return array<string, int|string> */

@@ -6,7 +6,7 @@ export interface PublicGalleryLocation {
 	page: number
 	path: string
 	search: string
-	sortBy: 'name' | 'modified' | 'size'
+	sortBy: 'name' | 'modified' | 'size' | 'capturedAt' | 'collection'
 	sortDirection: 'asc' | 'desc'
 	groupBy: 'none' | 'type' | 'folder'
 	layout: PublicGalleryLayout
@@ -26,7 +26,7 @@ export function readPublicGalleryLocation(url: URL, fallback: Omit<PublicGallery
 		page: integer('page') ?? 1,
 		path: (url.searchParams.get('path') ?? fallback.path ?? '').replace(/^\/+|\/+$/g, '').slice(0, 1024),
 		search: (url.searchParams.get('q') ?? fallback.search).slice(0, 120),
-		sortBy: oneOf('sort', ['name', 'modified', 'size'] as const, fallback.sortBy),
+		sortBy: oneOf('sort', ['name', 'modified', 'size', 'capturedAt', 'collection'] as const, fallback.sortBy),
 		sortDirection: oneOf('order', ['asc', 'desc'] as const, fallback.sortDirection),
 		groupBy: oneOf('group', ['none', 'type', 'folder'] as const, fallback.groupBy),
 		layout: oneOf('view', ['grid', 'masonry', 'list', 'story'] as const, fallback.layout),
@@ -34,7 +34,7 @@ export function readPublicGalleryLocation(url: URL, fallback: Omit<PublicGallery
 	}
 }
 
-export function writePublicGalleryLocation(url: URL, state: PublicGalleryLocation): URL {
+export function writePublicGalleryLocation(url: URL, state: PublicGalleryLocation, sortOverride = false): URL {
 	const next = new URL(url)
 	const setOptional = (name: string, value: string, defaultValue = '') => value === defaultValue
 		? next.searchParams.delete(name)
@@ -42,8 +42,13 @@ export function writePublicGalleryLocation(url: URL, state: PublicGalleryLocatio
 	setOptional('page', String(Math.max(1, state.page)), '1')
 	setOptional('path', state.path)
 	setOptional('q', state.search)
-	setOptional('sort', state.sortBy, 'name')
-	setOptional('order', state.sortDirection, 'asc')
+	if (sortOverride) {
+		next.searchParams.set('sort', state.sortBy)
+		next.searchParams.set('order', state.sortDirection)
+	} else {
+		next.searchParams.delete('sort')
+		next.searchParams.delete('order')
+	}
 	setOptional('group', state.groupBy, 'none')
 	setOptional('view', state.layout, 'grid')
 	setOptional('photo', state.photoId === null ? '' : String(state.photoId))

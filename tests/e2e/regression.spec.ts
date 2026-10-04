@@ -6,6 +6,7 @@ import { promisify } from 'node:util'
 import AxeBuilder from '@axe-core/playwright'
 import { expect, request as requestFactory, test } from '@playwright/test'
 
+import { createDefaultGallerySettings } from '../../src/domain/gallerySettings.ts'
 import { expectSuccessToast } from './dialogs.ts'
 
 const auth = `Basic ${Buffer.from('admin:admin').toString('base64')}`
@@ -87,7 +88,7 @@ test('uploaded gallery logos use the authenticated image route', async ({ reques
 	expect(created.status()).toBe(201)
 	const gallery = await created.json() as { id: number; settings: { schemaVersion: number; presentation: { logoBackground: string } } }
 	try {
-		expect(gallery.settings.schemaVersion).toBe(12)
+		expect(gallery.settings.schemaVersion).toBe(createDefaultGallerySettings().schemaVersion)
 		expect(gallery.settings.presentation.logoBackground).toBe('light')
 		const logo = await request.get(`${baseURL}/apps/proofing_gallery/media/${gallery.id}/asset/logo`, { headers: apiHeaders })
 		expect(logo.status()).toBe(200)

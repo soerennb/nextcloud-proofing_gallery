@@ -2,6 +2,8 @@
 
 Dieses Handbuch beschreibt Installation und Betrieb von Proofing Gallery.
 
+Die Vorgaben für neue Galerien enthalten Dateiname, Aufnahmedatum, letztes Änderungsdatum und Dateigröße samt Richtung. Sie werden beim Erstellen kopiert; vorhandene Galerien ändern sich nur durch eine ausdrückliche Aktion des Eigentümers oder einen Rollout. Die Zustandsansicht zeigt fertige, ausstehende und fehlgeschlagene Aufnahmedaten. Die wiederaufnehmbare Hintergrundaufgabe verarbeitet höchstens `metadataBatchSize` Dateien pro Aufruf und beachtet `metadataMaxBytes`. Ein Neuaufbau des Medienindex stellt fehlgeschlagene Einträge erneut in die Warteschlange. Öffentliche Sortieranfragen extrahieren keine Bilddaten.
+
 ## Voraussetzungen und Installation
 
 - Nextcloud 31–34

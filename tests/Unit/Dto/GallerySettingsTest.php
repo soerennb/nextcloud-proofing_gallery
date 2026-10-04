@@ -37,7 +37,7 @@ final class GallerySettingsTest extends TestCase {
 		self::assertTrue($settings['presentation']['showMediaCount']);
 		self::assertSame('medium', $settings['presentation']['titleSize']);
 		self::assertSame('auto', $settings['publicLocale']);
-		self::assertSame(12, $settings['schemaVersion']);
+		self::assertSame(13, $settings['schemaVersion']);
 		self::assertSame(['sections' => [], 'showAllMedia' => true], $settings['presentation']['story']);
 		self::assertSame('subtle', $settings['presentation']['motionPreset']);
 		self::assertSame('auto', $settings['presentation']['lightboxFilmstripPlacement']);

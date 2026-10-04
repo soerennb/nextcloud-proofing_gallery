@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace OCA\ProofingGallery\Dto;
 
 final class MediaIndexQuery {
-	private const SORTS = ['name', 'modified', 'size'];
+	private const SORTS = \OCA\ProofingGallery\Domain\MediaSort::AUTOMATIC;
 	private const DIRECTIONS = ['asc', 'desc'];
 
 	public function __construct(
@@ -17,6 +17,7 @@ final class MediaIndexQuery {
 		public readonly string $sortBy,
 		public readonly string $sortDirection,
 		public readonly int $minOwnerRating,
+		public readonly string $sortRevision = '',
 	) {
 		if ($galleryId <= 0 || $ownerUid === '') throw new \InvalidArgumentException('Invalid media index owner');
 		if ($limit < 1 || $limit > 201) throw new \InvalidArgumentException('Invalid media index limit');
@@ -38,6 +39,7 @@ final class MediaIndexQuery {
 		string $sortBy,
 		string $sortDirection,
 		int $minOwnerRating,
+		string $sortRevision = '',
 	): self {
 		return new self(
 			$galleryId,
@@ -48,11 +50,14 @@ final class MediaIndexQuery {
 			$sortBy,
 			$sortDirection,
 			$minOwnerRating,
+			$sortRevision,
 		);
 	}
 
-	public function cursorScope(): string {
-		return hash('sha256', implode("\0", [(string)$this->galleryId, $this->ownerUid, $this->pathPrefix, $this->search, (string)$this->minOwnerRating]));
+	public function cursorScope(bool $legacy = false): string {
+		$scope = [(string)$this->galleryId, $this->ownerUid, $this->pathPrefix, $this->search, (string)$this->minOwnerRating];
+		if (!$legacy) $scope[] = $this->sortRevision;
+		return hash('sha256', implode("\0", $scope));
 	}
 
 	public function withLimit(int $limit): self {
@@ -65,6 +70,7 @@ final class MediaIndexQuery {
 			$this->sortBy,
 			$this->sortDirection,
 			$this->minOwnerRating,
+			$this->sortRevision,
 		);
 	}
 }

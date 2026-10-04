@@ -29,6 +29,9 @@ import {
 } from 'ionicons/icons'
 import { computed, nextTick, ref, useTemplateRef, watch } from 'vue'
 
+import { mediaSortOptions, sortDirectionLabel } from '../domain/mediaSorting.ts'
+import type { MediaSortBy } from '../domain/mediaSorting.ts'
+
 type Panel = 'menu' | 'search' | 'view' | 'pages' | 'download' | 'selection' | null
 type Layout = 'grid' | 'masonry' | 'list' | 'story'
 
@@ -39,6 +42,8 @@ const props = withDefaults(defineProps<{
 	mobile: boolean
 	panel: Panel
 	canFolderGroup: boolean
+	collection?: boolean
+	sortOverride?: boolean
 	hasStory: boolean
 	downloadScope: 'none' | 'individual' | 'selection' | 'all'
 	selectedCount: number
@@ -54,7 +59,7 @@ const props = withDefaults(defineProps<{
 }>(), { hideChrome: false })
 
 const search = defineModel<string>('search', { required: true })
-const sortBy = defineModel<'name' | 'modified' | 'size'>('sortBy', { required: true })
+const sortBy = defineModel<MediaSortBy>('sortBy', { required: true })
 const sortDirection = defineModel<'asc' | 'desc'>('sortDirection', { required: true })
 const groupBy = defineModel<'none' | 'type' | 'folder'>('groupBy', { required: true })
 const layout = defineModel<Layout>('layout', { required: true })
@@ -65,6 +70,8 @@ const downloadWatermark = defineModel<boolean>('downloadWatermark', { required: 
 
 const emit = defineEmits<{
 	apply: []
+	'sort-change': []
+	'reset-sort': []
 	search: []
 	navigate: [page: number]
 	'update:panel': [panel: Panel]
@@ -177,18 +184,14 @@ function dismissMenu() {
 							label-placement="stacked"
 							interface="popover"
 							:interface-options="publicPopoverOptions"
-							@ion-change="emit('apply')">
-							<IonSelectOption value="name">
-								{{ t('proofing_gallery', 'Filename') }}
-							</IonSelectOption><IonSelectOption value="modified">
-								{{ t('proofing_gallery', 'Last changed') }}
-							</IonSelectOption><IonSelectOption value="size">
-								{{ t('proofing_gallery', 'File size') }}
+							@ion-change="emit('sort-change')">
+							<IonSelectOption v-for="option in mediaSortOptions(collection)" :key="option.value" :value="option.value">
+								{{ option.label }}
 							</IonSelectOption>
 						</IonSelect>
 					</IonItem>
-					<IonItem button @click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'; emit('apply')">
-						<IonIcon slot="start" :icon="swapVerticalOutline" /><IonLabel>{{ sortDirection === 'asc' ? t('proofing_gallery', 'Ascending') : t('proofing_gallery', 'Descending') }}</IonLabel>
+					<IonItem v-if="sortBy !== 'collection'" button @click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'; emit('sort-change')">
+						<IonIcon slot="start" :icon="swapVerticalOutline" /><IonLabel>{{ sortDirectionLabel(sortBy, sortDirection) }}</IonLabel>
 					</IonItem>
 					<IonItem>
 						<IonSelect v-model="groupBy"
@@ -206,7 +209,13 @@ function dismissMenu() {
 							</IonSelectOption>
 						</IonSelect>
 					</IonItem>
+					<IonItem v-if="sortOverride" button @click="emit('reset-sort')">
+						<IonLabel>{{ t('proofing_gallery', 'Use gallery default') }}</IonLabel>
+					</IonItem>
 				</IonList>
+				<p v-if="sortBy === 'capturedAt'">
+					{{ t('proofing_gallery', 'Photos without a capture date appear last in either direction.') }}
+				</p>
 			</div>
 
 			<div v-else-if="panel === 'pages'" class="gallery-sheet__section gallery-sheet__pages">

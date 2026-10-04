@@ -1,3 +1,4 @@
+import { readBrowserStorage, safelyStore } from '../domain/publicGalleryPreferences.ts'
 import type { Ref } from 'vue'
 import { ref } from 'vue'
 
@@ -8,11 +9,11 @@ export function usePublicCollaborationIdentity(token: string) {
 	const guest = ref<GuestIdentity | null>(null)
 	const collaboration = ref<CollaborationState | null>(null)
 	const hydratedIds = new Set<number>()
-	const nonce = ref(sessionStorage.getItem(storageKey) ?? '')
+	const nonce = ref(readBrowserStorage('session', storageKey) ?? '')
 
 	function saveNonce(value: string) {
 		nonce.value = value
-		sessionStorage.setItem(storageKey, value)
+		safelyStore(() => sessionStorage.setItem(storageKey, value))
 	}
 
 	function restoreIdentity(value: GuestIdentity, restoredNonce: string) {
@@ -23,7 +24,7 @@ export function usePublicCollaborationIdentity(token: string) {
 	function clearIdentity() {
 		guest.value = null
 		nonce.value = ''
-		sessionStorage.removeItem(storageKey)
+		safelyStore(() => sessionStorage.removeItem(storageKey))
 		collaboration.value = null
 		hydratedIds.clear()
 	}

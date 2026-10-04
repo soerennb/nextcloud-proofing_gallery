@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { mediaSortOptions } from '../domain/mediaSorting.ts'
 import { showError, showInfo, showSuccess } from '@nextcloud/dialogs'
 import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
@@ -27,8 +28,8 @@ const items = ref<MediaItem[]>([])
 const total = ref(0)
 const path = ref('')
 const search = ref('')
-const sortBy = ref<'name' | 'modified' | 'size' | 'capturedAt'>('name')
-const sortDirection = ref<'asc' | 'desc'>('asc')
+const sortBy = ref(props.gallery.settings.navigation.sortBy)
+const sortDirection = ref(props.gallery.settings.navigation.sortDirection)
 const loading = ref(false)
 const loadingMore = ref(false)
 const uploading = ref(false)
@@ -80,6 +81,7 @@ async function load(offset = 0) {
 			keyword: keyword.value,
 			ratingMin: ratingMin.value,
 		}, controller.signal)
+		if (loadController !== controller) return
 		items.value = offset === 0 ? page.items : [...items.value, ...page.items]
 		total.value = page.total
 		selectedIds.value = selectedIds.value.filter(id => items.value.some(item => item.id === id))
@@ -489,7 +491,7 @@ onBeforeUnmount(() => {
 			</nav>
 			<div class="folder-toolbar">
 				<NcTextField v-model="search" type="search" :label="t('proofing_gallery', 'Search this folder')" />
-				<label><span>{{ t('proofing_gallery', 'Sort') }}</span><select v-model="sortBy" :aria-label="t('proofing_gallery', 'Sort files')"><option value="name">{{ t('proofing_gallery', 'Name') }}</option><option value="modified">{{ t('proofing_gallery', 'Modified') }}</option><option value="size">{{ t('proofing_gallery', 'Size') }}</option><option value="capturedAt">{{ t('proofing_gallery', 'Captured') }}</option></select></label>
+				<label><span>{{ t('proofing_gallery', 'Sort') }}</span><select v-model="sortBy" :aria-label="t('proofing_gallery', 'Sort files')"><option v-for="option in mediaSortOptions(gallery.sourceType === 'collection')" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
 				<NcButton variant="tertiary" :aria-label="t('proofing_gallery', 'Reverse file order')" @click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'">
 					<ArrowDownIcon v-if="sortDirection === 'desc'" :size="18" />
 					<ArrowUpIcon v-else :size="18" />

@@ -172,6 +172,7 @@ export interface GuestRatingPromotion {
 }
 
 export interface IndexedMediaPage {
+	sortRevision?: string
 	items: IndexedMediaItem[]
 	previousCursor: string | null
 	nextCursor: string | null
@@ -399,7 +400,7 @@ export interface UserPreferences {
 		id: string
 		name: string
 		galleryId: number
-		filters: { sortBy: 'name' | 'modified' | 'size'; sortDirection: 'asc' | 'desc'; rating: number; pick: 'all' | CullPick; color: 'all' | CullColor }
+		filters: { sortBy: 'name' | 'modified' | 'size' | 'capturedAt'; sortDirection: 'asc' | 'desc'; rating: number; pick: 'all' | CullPick; color: 'all' | CullColor }
 		updatedAt: number
 	}>
 }

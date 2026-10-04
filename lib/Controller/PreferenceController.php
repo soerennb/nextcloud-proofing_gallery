@@ -42,6 +42,7 @@ final class PreferenceController extends Controller {
 		return new DataResponse([
 			'preferences' => $this->preferences->get($userId),
 			'effectiveCapabilities' => $this->capabilities->effective(userId: $userId),
+			'instanceMediaSort' => array_intersect_key($this->policies->galleryDefaults()['navigation'], array_flip(['sortBy', 'sortDirection'])),
 			'instanceDefaultPurpose' => $this->policies->instanceSettings()['workflow']['defaultPurpose'],
 			'projectCreationOptions' => ProjectCreationOptions::all(),
 		]);

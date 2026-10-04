@@ -86,6 +86,7 @@ final class Application extends App implements IBootstrap {
 		$context->registerUserMigrator(ProofingGalleryMigrator::class);
 		$context->registerServiceAlias(CollectionAnchorReferences::class, GalleryMapper::class);
 		$context->registerServiceAlias(PublicLinkAnchorReferences::class, PublicLinkRootRepository::class);
+		$context->registerEventListener(\OCA\ProofingGallery\Event\MediaMetadataIndexedEvent::class, \OCA\ProofingGallery\Listener\MediaSortProjectionListener::class);
 		$context->registerEventListener(FileCacheUpdated::class, MediaIndexCacheListener::class);
 		$context->registerEventListener(NodeAddedToCache::class, MediaIndexCacheListener::class);
 		$context->registerEventListener(NodeRemovedFromCache::class, MediaIndexCacheListener::class);

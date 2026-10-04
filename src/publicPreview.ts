@@ -21,6 +21,7 @@ import { generateUrl } from '@nextcloud/router'
 import { createApp, reactive } from 'vue'
 
 import PublicApp from './PublicApp.vue'
+import { compareMedia } from './domain/mediaSorting.ts'
 import type { GallerySettings } from './domain/gallerySettings.ts'
 import type { MediaItem, PublicGallery } from './publicTypes.ts'
 import { applyPublicLocale } from './publicLocale.ts'
@@ -75,7 +76,7 @@ function toGallery(bootstrap: PreviewBootstrap): PublicGallery {
 }
 
 function previewItems(items: MediaItem[], settings: GallerySettings): MediaItem[] {
-	return items.filter(item => !item.folder).map(item => ({
+	return items.filter(item => !item.folder).sort((left, right) => compareMedia(left, right, settings.navigation.sortBy, settings.navigation.sortDirection)).map(item => ({
 		...item,
 		metadata: previewMetadata(item, settings),
 	}))

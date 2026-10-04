@@ -18,6 +18,7 @@ export interface AdminSettingsState {
 	health: {
 		cleanup: { state: string; lastRunAt: number | null }
 		integrations: { outbox: { pending: number } }
+		captureMetadata?: { pending: number; ready: number; failed: number }
 		mediaIndex: { running: number; stalled: number; lastCompletedAt: number | null }
 		retention: { assigned: number; failed: number }
 		backlogs: { purges: { scheduled: number; running: number; due: number; oldestExecuteAfter: number | null }; lifecycleDue: number; expiredGuests: number; mediaFolders: number }

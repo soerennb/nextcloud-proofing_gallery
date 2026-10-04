@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { cancelledRequest, fetchCullingPage } from '../services/cullingPage.ts'
+import { mediaSortOptions } from '../domain/mediaSorting.ts'
 import { showError, showSuccess } from '@nextcloud/dialogs'
 import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
@@ -37,8 +39,8 @@ const activeId = ref<number | null>(null)
 const ratingFilter = ref(-1)
 const pickFilter = ref<'all' | CullPick>('all')
 const colorFilter = ref<'all' | CullColor>('all')
-const sortBy = ref<'name' | 'modified' | 'size'>('name')
-const sortDirection = ref<'asc' | 'desc'>('asc')
+const sortBy = ref<'name' | 'modified' | 'size' | 'capturedAt'>(props.gallery.settings.navigation.sortBy === 'collection' ? 'name' : props.gallery.settings.navigation.sortBy)
+const sortDirection = ref(props.gallery.settings.navigation.sortDirection)
 const savedViews = ref<UserPreferences['savedViews']>([])
 const activeViewId = ref('')
 const viewWorking = ref(false)
@@ -96,40 +98,42 @@ watch(filteredItems, visibleItems => {
 	if (!visibleItems.some(item => item.id === activeId.value)) activeId.value = visibleItems[0].id
 })
 
+function finishLoading() { loading.value = false; loadingMore.value = false; indexing.value = false }
+
+function cullingStates(reset: boolean) { return reset ? {} : states.value }
+
 async function loadPage(reset = false) {
-	if (loadingMore.value) return
+	if (!reset && loadingMore.value) return
 	if (reset) {
 		controller?.abort()
-		items.value = []
-		states.value = {}
 		cursor.value = null
 		loading.value = true
 	} else loadingMore.value = true
 	const request = new AbortController()
 	controller = request
 	try {
-		let page = await fetchIndexedMedia(props.gallery.id, 200, cursor.value, '', request.signal, sortBy.value, sortDirection.value)
+		const loaded = await fetchCullingPage(props.gallery.id, cursor.value, request.signal, sortBy.value, sortDirection.value)
+		reset ||= loaded.reset
+		let page = loaded.page
 		if (reset && page.total === 0) {
 			indexing.value = true
 			await rebuildGalleryMediaIndex(props.gallery.id)
 			page = await fetchIndexedMedia(props.gallery.id, 200, null, '', request.signal, sortBy.value, sortDirection.value)
 		}
 		const culls = await fetchMediaCulling(props.gallery.id, page.items.map(item => item.id))
+		if (controller !== request) return
 		items.value = reset ? page.items : [...items.value, ...page.items]
-		states.value = { ...states.value, ...Object.fromEntries(culls.map(state => [state.fileId, state])) }
+		states.value = { ...cullingStates(reset), ...Object.fromEntries(culls.map(state => [state.fileId, state])) }
 		total.value = page.total
 		cursor.value = page.nextCursor
-		if (activeId.value === null && items.value.length) activeId.value = items.value[0].id
 		failure.value = false
 	} catch (error) {
-		if (!(error instanceof DOMException && error.name === 'AbortError')) {
+		if (controller === request && !cancelledRequest(error)) {
 			failure.value = true
 			showError(t('proofing_gallery', 'The culling workspace could not be loaded.'))
 		}
 	} finally {
-		loading.value = false
-		loadingMore.value = false
-		indexing.value = false
+		if (controller === request) finishLoading()
 	}
 }
 
@@ -501,7 +505,7 @@ onBeforeUnmount(() => {
 				<label><span>{{ t('proofing_gallery', 'Rating') }}</span><select v-model.number="ratingFilter" name="cullingRating"><option :value="-1">{{ t('proofing_gallery', 'All') }}</option><option v-for="rating in 6" :key="rating - 1" :value="rating - 1">{{ rating - 1 }} ★</option></select></label>
 				<label><span>{{ t('proofing_gallery', 'Decision') }}</span><select v-model="pickFilter" name="cullingDecision"><option value="all">{{ t('proofing_gallery', 'All') }}</option><option value="pick">{{ t('proofing_gallery', 'Picks') }}</option><option value="reject">{{ t('proofing_gallery', 'Rejects') }}</option><option value="none">{{ t('proofing_gallery', 'Undecided') }}</option></select></label>
 				<label><span>{{ t('proofing_gallery', 'Color') }}</span><select v-model="colorFilter" name="cullingColor"><option value="all">{{ t('proofing_gallery', 'All') }}</option><option v-for="color in colors" :key="color.value" :value="color.value">{{ color.label }}</option></select></label>
-				<label><span>{{ t('proofing_gallery', 'Sort') }}</span><select v-model="sortBy" name="cullingSort" @change="loadPage(true)"><option value="name">{{ t('proofing_gallery', 'Filename') }}</option><option value="modified">{{ t('proofing_gallery', 'Last modified') }}</option><option value="size">{{ t('proofing_gallery', 'File size') }}</option></select></label>
+				<label><span>{{ t('proofing_gallery', 'Sort') }}</span><select v-model="sortBy" name="cullingSort" @change="loadPage(true)"><option v-for="option in mediaSortOptions()" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
 				<NcButton variant="tertiary" :aria-label="t('proofing_gallery', 'Reverse sort direction')" @click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'; loadPage(true)">
 					<ArrowUpIcon :size="18" :class="{ 'sort-icon--desc': sortDirection === 'desc' }" />
 				</NcButton>

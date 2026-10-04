@@ -1,6 +1,7 @@
 export type PublicGalleryLayout = 'grid' | 'masonry' | 'list' | 'story'
 export interface PublicGallerySavedView {
-	sortBy: 'name' | 'modified' | 'size'
+	sortOverride?: boolean
+	sortBy: 'name' | 'modified' | 'size' | 'capturedAt' | 'collection'
 	sortDirection: 'asc' | 'desc'
 	groupBy: 'none' | 'type' | 'folder'
 	search: string
@@ -14,8 +15,9 @@ export function continuationStorageKey(token: string): string { return `proofing
 export function loadPublicGallerySavedView(token: string): PublicGallerySavedView | null {
 	try {
 		const value = JSON.parse(localStorage.getItem(viewStorageKey(token)) ?? 'null') as Record<string, unknown> | null
-		if (!value || !['name', 'modified', 'size'].includes(String(value.sortBy)) || !['asc', 'desc'].includes(String(value.sortDirection)) || !['none', 'type', 'folder'].includes(String(value.groupBy))) return null
+		if (!value || !['name', 'modified', 'size', 'capturedAt', 'collection'].includes(String(value.sortBy)) || !['asc', 'desc'].includes(String(value.sortDirection)) || !['none', 'type', 'folder'].includes(String(value.groupBy))) return null
 		return {
+			sortOverride: value.sortOverride !== false,
 			sortBy: value.sortBy as PublicGallerySavedView['sortBy'],
 			sortDirection: value.sortDirection as PublicGallerySavedView['sortDirection'],
 			groupBy: value.groupBy as PublicGallerySavedView['groupBy'],
@@ -25,8 +27,10 @@ export function loadPublicGallerySavedView(token: string): PublicGallerySavedVie
 }
 
 export function loadPublicGallerySessionLayout(token: string): PublicGalleryLayout | null {
-	const value = sessionStorage.getItem(layoutSessionStorageKey(token))
-	return ['grid', 'masonry', 'list', 'story'].includes(String(value)) ? value as PublicGalleryLayout : null
+	try {
+		const value = sessionStorage.getItem(layoutSessionStorageKey(token))
+		return ['grid', 'masonry', 'list', 'story'].includes(String(value)) ? value as PublicGalleryLayout : null
+	} catch { return null }
 }
 
 export function loadPublicGalleryContinuation(token: string): PublicGalleryContinuation | null {
@@ -41,4 +45,17 @@ export function loadPublicGalleryCompareIds(token: string): number[] {
 		const stored = JSON.parse(localStorage.getItem(`proofing-gallery-compare:${token}`) ?? '[]')
 		return Array.isArray(stored) ? stored.filter(Number.isInteger).slice(0, 4) : []
 	} catch { return [] }
+}
+
+/**
+ * Browsers may deny storage; gallery controls remain usable in that case.
+ *
+ * @param action Storage operation.
+ */
+export function safelyStore(action: () => void): void {
+	try { action() } catch { /* Storage is optional. */ }
+}
+
+export function readBrowserStorage(storage: 'local' | 'session', key: string): string | null {
+	try { return (storage === 'session' ? sessionStorage : localStorage).getItem(key) } catch { return null }
 }

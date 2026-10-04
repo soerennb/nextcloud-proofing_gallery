@@ -34,6 +34,29 @@ mode is **Standard** or **Event**. Event delivery is available for the delivery,
 showcase, selection, and proofing purposes; receive-files projects use one
 moderated upload inbox and do not support collections or event delivery.
 
+## Image sorting
+
+New galleries copy the instance default sort. In **Deliver → Default sort**, choose
+filename, capture date, last modified date or file size and the direction. **Use
+current instance default** copies the current administrator setting; later changes
+to that setting do not change existing galleries. Collections can also use their
+original stored membership order. Existing collections retain that order on upgrade.
+
+Visitors choose an order under **More options → Display**, saved in their browser
+for that link. **Use gallery default** clears only their sort override. Explicit
+`sort` and `order` URL parameters take priority over the saved visitor choice.
+Filename order is natural and case insensitive (`img2` precedes `img10`), across
+subfolders, with file ID as the final tie breaker. Story sections retain their
+authored order.
+
+Capture dates come from XMP `exif:DateTimeOriginal`, then embedded EXIF, then cached
+Nextcloud Photos metadata. EXIF offsets are normalized to UTC; missing offsets
+are interpreted as UTC. Files without a date remain visible at the end in both
+directions. Modification time is never substituted for a capture date. Dates are
+indexed in bounded background batches. Pending dates may move into their final
+position as indexing completes. Sorting remains available when capture dates are
+hidden by the public metadata policy; capture-date cursors are encrypted.
+
 ## Deliver a volume event privately
 
 For schools, sports events, and other jobs with many recipients, keep shared

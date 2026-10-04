@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ProofingGallery\Db;
 
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
+use OCA\ProofingGallery\Domain\MediaSort;
 use OCA\ProofingGallery\Dto\MediaIndexQuery;
 use OCP\AppFramework\Db\QBMapper;
 use OCP\DB\QueryBuilder\IQueryBuilder;
@@ -24,42 +25,43 @@ final class MediaIndexMapper extends QBMapper {
 		bool $before = false,
 		int $offset = 0,
 	): array {
-		$sortColumn = match ($query->sortBy) {
-			'modified' => 'm.mtime',
-			'size' => 'm.size',
-			default => 'm.sort_key',
-		};
 		$naturalDirection = $query->sortDirection === 'desc' ? 'DESC' : 'ASC';
 		$direction = $before ? ($naturalDirection === 'ASC' ? 'DESC' : 'ASC') : $naturalDirection;
+		$comparison = $direction === 'ASC' ? 'gt' : 'lt';
+		$sortColumn = $this->sortColumn($query);
 		$qb = $this->filteredQuery($query);
-		$qb->select('m.*')->orderBy($sortColumn, $direction)->addOrderBy('m.file_id', $direction)->setMaxResults($query->limit);
-		if ($afterValue === null && $afterFileId === null && !$before) $qb->setFirstResult(max(0, $offset));
-		if ($afterValue !== null && $afterFileId !== null) {
-			$comparison = $before
-				? ($naturalDirection === 'ASC' ? 'lt' : 'gt')
-				: ($naturalDirection === 'ASC' ? 'gt' : 'lt');
-			$valueType = $sortColumn === 'm.sort_key' ? IQueryBuilder::PARAM_STR : IQueryBuilder::PARAM_INT;
-			$qb->andWhere($qb->expr()->orX(
-				$qb->expr()->{$comparison}($sortColumn, $qb->createNamedParameter($afterValue, $valueType)),
-				$qb->expr()->andX(
-					$qb->expr()->eq($sortColumn, $qb->createNamedParameter($afterValue, $valueType)),
-					$qb->expr()->{$comparison}('m.file_id', $qb->createNamedParameter($afterFileId, IQueryBuilder::PARAM_INT)),
-				),
-			));
+		$this->order($qb, $query, $direction, $before);
+		$qb->select('m.*')->setMaxResults($query->limit);
+		if ($afterFileId === null && !$before) $qb->setFirstResult(max(0, $offset));
+		if ($afterFileId !== null) {
+			$fileCondition = $qb->expr()->{$comparison}('m.file_id', $qb->createNamedParameter($afterFileId, IQueryBuilder::PARAM_INT));
+			if ($query->sortBy === 'capturedAt' && $afterValue === null) {
+				$valueCondition = $fileCondition;
+			} else {
+				$valueType = $query->sortBy === 'name' ? IQueryBuilder::PARAM_LOB : IQueryBuilder::PARAM_INT;
+				$valueCondition = $qb->expr()->orX(
+					$qb->expr()->{$comparison}($sortColumn, $qb->createNamedParameter($afterValue, $valueType)),
+					$qb->expr()->andX($qb->expr()->eq($sortColumn, $qb->createNamedParameter($afterValue, $valueType)), $fileCondition),
+				);
+			}
+			if ($query->sortBy === 'capturedAt') {
+				$bucket = (int)($afterValue === null);
+				$bucketComparison = $before ? 'lt' : 'gt';
+				$valueCondition = $qb->expr()->orX(
+					$qb->expr()->{$bucketComparison}('m.capture_missing', $qb->createNamedParameter($bucket, IQueryBuilder::PARAM_INT)),
+					$qb->expr()->andX($qb->expr()->eq('m.capture_missing', $qb->createNamedParameter($bucket, IQueryBuilder::PARAM_INT)), $valueCondition),
+				);
+			}
+			$qb->andWhere($valueCondition);
 		}
 		$entities = $this->findEntities($qb);
 		return $before ? array_reverse($entities) : $entities;
 	}
 
 	public function positionOf(MediaIndexQuery $query, int $fileId): ?int {
-		$sortColumn = match ($query->sortBy) {
-			'modified' => 'm.mtime',
-			'size' => 'm.size',
-			default => 'm.sort_key',
-		};
-		$direction = $query->sortDirection === 'desc' ? 'DESC' : 'ASC';
 		$qb = $this->filteredQuery($query);
-		$qb->select('m.file_id')->orderBy($sortColumn, $direction)->addOrderBy('m.file_id', $direction);
+		$qb->select('m.file_id');
+		$this->order($qb, $query, $query->sortDirection === 'desc' ? 'DESC' : 'ASC');
 		$position = 0;
 		$result = $qb->executeQuery();
 		while (($value = $result->fetchOne()) !== false) {
@@ -71,6 +73,17 @@ final class MediaIndexMapper extends QBMapper {
 		}
 		$result->closeCursor();
 		return null;
+	}
+
+	private function sortColumn(MediaIndexQuery $query): string {
+		return match ($query->sortBy) {
+			'modified' => 'm.mtime', 'size' => 'm.size', 'capturedAt' => 'm.captured_at', default => 'm.natural_name',
+		};
+	}
+
+	private function order(IQueryBuilder $qb, MediaIndexQuery $query, string $direction, bool $before = false): void {
+		if ($query->sortBy === 'capturedAt') $qb->orderBy('m.capture_missing', $before ? 'DESC' : 'ASC');
+		$qb->addOrderBy($this->sortColumn($query), $direction)->addOrderBy('m.file_id', $direction);
 	}
 
 	public function countFiltered(MediaIndexQuery $query): int {
@@ -165,7 +178,7 @@ final class MediaIndexMapper extends QBMapper {
 		return $qb->executeStatement();
 	}
 
-	/** @param array{name: string, mimeType: string, size: int, mtime: int, etag: string} $file */
+	/** @param array{name: string, mimeType: string, size: int, mtime: int, etag: string, capturedAt?: ?int, captureState?: string} $file */
 	public function upsert(
 		int $galleryId,
 		int $fileId,
@@ -177,11 +190,17 @@ final class MediaIndexMapper extends QBMapper {
 		array $file,
 	): void {
 		$sortKey = mb_strtolower(mb_substr($relativePath, 0, 512));
+		$naturalName = MediaSort::nameKey($file['name']);
+		$capturedAt = $file['capturedAt'] ?? null;
 		$qb = $this->db->getQueryBuilder();
 		$updated = $qb->update($this->tableName)
 			->set('parent_file_id', $qb->createNamedParameter($parentId, IQueryBuilder::PARAM_INT))
 			->set('relative_path', $qb->createNamedParameter($relativePath))
 			->set('sort_key', $qb->createNamedParameter($sortKey))
+			->set('natural_name', $qb->createNamedParameter($naturalName, IQueryBuilder::PARAM_LOB))
+			->set('captured_at', $qb->createNamedParameter($capturedAt, $capturedAt === null ? IQueryBuilder::PARAM_NULL : IQueryBuilder::PARAM_INT))
+			->set('capture_missing', $qb->createNamedParameter((int)($capturedAt === null), IQueryBuilder::PARAM_INT))
+			->set('capture_state', $qb->createNamedParameter($file['captureState'] ?? 'pending'))
 			->set('name', $qb->createNamedParameter($file['name']))
 			->set('mime_type', $qb->createNamedParameter($file['mimeType']))
 			->set('size', $qb->createNamedParameter($file['size'], IQueryBuilder::PARAM_INT))
@@ -202,6 +221,10 @@ final class MediaIndexMapper extends QBMapper {
 				'parent_file_id' => $qb->createNamedParameter($parentId, IQueryBuilder::PARAM_INT),
 				'relative_path' => $qb->createNamedParameter($relativePath),
 				'sort_key' => $qb->createNamedParameter($sortKey),
+				'natural_name' => $qb->createNamedParameter($naturalName, IQueryBuilder::PARAM_LOB),
+				'captured_at' => $qb->createNamedParameter($capturedAt, $capturedAt === null ? IQueryBuilder::PARAM_NULL : IQueryBuilder::PARAM_INT),
+				'capture_missing' => $qb->createNamedParameter((int)($capturedAt === null), IQueryBuilder::PARAM_INT),
+				'capture_state' => $qb->createNamedParameter($file['captureState'] ?? 'pending'),
 				'name' => $qb->createNamedParameter($file['name']),
 				'mime_type' => $qb->createNamedParameter($file['mimeType']),
 				'size' => $qb->createNamedParameter($file['size'], IQueryBuilder::PARAM_INT),

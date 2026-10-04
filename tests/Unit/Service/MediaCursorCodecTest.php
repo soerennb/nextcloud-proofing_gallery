@@ -15,17 +15,19 @@ final class MediaCursorCodecTest extends TestCase {
 		$entry = new MediaIndex();
 		$entry->setFileId(17);
 		$entry->setSortKey('portrait.jpg');
-		$cursor = (new MediaCursorCodec())->encode($entry, $query);
-		self::assertSame(['portrait.jpg', 17, 'next'], (new MediaCursorCodec())->decode($cursor, $query));
-		$previous = (new MediaCursorCodec())->encode($entry, $query, 'previous');
-		self::assertSame(['portrait.jpg', 17, 'previous'], (new MediaCursorCodec())->decode($previous, $query));
+		$entry->setNaturalName('portrait.jpg');
+		$cursor = (new MediaCursorCodec($this->createMock(\OCP\Security\ICrypto::class)))->encode($entry, $query);
+		self::assertSame(['portrait.jpg', 17, 'next'], (new MediaCursorCodec($this->createMock(\OCP\Security\ICrypto::class)))->decode($cursor, $query));
+		$previous = (new MediaCursorCodec($this->createMock(\OCP\Security\ICrypto::class)))->encode($entry, $query, 'previous');
+		self::assertSame(['portrait.jpg', 17, 'previous'], (new MediaCursorCodec($this->createMock(\OCP\Security\ICrypto::class)))->decode($previous, $query));
 	}
 
 	public function testRatingChangeInvalidatesCursor(): void {
 		$entry = new MediaIndex();
 		$entry->setFileId(17);
 		$entry->setSortKey('portrait.jpg');
-		$codec = new MediaCursorCodec();
+		$entry->setNaturalName('portrait.jpg');
+		$codec = new MediaCursorCodec($this->createMock(\OCP\Security\ICrypto::class));
 		$cursor = $codec->encode($entry, $this->query(3));
 		$this->expectException(\InvalidArgumentException::class);
 		$codec->decode($cursor, $this->query(4));
@@ -35,7 +37,8 @@ final class MediaCursorCodecTest extends TestCase {
 		$entry = new MediaIndex();
 		$entry->setFileId(17);
 		$entry->setSortKey('portrait.jpg');
-		$codec = new MediaCursorCodec();
+		$entry->setNaturalName('portrait.jpg');
+		$codec = new MediaCursorCodec($this->createMock(\OCP\Security\ICrypto::class));
 		$cursor = $codec->encode($entry, $this->query(3));
 
 		foreach ([

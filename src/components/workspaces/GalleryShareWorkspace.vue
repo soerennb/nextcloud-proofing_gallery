@@ -8,6 +8,7 @@ import type { EventSetup } from '../../services/eventApi.ts'
 import type { Gallery } from '../../types.ts'
 import DownloadPolicyFields from '../DownloadPolicyFields.vue'
 import PublicLinkManager from '../PublicLinkManager.vue'
+import GallerySortSettings from '../GallerySortSettings.vue'
 import EventDeliveryWorkspace from '../EventDeliveryWorkspace.vue'
 
 const props = defineProps<{ gallery: Gallery; saveGallerySettings?: () => Promise<boolean> }>()
@@ -35,8 +36,6 @@ const settings = defineModel<GallerySettings>('settings', { required: true })
 			<DownloadPolicyFields v-model:delivery="settings.delivery" />
 			<h3>{{ t('proofing_gallery', 'Gallery navigation') }}</h3>
 			<div class="option-grid">
-				<label class="select-field"><span>{{ t('proofing_gallery', 'Default sort') }}</span><select v-model="settings.navigation.sortBy" name="sortBy"><option value="name">{{ t('proofing_gallery', 'Filename') }}</option><option value="modified">{{ t('proofing_gallery', 'Last modified') }}</option><option value="size">{{ t('proofing_gallery', 'File size') }}</option></select></label>
-				<label class="select-field"><span>{{ t('proofing_gallery', 'Sort direction') }}</span><select v-model="settings.navigation.sortDirection" name="sortDirection"><option value="asc">{{ t('proofing_gallery', 'Ascending') }}</option><option value="desc">{{ t('proofing_gallery', 'Descending') }}</option></select></label>
 				<label class="select-field"><span>{{ t('proofing_gallery', 'Group media') }}</span><select v-model="settings.navigation.groupBy" name="groupBy"><option value="none">{{ t('proofing_gallery', 'No grouping') }}</option><option value="type">{{ t('proofing_gallery', 'By file type') }}</option><option value="folder">{{ t('proofing_gallery', 'By folder') }}</option></select></label>
 				<label v-if="gallery.sourceType === 'folder' && settings.navigation.groupBy === 'folder'" class="select-field"><span>{{ t('proofing_gallery', 'Folder grouping depth') }}</span><select v-model.number="settings.navigation.groupDepth" name="groupDepth"><option v-for="depth in 8" :key="depth" :value="depth">{{ depth }}</option></select></label>
 			</div>
@@ -48,4 +47,5 @@ const settings = defineModel<GallerySettings>('settings', { required: true })
 			</NcCheckboxRadioSwitch>
 		</div>
 	</section>
+	<GallerySortSettings v-model="settings.navigation" :collection="gallery.sourceType === 'collection'" />
 </template>
