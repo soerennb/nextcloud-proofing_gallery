@@ -42,7 +42,7 @@ jobs:
       - run: composer lint
       - run: composer test
       - run: composer analyse
-      - run: npm audit --audit-level=high
+      - run: npm run audit:dependencies
       - run: composer audit --no-interaction
 
   compatibility:

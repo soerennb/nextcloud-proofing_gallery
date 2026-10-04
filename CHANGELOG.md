@@ -2,10 +2,32 @@
 
 ## Unreleased
 
+## 0.11.0 — 2026-10-04
+
+- add administrator defaults, per-gallery image ordering, and personal visitor
+  choices with a reset action; sort naturally by filename or by capture date,
+  last modified date, or file size in either direction across galleries,
+  collections, and culling
+- index capture dates privately in bounded background jobs, keep images without
+  a capture date at the end, and preserve pagination and the active image when
+  changing the sort order
+- add a Fotobox project workflow and authenticated gallery provisioning and
+  JPEG upload API with repeatable requests and stable photo links for QR codes;
+  external photobooth software can integrate with the API and is not included
 - preserve each public link's folder restrictions when changing a gallery source;
   report missing folders and disable links without matching folders until repaired
 - recover deleted gallery shares explicitly while retaining link identities and
   review history, and keep folder names visible in public galleries
+- apply public preview language changes consistently, keep concurrent public
+  link listings read-only, and improve action-label contrast
+- update frontend, PHP tooling, and GitHub Actions dependencies; strengthen
+  browser setup checks and verify published package attestations
+
+Upgrade note: existing collections keep their original order. Capture-date
+indexing continues in the background after upgrading; images can move into
+their dated position as metadata becomes available. Images without a capture
+date remain visible at the end. Gallery and visitor sort choices do not grant
+access to additional folders or expose private capture-date metadata.
 
 ## 0.10.0 — 2026-09-10
 

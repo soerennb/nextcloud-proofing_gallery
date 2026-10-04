@@ -26,12 +26,19 @@ $rows = static function (string $table) use ($db, $galleryId): array {
 };
 $feedback = ['gallery_id' => $galleryId, 'file_id' => 1, 'guest_id' => null, 'actor_uid' => 'upgrade-reviewer', 'kind' => 'color', 'value' => 'old', 'created_at' => 1, 'updated_at' => 1];
 if (($argv[1] ?? '') === 'seed') {
-	$insert('proofing_feedback', $feedback);
+	$qb = $db->getQueryBuilder();
+	$hasAccountUniqueness = (int)$qb->select($qb->func()->count())->from('migrations')
+		->where($qb->expr()->eq('app', $qb->createNamedParameter('proofing_gallery')))
+		->andWhere($qb->expr()->eq('version', $qb->createNamedParameter('000130Date20260903')))
+		->executeQuery()->fetchOne() > 0;
+	// Current release baselines already reject duplicates; older baselines
+	// still exercise the migration that retains the greatest-ID value.
+	if (!$hasAccountUniqueness) $insert('proofing_feedback', $feedback);
 	$insert('proofing_feedback', [...$feedback, 'value' => 'new', 'updated_at' => 2]);
 	$insert('proofing_comments', ['gallery_id' => $galleryId, 'file_id' => 1, 'guest_id' => 424242, 'actor_uid' => null, 'parent_id' => null, 'body' => 'Historical guest pin', 'created_at' => 1]);
 	$comment = (int)$db->lastInsertId('proofing_comments');
 	$insert('proofing_annotations', ['gallery_id' => $galleryId, 'file_id' => 1, 'comment_id' => $comment, 'x' => 6700, 'y' => 4200, 'width' => 800, 'height' => 800]);
-	echo "Seeded duplicate account feedback and historical guest annotation.\n";
+	echo ($hasAccountUniqueness ? 'Seeded unique account feedback' : 'Seeded duplicate account feedback') . " and historical guest annotation.\n";
 	exit(0);
 }
 $values = $rows('proofing_feedback');
