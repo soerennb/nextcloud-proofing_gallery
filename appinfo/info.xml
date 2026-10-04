@@ -19,6 +19,16 @@ Proofing mode, then configure each public link with its own folder scope,
 language, appearance, password, expiry, downloads, feedback, uploads,
 metadata, and preview watermark.
 
+Set an administrator default image order, choose a gallery order, and let
+visitors change or reset their view. Sort by filename, capture date, last
+modified date, or file size in either direction. Existing collections retain
+their original order; images without a capture date remain visible at the end.
+
+Create and publish Fotobox galleries from the owner interface. An authenticated
+API provisions galleries and accepts JPEG uploads with stable photo links for
+QR codes. The API supports integration with external photobooth software;
+the external kiosk application is not included.
+
 Clients can like, rate, pick, reject, comment, annotate, and save named
 selections. Owners get culling, review rounds, CSV exports, Adobe-compatible
 XMP sidecars, and explicit promotion of client decisions. Allow individual
@@ -51,6 +61,17 @@ Wähle Präsentations- oder Proofing-Modus und konfiguriere jeden öffentlichen
 Link separat: Ordnerumfang, Sprache, Gestaltung, Passwort, Ablauf, Downloads,
 Feedback, Uploads, Metadaten und Vorschau-Wasserzeichen.
 
+Lege als Administrator eine Standardsortierung fest, wähle eine Reihenfolge für
+die Galerie und lasse Besucher ihre Ansicht ändern oder zurücksetzen.
+Sortiere nach Dateiname, Aufnahmedatum, letztem Änderungsdatum oder Dateigröße
+in beiden Richtungen. Bestehende Sammlungen behalten ihre ursprüngliche
+Reihenfolge; Bilder ohne Aufnahmedatum bleiben am Ende sichtbar.
+
+Erstelle und veröffentliche Fotobox-Galerien über die Eigentümeroberfläche.
+Eine authentifizierte API richtet Galerien ein und nimmt JPEG-Uploads mit
+stabilen Bildlinks für QR-Codes an. Sie ermöglicht die Anbindung externer
+Fotobox-Software; eine externe Kiosk-Anwendung wird nicht mitgeliefert.
+
 Kunden können favorisieren, bewerten, auswählen, ablehnen, kommentieren,
 annotieren und benannte Auswahlen speichern. Eigentümer erhalten Culling,
 Prüfrunden, CSV-Exporte, Adobe-kompatible XMP-Sidecars und eine ausdrückliche
@@ -73,7 +94,7 @@ Vorlagen und Nextcloud-Integrationen, sofern aktiviert. Administrations-,
 Galerie-, Link- und Event-Wellen-Regeln werden gemeinsam ausgewertet, sodass
 ein öffentlicher Link nur erlauben kann, was alle geltenden Regeln zulassen.
 	]]></description>
-	<version>0.10.0</version>
+	<version>0.11.0</version>
 	<licence>AGPL-3.0-or-later</licence>
 	<author>soerennb</author>
 	<namespace>ProofingGallery</namespace>

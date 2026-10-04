@@ -107,6 +107,15 @@ do not rewrite the description of an already published release.
 
 ## Local package checks
 
+Run `npm run audit:dependencies` for the full npm dependency audit. It retains
+the high-severity release threshold and reports lower-severity findings. The
+unpatched [braces nesting-depth advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
+has a temporary exception only when every affected dependency path is marked
+development-only in the lockfile, through October 18, 2026 UTC. It fails closed
+on expiry, production exposure, unrelated high advisories, or invalid audit
+reports. Reassess and remove this exception when an upstream fix is available;
+do not broaden it or renew it automatically.
+
 The normal target remains unsigned and requires no credentials:
 
 ```bash

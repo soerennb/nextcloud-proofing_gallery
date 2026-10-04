@@ -1,11 +1,12 @@
 {
   "name": "proofing_gallery",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {
     "preflight": "node scripts/check-node-version.mjs",
+    "audit:dependencies": "node scripts/audit-npm.mjs",
     "prebuild": "npm run preflight && node scripts/clean-build.mjs",
     "build": "vite build",
     "build:docs": "node scripts/build-docs-site.mjs",
