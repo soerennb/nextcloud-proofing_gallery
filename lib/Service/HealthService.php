@@ -34,6 +34,7 @@ final class HealthService {
 		private ReviewRoundRepository $reviewRounds,
 		private RetentionRepository $retention,
 		private BackgroundMaintenanceHealthService $maintenance,
+		private \OCA\ProofingGallery\Db\MediaSortRepository $mediaSorts,
 	) {
 	}
 
@@ -50,6 +51,7 @@ final class HealthService {
 	public function status(): array {
 		return [
 			...$this->operationalStatus(),
+			'captureMetadata' => $this->mediaSorts->health(),
 			'notifications' => [
 				...$this->notificationHealth(),
 				'available' => (bool)$this->apps->isInstalled('notifications'),

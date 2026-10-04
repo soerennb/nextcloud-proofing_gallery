@@ -3,6 +3,7 @@ import type { MediaItem } from './types.ts'
 export type { MediaItem } from './types.ts'
 
 export interface PublicGalleryPage {
+	view?: { sortBy: GallerySettings['navigation']['sortBy']; sortDirection: 'asc' | 'desc'; groupBy: 'none' | 'type' | 'folder'; search: string }
 	gallery: { id: number; title: string; deliveryMode: 'standard' | 'event'; liveUpdates?: boolean; settings: GallerySettings }
 	items: MediaItem[]
 	s: MediaItem[]
@@ -17,7 +18,7 @@ export interface PublicGalleryPage {
 	nextCursor: string | null
 	path: string
 	groups: Record<string, number>
-	indexState: { indexed: number; limit: number; limitReached: boolean; complete: boolean; state?: 'unindexed' | 'limit_reached' | 'ready'; lastIndexedAt?: number | null }
+	indexState: { sortRevision?: string; indexed: number; limit: number; limitReached: boolean; complete: boolean; state?: 'unindexed' | 'limit_reached' | 'ready'; lastIndexedAt?: number | null }
 	scope: { startPath: string; allowedRoots?: string[]; roots?: PublicGalleryRoot[]; viewMode: 'folder' | 'recursive' | 'collection'; groupDepth: number }
 }
 

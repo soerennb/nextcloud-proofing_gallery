@@ -102,7 +102,7 @@ final class UserPreferenceService {
 			$galleryId = (int)($view['galleryId'] ?? 0);
 			$filters = is_array($view['filters'] ?? null) ? $view['filters'] : [];
 			if (preg_match('/^[a-zA-Z0-9_-]{8,64}$/', $id) !== 1 || isset($viewIds[$id]) || $name === '' || mb_strlen($name) > 80 || $galleryId < 1
-				|| !in_array($filters['sortBy'] ?? null, ['name', 'modified', 'size'], true)
+				|| !in_array($filters['sortBy'] ?? null, ['name', 'modified', 'size', 'capturedAt'], true)
 				|| !in_array($filters['sortDirection'] ?? null, ['asc', 'desc'], true)
 				|| !in_array($filters['rating'] ?? null, [-1, 0, 1, 2, 3, 4, 5], true)
 				|| !in_array($filters['pick'] ?? null, ['all', 'none', 'pick', 'reject'], true)

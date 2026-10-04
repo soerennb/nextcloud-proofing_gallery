@@ -22,8 +22,8 @@ export async function createProject(payload: {
 	return (await axios.post<Gallery>(projectsUrl, payload)).data
 }
 
-export async function fetchUserPreferences(): Promise<{ preferences: UserPreferences; effectiveCapabilities: EffectiveCapabilities; instanceDefaultPurpose: GalleryPurpose; projectCreationOptions: ProjectCreationOptions }> {
-	return (await axios.get<{ preferences: UserPreferences; effectiveCapabilities: EffectiveCapabilities; instanceDefaultPurpose: GalleryPurpose; projectCreationOptions: ProjectCreationOptions }>(preferencesUrl)).data
+export async function fetchUserPreferences(): Promise<{ preferences: UserPreferences; effectiveCapabilities: EffectiveCapabilities; instanceDefaultPurpose: GalleryPurpose; instanceMediaSort: { sortBy: 'name' | 'modified' | 'size' | 'capturedAt'; sortDirection: 'asc' | 'desc' }; projectCreationOptions: ProjectCreationOptions }> {
+	return (await axios.get<{ preferences: UserPreferences; effectiveCapabilities: EffectiveCapabilities; instanceDefaultPurpose: GalleryPurpose; instanceMediaSort: { sortBy: 'name' | 'modified' | 'size' | 'capturedAt'; sortDirection: 'asc' | 'desc' }; projectCreationOptions: ProjectCreationOptions }>(preferencesUrl)).data
 }
 
 export async function updateUserPreferences(preferences: Partial<UserPreferences>): Promise<UserPreferences> {

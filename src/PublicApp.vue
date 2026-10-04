@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { initialPublicGalleryLocation, matchesInitialGalleryPage, usePublicGallerySort } from './composables/usePublicGallerySort.ts'
 import { n, t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import type {Gesture, GestureDetail} from '@ionic/core'
@@ -8,7 +9,7 @@ import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, r
 import { calculateMediaLayout } from './domain/mediaGridLayout.ts'
 import { publicGalleryThemeStyle } from './domain/publicGalleryThemeStyle.ts'
 import { PUBLIC_GALLERY_PAGE_SIZE, readPublicGalleryLocation, writePublicGalleryLocation } from './domain/publicGalleryNavigation.ts'
-import { continuationStorageKey, layoutSessionStorageKey, loadPublicGalleryCompareIds, loadPublicGalleryContinuation, loadPublicGallerySavedView, loadPublicGallerySessionLayout, viewStorageKey } from './domain/publicGalleryPreferences.ts'
+import { continuationStorageKey, layoutSessionStorageKey, loadPublicGalleryCompareIds, loadPublicGalleryContinuation, safelyStore, viewStorageKey } from './domain/publicGalleryPreferences.ts'
 import { serialTask } from './domain/serialTask.ts'
 import { galleryHasLogo, galleryTitleMode } from './domain/galleryTitlePresentation.ts'
 import { downloadQuery } from './domain/publicDownloadOptions.ts'
@@ -82,24 +83,11 @@ const [downloadPreset, downloadWatermark] = [ref<PublicDownloadPreset>('original
 const savingSelection = ref(false)
 const guestDialogOpen = ref(false)
 const review = ref(props.gallery.review ?? { enabled: false, dueDate: null, rules: { minimum: 0, maximum: 0 }, progress: null, current: null })
-const savedView = isStaticPreview ? null : loadPublicGallerySavedView(props.gallery.token)
-if (!isStaticPreview) localStorage.removeItem(`proofing-gallery-layout:${props.gallery.token}`)
-const fallbackLayout = (isStaticPreview ? null : loadPublicGallerySessionLayout(props.gallery.token))
-	?? settings.value.presentation.layout
-	?? 'grid'
-const initialLocation = readPublicGalleryLocation(new URL(window.location.href), {
-	search: savedView?.search ?? '',
-	sortBy: savedView?.sortBy ?? settings.value.navigation.sortBy,
-	sortDirection: savedView?.sortDirection ?? settings.value.navigation.sortDirection,
-	groupBy: savedView?.groupBy === 'folder' && !settings.value.navigation?.recursive
-		? settings.value.navigation.groupBy
-		: savedView?.groupBy ?? settings.value.navigation.groupBy,
-	layout: fallbackLayout,
-})
+const initialView = initialPublicGalleryLocation(props.gallery.token, settings.value, isStaticPreview, props.gallery.initialPage?.scope.viewMode === 'collection')
+const initialLocation = initialView.location
 currentPath.value = initialLocation.path
 const search = ref(initialLocation.search)
-const sortBy = ref(initialLocation.sortBy)
-const sortDirection = ref(initialLocation.sortDirection)
+const { sortBy, sortDirection, sortOverride, changeSort, resetSort } = usePublicGallerySort(props.gallery.token, settings, initialView, applyView, () => { continuation.value = null; continueVisible.value = false })
 const groupBy = ref(initialLocation.groupBy)
 const layout = ref<'grid' | 'masonry' | 'list' | 'story'>(initialLocation.layout)
 const lightboxMediaItems = computed(() => layout.value === 'story' ? mediaItems.value.concat(story.value) : mediaItems.value)
@@ -144,6 +132,8 @@ function galleryControlProps() {
 		pageCount: pageCount.value,
 		mobile: mobileViewport.value,
 		panel: activePanel.value,
+		collection: scope.value?.viewMode === 'collection',
+		sortOverride: sortOverride.value,
 		canFolderGroup: scope.value?.viewMode === 'recursive',
 		hasStory: !!settings.value.presentation.story.sections.length,
 		downloadScope: downloadScope.value,
@@ -197,15 +187,16 @@ watch(() => props.gallery, gallery => {
 
 watch(() => props.staticPreview?.scene, async scene => { if (scene === 'gallery') await nextTick(); activeIndex.value = scene && scene !== 'gallery' && mediaItems.value.length > 0 ? 0 : null })
 
-watch([layout, sortBy, sortDirection, groupBy, search], () => {
+watch([layout, sortBy, sortDirection, sortOverride, groupBy, search], () => {
 	if (isStaticPreview) return
-	sessionStorage.setItem(layoutSessionStorageKey(props.gallery.token), layout.value)
-	localStorage.setItem(viewStorageKey(props.gallery.token), JSON.stringify({
+	safelyStore(() => sessionStorage.setItem(layoutSessionStorageKey(props.gallery.token), layout.value))
+	safelyStore(() => localStorage.setItem(viewStorageKey(props.gallery.token), JSON.stringify({
+		sortOverride: sortOverride.value,
 		sortBy: sortBy.value,
 		sortDirection: sortDirection.value,
 		groupBy: groupBy.value,
 		search: search.value,
-	}))
+	})))
 })
 
 onMounted(async () => {
@@ -228,12 +219,7 @@ onMounted(async () => {
 		})
 		pageSwipeGesture.enable()
 	}
-	const initialPage = props.gallery.initialPage
-	const initialMatches = initialPage
-		&& currentPage.value === (initialPage.page ?? 1)
-		&& currentPath.value === initialPage.path
-		&& !savedView
-		&& !initialLocation.photoId
+	const initialMatches = matchesInitialGalleryPage(props.gallery.initialPage, { ...locationState(), photoId: initialLocation.photoId }, settings.value)
 	if (initialMatches) deferCollaborationInitialization()
 	else loadPage(currentPage.value, initialLocation.photoId).then(() => deferCollaborationInitialization())
 	document.addEventListener('visibilitychange', onVisibilityChange)
@@ -282,14 +268,16 @@ function locationState(photoId: number | null = null) {
 }
 
 function updateLocation(mode: 'push' | 'replace', photoId: number | null = null, state: Record<string, unknown> = {}) {
-	const url = writePublicGalleryLocation(new URL(window.location.href), locationState(photoId))
+	const url = writePublicGalleryLocation(new URL(window.location.href), locationState(photoId), sortOverride.value)
 	window.history[mode === 'push' ? 'pushState' : 'replaceState'](state, '', url)
 }
 
 async function onHistoryChange() {
 	applyingHistory = true
 	activePanel.value = null
-	const location = readPublicGalleryLocation(new URL(window.location.href), locationState())
+	const historyUrl = new URL(window.location.href)
+	sortOverride.value = historyUrl.searchParams.has('sort') || historyUrl.searchParams.has('order')
+	const location = readPublicGalleryLocation(historyUrl, { ...locationState(), sortBy: settings.value.navigation.sortBy, sortDirection: settings.value.navigation.sortDirection })
 	const reload = location.page !== currentPage.value
 		|| location.path !== currentPath.value
 		|| location.search !== search.value
@@ -321,7 +309,7 @@ function deferCollaborationInitialization() {
 }
 
 function pageQuery(page: number, focusId: number | null = null) {
-	return publicGalleryPageQuery({ limit: PUBLIC_GALLERY_PAGE_SIZE, page, path: currentPath.value, search: search.value, sortBy: sortBy.value, sortDirection: sortDirection.value, groupBy: groupBy.value, focusId })
+	return publicGalleryPageQuery({ limit: PUBLIC_GALLERY_PAGE_SIZE, page, path: currentPath.value, search: search.value, sortBy: sortOverride.value ? sortBy.value : '', sortDirection: sortOverride.value ? sortDirection.value : '', groupBy: groupBy.value, focusId })
 }
 
 async function loadPage(page: number, focusId: number | null = null) {
@@ -331,6 +319,7 @@ async function loadPage(page: number, focusId: number | null = null) {
 	loading.value = true
 	try {
 		const payload = await fetchPublicGalleryPage(publicEndpoint(pageQuery(page, focusId)), controller.signal)
+		if (pageController !== controller) return
 		applyGalleryPage(payload)
 		await nextTick()
 		if (focusId) openPhotoFromLocation(focusId)
@@ -345,6 +334,7 @@ async function loadPage(page: number, focusId: number | null = null) {
 }
 
 function applyGalleryPage(payload: PublicGalleryPage) {
+	const activeId = activeIndex.value === null ? null : lightboxMediaItems.value[activeIndex.value]?.id
 	items.value = payload.items
 	story.value = payload.s
 	total.value = payload.total
@@ -357,6 +347,15 @@ function applyGalleryPage(payload: PublicGalleryPage) {
 	groups.value = payload.groups
 	indexState.value = payload.indexState
 	scope.value = payload.scope
+	if (payload.view) {
+		sortBy.value = payload.view.sortBy
+		sortDirection.value = payload.view.sortDirection
+		groupBy.value = payload.view.groupBy
+	}
+	if (activeId !== undefined && activeId !== null) {
+		const index = lightboxMediaItems.value.findIndex(item => item.id === activeId)
+		activeIndex.value = index < 0 ? null : index
+	}
 	if (collaboration.value !== null && settings.value.mode === 'collaboration') void loadCollaboration()
 }
 
@@ -367,7 +366,7 @@ function onContentScroll(event: CustomEvent<{ scrollTop: number }>) {
 	scrollTimer = window.setTimeout(() => {
 		const value = { scrollY: currentScrollY, fileId: activeIndex.value === null ? continuation.value?.fileId ?? null : lightboxMediaItems.value[activeIndex.value]?.id ?? null, path: currentPath.value, page: currentPage.value }
 		continuation.value = value
-		localStorage.setItem(continuationStorageKey(props.gallery.token), JSON.stringify(value))
+		safelyStore(() => localStorage.setItem(continuationStorageKey(props.gallery.token), JSON.stringify(value)))
 	}, 80)
 }
 
@@ -670,7 +669,7 @@ function finishSelectionMode() {
 function openSelectionCompare() {
 	if (settings.value.mode !== 'collaboration' || selectedIds.value.length < 2) return
 	compareIds.value = selectedIds.value.slice(0, 4)
-	if (!isStaticPreview) localStorage.setItem(`proofing-gallery-compare:${props.gallery.token}`, JSON.stringify(compareIds.value))
+	if (!isStaticPreview) safelyStore(() => localStorage.setItem(`proofing-gallery-compare:${props.gallery.token}`, JSON.stringify(compareIds.value)))
 	compareOpen.value = true
 }
 
@@ -679,7 +678,7 @@ function toggleCompare(item: MediaItem) {
 	compareIds.value = compareIds.value.includes(item.id)
 		? compareIds.value.filter(id => id !== item.id)
 		: compareIds.value.length < 4 ? [...compareIds.value, item.id] : compareIds.value
-	if (!isStaticPreview) localStorage.setItem(`proofing-gallery-compare:${props.gallery.token}`, JSON.stringify(compareIds.value))
+	if (!isStaticPreview) safelyStore(() => localStorage.setItem(`proofing-gallery-compare:${props.gallery.token}`, JSON.stringify(compareIds.value)))
 }
 
 function openItem(item: MediaItem, event?: MouseEvent) {
@@ -693,7 +692,7 @@ function openItem(item: MediaItem, event?: MouseEvent) {
 		activeIndex.value = lightboxMediaItems.value.findIndex(media => media.id === item.id)
 		continuation.value = { scrollY: scrollElement.value?.scrollTop ?? 0, fileId: item.id, path: currentPath.value, page: currentPage.value }
 		if (!isStaticPreview) {
-			localStorage.setItem(continuationStorageKey(props.gallery.token), JSON.stringify(continuation.value))
+			safelyStore(() => localStorage.setItem(continuationStorageKey(props.gallery.token), JSON.stringify(continuation.value)))
 			updateLocation('push', item.id, { proofingGalleryPhoto: true })
 		}
 		return
@@ -838,6 +837,8 @@ function upOneLevel() {
 							v-bind="galleryControlProps()"
 							:hide-chrome="activeIndex !== null || compareOpen"
 							@apply="applyView"
+							@sort-change="changeSort"
+							@reset-sort="resetSort"
 							@search="queueSearch"
 							@navigate="navigateToPage"
 							@update:panel="setPanel"

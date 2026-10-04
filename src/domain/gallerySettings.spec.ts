@@ -5,7 +5,7 @@ import { createDefaultGallerySettings } from './gallerySettings'
 describe('createDefaultGallerySettings', () => {
 	it('starts with conservative public capabilities', () => {
 		expect(createDefaultGallerySettings()).toMatchObject({
-			schemaVersion: 12,
+			schemaVersion: 13,
 			mode: 'presentation',
 			presentation: {
 				openerStyle: 'minimal',

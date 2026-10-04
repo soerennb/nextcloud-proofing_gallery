@@ -148,7 +148,7 @@ final class FolderServiceTest extends TestCase {
 		$policies = new PolicyService($this->createMock(IConfig::class));
 		$service = new FolderService(
 			$root,
-			new MediaMetadataService($this->createMock(IFilesMetadataManager::class), $policies, new EmbeddedMetadataExtractor($policies)),
+			new MediaMetadataService($this->createMock(IFilesMetadataManager::class), $policies, new EmbeddedMetadataExtractor($policies), $this->createMock(\OCP\EventDispatcher\IEventDispatcher::class)),
 			new MediaTypePolicy(),
 			new UploadLockService($provider),
 			new MediaCleanupService($this->createMock(IDBConnection::class), $this->createMock(IAppData::class)),
@@ -187,6 +187,7 @@ final class FolderServiceTest extends TestCase {
 			$this->createMock(IFilesMetadataManager::class),
 			$policies,
 			new EmbeddedMetadataExtractor($policies),
+			$this->createMock(\OCP\EventDispatcher\IEventDispatcher::class),
 		);
 
 		$provider = $this->createMock(ILockingProvider::class);

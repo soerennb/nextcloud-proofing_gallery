@@ -110,6 +110,7 @@ final class PolicyService {
 	/** @param array<string, mixed> $values */
 	public function saveGalleryDefaults(array $values): void {
 		$settings = GallerySettings::merge(GallerySettings::defaults(), $values);
+		\OCA\ProofingGallery\Domain\MediaSort::assertValid($settings->navigation->sortBy, $settings->navigation->sortDirection);
 		$this->config->setAppValue(Application::APP_ID, 'galleryDefaults', json_encode($settings, JSON_THROW_ON_ERROR));
 	}
 

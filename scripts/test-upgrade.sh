@@ -214,6 +214,10 @@ compose exec -T -e PG_BASELINE_HAS_LEGACY_REPAIR="${baseline_has_legacy_repair}"
 	$activeId = $insertGallery("upgrade-active", "upgrade-active-token", "draft", null);
 	$archivedId = $insertGallery("upgrade-archived", "upgrade-archived-token", "archived", $now);
 	$existingId = $insertGallery("upgrade-existing", "upgrade-existing-token", "published", null);
+	$collectionSortId = $insertGallery("upgrade-collection-sort", "upgrade-collection-sort-token", "draft", null);
+	$q = $db->getQueryBuilder();
+	$q->update("proofing_galleries")->set("source_type", $q->createNamedParameter("collection"))
+		->where($q->expr()->eq("id", $q->createNamedParameter($collectionSortId, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT)))->executeStatement();
 	$jobs = \OC::$server->get(\OCP\BackgroundJob\IJobList::class);
 	$jobs->add(\OCA\ProofingGallery\BackgroundJob\CleanupGalleryDataJob::class, null);
 	$jobs->add(\OCA\ProofingGallery\BackgroundJob\ContinueCleanupGalleryDataJob::class, null);
@@ -314,6 +318,8 @@ run_upgrade
 status_json="$(compose exec -T --user www-data "${service}" php occ status --output=json)"
 compose exec -T --user www-data "${service}" php /dev/stdin verify < "${repo_dir}/tests/smoke/UpgradeCollaboration.php"
 compose exec -T --user www-data "${service}" php /dev/stdin < "${repo_dir}/tests/smoke/UpgradeKiosk.php"
+compose cp "${repo_dir}/tests/smoke/UpgradeMediaSorting.php" "${service}:/tmp/proofing-upgrade-media-sorting.php"
+compose exec -T --user www-data "${service}" php /tmp/proofing-upgrade-media-sorting.php
 php -r '
 	$status = json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR);
 	if (($status["maintenance"] ?? true) || ($status["needsDbUpgrade"] ?? true)) {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ProofingGallery\Service;
 
 use OCA\ProofingGallery\Db\Gallery;
+use OCA\ProofingGallery\Domain\MediaSort;
 use OCA\ProofingGallery\Db\KioskRepository;
 use OCA\ProofingGallery\Dto\PublicGalleryQuery;
 use OCA\ProofingGallery\Dto\PublicShareContext;
@@ -50,12 +51,13 @@ final class PublicGalleryDataService {
 		$sortBy = $sortBy !== '' ? $sortBy : $settings->navigation->sortBy;
 		$sortDirection = $sortDirection !== '' ? $sortDirection : $settings->navigation->sortDirection;
 		$groupBy = $groupBy !== '' ? $groupBy : $settings->navigation->groupBy;
-		if (!in_array($sortBy, ['name', 'modified', 'size'], true)
+		if (!in_array($sortBy, $gallery->getSourceType() === 'collection' ? MediaSort::ALL : MediaSort::AUTOMATIC, true)
 			|| !in_array($sortDirection, ['asc', 'desc'], true)
 			|| !in_array($groupBy, ['none', 'type', 'folder'], true)) {
 			throw new \InvalidArgumentException('Invalid gallery arrangement');
 		}
 		if ($gallery->getSourceType() === 'collection') {
+			if ($sortBy === 'collection') $sortDirection = 'asc';
 			if ($path !== '') {
 				throw new \OCP\Files\NotFoundException('Collections do not contain folders');
 			}
@@ -63,9 +65,11 @@ final class PublicGalleryDataService {
 				$this->collections->availableItems($gallery),
 				static fn (array $item): bool => $search === '' || mb_stripos((string)$item['name'], $search) !== false,
 			));
-			$nodes = array_map(function (array $item) use ($gallery, $settings): array {
+			$captureById = [];
+			$nodes = array_map(function (array $item) use ($gallery, $settings, $sortBy, &$captureById): array {
 				try {
 					$file = $this->collections->resolveMedia($gallery, (int)$item['id']);
+					if ($sortBy === 'capturedAt') $captureById[$item['id']] = $this->metadata->summary($file)['capturedAt'] ?? null;
 					$item['metadata'] = $this->metadata->publicSummary($file, $settings->metadata->publicFields);
 					$item = [...$item, ...$this->publicGeometry($file)];
 				} catch (\Throwable) {
@@ -73,6 +77,9 @@ final class PublicGalleryDataService {
 				}
 				return $item;
 			}, $nodes);
+			if ($sortBy !== 'collection') usort($nodes, static fn (array $left, array $right): int => MediaSort::compare(
+				[...$left, 'capturedAt' => $captureById[$left['id']] ?? null], [...$right, 'capturedAt' => $captureById[$right['id']] ?? null], $sortBy, $sortDirection,
+			));
 			$focusIndex = $focusId === null ? null : $this->arrayItemPosition($nodes, $focusId);
 			if ($focusId !== null && $focusIndex === null) throw new \OCP\Files\NotFoundException('Gallery media not found');
 			$offset = $this->pageOffset(count($nodes), $limit, $offset, $focusIndex);
@@ -84,8 +91,8 @@ final class PublicGalleryDataService {
 				$offset,
 				'',
 				$search,
-				'collection',
-				'asc',
+				$sortBy,
+				$sortDirection,
 				'none',
 				null,
 				null,
@@ -177,7 +184,11 @@ final class PublicGalleryDataService {
 			static fn (Node $node): bool => ($multiRoot || $settings->navigation->folders || !($node instanceof Folder))
 				&& ($search === '' || mb_stripos($node->getName(), $search) !== false),
 		));
-		usort($nodes, static function (Node $left, Node $right) use ($sortBy, $sortDirection, $groupBy, $eventAlbums, $eventRoots): int {
+		$captureById = [];
+		if ($sortBy === 'capturedAt') foreach ($nodes as $node) {
+			if ($node instanceof File) $captureById[$node->getId()] = $this->metadata->summary($node)['capturedAt'] ?? null;
+		}
+		usort($nodes, static function (Node $left, Node $right) use ($sortBy, $sortDirection, $groupBy, $eventAlbums, $eventRoots, $captureById): int {
 			if ($eventAlbums) {
 				$order = ['shared' => 0, 'group' => 1, 'private' => 2];
 				$roleOrder = ($order[$eventRoots[$left->getId()]['role'] ?? 'shared'] ?? 3) <=> ($order[$eventRoots[$right->getId()]['role'] ?? 'shared'] ?? 3);
@@ -191,13 +202,11 @@ final class PublicGalleryDataService {
 				$folderOrder = ($left instanceof Folder ? 0 : 1) <=> ($right instanceof Folder ? 0 : 1);
 				if ($folderOrder !== 0) return $folderOrder;
 			}
-			$result = match ($sortBy) {
-				'modified' => $left->getMTime() <=> $right->getMTime(),
-				'size' => $left->getSize() <=> $right->getSize(),
-				default => strnatcasecmp($left->getName(), $right->getName()),
-			};
-			if ($result === 0) $result = strnatcasecmp($left->getName(), $right->getName());
-			return $sortDirection === 'desc' ? -$result : $result;
+			$value = static fn (Node $node): array => [
+				'id' => $node->getId(), 'name' => $node->getName(), 'size' => $node->getSize(), 'modifiedAt' => $node->getMTime(),
+				'capturedAt' => $captureById[$node->getId()] ?? null,
+			];
+			return MediaSort::compare($value($left), $value($right), $sortBy, $sortDirection);
 		});
 		$focusIndex = $focusId === null ? null : $this->nodePosition($nodes, $focusId);
 		if ($focusId !== null && $focusIndex === null) throw new \OCP\Files\NotFoundException('Gallery media not found');

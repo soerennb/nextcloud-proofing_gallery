@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { mediaSortOptions, sortDirectionLabel } from '../domain/mediaSorting.ts'
 import axios from '@nextcloud/axios'
 import { showError, showSuccess } from '@nextcloud/dialogs'
 import { t } from '@nextcloud/l10n'
@@ -312,6 +313,8 @@ onBeforeUnmount(() => {
 						<label>{{ t('proofing_gallery', 'Public language') }}<select v-model="defaults.publicLocale"><option value="auto">{{ t('proofing_gallery', 'Automatic') }}</option><option value="de">{{ t('proofing_gallery', 'German') }}</option><option value="en">{{ t('proofing_gallery', 'English') }}</option></select></label>
 						<label>{{ t('proofing_gallery', 'Theme') }}<select v-model="defaults.presentation.theme"><option value="auto">{{ t('proofing_gallery', 'Automatic') }}</option><option value="light">{{ t('proofing_gallery', 'Light') }}</option><option value="dark">{{ t('proofing_gallery', 'Dark') }}</option></select></label>
 						<label>{{ t('proofing_gallery', 'Layout') }}<select v-model="defaults.presentation.layout"><option value="grid">{{ t('proofing_gallery', 'Grid') }}</option><option value="masonry">{{ t('proofing_gallery', 'Masonry') }}</option><option value="list">{{ t('proofing_gallery', 'List') }}</option><option value="story">{{ t('proofing_gallery', 'Story') }}</option></select></label>
+						<label>{{ t('proofing_gallery', 'Default sort') }}<select v-model="defaults.navigation.sortBy" name="defaultSort"><option v-for="option in mediaSortOptions()" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
+						<label>{{ t('proofing_gallery', 'Sort direction') }}<select v-model="defaults.navigation.sortDirection" name="defaultSortDirection"><option v-for="direction in (['asc', 'desc'] as const)" :key="direction" :value="direction">{{ sortDirectionLabel(defaults.navigation.sortBy, direction) }}</option></select></label>
 						<label>{{ t('proofing_gallery', 'Tile size') }}<select v-model="defaults.presentation.tileSize"><option value="small">{{ t('proofing_gallery', 'Small') }}</option><option value="medium">{{ t('proofing_gallery', 'Medium') }}</option><option value="large">{{ t('proofing_gallery', 'Large') }}</option></select></label>
 						<label>{{ t('proofing_gallery', 'Spacing') }}<select v-model="defaults.presentation.tileGap"><option value="tight">{{ t('proofing_gallery', 'Tight') }}</option><option value="normal">{{ t('proofing_gallery', 'Normal') }}</option><option value="wide">{{ t('proofing_gallery', 'Wide') }}</option></select></label>
 						<label>{{ t('proofing_gallery', 'Corners') }}<select v-model="defaults.presentation.tileRadius"><option value="square">{{ t('proofing_gallery', 'Square') }}</option><option value="soft">{{ t('proofing_gallery', 'Soft') }}</option></select></label>
@@ -407,6 +410,8 @@ onBeforeUnmount(() => {
 						<strong>{{ t('proofing_gallery', 'Integration queue') }}</strong><p>{{ t('proofing_gallery', '{count} pending events', { count: draft.health.integrations.outbox.pending }) }}</p>
 					</NcNoteCard><NcNoteCard :type="draft.health.mediaIndex.stalled > 0 ? 'warning' : 'success'">
 						<strong>{{ t('proofing_gallery', 'Media indexing') }}</strong><p>{{ draft.health.mediaIndex.stalled > 0 ? t('proofing_gallery', '{count} stalled scans', { count: draft.health.mediaIndex.stalled }) : t('proofing_gallery', '{count} scans running', { count: draft.health.mediaIndex.running }) }}</p>
+					</NcNoteCard><NcNoteCard :type="(draft.health.captureMetadata?.failed ?? 0) > 0 ? 'warning' : 'success'">
+						<strong>{{ t('proofing_gallery', 'Capture date indexing') }}</strong><p>{{ t('proofing_gallery', '{ready} ready · {pending} pending · {failed} failed', draft.health.captureMetadata ?? { ready: 0, pending: 0, failed: 0 }) }}</p>
 					</NcNoteCard><NcNoteCard :type="draft.health.retention.failed > 0 ? 'warning' : 'success'">
 						<strong>{{ t('proofing_gallery', 'Retention handoff') }}</strong><p>{{ t('proofing_gallery', '{assigned} folders tagged · {failed} failed', draft.health.retention) }}</p>
 					</NcNoteCard><NcNoteCard :type="draft.health.backlogs.purges.due > 0 ? 'warning' : 'success'">

@@ -326,7 +326,7 @@ export async function revokeLivePushCredential(id: number, credentialId: number)
 	await axios.delete(`${galleriesUrl}/${id}/live-push/${credentialId}`)
 }
 
-export async function fetchIndexedMedia(id: number, limit = 200, cursor?: string | null, path = '', signal?: AbortSignal, sortBy: 'name' | 'modified' | 'size' = 'name', sortDirection: 'asc' | 'desc' = 'asc'): Promise<IndexedMediaPage> {
+export async function fetchIndexedMedia(id: number, limit = 200, cursor?: string | null, path = '', signal?: AbortSignal, sortBy: 'name' | 'modified' | 'size' | 'capturedAt' = 'name', sortDirection: 'asc' | 'desc' = 'asc'): Promise<IndexedMediaPage> {
 	const { data } = await axios.get<IndexedMediaPage>(`${galleriesUrl}/${id}/indexed-media`, {
 		params: { limit, cursor: cursor || undefined, path, sortBy, sortDirection },
 		signal,

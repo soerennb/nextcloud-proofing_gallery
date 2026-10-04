@@ -67,6 +67,9 @@ final class PresetService {
 			$settings['delivery']['guestUploads'] = false;
 			unset($settings['allowGuestUploads']);
 		}
+		if ($gallery->getSourceType() === 'folder' && ($settings['navigation']['sortBy'] ?? '') === 'collection') {
+			$settings['navigation'] = array_replace($settings['navigation'], $this->galleries->instanceMediaSort());
+		}
 		return $this->galleries->update($ownerUid, $galleryId, null, $settings, $expectedRevision);
 	}
 

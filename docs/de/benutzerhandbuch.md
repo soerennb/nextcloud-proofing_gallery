@@ -35,6 +35,33 @@ und klicke **Erstellen und veröffentlichen**. Die gemeinsame Galerie ist sofort
 lade die Verbindungskonfiguration herunter. Konto und App-Passwort werden
 separat am Kiosk eingerichtet. Die Referenz zur Fotobox-Anbindung beschreibt die spätere API-Kommunikation und den QR-Ablauf.
 
+## Bilder sortieren
+
+Neue Galerien übernehmen eine Kopie der Instanz-Vorgabe. Unter **Ausliefern →
+Standardsortierung** stehen Dateiname, Aufnahmedatum, letztes Änderungsdatum und
+Dateigröße mit auf- oder absteigender Richtung zur Verfügung. **Aktuelle
+Instanz-Vorgabe übernehmen** kopiert die aktuelle Einstellung der Administration.
+Spätere Änderungen der Instanz-Vorgabe verändern vorhandene Galerien nicht.
+Sammlungen bieten außerdem ihre ursprüngliche gespeicherte Reihenfolge an.
+Vorhandene Sammlungen behalten diese Reihenfolge beim Upgrade.
+
+Besucher wählen unter **Weitere Optionen → Anzeige** ihre Reihenfolge. Der Browser
+speichert die Wahl für diesen Link. **Galerie-Vorgabe verwenden** setzt nur die
+persönliche Sortierung zurück. Explizite URL-Parameter `sort` und `order` haben
+Vorrang vor der gespeicherten Auswahl. Dateinamen werden unabhängig vom Unterordner
+natürlich und ohne Unterscheidung der Großschreibung sortiert (`img2` vor `img10`).
+Bei Gleichstand entscheidet die Datei-ID. Story-Abschnitte behalten ihre festgelegte
+Reihenfolge.
+
+Das Aufnahmedatum stammt vorrangig aus XMP `exif:DateTimeOriginal`, danach aus
+EXIF im Bild und schließlich aus gespeicherten Nextcloud-Photos-Metadaten.
+EXIF-Zeitzonen werden nach UTC umgerechnet; ohne Zeitzone gilt UTC. Dateien ohne
+Aufnahmedatum bleiben in beiden Richtungen am Ende sichtbar. Das Änderungsdatum
+dient nicht als Ersatz. Hintergrundaufgaben indexieren die Daten in begrenzten
+Paketen. Während der Indexierung können Bilder ihre endgültige Position noch
+wechseln. Die Sortierung ist auch möglich, wenn das Aufnahmedatum öffentlich
+nicht angezeigt werden darf; Cursor für diese Sortierung sind verschlüsselt.
+
 ## Serien-Events privat ausliefern
 
 Für Einschulungen, Sportveranstaltungen und andere Aufträge mit vielen

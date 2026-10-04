@@ -119,6 +119,7 @@ final class GalleryService {
 			$settings,
 		);
 		$gallerySettings = GallerySettings::merge(GallerySettings::defaults(), $composed);
+		\OCA\ProofingGallery\Domain\MediaSort::assertValid($gallerySettings->navigation->sortBy, $gallerySettings->navigation->sortDirection, $sourceType === 'collection');
 		$this->assertPresentationAssets($gallery, $gallerySettings);
 		$gallery->setSettings(json_encode($gallerySettings, JSON_THROW_ON_ERROR));
 		$gallery->setCreatedAt($now);
@@ -417,6 +418,12 @@ final class GalleryService {
 		];
 	}
 
+	/** @return array{sortBy: string, sortDirection: string} */
+	public function instanceMediaSort(): array {
+		$navigation = $this->policies->galleryDefaults()['navigation'];
+		return ['sortBy' => $navigation['sortBy'], 'sortDirection' => $navigation['sortDirection']];
+	}
+
 	public function rebindSource(string $ownerUid, int $id, int $folderId): \OCA\ProofingGallery\Dto\SourceRebindResult {
 		$gallery = $this->access->owner($ownerUid, $id);
 		if ($gallery->getSourceType() !== 'folder') {
@@ -440,6 +447,7 @@ final class GalleryService {
 			}
 			$current = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
 			$merged = GallerySettings::merge($current, $settings);
+			\OCA\ProofingGallery\Domain\MediaSort::assertValid($merged->navigation->sortBy, $merged->navigation->sortDirection, $gallery->getSourceType() === 'collection');
 			$this->assertPresentationAssets($gallery, $merged);
 			$gallery->setSettings(json_encode($merged, JSON_THROW_ON_ERROR));
 		}

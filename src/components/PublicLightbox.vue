@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { readBrowserStorage, safelyStore } from '../domain/publicGalleryPreferences.ts'
 /* eslint-disable vue/no-deprecated-slot-attribute -- Ionic Vue maps Web Component slots through the slot attribute. */
 import { IonActionSheet, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar } from '@ionic/vue'
 import { t } from '@nextcloud/l10n'
@@ -54,7 +55,7 @@ const shell = ref<HTMLElement | null>(null), feedbackOpen = ref(false), metadata
 const slideshowSuspended = ref(false), slideshowCycle = ref(0)
 const touchHint = ref(false), chromeVisible = ref(true), fullscreen = ref(Boolean(document.fullscreenElement))
 const filmstripSessionKey = `proofing-gallery-filmstrip:${window.location.pathname}`
-const guestFilmstripHidden = ref(sessionStorage.getItem(filmstripSessionKey) === 'hidden')
+const guestFilmstripHidden = ref(readBrowserStorage('session', filmstripSessionKey) === 'hidden')
 const viewportWidth = ref(window.innerWidth), viewportHeight = ref(window.visualViewport?.height ?? window.innerHeight)
 const viewportTop = ref(window.visualViewport?.offsetTop ?? 0), viewportBottom = ref(0)
 const commentBody = ref(''), annotationReplyBody = ref('')
@@ -232,9 +233,9 @@ function bindPhotoSwipeEvents() {
 		unbindZoomSurface = zoomSurface?.bind() ?? (() => {})
 		nextTick(() => { zoomSurface?.mount(); annotations.syncHost() })
 		if (window.matchMedia('(pointer: coarse)').matches
-			&& localStorage.getItem('proofing-gallery-touch-hint') !== 'seen') {
+			&& readBrowserStorage('local', 'proofing-gallery-touch-hint') !== 'seen') {
 			touchHint.value = true
-			localStorage.setItem('proofing-gallery-touch-hint', 'seen')
+			safelyStore(() => localStorage.setItem('proofing-gallery-touch-hint', 'seen'))
 			hintTimer = window.setTimeout(() => { touchHint.value = false }, 2600)
 		}
 	})
@@ -413,7 +414,7 @@ function toggleChrome() {
 
 function toggleFilmstrip() {
 	guestFilmstripHidden.value = !guestFilmstripHidden.value
-	sessionStorage.setItem(filmstripSessionKey, guestFilmstripHidden.value ? 'hidden' : 'visible')
+	safelyStore(() => sessionStorage.setItem(filmstripSessionKey, guestFilmstripHidden.value ? 'hidden' : 'visible'))
 	wakeChrome()
 	nextTick(() => pswp?.updateSize(true))
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ProofingGallery\Service;
 
 use OCA\ProofingGallery\Dto\MediaItem;
+use OCA\ProofingGallery\Domain\MediaSort;
 use OCA\ProofingGallery\Dto\MediaPage;
 use OCA\ProofingGallery\Exception\FolderAccessException;
 use OCP\Files\File;
@@ -389,10 +390,7 @@ final class FolderService {
 		$limit = max(1, min(200, $limit));
 		$offset = max(0, $offset);
 		$search = mb_substr(trim($search), 0, 120);
-		if (!in_array($sortBy, ['name', 'modified', 'size', 'capturedAt'], true)
-			|| !in_array($sortDirection, ['asc', 'desc'], true)) {
-			throw new \InvalidArgumentException('Invalid media sort');
-		}
+		MediaSort::assertValid($sortBy, $sortDirection);
 		if ($ratingMin < 0 || $ratingMin > 5) throw new \InvalidArgumentException('Invalid minimum rating');
 		$capturedFromTime = $this->filterTimestamp($capturedFrom);
 		$capturedToTime = $this->filterTimestamp($capturedTo, true);
@@ -408,10 +406,11 @@ final class FolderService {
 		if ($capturedFrom !== '' || $capturedTo !== '' || $camera !== '' || $lens !== '' || $keyword !== '' || $ratingMin > 0 || $sortBy === 'capturedAt') {
 			$nodes = array_values(array_filter($nodes, function (Node $node) use (&$metadataById, $capturedFromTime, $capturedToTime, $camera, $lens, $keyword, $ratingMin): bool {
 				if ($node instanceof Folder) return true;
-				if (!$node instanceof File) return false;
+				if (!$node instanceof File) return $capturedFromTime === null && $capturedToTime === null && $camera === '' && $lens === '' && $keyword === '' && $ratingMin === 0;
 				$summary = $this->metadata->summary($node);
 				$metadataById[$node->getId()] = $summary;
-				return $this->matchesMetadata($summary, $capturedFromTime, $capturedToTime, $camera, $lens, $keyword, $ratingMin);
+				return ($capturedFromTime === null && $capturedToTime === null && $camera === '' && $lens === '' && $keyword === '' && $ratingMin === 0)
+					|| $this->matchesMetadata($summary, $capturedFromTime, $capturedToTime, $camera, $lens, $keyword, $ratingMin);
 			}));
 		}
 		usort($nodes, static function (Node $left, Node $right) use ($sortBy, $sortDirection, $metadataById): int {
@@ -419,14 +418,11 @@ final class FolderService {
 				$folderOrder = ($left instanceof Folder ? 0 : 1) <=> ($right instanceof Folder ? 0 : 1);
 				if ($folderOrder !== 0) return $folderOrder;
 			}
-			$result = match ($sortBy) {
-				'modified' => $left->getMTime() <=> $right->getMTime(),
-				'size' => $left->getSize() <=> $right->getSize(),
-				'capturedAt' => (int)($metadataById[$left->getId()]['capturedAt'] ?? 0) <=> (int)($metadataById[$right->getId()]['capturedAt'] ?? 0),
-				default => strnatcasecmp($left->getName(), $right->getName()),
-			};
-			if ($result === 0) $result = strnatcasecmp($left->getName(), $right->getName());
-			return $sortDirection === 'desc' ? -$result : $result;
+			$value = static fn (Node $node): array => [
+				'id' => $node->getId(), 'name' => $node->getName(), 'size' => $node->getSize(), 'modifiedAt' => $node->getMTime(),
+				'capturedAt' => $metadataById[$node->getId()]['capturedAt'] ?? null,
+			];
+			return MediaSort::compare($value($left), $value($right), $sortBy, $sortDirection);
 		});
 
 		$items = array_map(

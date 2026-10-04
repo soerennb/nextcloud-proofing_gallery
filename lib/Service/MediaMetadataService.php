@@ -11,7 +11,7 @@ use OCP\Files\Folder;
 use OCP\FilesMetadata\IFilesMetadataManager;
 
 final class MediaMetadataService {
-	private const DETAILS_KEY = 'proofing-gallery-details';
+	private const DETAILS_KEY = 'proofing-gallery-details-v2';
 	private const MAX_SIDECAR_BYTES = 1048576;
 	private const EDITABLE_FIELDS = ['title', 'description', 'creator', 'copyright', 'keywords', 'rating', 'label'];
 	private const PUBLIC_FIELDS = ['capturedAt', 'camera', 'lens', 'exposure', 'title', 'description', 'creator', 'copyright'];
@@ -33,6 +33,7 @@ final class MediaMetadataService {
 		private IFilesMetadataManager $metadataManager,
 		private PolicyService $policies,
 		private EmbeddedMetadataExtractor $extractor,
+		private \OCP\EventDispatcher\IEventDispatcher $events,
 	) {
 	}
 
@@ -44,15 +45,41 @@ final class MediaMetadataService {
 				return ['state' => 'pending'];
 			}
 			$details = $metadata->getArray(self::DETAILS_KEY);
+			$parent = $file->getParent();
+			if ($parent instanceof Folder) {
+				$name = pathinfo($file->getName(), PATHINFO_FILENAME) . '.xmp';
+				$current = $parent->nodeExists($name) ? $parent->get($name) : null;
+				if (($details['sidecar']['etag'] ?? null) !== ($current instanceof File ? $current->getEtag() : null)) return ['state' => 'pending'];
+			}
 			return ['state' => 'ready', ...$details];
 		} catch (\Throwable) {
 			return ['state' => 'pending'];
 		}
 	}
 
+	/** Cache-only access for the bounded filecache scan; never reads image bytes.
+	 * @return array<string, mixed>
+	 */
+	public function cachedSummary(int $fileId, string $etag): array {
+		try {
+			$value = $this->metadataManager->getMetadata($fileId, false);
+			if ($value->hasKey(self::DETAILS_KEY) && $value->getEtag(self::DETAILS_KEY) === $etag) return ['state' => 'ready', ...$value->getArray(self::DETAILS_KEY)];
+		} catch (\Throwable) {}
+		return ['state' => 'pending'];
+	}
+
+	public function invalidate(int $fileId): void {
+		try { $metadata = $this->metadataManager->getMetadata($fileId, false); } catch (\Throwable) { return; }
+		if ($metadata->hasKey(self::DETAILS_KEY)) {
+			$metadata->setEtag(self::DETAILS_KEY, '');
+			$this->metadataManager->saveMetadata($metadata);
+		}
+	}
+
 	/** @return array<string, mixed> */
 	public function index(File $file): array {
 		if (!str_starts_with($file->getMimeType(), 'image/')) {
+			$this->events->dispatchTyped(new \OCA\ProofingGallery\Event\MediaMetadataIndexedEvent($file->getId(), $file->getEtag(), null, 'ready'));
 			return ['state' => 'unavailable'];
 		}
 		$metadata = $this->metadataManager->getMetadata($file->getId(), true);
@@ -60,6 +87,7 @@ final class MediaMetadataService {
 		$metadata->setArray(self::DETAILS_KEY, $details);
 		$metadata->setEtag(self::DETAILS_KEY, $file->getEtag());
 		$this->metadataManager->saveMetadata($metadata);
+		$this->events->dispatchTyped(new \OCA\ProofingGallery\Event\MediaMetadataIndexedEvent($file->getId(), $file->getEtag(), isset($details['capturedAt']) ? (int)$details['capturedAt'] : null));
 		return ['state' => 'ready', ...$details];
 	}
 
@@ -315,9 +343,11 @@ final class MediaMetadataService {
 		$xpath->registerNamespace('rdf', self::NS_RDF);
 		$xpath->registerNamespace('xmp', self::NS_XMP);
 		$xpath->registerNamespace('dc', self::NS_DC);
+		$xpath->registerNamespace('exif', 'http://ns.adobe.com/exif/1.0/');
 		$description = $xpath->query('//rdf:Description')->item(0);
 		if (!$description instanceof \DOMElement) return [];
 		return array_filter([
+			'capturedAt' => CaptureTimestamp::parse($description->getAttributeNS('http://ns.adobe.com/exif/1.0/', 'DateTimeOriginal') ?: $this->xpathText($xpath, './/exif:DateTimeOriginal', $description)),
 			'title' => $this->xpathText($xpath, './/dc:title/rdf:Alt/rdf:li', $description),
 			'description' => $this->xpathText($xpath, './/dc:description/rdf:Alt/rdf:li', $description),
 			'creator' => $this->xpathText($xpath, './/dc:creator/rdf:Seq/rdf:li', $description),

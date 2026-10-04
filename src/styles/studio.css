@@ -7,7 +7,7 @@ body[data-proofing-gallery-theme='light'] {
 	--studio-muted: #586970;
 	--studio-line: rgb(16 21 25 / 13%);
 	--studio-line-strong: rgb(16 21 25 / 25%);
-	--studio-accent: #087f91;
+	--studio-accent: #08798b;
 	--studio-accent-ink: #fff;
 	--studio-accent-soft: #d5f0f3;
 	--studio-success: #16855b;
@@ -59,7 +59,7 @@ body[data-proofing-gallery-theme='light'] .modal-container {
 	--color-background-dark: #d8e6e9;
 	--color-border: rgb(16 21 25 / 13%);
 	--color-border-maxcontrast: rgb(16 21 25 / 25%);
-	--color-primary-element: #087f91;
+	--color-primary-element: #08798b;
 	--color-primary-element-text: #fff;
 	--color-success: #16855b;
 	--color-warning: #a86800;

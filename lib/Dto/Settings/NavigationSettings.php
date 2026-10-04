@@ -6,6 +6,7 @@ namespace OCA\ProofingGallery\Dto\Settings;
 
 use InvalidArgumentException;
 use JsonSerializable;
+use OCA\ProofingGallery\Domain\MediaSort;
 
 final class NavigationSettings implements JsonSerializable {
 	private function __construct(
@@ -30,8 +31,8 @@ final class NavigationSettings implements JsonSerializable {
 		if ($depth < 0 || $depth > 8) throw new InvalidArgumentException('Invalid navigation settings');
 		return new self(
 			SettingsInput::bool($value['folders'], 'navigation.folders'), SettingsInput::bool($value['recursive'], 'navigation.recursive'), $depth,
-			SettingsInput::choice($value['sortBy'], 'navigation sort', ['name', 'modified', 'size']),
-			SettingsInput::choice($value['sortDirection'], 'navigation direction', ['asc', 'desc']),
+			SettingsInput::choice($value['sortBy'], 'navigation sort', MediaSort::ALL),
+			SettingsInput::choice($value['sortDirection'], 'navigation direction', MediaSort::DIRECTIONS),
 			SettingsInput::choice($value['groupBy'], 'navigation grouping', ['none', 'type', 'folder']),
 		);
 	}

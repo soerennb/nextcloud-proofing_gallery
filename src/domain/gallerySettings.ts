@@ -52,7 +52,7 @@ export interface GalleryPresentation extends GalleryAppearance {
 }
 
 export interface GallerySettings {
-	schemaVersion?: 12
+	schemaVersion?: 13
 	mode: GalleryMode
 	publicLocale: 'auto' | 'en' | 'de'
 	review: {
@@ -80,7 +80,7 @@ export interface GallerySettings {
 		folders: boolean
 		recursive: boolean
 		groupDepth: number
-		sortBy: 'name' | 'modified' | 'size'
+		sortBy: 'name' | 'modified' | 'size' | 'capturedAt' | 'collection'
 		sortDirection: 'asc' | 'desc'
 		groupBy: 'none' | 'type' | 'folder'
 	}
@@ -108,7 +108,7 @@ export type CanonicalGallerySettings = Pick<GallerySettings,
 
 export function canonicalGallerySettings(settings: GallerySettings): CanonicalGallerySettings {
 	return {
-		schemaVersion: 12,
+		schemaVersion: 13,
 		mode: settings.mode,
 		publicLocale: settings.publicLocale,
 		review: structuredClone(settings.review),
@@ -168,7 +168,7 @@ export function createDefaultGallerySettings(): GallerySettings {
 		story: { sections: [], showAllMedia: true },
 	}
 	return {
-		schemaVersion: 12,
+		schemaVersion: 13,
 		mode: 'presentation',
 		publicLocale: 'auto',
 		review: {

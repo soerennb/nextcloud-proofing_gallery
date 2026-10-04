@@ -117,7 +117,7 @@ final class MediaMetadataServiceTest extends TestCase {
 		$manager = $this->createMock(IFilesMetadataManager::class);
 		$manager->method('getMetadata')->willReturn($stored);
 		$policies = new PolicyService($this->createMock(IConfig::class));
-		$service = new MediaMetadataService($manager, $policies, new EmbeddedMetadataExtractor($policies));
+		$service = new MediaMetadataService($manager, $policies, new EmbeddedMetadataExtractor($policies), $this->createMock(\OCP\EventDispatcher\IEventDispatcher::class));
 
 		self::assertSame(
 			['state' => 'ready', 'camera' => 'Example Camera'],
@@ -145,6 +145,7 @@ final class MediaMetadataServiceTest extends TestCase {
 			$this->createMock(IFilesMetadataManager::class),
 			$policies,
 			new EmbeddedMetadataExtractor($policies),
+			$this->createMock(\OCP\EventDispatcher\IEventDispatcher::class),
 		);
 	}
 

@@ -16,7 +16,7 @@ final class EmbeddedMetadataExtractor {
 	public function extract(File $file, array $known): array {
 		$flat = $this->flatten($known);
 		$details = [
-			'capturedAt' => $this->timestamp($this->first($flat, ['photos-original_date_time', 'datetimeoriginal', 'date_time_original'])),
+			'capturedAt' => CaptureTimestamp::parse($this->first($flat, ['datetimeoriginal', 'date_time_original']), $this->first($flat, ['offsettimeoriginal'])) ?? $this->photosTimestamp($file, $flat),
 			'camera' => $this->joined($this->first($flat, ['make']), $this->first($flat, ['model', 'cameramodelname'])),
 			'lens' => $this->text($this->first($flat, ['lensmodel', 'lens'])),
 			'focalLength' => $this->number($this->first($flat, ['focallength'])),
@@ -32,6 +32,14 @@ final class EmbeddedMetadataExtractor {
 			$embedded,
 			static fn (mixed $value): bool => $value !== null && $value !== [],
 		)), static fn (mixed $value): bool => $value !== null && $value !== '' && $value !== []);
+	}
+
+	/** Nextcloud Photos also stores mtime in this field when it found no date.
+	 * @param array<string, mixed> $flat
+	 */
+	private function photosTimestamp(File $file, array $flat): ?int {
+		$value = CaptureTimestamp::parse($this->first($flat, ['photos-original_date_time']));
+		return $value === $file->getMTime() ? null : $value;
 	}
 
 	/** @return array<string, mixed> */
@@ -65,7 +73,7 @@ final class EmbeddedMetadataExtractor {
 			$flat = is_array($raw) ? $this->flatten($raw) : [];
 			$iptc = isset($info['APP13']) && function_exists('iptcparse') ? @iptcparse($info['APP13']) : false;
 			return [
-				'capturedAt' => $this->timestamp($this->first($flat, ['datetimeoriginal', 'date_time_original'])),
+				'capturedAt' => CaptureTimestamp::parse($this->first($flat, ['datetimeoriginal', 'date_time_original']), $this->first($flat, ['offsettimeoriginal'])),
 				'camera' => $this->joined($this->first($flat, ['make']), $this->first($flat, ['model'])),
 				'lens' => $this->text($this->first($flat, ['lensmodel', 'lens'])),
 				'focalLength' => $this->number($this->first($flat, ['focallength'])),
@@ -107,13 +115,6 @@ final class EmbeddedMetadataExtractor {
 			if (array_key_exists($normalized, $values)) return $values[$normalized];
 		}
 		return null;
-	}
-
-	private function timestamp(mixed $value): ?int {
-		if (is_int($value) || (is_string($value) && ctype_digit($value))) return (int)$value;
-		if (!is_string($value) || trim($value) === '') return null;
-		$date = \DateTimeImmutable::createFromFormat('Y:m:d H:i:s', trim($value));
-		return $date === false ? null : $date->getTimestamp();
 	}
 
 	private function number(mixed $value): ?float {
