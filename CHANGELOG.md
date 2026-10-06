@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- show the white app icon in the header and app menu and the dark one on light
+  backgrounds such as the administration settings, notifications and search
+
 ## 0.11.0 — 2026-10-04
 
 - add administrator defaults, per-gallery image ordering, and personal visitor
