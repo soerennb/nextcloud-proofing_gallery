@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { downloadScopeLabels } from '../domain/downloadScopeLabels.ts'
 import { showError, showSuccess } from '@nextcloud/dialogs'
 import { t } from '@nextcloud/l10n'
 import { missingPublicShare, publicShareError, shareRecoveryMessage } from '../domain/publicShareRecovery.ts'
@@ -299,14 +300,8 @@ function updateOpen(open: boolean) {
 				</NcCheckboxRadioSwitch>
 				<div class="delivery-summary">
 					<strong>{{ t('proofing_gallery', 'Downloads') }}</strong>
-					<span>{{ gallery.settings.delivery.downloadScope === 'none'
-						? t('proofing_gallery', 'Disabled')
-						: gallery.settings.delivery.downloadScope === 'individual'
-							? t('proofing_gallery', 'Individual files')
-							: gallery.settings.delivery.downloadScope === 'selection'
-								? t('proofing_gallery', 'Saved selections')
-								: t('proofing_gallery', 'Files and selections') }}</span>
-					<small>{{ t('proofing_gallery', 'Change downloads in the Delivery workspace.') }}</small>
+					<span>{{ downloadScopeLabels()[gallery.settings.delivery.downloadScope] }}</span>
+					<small>{{ t('proofing_gallery', 'Change downloads in the Share workspace.') }}</small>
 				</div>
 				<p v-if="!published && gallery.sourceType === 'collection' && gallery.mediaSummary.total === 0" class="sharing-dialog__hint">
 					{{ t('proofing_gallery', 'Add at least one available file before publishing this collection.') }}

@@ -233,10 +233,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+      - uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           languages: javascript-typescript,actions
-      - uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+      - uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
 
   e2e:
     needs: [classify, web, php, main_web_smoke, main_php_smoke]
@@ -253,7 +253,7 @@ jobs:
       matrix:
         include:
           - suite: ui
-            specs: tests/e2e/collection.spec.ts tests/e2e/event.spec.ts tests/e2e/gallery.spec.ts tests/e2e/review-viewer.spec.ts tests/e2e/sorting.spec.ts
+            specs: tests/e2e/collection.spec.ts tests/e2e/event.spec.ts tests/e2e/gallery.spec.ts tests/e2e/owner-studio.spec.ts tests/e2e/review-viewer.spec.ts tests/e2e/sorting.spec.ts
           - suite: api
             specs: tests/e2e/ecosystem.spec.ts tests/e2e/regression.spec.ts tests/e2e/security.spec.ts tests/e2e/review-identity.spec.ts tests/e2e/share-recovery.spec.ts tests/e2e/source-rebinding.spec.ts tests/e2e/kiosk.spec.ts
     steps:

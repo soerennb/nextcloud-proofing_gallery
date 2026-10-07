@@ -17,6 +17,9 @@ const settings = defineModel<GallerySettings>('settings', { required: true })
 </script>
 
 <template>
+	<section class="settings-section guest-order-section">
+		<GallerySortSettings v-model="settings.navigation" :collection="gallery.sourceType === 'collection'" />
+	</section>
 	<EventDeliveryWorkspace v-if="gallery.deliveryMode === 'event'"
 		v-model:settings="settings"
 		:gallery="gallery"
@@ -29,7 +32,7 @@ const settings = defineModel<GallerySettings>('settings', { required: true })
 			<p>{{ gallery.shareToken ? t('proofing_gallery', 'Manage who can open this gallery and what each link allows.') : t('proofing_gallery', 'Publish the gallery when it is ready for clients.') }}</p>
 		</div>
 		<NcButton variant="primary" @click="emit('open-sharing')">
-			{{ gallery.shareToken ? t('proofing_gallery', 'Invitation and primary link') : t('proofing_gallery', 'Publish gallery') }}
+			{{ gallery.shareToken ? t('proofing_gallery', 'Invite clients') : t('proofing_gallery', 'Publish gallery') }}
 		</NcButton>
 		<PublicLinkManager v-if="gallery.shareToken" :gallery="gallery" @gallery-updated="emit('updated', $event)" />
 		<div class="settings-subsection">
@@ -47,5 +50,4 @@ const settings = defineModel<GallerySettings>('settings', { required: true })
 			</NcCheckboxRadioSwitch>
 		</div>
 	</section>
-	<GallerySortSettings v-model="settings.navigation" :collection="gallery.sourceType === 'collection'" />
 </template>

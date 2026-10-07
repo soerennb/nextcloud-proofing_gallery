@@ -43,6 +43,7 @@
 .settings-header__actions {
 	display: flex;
 	align-items: center;
+	flex-wrap: wrap;
 	gap: 12px;
 }
 
@@ -63,11 +64,11 @@
 
 @media (prefers-reduced-motion: reduce) { .save-indicator__spin { animation: none; } }
 
-.save-indicator[data-state='saved'] { color: var(--color-success-text); }
+.save-indicator[data-state='saved'] { color: var(--studio-success); }
 
 .save-indicator[data-state='error'],
 .save-indicator[data-state='conflict'],
-.save-indicator[data-state='invalid'] { color: var(--color-error-text); }
+.save-indicator[data-state='invalid'] { color: var(--studio-danger); }
 
 .save-problem {
 	position: fixed;
@@ -99,9 +100,9 @@
 
 .settings-header h1 {
 	margin: 0;
-	font-family: NewsreaderVariable, Newsreader, serif;
-	font-size: clamp(34px, 4vw, 52px);
-	font-weight: 540;
+	font-family: inherit;
+	font-size: 32px;
+	font-weight: 700;
 	letter-spacing: -.04em;
 	line-height: 1.02;
 }
@@ -113,7 +114,7 @@
 .project-status,
 .purpose-name { padding: 4px 8px; border-radius: 6px; background: var(--studio-surface-raised, var(--color-background-hover)); color: var(--studio-muted, var(--color-text-maxcontrast)); font-size: 11px; font-weight: 700; letter-spacing: .025em; }
 
-.project-status { border-inline-start: 3px solid var(--color-primary-element); color: var(--color-main-text); }
+.project-status {  color: var(--color-main-text); }
 
 .readiness-popover { position: relative; }
 
@@ -148,91 +149,10 @@
 
 .workflow-completion strong { font-size: 18px; }
 
-.workflow-completion span { color: var(--color-text-maxcontrast); }
-
-.settings-tabs {
-	position: sticky;
-	z-index: 12;
-	top: 0;
-	display: flex;
-	overflow-x: auto;
-	gap: 24px;
-	margin-top: 28px;
-	border-bottom: 1px solid var(--studio-line, var(--color-border));
-	background: color-mix(in srgb, var(--studio-canvas, var(--color-main-background)) 92%, transparent);
-	backdrop-filter: blur(16px);
-	scroll-snap-type: inline proximity;
-}
-
-.settings-tabs button {
-	scroll-snap-align: center;
-	min-height: 44px;
-	padding: 0;
-	border: 0;
-	border-bottom: 2px solid transparent;
-	background: transparent;
-	color: var(--color-text-maxcontrast);
-	font-weight: 600;
-	white-space: nowrap;
-	cursor: pointer;
-}
-
-.settings-tabs button[aria-current="page"] {
-	border-bottom-color: var(--studio-accent, var(--color-primary-element));
-	color: var(--studio-ink, var(--color-main-text));
-}
-
-.settings-more {
-	position: relative;
-	margin-inline-start: auto;
-}
-
-.settings-more > summary {
-	display: flex;
-	min-height: 44px;
-	align-items: center;
-	gap: 7px;
-	border-bottom: 2px solid transparent;
-	color: var(--color-main-text);
-	font-weight: 600;
-	cursor: pointer;
-	list-style: none;
-}
-
-.settings-more > summary::-webkit-details-marker { display: none; }
-
-.settings-more > summary::after { content: '⌄'; font-size: 14px; }
-
-.settings-more--active > summary { border-bottom-color: var(--color-primary-element); }
-
-.settings-more > div {
-	position: absolute;
-	z-index: 30;
-	inset: calc(100% + 5px) 0 auto auto;
-	display: grid;
-	min-width: 190px;
-	padding: 5px;
-	border: 1px solid var(--color-border-maxcontrast);
-	border-radius: 8px;
-	background: var(--color-main-background);
-	box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
-}
-
-.settings-more > div button {
-	min-height: 40px;
-	padding: 0 10px;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--color-main-text);
-	text-align: start;
-}
-
-.settings-more > div button:hover,
-.settings-more > div button[aria-current='page'] { background: var(--color-background-hover); }
+.workflow-completion > div > span { color: var(--color-text-maxcontrast); }
 
 .settings-content {
-	padding-top: 32px;
+	padding-top: 24px;
 }
 
 .settings-section {
@@ -324,9 +244,9 @@
 }
 
 .section-heading h2 {
-	font-family: NewsreaderVariable, Newsreader, serif;
-	font-size: 27px;
-	font-weight: 560;
+	font-family: inherit;
+	font-size: 20px;
+	font-weight: 700;
 	letter-spacing: -.025em;
 }
 
@@ -411,9 +331,9 @@
 
 .design-layout {
 	display: grid;
-	grid-template-columns: minmax(320px, 440px) minmax(420px, 1fr);
+	grid-template-columns: minmax(300px, 440px) minmax(0, 1fr);
 	align-items: start;
-	gap: 40px;
+	gap: 24px;
 }
 
 .design-fields {
@@ -549,9 +469,7 @@
 	gap: 8px;
 }
 
-.mobile-preview-button {
-	display: none;
-}
+.mobile-preview-toolbar { display: none; }
 
 .hidden-file-input {
 	display: none;
@@ -580,7 +498,7 @@
 	gap: 8px;
 	padding: 8px 8px 8px 14px;
 	border: 1px solid var(--color-border-maxcontrast);
-	border-top: 4px solid var(--color-primary-element);
+
 	border-radius: 8px;
 	background: var(--color-main-background);
 	box-shadow: 0 2px 8px var(--color-box-shadow);
@@ -597,9 +515,7 @@
 		grid-template-columns: 1fr;
 	}
 
-	.mobile-preview-button {
-		display: inline-flex;
-	}
+	.mobile-preview-toolbar { position: sticky; z-index: 11; top: 58px; display: flex; grid-column: 1 / -1; justify-content: flex-end; padding-block: 8px; background: var(--studio-canvas); }
 }
 
 @media (max-width: 640px) {
@@ -611,7 +527,7 @@
 	}
 
 	.settings-page {
-		padding: 24px 14px 100px 48px;
+		padding: 24px 16px 80px;
 	}
 
 	.settings-header {
@@ -621,7 +537,7 @@
 
 	.settings-header h1 {
 		max-width: 100%;
-		font-size: 32px;
+		font-size: 24px;
 		line-height: 1.05;
 	}
 
@@ -639,30 +555,12 @@
 	}
 
 	.settings-header__actions {
-		display: grid;
-		grid-template-columns: auto minmax(0, 1fr);
 		width: 100%;
 	}
 
 	.save-indicator {
-		grid-column: 1 / -1;
+		flex-basis: 100%;
 		min-height: 32px;
-	}
-
-	.settings-tabs {
-		display: flex;
-		overflow-x: auto;
-		gap: 22px;
-		margin-top: 20px;
-		scroll-padding-inline: 12px;
-		scrollbar-width: thin;
-		mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 28px), transparent 100%);
-	}
-
-	.settings-tabs button {
-		flex: 0 0 auto;
-		font-size: 14px;
-		white-space: nowrap;
 	}
 
 	.settings-content {
@@ -711,3 +609,12 @@
 		padding: 0;
 	}
 }
+
+.guest-order-section { max-width: 1040px; margin-bottom: 20px; }
+
+.guest-order-section .settings-subsection { display: grid; gap: 12px; border: 0; padding: 0; }
+
+.guest-order-section h3, .guest-order-section p { margin: 0; }
+
+.settings-header__actions > *, .workflow-completion > .button-vue { flex-shrink: 0; }
+@media (max-width: 640px) { .settings-header__identity { padding-inline-start: 32px; } .settings-section { padding: 18px; } .workflow-completion { align-items: stretch; flex-direction: column; gap: 12px; } }

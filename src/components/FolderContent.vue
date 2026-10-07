@@ -7,8 +7,7 @@ import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import ArrowDownIcon from 'vue-material-design-icons/ArrowDown.vue'
-import ArrowUpIcon from 'vue-material-design-icons/ArrowUp.vue'
+import OwnerSortControl from './OwnerSortControl.vue'
 import CloseIcon from 'vue-material-design-icons/Close.vue'
 import DotsHorizontalIcon from 'vue-material-design-icons/DotsHorizontal.vue'
 import FolderIcon from 'vue-material-design-icons/Folder.vue'
@@ -22,7 +21,7 @@ import ProgressiveImage from './ProgressiveImage.vue'
 import VirtualMediaGrid from './VirtualMediaGrid.vue'
 
 const props = defineProps<{ gallery: Gallery }>()
-const emit = defineEmits<{ changed: [] }>()
+const emit = defineEmits<{ changed: []; 'guest-order': [] }>()
 
 const items = ref<MediaItem[]>([])
 const total = ref(0)
@@ -447,7 +446,7 @@ onBeforeUnmount(() => {
 <template>
 	<section class="folder-workspace">
 		<header class="folder-workspace__header">
-			<h2>{{ t('proofing_gallery', 'Gallery files') }}</h2>
+			<h2>{{ t('proofing_gallery', 'Gallery files') }} <small>{{ total }}</small></h2>
 			<div class="folder-workspace__actions">
 				<input ref="fileInput"
 					class="visually-hidden"
@@ -491,12 +490,13 @@ onBeforeUnmount(() => {
 			</nav>
 			<div class="folder-toolbar">
 				<NcTextField v-model="search" type="search" :label="t('proofing_gallery', 'Search this folder')" />
-				<label><span>{{ t('proofing_gallery', 'Sort') }}</span><select v-model="sortBy" :aria-label="t('proofing_gallery', 'Sort files')"><option v-for="option in mediaSortOptions(gallery.sourceType === 'collection')" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
-				<NcButton variant="tertiary" :aria-label="t('proofing_gallery', 'Reverse file order')" @click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'">
-					<ArrowDownIcon v-if="sortDirection === 'desc'" :size="18" />
-					<ArrowUpIcon v-else :size="18" />
+				<OwnerSortControl v-model="sortBy"
+					v-model:direction="sortDirection"
+					:options="mediaSortOptions(gallery.sourceType === 'collection')"
+					:label="t('proofing_gallery', 'Sort files')" />
+				<NcButton variant="tertiary" @click="emit('guest-order')">
+					{{ t('proofing_gallery', 'Order for guests') }}
 				</NcButton>
-				<span>{{ total }}</span>
 				<NcButton variant="tertiary" :aria-expanded="metadataFiltersOpen" @click="metadataFiltersOpen = !metadataFiltersOpen">
 					{{ t('proofing_gallery', 'Metadata filters') }}
 				</NcButton>

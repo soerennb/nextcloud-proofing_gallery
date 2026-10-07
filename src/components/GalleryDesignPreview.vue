@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import type { GallerySettings } from '../domain/gallerySettings.ts'
 import type { Gallery, MediaItem } from '../types.ts'
@@ -16,6 +16,8 @@ const PREVIEW_FRAME_URL = generateUrl('/apps/proofing_gallery/preview-frame')
 const exactUrl = computed(() => props.gallery.shareToken ? generateUrl('/s/{token}', { token: props.gallery.shareToken }) : null)
 const viewport = ref<'desktop' | 'phone'>('desktop')
 const scene = ref<'gallery' | 'photo' | 'slideshow' | 'metadata'>('gallery')
+const preview = ref<HTMLElement | null>(null)
+const closeButton = ref<HTMLButtonElement | null>(null)
 const frame = ref<HTMLIFrameElement | null>(null)
 const sceneHint = computed(() => ({
 	gallery: t('proofing_gallery', 'Shows the opening, header, layout and gallery tiles.'),
@@ -51,8 +53,26 @@ function onMessage(event: MessageEvent) {
 	if (event.data?.type === PREVIEW_READY_MESSAGE) postState()
 }
 
-onMounted(() => window.addEventListener('message', onMessage))
-onBeforeUnmount(() => window.removeEventListener('message', onMessage))
+function onPreviewKey(event: KeyboardEvent) {
+	if (!props.expanded) return
+	if (event.key === 'Escape') { event.preventDefault(); emit('close'); return }
+	if (event.key !== 'Tab') return
+	const controls = [...(preview.value?.querySelectorAll<HTMLElement>('button, select, a[href]') ?? [])].filter(el => el.getClientRects().length)
+	const first = controls[0], last = controls.at(-1)
+	if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus() } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === frame.value)) { event.preventDefault(); first?.focus() }
+}
+function frameLoaded() {
+	frame.value?.contentDocument?.addEventListener('keydown', onPreviewKey)
+}
+watch(() => props.expanded, async expanded => { if (expanded) { await nextTick(); closeButton.value?.focus() } })
+function onResize() { if (props.expanded && window.innerWidth > 960) emit('close') }
+onMounted(() => { window.addEventListener('message', onMessage); window.addEventListener('keydown', onPreviewKey); window.addEventListener('resize', onResize) })
+onBeforeUnmount(() => {
+	window.removeEventListener('message', onMessage)
+	window.removeEventListener('keydown', onPreviewKey)
+	window.removeEventListener('resize', onResize)
+	frame.value?.contentDocument?.removeEventListener('keydown', onPreviewKey)
+})
 watch(() => [props.title, props.settings, props.media, scene.value], postState, { deep: true })
 watch(() => props.settings.metadata.publicFields.join('|'), (fields, previousFields) => {
 	if (fields !== previousFields) scene.value = 'metadata'
@@ -60,39 +80,49 @@ watch(() => props.settings.metadata.publicFields.join('|'), (fields, previousFie
 </script>
 
 <template>
-	<aside class="gallery-preview" :class="{ 'gallery-preview--expanded': expanded }">
-		<div class="gallery-preview__bar">
-			<strong>{{ t('proofing_gallery', 'Live preview') }}</strong>
-			<div class="gallery-preview__viewport-switch" :aria-label="t('proofing_gallery', 'Preview size')">
-				<button type="button" :aria-pressed="viewport === 'desktop'" @click="viewport = 'desktop'">
-					{{ t('proofing_gallery', 'Desktop') }}
-				</button>
-				<button type="button" :aria-pressed="viewport === 'phone'" @click="viewport = 'phone'">
-					{{ t('proofing_gallery', 'Phone') }}
+	<Teleport to="#proofing_gallery" :disabled="!expanded">
+		<aside ref="preview"
+			class="gallery-preview"
+			:role="expanded ? 'dialog' : undefined"
+			:aria-modal="expanded ? true : undefined"
+			:aria-label="t('proofing_gallery', 'Live preview')"
+			:class="{ 'gallery-preview--expanded': expanded }">
+			<div class="gallery-preview__bar">
+				<strong>{{ t('proofing_gallery', 'Live preview') }}</strong>
+				<div class="gallery-preview__viewport-switch" :aria-label="t('proofing_gallery', 'Preview size')">
+					<button type="button" :aria-pressed="viewport === 'desktop'" @click="viewport = 'desktop'">
+						{{ t('proofing_gallery', 'Desktop') }}
+					</button>
+					<button type="button" :aria-pressed="viewport === 'phone'" @click="viewport = 'phone'">
+						{{ t('proofing_gallery', 'Phone') }}
+					</button>
+				</div>
+				<label class="gallery-preview__scene"><span>{{ t('proofing_gallery', 'Scene') }}</span><select v-model="scene"><option value="gallery">{{ t('proofing_gallery', 'Gallery') }}</option><option value="photo">{{ t('proofing_gallery', 'Photo viewer') }}</option><option value="slideshow">{{ t('proofing_gallery', 'Slideshow') }}</option><option value="metadata">{{ t('proofing_gallery', 'Image information') }}</option></select></label>
+				<a v-if="exactUrl"
+					:href="exactUrl"
+					target="_blank"
+					rel="noopener">{{ t('proofing_gallery', 'Open published gallery') }}</a>
+				<button ref="closeButton"
+					class="gallery-preview__close"
+					type="button"
+					:aria-label="t('proofing_gallery', 'Close preview')"
+					@click="emit('close')">
+					×
 				</button>
 			</div>
-			<label class="gallery-preview__scene"><span>{{ t('proofing_gallery', 'Scene') }}</span><select v-model="scene"><option value="gallery">{{ t('proofing_gallery', 'Gallery') }}</option><option value="photo">{{ t('proofing_gallery', 'Photo viewer') }}</option><option value="slideshow">{{ t('proofing_gallery', 'Slideshow') }}</option><option value="metadata">{{ t('proofing_gallery', 'Image information') }}</option></select></label>
-			<a v-if="exactUrl"
-				:href="exactUrl"
-				target="_blank"
-				rel="noopener">{{ t('proofing_gallery', 'Open published gallery') }}</a>
-			<button class="gallery-preview__close"
-				type="button"
-				:aria-label="t('proofing_gallery', 'Close preview')"
-				@click="emit('close')">
-				×
-			</button>
-		</div>
-		<p class="gallery-preview__hint">
-			{{ sceneHint }} {{ t('proofing_gallery', 'Preview interactions are disabled.') }}
-		</p>
-		<div class="gallery-preview__viewport" :class="{ 'gallery-preview__viewport--phone': viewport === 'phone' }">
-			<iframe ref="frame"
-				class="gallery-preview__frame"
-				:title="t('proofing_gallery', 'Live preview')"
-				:src="PREVIEW_FRAME_URL" />
-		</div>
-	</aside>
+			<p class="gallery-preview__hint">
+				{{ sceneHint }} {{ t('proofing_gallery', 'Preview interactions are disabled.') }}
+			</p>
+			<div class="gallery-preview__viewport" :class="{ 'gallery-preview__viewport--phone': viewport === 'phone' }">
+				<iframe ref="frame"
+					class="gallery-preview__frame"
+					:title="t('proofing_gallery', 'Live preview')"
+					:src="PREVIEW_FRAME_URL"
+					tabindex="-1"
+					@load="frameLoaded" />
+			</div>
+		</aside>
+	</Teleport>
 </template>
 
 <style scoped src="./styles/GalleryDesignPreview.css"></style>

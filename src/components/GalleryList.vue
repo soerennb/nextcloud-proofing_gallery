@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { t } from '@nextcloud/l10n'
+import { ref } from 'vue'
+import { n, t } from '@nextcloud/l10n'
 import CheckIcon from 'vue-material-design-icons/Check.vue'
 import ImageMultipleIcon from 'vue-material-design-icons/ImageMultiple.vue'
 import { ownerPreviewUrl } from '../services/galleryApi.ts'
@@ -13,6 +14,8 @@ const emit = defineEmits<{
 	archive: [gallery: GalleryListItem]
 	restore: [gallery: GalleryListItem]
 }>()
+
+const failedPreviews = ref(new Set<string>())
 
 function formattedDate(timestamp: number): string {
 	return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(timestamp * 1000))
@@ -29,15 +32,19 @@ function previewUrl(gallery: GalleryListItem): string {
 
 <template>
 	<div class="gallery-list" :class="`gallery-list--${view}`">
-		<article v-for="(gallery, index) in galleries" :key="gallery.id" class="gallery-row">
+		<article v-for="gallery in galleries" :key="gallery.id" class="gallery-row">
 			<button class="gallery-row__main" type="button" @click="emit('select', gallery)">
 				<span class="gallery-row__cover" aria-hidden="true">
-					<img v-if="previewUrl(gallery)" :src="previewUrl(gallery)" alt="">
+					<img v-if="previewUrl(gallery) && !failedPreviews.has(previewUrl(gallery))"
+						:src="previewUrl(gallery)"
+						alt=""
+						loading="lazy"
+						@error="failedPreviews.add(previewUrl(gallery))">
 					<span v-else class="gallery-row__fallback">
 						<CheckIcon v-if="gallery.mode === 'collaboration'" :size="26" />
 						<ImageMultipleIcon v-else :size="26" />
 					</span>
-					<span class="gallery-row__frame">{{ String(index + 1).padStart(2, '0') }} · {{ gallery.mediaSummary.total }}</span>
+					<span class="gallery-row__frame">{{ n('proofing_gallery', '%n image', '%n images', gallery.mediaSummary.total) }}</span>
 				</span>
 				<span class="gallery-row__identity">
 					<strong>{{ gallery.title }}</strong>
@@ -48,11 +55,11 @@ function previewUrl(gallery: GalleryListItem): string {
 							? t('proofing_gallery', 'Proofing')
 							: t('proofing_gallery', 'Presentation') }}
 						·
-						{{ gallery.status === 'published'
+						<span class="gallery-row__status" :data-status="gallery.status">{{ gallery.status === 'published'
 							? t('proofing_gallery', 'Published')
 							: gallery.status === 'archived'
 								? t('proofing_gallery', 'Archived')
-								: t('proofing_gallery', 'Draft') }}
+								: t('proofing_gallery', 'Draft') }}</span>
 					</small>
 				</span>
 				<span class="gallery-row__date">{{ formattedDate(gallery.updatedAt) }}</span>
@@ -122,12 +129,18 @@ function previewUrl(gallery: GalleryListItem): string {
 	background: transparent;
 	color: var(--studio-ink, var(--color-main-text));
 	text-align: start;
+	font: inherit;
+	font-weight: 400;
 	cursor: pointer;
 }
 
 .gallery-row:hover,
 .gallery-row:focus-within {
 	background: var(--studio-surface-raised, var(--color-background-hover));
+}
+
+.gallery-row > .gallery-row__main:is(:hover, :focus, :active) {
+	background: transparent;
 }
 
 .gallery-row__main:focus-visible {
@@ -154,10 +167,10 @@ function previewUrl(gallery: GalleryListItem): string {
 	border-radius: 4px;
 	background: rgb(10 12 14 / 76%);
 	color: #fff;
-	font-family: ui-monospace, SFMono-Regular, monospace;
-	font-size: 10px;
+
+	font-size: 12px;
 	font-weight: 700;
-	letter-spacing: .06em;
+
 	backdrop-filter: blur(8px);
 }
 
@@ -210,8 +223,8 @@ function previewUrl(gallery: GalleryListItem): string {
 .gallery-list--grid .gallery-row:focus-within {
 	border-color: var(--studio-accent, var(--color-primary-element));
 	background: var(--studio-surface, var(--color-main-background));
-	box-shadow: var(--studio-shadow);
-	transform: translateY(-3px);
+	box-shadow: 0 3px 12px rgb(0 0 0 / 6%);
+
 }
 
 .gallery-list--grid .gallery-row__main {
@@ -233,7 +246,7 @@ function previewUrl(gallery: GalleryListItem): string {
 	padding-inline: 16px 54px;
 }
 
-.gallery-list--grid .gallery-row__identity strong { font-family: NewsreaderVariable, Newsreader, serif; font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+.gallery-list--grid .gallery-row__identity strong { font-size: 17px; font-weight: 700; line-height: 1.4; }
 
 .gallery-list--grid .gallery-row__date { margin-top: -8px; }
 
@@ -244,6 +257,9 @@ function previewUrl(gallery: GalleryListItem): string {
 	padding: 0;
 }
 
+.gallery-row__status { color: var(--studio-ink); font-weight: 650; }
+
+.gallery-row__status[data-status='published'] { color: var(--studio-success); }
 @media (max-width: 760px) {
 	.gallery-list--grid { grid-template-columns: 1fr; }
 	.gallery-list--grid .gallery-row,

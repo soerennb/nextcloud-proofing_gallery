@@ -20,7 +20,7 @@ final class GalleryEntity implements IEntity {
 	}
 
 	public function getName(): string { return $this->l10n->t('Customer gallery'); }
-	public function getIcon(): string { return $this->urls->imagePath('proofing_gallery', 'app.svg'); }
+	public function getIcon(): string { return $this->urls->imagePath('proofing_gallery', 'app-dark.svg'); }
 
 	public function getEvents(): array {
 		return [new GenericEntityEvent($this->l10n->t('a customer gallery changes'), GalleryIntegrationEvent::class)];

@@ -44,7 +44,7 @@ async function mutate(action: 'assign' | 'remove') {
 
 .retention-panel > div { display: grid; gap: 3px; }
 
-.retention-panel span { color: var(--color-text-maxcontrast); font-size: 12px; font-weight: 700; text-transform: uppercase; }
+.retention-panel span { color: var(--color-text-maxcontrast); font-size: 12px; font-weight: 700;  }
 
 .retention-panel small { max-width: 68ch; color: var(--color-text-maxcontrast); }
 

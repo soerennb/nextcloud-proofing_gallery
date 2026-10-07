@@ -2,7 +2,7 @@
 import { nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 import DotsHorizontalIcon from 'vue-material-design-icons/DotsHorizontal.vue'
 
-defineProps<{ label: string }>()
+defineProps<{ label: string; named?: boolean }>()
 
 const menuId = `gallery-actions-${useId()}`
 const trigger = ref<HTMLButtonElement | null>(null)
@@ -28,7 +28,7 @@ function place() {
 
 function close({ returnFocus = false } = {}) {
 	open.value = false
-	if (returnFocus) trigger.value?.focus()
+	if (returnFocus) trigger.value?.focus({ preventScroll: true })
 }
 
 function toggle() {
@@ -48,6 +48,7 @@ function onDocumentKeyDown(event: KeyboardEvent) {
 }
 
 function onMenuKeyDown(event: KeyboardEvent) {
+	if (event.key === 'Tab') { close({ returnFocus: true }); return }
 	if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
 	const items = [...(menu.value?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])]
 	if (items.length === 0) return
@@ -71,7 +72,7 @@ watch(open, async value => {
 	if (!value) return
 	await nextTick()
 	place()
-	menu.value?.querySelector<HTMLElement>('[role="menuitem"]')?.focus()
+	menu.value?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true })
 })
 
 document.addEventListener('pointerdown', onDocumentPointerDown, true)
@@ -92,13 +93,16 @@ onBeforeUnmount(() => {
 		<button
 			ref="trigger"
 			class="gallery-actions__trigger"
+			:class="{ 'gallery-actions__trigger--named': named }"
 			type="button"
 			:aria-controls="open ? menuId : undefined"
 			:aria-expanded="open"
 			:aria-label="label"
 			aria-haspopup="menu"
 			@click="toggle">
-			<DotsHorizontalIcon aria-hidden="true" :size="18" />
+			<slot name="trigger">
+				<DotsHorizontalIcon aria-hidden="true" :size="18" />
+			</slot>
 		</button>
 		<Teleport to="body">
 			<div
@@ -135,6 +139,8 @@ onBeforeUnmount(() => {
 .gallery-actions__trigger[aria-expanded="true"] {
 	background: var(--color-background-hover);
 }
+
+.gallery-actions__trigger--named { display: flex; width: auto; min-height: 44px; height: auto; align-items: center; gap: 8px; padding-inline: 12px; border: 1px solid var(--studio-line-strong); border-radius: 8px; background: var(--studio-surface); color: var(--studio-ink); font: inherit; font-size: 14px; font-weight: 650; }
 
 .gallery-actions__trigger:focus-visible {
 	outline: 2px solid var(--color-primary-element);

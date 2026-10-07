@@ -83,7 +83,7 @@ function formatBytes(bytes: number): string {
 	<section class="live-push" aria-labelledby="live-push-title">
 		<header>
 			<div>
-				<span class="live-push__eyebrow">{{ t('proofing_gallery', 'Camera workflow') }}</span><h3 id="live-push-title">
+				<h3 id="live-push-title">
 					{{ t('proofing_gallery', 'HTTPS Live Push') }}
 				</h3>
 			</div>
@@ -138,7 +138,7 @@ function formatBytes(bytes: number): string {
 </template>
 
 <style scoped>
-.live-push { display: grid; gap: 18px; padding: 22px; border: 1px solid color-mix(in srgb, var(--color-primary-element) 24%, var(--color-border)); border-radius: 18px; background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary-element) 9%, var(--color-main-background)) 0%, var(--color-main-background) 58%); }
+.live-push { display: grid; gap: 18px; padding: 20px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--studio-surface-raised, var(--color-background-hover)); }
 
 .live-push header, .live-push__connection, .live-push__create, .live-push__list li, .live-push__secret { display: flex; align-items: center; gap: 14px; }
 
@@ -152,7 +152,7 @@ function formatBytes(bytes: number): string {
 
 .live-push__state { padding: 5px 10px; border-radius: 999px; background: var(--color-background-dark); font-size: 12px; font-weight: 700; }
 
-.live-push__state[data-enabled="true"] { background: color-mix(in srgb, #20a66a 18%, var(--color-main-background)); color: #09603b; }
+.live-push__state[data-enabled="true"] { background: color-mix(in srgb, #20a66a 18%, var(--color-main-background)); color: var(--studio-success, var(--color-success)); }
 
 .live-push__connection { flex-wrap: wrap; }
 
