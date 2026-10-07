@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import ArchiveOutlineIcon from 'vue-material-design-icons/ArchiveOutline.vue'
+import HelpCircleOutlineIcon from 'vue-material-design-icons/HelpCircleOutline.vue'
+import ImageMultipleOutlineIcon from 'vue-material-design-icons/ImageMultipleOutline.vue'
+import OwnerSortControl from './components/OwnerSortControl.vue'
 import { emit } from '@nextcloud/event-bus'
 import { n, t } from '@nextcloud/l10n'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
@@ -228,7 +232,7 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 		<NcAppNavigation v-if="!immersiveWorkspace" :aria-label="t('proofing_gallery', 'Gallery navigation')">
 			<template #list>
 				<li class="studio-brand">
-					<div><span>{{ t('proofing_gallery', 'Photographer workspace') }}</span><strong>{{ t('proofing_gallery', 'Proofing Gallery') }}</strong></div>
+					<div><strong>{{ t('proofing_gallery', 'Proofing Gallery') }}</strong></div>
 					<StudioThemeSwitch v-model="studioTheme" />
 				</li>
 				<li class="gallery-nav__entry">
@@ -237,7 +241,7 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 						:class="{ 'gallery-nav__item--active': !archived && !helpOpen }"
 						type="button"
 						@click="showArchive(false)">
-						<span>{{ t('proofing_gallery', 'Galleries') }}</span>
+						<ImageMultipleOutlineIcon aria-hidden="true" :size="20" /><span>{{ t('proofing_gallery', 'Galleries') }}</span>
 					</button>
 				</li>
 				<li class="gallery-nav__entry">
@@ -246,7 +250,7 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 						:class="{ 'gallery-nav__item--active': archived && !helpOpen }"
 						type="button"
 						@click="showArchive(true)">
-						<span>{{ t('proofing_gallery', 'Archive') }}</span>
+						<ArchiveOutlineIcon aria-hidden="true" :size="20" /><span>{{ t('proofing_gallery', 'Archive') }}</span>
 					</button>
 				</li>
 				<li class="gallery-nav__entry gallery-nav__entry--help">
@@ -255,7 +259,7 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 						:class="{ 'gallery-nav__item--active': helpOpen }"
 						type="button"
 						@click="showHelp">
-						<span>{{ t('proofing_gallery', 'Help') }}</span>
+						<HelpCircleOutlineIcon aria-hidden="true" :size="20" /><span>{{ t('proofing_gallery', 'Help') }}</span>
 					</button>
 				</li>
 			</template>
@@ -272,7 +276,7 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 			<section v-else class="gallery-page" aria-labelledby="gallery-page-title">
 				<header class="gallery-page__header">
 					<div class="gallery-page__title">
-						<span>{{ t('proofing_gallery', 'Studio contact sheet') }}</span><h1 id="gallery-page-title">
+						<h1 id="gallery-page-title">
 							{{ archived ? t('proofing_gallery', 'Archive') : t('proofing_gallery', 'Galleries') }}
 						</h1><p>{{ archived ? t('proofing_gallery', 'Completed work kept safely out of the active studio.') : t('proofing_gallery', 'Prepare, review and deliver every client project from one workspace.') }}</p>
 					</div>
@@ -302,6 +306,9 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 						v-model="search"
 						type="search"
 						:label="t('proofing_gallery', 'Search galleries')" />
+					<OwnerSortControl v-model="gallerySort"
+						:label="t('proofing_gallery', 'Sort galleries')"
+						:options="[{ value: 'updated', label: t('proofing_gallery', 'Last changed') }, { value: 'created', label: t('proofing_gallery', 'Newest') }, { value: 'title', label: t('proofing_gallery', 'Title') }]" />
 					<button class="gallery-toolbar__filter-button"
 						type="button"
 						:aria-expanded="mobileFiltersOpen"
@@ -341,14 +348,7 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 								<option value="published">{{ t('proofing_gallery', 'Published') }}</option>
 							</select>
 						</label>
-						<label>
-							<span>{{ t('proofing_gallery', 'Sort') }}</span>
-							<select v-model="gallerySort">
-								<option value="updated">{{ t('proofing_gallery', 'Last changed') }}</option>
-								<option value="created">{{ t('proofing_gallery', 'Newest') }}</option>
-								<option value="title">{{ t('proofing_gallery', 'Title') }}</option>
-							</select>
-						</label>
+
 						<p>{{ n('proofing_gallery', '%n gallery', '%n galleries', galleryTotal) }}</p>
 						<button v-if="activeFilterCount"
 							class="gallery-toolbar__reset"
@@ -414,307 +414,4 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 	</NcContent>
 </template>
 
-<style scoped>
-.gallery-nav__entry {
-	display: block;
-	padding: 0 8px;
-}
-
-.studio-brand + .gallery-nav__entry {
-	padding-top: 8px;
-}
-
-.gallery-nav__entry:last-child {
-	padding-bottom: 8px;
-}
-
-.gallery-nav__entry--help {
-	margin-top: 10px;
-	padding-top: 10px;
-	border-top: 1px solid var(--studio-line);
-}
-
-.gallery-nav__item {
-	display: block;
-	width: 100%;
-	min-height: 44px;
-	padding: 11px 12px;
-	border: 0;
-	border-radius: 10px;
-	background: transparent;
-	color: var(--studio-ink);
-	text-align: start;
-	cursor: pointer;
-}
-
-.gallery-nav__item:hover,
-.gallery-nav__item:focus-visible {
-	background: var(--studio-surface-raised);
-}
-
-.gallery-nav__item--active {
-	background: var(--studio-accent-soft);
-	box-shadow: inset 3px 0 var(--studio-accent);
-	font-weight: 650;
-}
-
-.gallery-page {
-	box-sizing: border-box;
-	width: 100%;
-	min-width: 0;
-	max-width: 1240px;
-	margin: 0 auto;
-	padding: 40px clamp(20px, 4vw, 56px) 80px;
-}
-
-.gallery-page__header {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 24px;
-	margin-bottom: 30px;
-}
-
-.gallery-page__actions,
-.view-switch {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-
-.view-switch {
-	gap: 2px;
-	padding: 2px;
-	border: 1px solid var(--studio-line-strong);
-	border-radius: 10px;
-	background: var(--studio-surface);
-}
-
-.view-switch button {
-	display: grid;
-	width: 38px;
-	height: 36px;
-	place-items: center;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--color-text-maxcontrast);
-	font-size: 19px;
-	cursor: pointer;
-}
-
-.view-switch button[aria-pressed="true"] {
-	background: var(--studio-accent);
-	color: var(--studio-accent-ink);
-}
-
-.view-switch__grid {
-	display: grid;
-	width: 16px;
-	height: 16px;
-	grid-template-columns: 1fr 1fr;
-	gap: 2px;
-}
-
-.view-switch__grid i { border: 1.5px solid currentColor; border-radius: 1px; }
-
-.view-switch__list { display: grid; width: 17px; gap: 3px; }
-
-.view-switch__list i { height: 2px; border-radius: 2px; background: currentColor; }
-
-.gallery-toolbar {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 10px;
-	margin-bottom: 20px;
-	padding: 12px;
-	border: 1px solid var(--studio-line);
-	border-radius: var(--studio-radius);
-	background: var(--studio-surface);
-}
-
-.gallery-toolbar > :first-child {
-	width: min(320px, 100%);
-	margin-inline-end: auto;
-}
-
-.gallery-toolbar__filters {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 10px;
-}
-
-.gallery-toolbar__filter-button,
-.gallery-toolbar__backdrop,
-.gallery-toolbar__reset { display: none; }
-
-.gallery-toolbar label {
-	display: grid;
-	gap: 3px;
-	color: var(--studio-muted);
-	font-size: 11px;
-}
-
-.gallery-toolbar select {
-	min-height: 36px;
-	padding: 0 8px;
-	border: 1px solid var(--studio-line-strong);
-	border-radius: 8px;
-	background: var(--studio-surface);
-	color: var(--studio-ink);
-}
-
-.gallery-toolbar p {
-	margin: 0;
-	color: var(--color-text-maxcontrast);
-	font-size: 13px;
-	white-space: nowrap;
-}
-
-.gallery-loading {
-	display: flex;
-	min-height: 260px;
-	align-items: center;
-	justify-content: center;
-	gap: 12px;
-	color: var(--color-text-maxcontrast);
-}
-
-.gallery-page__pagination {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 16px;
-	min-height: 52px;
-	margin-top: 16px;
-	padding-top: 12px;
-	border-top: 1px solid var(--color-border);
-	color: var(--color-text-maxcontrast);
-	font-size: 13px;
-}
-
-@media (max-width: 600px) {
-	.gallery-page {
-		padding: 28px 14px 64px 48px;
-	}
-
-	.gallery-page__header {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr);
-		align-items: center;
-		margin-bottom: 24px;
-	}
-
-	.gallery-page__header h1 { font-size: 26px; }
-	.gallery-page__actions { width: 100%; justify-content: space-between; gap: 8px; }
-	.view-switch button { width: 34px; }
-
-	.gallery-toolbar {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto;
-		align-items: end;
-	}
-
-	.gallery-toolbar > :first-child {
-		width: 100%;
-		margin: 0;
-	}
-
-	.gallery-toolbar__filter-button {
-		display: inline-flex;
-		min-height: 44px;
-		align-items: center;
-		gap: 7px;
-		padding: 0 12px;
-		border: 1px solid var(--color-border-maxcontrast);
-		border-radius: 8px;
-		background: var(--color-main-background);
-		color: var(--color-main-text);
-		cursor: pointer;
-	}
-
-	.gallery-toolbar__filter-button span {
-		padding: 1px 6px;
-		border-radius: 4px;
-		background: var(--color-primary-element);
-		color: var(--color-primary-element-text);
-	}
-
-	.gallery-toolbar__backdrop {
-		position: fixed;
-		z-index: 90;
-		inset: 0;
-		display: block;
-		width: 100%;
-		height: 100%;
-		padding: 0;
-		border: 0;
-		border-radius: 0;
-		background: rgb(0 0 0 / 58%);
-	}
-
-	.gallery-toolbar__filters {
-		position: fixed;
-		z-index: 91;
-		inset: auto 0 0;
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 12px;
-		padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
-		border-top: 4px solid var(--color-primary-element);
-		background: var(--color-main-background);
-		box-shadow: 0 -8px 28px var(--color-box-shadow);
-		opacity: 0;
-		pointer-events: none;
-		transform: translateY(105%);
-		transition: opacity 160ms ease, transform 220ms cubic-bezier(.2,.75,.25,1);
-	}
-
-	.gallery-toolbar__filters--open {
-		opacity: 1;
-		pointer-events: auto;
-		transform: translateY(0);
-	}
-
-	.gallery-toolbar__filters label { min-width: 0; }
-	.gallery-toolbar__filters select { width: 100%; }
-	.gallery-toolbar__reset {
-		display: block;
-		min-height: 40px;
-		grid-column: 1 / -1;
-		border: 1px solid var(--color-primary-element);
-		border-radius: 7px;
-		background: transparent;
-		color: var(--color-main-text);
-	}
-
-	.gallery-toolbar p {
-		display: none;
-	}
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.gallery-toolbar__filters { transition: none; }
-}
-</style>
-
-<style>
-.app-content--immersive > .app-content {
-	border-radius: 0 !important;
-}
-
-.app-content--immersive .app-content {
-	width: 100% !important;
-	margin-inline-start: 0 !important;
-}
-
-.app-content--immersive .app-navigation-toggle {
-	display: none !important;
-}
-
-.app-content--immersive .app-content__content {
-	overflow: hidden;
-}
-</style>
+<style scoped src="./styles/ownerDashboard.css"></style>

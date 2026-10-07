@@ -19,7 +19,7 @@ import {
 import type { CollectionDocument, CollectionItem, Gallery, MediaItem } from '../types.ts'
 
 const props = defineProps<{ gallery: Gallery }>()
-const emit = defineEmits<{ changed: [] }>()
+const emit = defineEmits<{ changed: []; 'guest-order': [] }>()
 const SOURCE_PAGE_SIZE = 50
 const MEDIA_PAGE_SIZE = 100
 
@@ -256,6 +256,9 @@ async function save() {
 				<h2>{{ t('proofing_gallery', 'Collection content') }}</h2>
 				<p>{{ t('proofing_gallery', 'Choose files from your folder galleries. Originals stay where they are.') }}</p>
 			</div>
+			<NcButton variant="tertiary" @click="emit('guest-order')">
+				{{ t('proofing_gallery', 'Order for guests') }}
+			</NcButton>
 			<NcButton variant="primary" :disabled="!dirty || saving" @click="save">
 				{{ saving ? t('proofing_gallery', 'Saving…') : t('proofing_gallery', 'Save collection') }}
 			</NcButton>

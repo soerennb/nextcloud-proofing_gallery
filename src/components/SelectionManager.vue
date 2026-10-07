@@ -225,21 +225,21 @@ onMounted(load)
 </template>
 
 <style scoped>
-.selection-manager { display: grid; gap: 18px; margin-block-start: 28px; padding: 28px clamp(18px, 3vw, 32px); overflow: hidden; border: 1px solid color-mix(in srgb, var(--color-primary-element) 24%, var(--color-border)); border-radius: 24px; background: radial-gradient(circle at 100% 0, color-mix(in srgb, #d8249f 16%, transparent), transparent 320px), radial-gradient(circle at 0 100%, color-mix(in srgb, var(--color-primary-element) 18%, transparent), transparent 360px), var(--color-main-background); box-shadow: 0 24px 60px rgb(0 0 0 / 10%); }
+.selection-manager { display: grid; gap: 18px; margin-block-start: 24px; padding: 24px; border: 1px solid var(--studio-line, var(--color-border)); border-radius: 12px; background: var(--studio-surface, var(--color-main-background)); }
+
+.selection-manager header > .button-vue { flex: none; }
 
 .selection-manager header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
 
 .selection-manager h2, .selection-manager p { margin: 0; }
 
-.selection-manager h2 { font-size: clamp(24px, 3vw, 34px); letter-spacing: -0.035em; }
+.selection-manager h2 { font-size: 20px; letter-spacing: -0.035em; }
 
 .selection-manager header p, .selection-manager__meta, .selection-manager__message { color: var(--color-text-maxcontrast); }
 
 .selection-manager ul { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
 
-.selection-manager li { position: relative; padding: 20px; overflow: hidden; border: 1px solid var(--color-border); border-radius: 18px; background: color-mix(in srgb, var(--color-main-background) 92%, transparent); box-shadow: 0 10px 28px rgb(0 0 0 / 8%); transition: border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease; }
-
-.selection-manager li::before { position: absolute; inset: 0 auto 0 0; width: 4px; background: linear-gradient(#7b2cff, #d8249f); content: ''; }
+.selection-manager li { position: relative; padding: 20px; overflow: hidden; border: 1px solid var(--color-border); border-radius: 8px; background: color-mix(in srgb, var(--color-main-background) 92%, transparent);  transition: border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease; }
 
 .selection-manager li:hover { border-color: color-mix(in srgb, var(--color-primary-element) 40%, var(--color-border)); box-shadow: 0 18px 42px rgb(0 0 0 / 13%); transform: translateY(-2px); }
 
@@ -259,7 +259,7 @@ onMounted(load)
 
 .selection-manager__pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--color-text-maxcontrast); font-size: 13px; }
 
-.export-composer { display: grid; gap: 14px; margin-top: 16px; padding: 18px; border: 1px solid color-mix(in srgb, #8c54ff 62%, var(--color-border)); border-radius: 14px; background: radial-gradient(circle at 100% 0, rgb(140 84 255 / 18%), transparent 240px), var(--color-main-background); }
+.export-composer { display: grid; gap: 14px; margin-top: 16px; padding: 18px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--studio-surface-raised, var(--color-background-dark)); }
 
 .export-composer header p, .export-composer h3 { margin: 0; }
 
@@ -275,7 +275,9 @@ onMounted(load)
 
 .export-composer pre { max-height: 240px; margin: 0; padding: 14px; overflow: auto; border-radius: 8px; background: #101118; color: #e7e9ff; font: 12px/1.55 ui-monospace, monospace; white-space: pre; }
 
-@media (max-width: 600px) { .selection-manager { padding: 20px 14px; border-radius: 18px; } .selection-manager header { align-items: stretch; flex-direction: column; } .selection-manager__fields { grid-template-columns: 1fr; } .selection-manager li { padding: 17px 15px 17px 19px; } }
+@media (max-width: 600px) { .selection-manager { padding: 20px 14px; border-radius: 8px; } .selection-manager header > .button-vue { flex: none; }
+
+.selection-manager header { align-items: stretch; flex-direction: column; } .selection-manager__fields { grid-template-columns: 1fr; } .selection-manager li { padding: 17px 15px 17px 19px; } }
 
 @media (prefers-reduced-motion: reduce) { .selection-manager li { transition: none; } }
 </style>

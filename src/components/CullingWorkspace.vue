@@ -6,9 +6,9 @@ import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import ArrowLeftIcon from 'vue-material-design-icons/ArrowLeft.vue'
+import CullingHeader from './CullingHeader.vue'
 import ArrowRightIcon from 'vue-material-design-icons/ArrowRight.vue'
-import ArrowUpIcon from 'vue-material-design-icons/ArrowUp.vue'
+import OwnerSortControl from './OwnerSortControl.vue'
 import CheckIcon from 'vue-material-design-icons/Check.vue'
 import CloseIcon from 'vue-material-design-icons/Close.vue'
 import StarIcon from 'vue-material-design-icons/Star.vue'
@@ -442,33 +442,22 @@ onBeforeUnmount(() => {
 
 <template>
 	<section class="culling-workspace" :class="{ 'culling-workspace--focus': focusMode, 'culling-workspace--chrome-hidden': !chromeVisible }" aria-labelledby="culling-title">
-		<header class="culling-header">
-			<div class="culling-header__identity">
-				<button type="button"
-					class="culling-back"
-					:aria-label="t('proofing_gallery', 'Back to project')"
-					@click="emit('exit')">
-					<ArrowLeftIcon :size="20" />
-				</button>
-				<div>
-					<p class="culling-header__eyebrow">
-						{{ t('proofing_gallery', 'Darkroom') }}
-					</p><h2 id="culling-title">
-						{{ gallery.title }}
-					</h2>
-				</div>
-			</div>
-			<div class="culling-progress" :aria-label="t('proofing_gallery', '{percent}% reviewed', { percent: progress.percent })">
-				<strong>{{ progress.percent }}%</strong><span>{{ progress.reviewed }} / {{ items.length }}</span>
-				<i :style="{ '--progress': `${progress.percent}%` }" />
-			</div>
-		</header>
+		<CullingHeader :title="gallery.title"
+			:progress="progress"
+			:count="items.length"
+			@exit="emit('exit')" />
 
 		<div class="culling-toolbar" :aria-label="t('proofing_gallery', 'Culling tools')">
 			<div class="culling-toolbar__primary">
 				<NcButton variant="tertiary" :disabled="!undoStack.length || saving" @click="undo">
 					{{ t('proofing_gallery', 'Undo') }}
 				</NcButton>
+				<OwnerSortControl v-model="sortBy"
+					v-model:direction="sortDirection"
+					:options="mediaSortOptions()"
+					:label="t('proofing_gallery', 'Sort files')"
+					name="cullingSort"
+					@change="loadPage(true)" />
 				<NcButton variant="tertiary" :aria-expanded="secondaryToolsOpen" @click="secondaryToolsOpen = !secondaryToolsOpen">
 					{{ t('proofing_gallery', 'Tools') }}
 				</NcButton>
@@ -505,10 +494,7 @@ onBeforeUnmount(() => {
 				<label><span>{{ t('proofing_gallery', 'Rating') }}</span><select v-model.number="ratingFilter" name="cullingRating"><option :value="-1">{{ t('proofing_gallery', 'All') }}</option><option v-for="rating in 6" :key="rating - 1" :value="rating - 1">{{ rating - 1 }} ★</option></select></label>
 				<label><span>{{ t('proofing_gallery', 'Decision') }}</span><select v-model="pickFilter" name="cullingDecision"><option value="all">{{ t('proofing_gallery', 'All') }}</option><option value="pick">{{ t('proofing_gallery', 'Picks') }}</option><option value="reject">{{ t('proofing_gallery', 'Rejects') }}</option><option value="none">{{ t('proofing_gallery', 'Undecided') }}</option></select></label>
 				<label><span>{{ t('proofing_gallery', 'Color') }}</span><select v-model="colorFilter" name="cullingColor"><option value="all">{{ t('proofing_gallery', 'All') }}</option><option v-for="color in colors" :key="color.value" :value="color.value">{{ color.label }}</option></select></label>
-				<label><span>{{ t('proofing_gallery', 'Sort') }}</span><select v-model="sortBy" name="cullingSort" @change="loadPage(true)"><option v-for="option in mediaSortOptions()" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
-				<NcButton variant="tertiary" :aria-label="t('proofing_gallery', 'Reverse sort direction')" @click="sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'; loadPage(true)">
-					<ArrowUpIcon :size="18" :class="{ 'sort-icon--desc': sortDirection === 'desc' }" />
-				</NcButton>
+
 				<label class="saved-view"><span>{{ t('proofing_gallery', 'Saved view') }}</span><select v-model="activeViewId" name="savedView" @change="applySavedView"><option value="">{{ t('proofing_gallery', 'Choose…') }}</option><option v-for="view in savedViews" :key="view.id" :value="view.id">{{ view.name }}</option></select></label>
 				<NcButton variant="tertiary" :disabled="viewWorking" @click="saveCurrentView">
 					{{ t('proofing_gallery', 'Save view') }}

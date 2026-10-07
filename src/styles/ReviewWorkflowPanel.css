@@ -2,6 +2,8 @@
 
 .review-panel > header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
 
+.review-panel h3 { font-size: 20px; line-height: 1.35; }
+
 .review-panel h3, .review-panel h4, .review-panel p { margin: 0; }
 
 .review-panel header p, .review-panel__empty span, .review-panel__main p { color: var(--color-text-maxcontrast); }
@@ -20,9 +22,9 @@
 
 .review-panel article { display: grid; grid-template-columns: minmax(120px, .55fr) minmax(180px, 1fr) auto; gap: 16px; align-items: center; padding: 14px 16px; border: 1px solid var(--color-border); border-radius: var(--border-radius-large); background: var(--color-main-background); }
 
-.review-panel article[data-state="submitted"] { border-inline-start: 4px solid var(--color-primary-element); }
+.review-panel article[data-state="submitted"] { border-color: var(--color-primary-element); }
 
-.review-panel article[data-state="approved"] { border-inline-start: 4px solid var(--color-success); }
+.review-panel article[data-state="approved"] { border-color: var(--color-success); }
 
 .review-panel__state { display: grid; gap: 2px; }
 
@@ -42,3 +44,6 @@
 
 .review-panel time { color: var(--color-text-maxcontrast); }
 @media (max-width: 700px) { .review-panel article { grid-template-columns: 1fr; } .review-panel__actions { justify-content: start; } .review-panel li { grid-template-columns: 1fr; gap: 1px; } }
+
+.review-panel > header > .button-vue { flex: none; }
+@media (max-width: 700px) { .review-panel > header { flex-wrap: wrap; } }

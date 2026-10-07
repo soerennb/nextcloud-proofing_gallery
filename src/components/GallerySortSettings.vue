@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { t } from '@nextcloud/l10n'
 import { showError } from '@nextcloud/dialogs'
+import OwnerSortControl from './OwnerSortControl.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import type { GallerySettings } from '../domain/gallerySettings.ts'
 import { mediaSortOptions, sortDirectionLabel } from '../domain/mediaSorting.ts'
@@ -18,11 +19,15 @@ async function useInstanceDefault() {
 
 <template>
 	<div class="settings-subsection">
-		<h3>{{ t('proofing_gallery', 'Default sort') }}</h3>
-		<div class="option-grid">
-			<label class="select-field"><span>{{ t('proofing_gallery', 'Sort') }}</span><select v-model="navigation.sortBy" name="sortBy"><option v-for="option in mediaSortOptions(collection)" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
-			<label v-if="navigation.sortBy !== 'collection'" class="select-field"><span>{{ t('proofing_gallery', 'Sort direction') }}</span><select v-model="navigation.sortDirection" name="sortDirection"><option v-for="direction in (['asc', 'desc'] as const)" :key="direction" :value="direction">{{ sortDirectionLabel(navigation.sortBy, direction) }}</option></select></label>
-		</div>
+		<h3>{{ t('proofing_gallery', 'Order for guests') }}</h3>
+		<p>{{ t('proofing_gallery', 'Choose the starting order for visitors. Sorting your own workspace does not change this setting.') }}</p>
+		<OwnerSortControl v-model="navigation.sortBy"
+			v-model:direction="navigation.sortDirection"
+			name="sortBy"
+			direction-name="sortDirection"
+			:options="mediaSortOptions(collection)"
+			:label="t('proofing_gallery', 'Order for guests')"
+			:direction-labels="{ asc: sortDirectionLabel(navigation.sortBy, 'asc'), desc: sortDirectionLabel(navigation.sortBy, 'desc') }" />
 		<p v-if="navigation.sortBy === 'capturedAt'">
 			{{ t('proofing_gallery', 'Photos without a capture date appear last in either direction.') }}
 		</p>
