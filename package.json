@@ -54,7 +54,7 @@
     "@nextcloud/vue": "^9.13.0",
     "@tanstack/vue-virtual": "^3.13.39",
     "ionicons": "^8.1.0",
-    "motion-v": "^2.4.2",
+    "motion-v": "^2.5.1",
     "photoswipe": "^5.4.4",
     "qrcode": "^1.5.4",
     "vue": "^3.5.43",
