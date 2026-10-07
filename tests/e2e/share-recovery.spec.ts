@@ -291,7 +291,7 @@ for (const width of [1440, 390]) {
 			const page = await context.newPage()
 			await login(page, baseURL)
 			await page.goto(`${baseURL}/apps/proofing_gallery/#gallery/${created.id}/share`)
-			await page.locator('.settings-header').getByRole('button', { name: 'Share', exact: true }).click()
+			await page.locator('.settings-header').getByRole('button', { name: 'Invite clients', exact: true }).click()
 			const dialog = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Share gallery', exact: true }) })
 			await dialog.getByRole('button', { name: 'Update public link', exact: true }).click()
 			await expect(dialog.locator('.share-recovery')).toBeVisible()
