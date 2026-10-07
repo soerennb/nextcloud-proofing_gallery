@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { downloadScopeLabels as scopeLabels } from '../domain/downloadScopeLabels.ts'
 import { showError, showSuccess } from '@nextcloud/dialogs'
 import { t } from '@nextcloud/l10n'
 import { missingPublicShare, publicShareError, shareRecoveryMessage } from '../domain/publicShareRecovery.ts'
@@ -38,12 +39,7 @@ const permissionLabels: Record<(typeof permissionKeys)[number], string> = {
 	export: t('proofing_gallery', 'Export'),
 	metadata: t('proofing_gallery', 'Metadata'),
 }
-const downloadScopeLabels: Record<PublicLinkPolicy['downloadScope'], string> = {
-	none: t('proofing_gallery', 'Downloads disabled'),
-	individual: t('proofing_gallery', 'Individual files'),
-	selection: t('proofing_gallery', 'Saved selections'),
-	all: t('proofing_gallery', 'Files, selections, and entire gallery'),
-}
+const downloadScopeLabels = scopeLabels()
 const presetLabels: Record<string, string> = {
 	presentation: t('proofing_gallery', 'Presentation'),
 	selection: t('proofing_gallery', 'Selection'),
@@ -224,7 +220,7 @@ onMounted(load)
 				<div class="link-card__top">
 					<div><strong>{{ link.name }}</strong><span v-if="link.primary">{{ t('proofing_gallery', 'PRIMARY') }}</span></div><small>{{ link.status === 'active' ? t('proofing_gallery', 'Active') : link.status === 'suspended' ? t('proofing_gallery', 'Suspended') : t('proofing_gallery', 'Revoked') }}</small>
 				</div>
-				<p>{{ link.viewMode === 'recursive' ? t('proofing_gallery', 'Recursive') : t('proofing_gallery', 'Folder view') }} · {{ link.scopeMode === 'empty' ? t('proofing_gallery', 'No folders shared') : link.allowedRoots?.length ? link.allowedRoots.join(' + ') : (link.startPath || t('proofing_gallery', 'Gallery root')) }} · {{ downloadScopeLabels[link.policy.downloadScope] }}</p>
+				<p>{{ link.viewMode === 'recursive' ? t('proofing_gallery', 'Recursive') : t('proofing_gallery', 'Folder view') }} · {{ link.scopeMode === 'empty' ? t('proofing_gallery', 'No folders shared') : link.allowedRoots?.length ? link.allowedRoots.map(root => root || t('proofing_gallery', 'Gallery root')).join(' + ') : (link.startPath || t('proofing_gallery', 'Gallery root')) }} · {{ downloadScopeLabels[link.policy.downloadScope] }}</p>
 				<p v-if="link.reviewEnabled" class="link-card__review">
 					{{ t('proofing_gallery', 'Review round {round}: {status}', { round: link.review.current?.round ?? 1, status: reviewStatusLabels[link.review.current?.status ?? 'awaiting_feedback'] ?? link.review.current?.status ?? '' }) }}<template v-if="link.reviewDueDate">
 						· {{ link.reviewDueDate }}
@@ -374,7 +370,7 @@ onMounted(load)
 
 .link-card__top { justify-content: space-between; }
 
-.link-card__top span { padding: 3px 6px; background: var(--color-primary-element-light); color: var(--color-primary-element); font-size: 10px; font-weight: 800; }
+.link-card__top span { padding: 3px 6px; background: var(--color-primary-element-light); color: var(--color-primary-element-light-text); border-radius: 4px; font-size: 12px; font-weight: 800; }
 
 .link-cards p { margin: 0; overflow-wrap: anywhere; color: var(--color-text-maxcontrast); font-size: 12px; }
 
@@ -390,7 +386,7 @@ onMounted(load)
 
 .link-domain code { overflow-wrap: anywhere; font-size: 11px; }
 
-.link-domain[data-status="verified"] { box-shadow: inset 3px 0 #20a66a; }
+.link-domain[data-status="verified"] { border-color: var(--studio-success, var(--color-success)); }
 
 .link-editor { display: grid; gap: 16px; padding: 20px; border: 2px solid var(--color-primary-element); background: var(--color-background-dark); }
 

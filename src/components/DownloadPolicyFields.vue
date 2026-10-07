@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { downloadScopeLabels } from '../domain/downloadScopeLabels.ts'
 import { t } from '@nextcloud/l10n'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import { computed } from 'vue'
@@ -21,7 +22,6 @@ const lead = computed(() => props.context === 'event'
 <template>
 	<section class="download-policy" aria-labelledby="download-policy-title">
 		<header class="download-policy__heading">
-			<span>{{ context === 'event' ? t('proofing_gallery', 'This delivery round') : t('proofing_gallery', 'Client access') }}</span>
 			<h3 id="download-policy-title">
 				{{ t('proofing_gallery', 'Downloads') }}
 			</h3>
@@ -30,18 +30,7 @@ const lead = computed(() => props.context === 'event'
 		<label class="download-policy__select">
 			<span>{{ t('proofing_gallery', 'Download access') }}</span>
 			<select v-model="delivery.downloadScope" name="downloadScope">
-				<option value="none">
-					{{ t('proofing_gallery', 'Downloads disabled') }}
-				</option>
-				<option value="individual">
-					{{ t('proofing_gallery', 'Individual files') }}
-				</option>
-				<option value="selection">
-					{{ t('proofing_gallery', 'Saved selections') }}
-				</option>
-				<option value="all">
-					{{ t('proofing_gallery', 'Files, selections, and entire gallery') }}
-				</option>
+				<option v-for="(label, value) in downloadScopeLabels()" :key="value" :value="value">{{ label }}</option>
 			</select>
 		</label>
 		<NcCheckboxRadioSwitch v-model="delivery.contactSheet" type="switch" :disabled="!allowsSelection">

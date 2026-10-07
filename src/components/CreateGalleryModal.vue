@@ -231,7 +231,7 @@ function reset() {
 			<Transition name="wizard-step" mode="out-in">
 				<div v-if="step === 1" key="purpose" class="purpose-step">
 					<header class="wizard-intro">
-						<span>{{ t('proofing_gallery', 'Start with the client’s job') }}</span><h2>{{ t('proofing_gallery', 'What should happen with these photos?') }}</h2><p>{{ t('proofing_gallery', 'Your choice prepares the right tools. Everything can still be refined inside the project.') }}</p>
+						<h2>{{ t('proofing_gallery', 'What should happen with these photos?') }}</h2><p>{{ t('proofing_gallery', 'Your choice prepares the right tools. Everything can still be refined inside the project.') }}</p>
 					</header>
 					<div class="purpose-list">
 						<label v-for="option in purposeChoices" :key="option.id" :class="{ selected: !kiosk && purpose === option.id }"><input v-model="purpose"
@@ -247,7 +247,7 @@ function reset() {
 				</div>
 				<div v-else key="setup" class="source-setup">
 					<header class="selected-purpose">
-						<div><span>{{ t('proofing_gallery', 'Selected project type') }}</span><h2>{{ copy.title }}</h2><p>{{ copy.description }}</p></div><button type="button" @click="step = 1">
+						<div><h2>{{ copy.title }}</h2><p>{{ copy.description }}</p></div><button type="button" @click="step = 1">
 							{{ t('proofing_gallery', 'Change') }}
 						</button>
 					</header>
@@ -306,7 +306,7 @@ function reset() {
 <style scoped>
 .project-wizard{--wizard-line:var(--studio-line,var(--color-border));--wizard-muted:var(--studio-muted,var(--color-text-maxcontrast));padding:0 32px 28px;color:var(--studio-ink,var(--color-main-text))}
 
-.wizard-policy-message{margin:0 0 14px;padding:10px 12px;border-inline-start:4px solid var(--color-warning);background:var(--studio-surface-raised,var(--color-background-dark))}
+.wizard-policy-message{margin:0 0 14px;padding:10px 12px;border:1px solid var(--color-warning);border-radius:8px;background:var(--studio-surface-raised,var(--color-background-dark))}
 
 .wizard-progress{display:grid;grid-template-columns:1fr 1fr;margin-bottom:24px;border-bottom:1px solid var(--wizard-line);color:var(--wizard-muted)}
 
@@ -320,13 +320,13 @@ function reset() {
 
 .wizard-intro>span,.selected-purpose>div>span{color:var(--studio-accent,var(--color-primary-element));font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
 
-.wizard-intro h2,.selected-purpose h2{margin:5px 0 8px;font-family:NewsreaderVariable,Newsreader,serif;font-size:clamp(29px,5vw,43px);font-weight:520;letter-spacing:-.03em;line-height:1.04}
+.wizard-intro h2,.selected-purpose h2{margin:5px 0 8px;font-family:inherit;font-size:28px;font-weight:700;letter-spacing:-.03em;line-height:1.04}
 
 .wizard-intro p,.selected-purpose p{margin:0;color:var(--wizard-muted);line-height:1.5}
 
 .purpose-list{display:grid;border-top:1px solid var(--wizard-line)}
 
-.purpose-list label{display:grid;grid-template-columns:22px 1fr 32px;align-items:center;min-height:82px;gap:14px;border-bottom:1px solid var(--wizard-line);cursor:pointer;transition:padding 180ms ease,background-color 180ms ease}
+.purpose-list label{display:grid;grid-template-columns:22px 1fr 32px;align-items:center;min-height:82px;gap:14px;border-bottom:1px solid var(--wizard-line);cursor:pointer;padding-inline:12px;transition:background-color 180ms ease}
 
 .purpose-list label:hover,.purpose-list label.selected{padding-inline:12px;background:var(--studio-surface-raised,var(--color-background-hover))}
 
@@ -350,7 +350,7 @@ function reset() {
 
 .selected-purpose{display:flex;align-items:start;justify-content:space-between;gap:24px;padding:6px 0 20px;border-bottom:1px solid var(--wizard-line)}
 
-.selected-purpose h2{font-size:clamp(27px,4vw,38px)}
+.selected-purpose h2{font-size:26px}
 
 .selected-purpose button{padding:6px 0;border:0;background:transparent;color:var(--studio-accent,var(--color-primary-element));font-weight:700;cursor:pointer}
 
@@ -411,6 +411,8 @@ footer{display:flex;justify-content:flex-end;gap:8px;padding-top:26px}
 .wizard-step-leave-to{opacity:0;transform:translateX(-12px)}
 
 .sr-only{position:absolute;overflow:hidden;width:1px;height:1px;clip-path:inset(50%)}
-@media(max-width:700px){.project-wizard{padding:0 16px 20px}.choice-grid,.choice-grid--sources,.new-folder-fields,.design-choice,.project-summary{grid-template-columns:1fr}.project-summary div{border-inline-end:0;border-bottom:1px solid var(--wizard-line)}.selected-purpose{align-items:flex-start}.wizard-intro h2{font-size:32px}.purpose-list label{grid-template-columns:20px 1fr 22px;min-height:92px}.choice-grid label{min-height:82px}}
+@media(max-width:700px){.project-wizard{padding:0 16px 20px}.choice-grid,.choice-grid--sources,.new-folder-fields,.design-choice,.project-summary{grid-template-columns:1fr}.project-summary div{border-inline-end:0;border-bottom:1px solid var(--wizard-line)}.selected-purpose{align-items:flex-start}.wizard-intro h2{font-size:24px}.purpose-list label{grid-template-columns:20px 1fr 22px;min-height:92px}.choice-grid label{min-height:82px}}
 @media(prefers-reduced-motion:reduce){.purpose-list label,.purpose-arrow,.wizard-step-enter-active,.wizard-step-leave-active{transition:none}}
+
+.purpose-list label:focus-within,.choice-grid label:focus-within{outline:2px solid var(--studio-accent,var(--color-primary-element));outline-offset:2px}
 </style>

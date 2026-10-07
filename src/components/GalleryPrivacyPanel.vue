@@ -63,11 +63,11 @@ onMounted(load)
 </template>
 
 <style scoped>
-.privacy-panel { display: grid; gap: 14px; margin-top: 22px; padding: 20px; border: 1px solid color-mix(in srgb, var(--color-error) 30%, var(--color-border)); border-radius: 18px; background: color-mix(in srgb, var(--color-main-background) 92%, var(--color-error) 8%); }
+.privacy-panel { display: grid; gap: 14px; margin-top: 22px; padding: 20px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--studio-surface-raised, var(--color-background-hover)); }
 
 .privacy-panel header, .privacy-panel__scheduled, .privacy-panel__actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 
-.privacy-panel header span { color: var(--color-text-maxcontrast); font-size: 12px; font-weight: 700; text-transform: uppercase; }
+.privacy-panel header span { color: var(--color-text-maxcontrast); font-size: 12px; font-weight: 700;  }
 
 .privacy-panel h3, .privacy-panel p { margin: 0; }
 

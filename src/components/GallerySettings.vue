@@ -23,6 +23,7 @@ import type { Gallery, GalleryReadiness, MediaItem, SourceRebindReport } from '.
 import CollectionContent from './CollectionContent.vue'
 import CullingWorkspace from './CullingWorkspace.vue'
 import FolderContent from './FolderContent.vue'
+import GalleryWorkspaceNavigation from './GalleryWorkspaceNavigation.vue'
 import SharingModal from './SharingModal.vue'
 import SourceRebindNotice from './SourceRebindNotice.vue'
 import GalleryAutomationWorkspace from './workspaces/GalleryAutomationWorkspace.vue'
@@ -46,9 +47,6 @@ const reduceMotion = useReducedMotion()
 
 const availableTabs = computed(() => availableGalleryWorkspaces(props.gallery))
 const [activeTab, saving, saveState] = [ref<GalleryWorkspace>(tabFromHash()), ref(false), ref<SaveState>('saved')]
-const primaryTabs = computed(() => availableTabs.value.filter(tab => tab.group === 'primary'))
-const moreTabs = computed(() => availableTabs.value.filter(tab => tab.group === 'more'))
-const activeMore = computed(() => moreTabs.value.some(tab => tab.id === activeTab.value))
 const saveTimer = ref<ReturnType<typeof setTimeout> | null>(null)
 const serverRevision = ref(props.gallery.revision)
 const conflictGallery = ref<Gallery | null>(null)
@@ -552,7 +550,7 @@ onBeforeUnmount(() => {
 					{{ saveStateLabel }}
 				</div>
 				<NcButton v-if="gallery.permissions.canManageAccess && gallery.deliveryMode !== 'event'" @click="openSharing">
-					{{ t('proofing_gallery', 'Share') }}
+					{{ gallery.shareToken ? t('proofing_gallery', 'Invite clients') : t('proofing_gallery', 'Publish gallery') }}
 				</NcButton>
 				<NcButton variant="primary" @click="setTab(nextStep.tab)">
 					{{ nextStep.label }}
@@ -560,28 +558,10 @@ onBeforeUnmount(() => {
 			</div>
 		</header>
 
-		<nav v-if="activeTab !== 'cull'" class="settings-tabs" :aria-label="t('proofing_gallery', 'Gallery settings')">
-			<button
-				v-for="tab in primaryTabs"
-				:key="tab.id"
-				type="button"
-				:aria-current="activeTab === tab.id ? 'page' : undefined"
-				@click="setTab(tab.id)">
-				{{ tab.label }}
-			</button>
-			<details v-if="moreTabs.length" class="settings-more" :class="{ 'settings-more--active': activeMore }">
-				<summary>{{ t('proofing_gallery', 'More') }}</summary>
-				<div>
-					<button v-for="tab in moreTabs"
-						:key="tab.id"
-						type="button"
-						:aria-current="activeTab === tab.id ? 'page' : undefined"
-						@click="setTab(tab.id)">
-						{{ tab.label }}
-					</button>
-				</div>
-			</details>
-		</nav>
+		<GalleryWorkspaceNavigation v-if="activeTab !== 'cull'"
+			:tabs="availableTabs"
+			:active="activeTab"
+			@select="setTab" />
 
 		<SourceRebindNotice v-if="sourceRebind" :report="sourceRebind" />
 
@@ -617,10 +597,12 @@ onBeforeUnmount(() => {
 				<CollectionContent
 					v-else-if="activeTab === 'photos' && gallery.sourceType === 'collection'"
 					:gallery="gallery"
+					@guest-order="setTab('share')"
 					@changed="collectionChanged" />
 				<FolderContent
 					v-else-if="activeTab === 'photos' && gallery.sourceType === 'folder'"
 					:gallery="gallery"
+					@guest-order="setTab('share')"
 					@changed="collectionChanged" />
 				<CullingWorkspace
 					v-else-if="activeTab === 'cull'"

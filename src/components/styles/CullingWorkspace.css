@@ -20,7 +20,7 @@
 
 .culling-toolbar { position: sticky; z-index: 8; top: 8px; display: flex; flex-wrap: wrap; align-items: end; gap: 8px; padding: 10px; border: 1px solid var(--color-border); border-radius: 12px; background: color-mix(in srgb, var(--color-main-background) 92%, transparent); box-shadow: 0 8px 26px var(--color-box-shadow); backdrop-filter: blur(18px); }
 
-.culling-toolbar label { display: grid; gap: 3px; color: var(--color-text-maxcontrast); font-size: 11px; }
+.culling-toolbar__secondary label { display: grid; gap: 3px; color: var(--color-text-maxcontrast); font-size: 11px; }
 
 .semantic-search { display: flex; flex: 1 1 100%; align-items: end; gap: 8px; }
 
@@ -28,7 +28,7 @@
 
 .semantic-search input { width: 100%; min-height: 38px; padding: 0 10px; border: 1px solid var(--color-border-maxcontrast); border-radius: 7px; background: var(--color-main-background); color: var(--color-main-text); }
 
-.culling-toolbar select { min-width: 120px; min-height: 38px; padding: 0 32px 0 9px; border: 1px solid var(--color-border-maxcontrast); border-radius: 7px; background: var(--color-main-background); color: var(--color-main-text); }
+.culling-toolbar__secondary select { min-width: 120px; min-height: 38px; padding: 0 32px 0 9px; border: 1px solid var(--color-border-maxcontrast); border-radius: 7px; background: var(--color-main-background); color: var(--color-main-text); }
 
 .culling-save { margin-inline-start: auto; align-self: center; color: var(--color-text-maxcontrast); font-size: 12px; }
 
@@ -264,10 +264,6 @@ kbd { padding: 2px 6px; border: 1px solid var(--color-border-maxcontrast); borde
 	outline-offset: 3px;
 }
 
-@keyframes culling-reveal { from { opacity: 0; transform: translateY(10px) scale(.992); } }
-
-.culling-loupe { animation: culling-reveal 260ms cubic-bezier(.2, .8, .2, 1); }
-
 @media (max-width: 800px) {
 	.culling-header { align-items: start; flex-direction: column; padding: 22px; }
 	.culling-progress { width: 100%; }
@@ -275,7 +271,7 @@ kbd { padding: 2px 6px; border: 1px solid var(--color-border-maxcontrast); borde
 	.culling-toolbar label, .culling-toolbar .saved-view { min-width: 0; }
 	.semantic-search { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; }
 	.semantic-search label { grid-column: 1 / -1; }
-	.culling-toolbar select { width: 100%; min-width: 0; min-height: 44px; }
+	.culling-toolbar__secondary select { width: 100%; min-width: 0; min-height: 44px; }
 	.culling-toolbar :deep(.button-vue) { width: 100%; min-height: 44px; }
 	.culling-stage { height: min(760px, calc(100dvh - 96px)); min-height: 620px; grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) 112px; }
 	.culling-loupe { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
@@ -293,6 +289,11 @@ kbd { padding: 2px 6px; border: 1px solid var(--color-border-maxcontrast); borde
 
 /* Darkroom workspace: a compact command surface around the image, not a settings form. */
 .culling-workspace {
+	--studio-surface: #17191f;
+	--studio-ink: #f5f7fa;
+	--studio-muted: #b7bbc5;
+	--studio-line-strong: #555b66;
+	--studio-accent: #6bd6e5;
 	--cull-gold: #f1be3d;
 	--cull-green: #28d18b;
 	--cull-red: #ff6174;
@@ -445,7 +446,7 @@ kbd { padding: 2px 6px; border: 1px solid var(--color-border-maxcontrast); borde
 	.culling-progress span { display: none; }
 	.culling-header h2 { max-width: 180px; }
 	.culling-toolbar { display: block; }
-	.culling-toolbar__primary { overflow-x: auto; padding-inline: 6px; scrollbar-width: none; }
+	.culling-toolbar__primary { flex-wrap: wrap; padding-inline: 6px; }
 	.culling-toolbar__primary :deep(.button-vue) { width: auto; min-width: max-content; min-height: 40px; }
 	.culling-toolbar__primary .culling-save { display: none; }
 	.culling-toolbar__secondary { inset-inline: 6px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
@@ -470,4 +471,13 @@ kbd { padding: 2px 6px; border: 1px solid var(--color-border-maxcontrast); borde
 
 @media (prefers-reduced-motion: reduce) {
 	.culling-loupe__image .progressive-image img { animation: none; }
+}
+
+.culling-toolbar__primary .owner-sort { flex: none; gap: 6px; }
+
+.culling-toolbar__primary .owner-sort__choice { display: flex; color: #f5f7fa; }
+
+.culling-toolbar__primary .owner-sort select { min-width: 0; background-color: #17191f; color: #f5f7fa; }
+@media (max-width: 800px) {
+	.culling-toolbar__primary .owner-sort { order: -1; flex: 1 0 100%; }
 }
