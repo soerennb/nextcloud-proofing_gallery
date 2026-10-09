@@ -106,6 +106,14 @@ primary-link change is atomic inside the app database. Updates spanning the
 Nextcloud share API and app data snapshot the native share and compensate it if
 app persistence fails.
 
+Public-link responses expose `feedbackPolicyMode`, `permissionsPolicyMode`, and
+`navigationPolicyMode`, each either `inherit` or `custom`. Owner link updates
+accept these optional fields independently; omitted fields retain compatibility
+with older clients. The feedback mode controls review features; permission mode
+controls downloads, uploads, exports and metadata; navigation mode controls
+view mode and grouping depth. Folder scopes and start paths remain link-owned.
+Inheritance never broadens access beyond administrator and gallery restrictions.
+
 Public downloads are resolved only after the effective link policy and the
 resolved folder or collection scope are known. Individual files, saved
 selections, complete-gallery archives, resized JPEGs, contact sheets, and event

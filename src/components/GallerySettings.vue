@@ -170,6 +170,8 @@ function tabFromHash(): GalleryWorkspace {
 }
 
 function setTab(tab: GalleryWorkspace, historyMode: 'push' | 'replace' = 'push') {
+	const routeGallery = window.location.hash.match(/^#gallery\/(\d+)/)
+	if (!routeGallery || Number(routeGallery[1]) !== props.gallery.id) return
 	const target = availableTabs.value.some(item => item.id === tab) ? tab : 'overview'
 	activeTab.value = target
 	emit('workspace-mode', target === 'cull')
@@ -178,7 +180,7 @@ function setTab(tab: GalleryWorkspace, historyMode: 'push' | 'replace' = 'push')
 }
 
 function syncTabFromHistory() {
-	setTab(tabFromHash(), 'replace')
+	queueMicrotask(() => setTab(tabFromHash(), 'replace'))
 }
 
 function resetDraft(gallery = props.gallery) {
@@ -445,6 +447,8 @@ async function flushSave(): Promise<boolean> {
 	clearSaveTimer()
 	return dirty.value ? save() : true
 }
+
+defineExpose({ flushSave, currentRoute: () => galleryWorkspacePath(props.gallery.id, activeTab.value) })
 
 async function openSharing() {
 	if (await flushSave()) showSharing.value = true

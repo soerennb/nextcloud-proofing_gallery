@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.12.0 — 2026-10-09
+
 - preserve separately configured primary-link download, upload, export, metadata
   and navigation settings; offer independent permission and navigation inheritance
 - synchronize native download restrictions with effective gallery and link rules
@@ -17,6 +19,21 @@
 
 - show the white app icon in the header and app menu and the dark one on light
   backgrounds such as the administration settings, notifications and search
+
+- simplify the owner workspace, expose photo sorting on desktop and mobile,
+  improve gallery action menus and organize design settings with a reachable
+  mobile preview
+- preserve cross-gallery deep links and browser history, save pending edits
+  before switching galleries, and ignore outdated gallery load responses
+- update frontend libraries, development tools and pinned GitHub Actions;
+  require upgrades from the latest stable release before publishing
+
+Upgrade note: existing administrator choices and public-link restrictions are
+preserved. New installations enable client ratings by default; new proofing
+projects enable ratings and pick/reject when permitted by the administrator.
+Primary links can inherit feedback, delivery permissions and navigation
+independently, while separately configured links retain their settings.
+Previously overwritten settings cannot be recovered without historical data.
 
 ## 0.11.0 — 2026-10-04
 
