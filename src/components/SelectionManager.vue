@@ -5,12 +5,12 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 import { deleteOwnerSelection, exportOwnerSelectionXmp, fetchOwnerSelectionExportPreview, fetchOwnerSelections, ownerSelectionExportUrl, updateOwnerSelection } from '../services/galleryApi.ts'
 import type { OwnerSelection } from '../types.ts'
 
-const props = defineProps<{ galleryId: number; editable: boolean }>()
+const props = defineProps<{ galleryId: number; editable: boolean; ratingsAvailable?: boolean }>()
 const items = ref<OwnerSelection[]>([])
 const loading = ref(true)
 const loadingMore = ref(false)
@@ -30,6 +30,8 @@ const exportOptions = [
 	['guestAverage', t('proofing_gallery', 'Client average')], ['guestCount', t('proofing_gallery', 'Client rating count')],
 	['selection', t('proofing_gallery', 'Selection name')], ['comments', t('proofing_gallery', 'Client comments')],
 ] as const
+const availableExportOptions = computed(() => exportOptions.filter(([field]) => props.ratingsAvailable !== false || !['guestAverage', 'guestCount'].includes(field)))
+const activeExportFields = computed(() => exportFields.value.filter(field => availableExportOptions.value.some(([allowed]) => allowed === field)))
 
 async function load(append = false) {
 	if (append && (!nextCursor.value || loadingMore.value)) return
@@ -96,10 +98,10 @@ function openComposer(selection: OwnerSelection) {
 }
 
 async function previewExport(selection: OwnerSelection) {
-	if (!exportFields.value.length || exportWorking.value) return
+	if (!activeExportFields.value.length || exportWorking.value) return
 	exportWorking.value = true
 	try {
-		exportPreview.value = await fetchOwnerSelectionExportPreview(props.galleryId, selection.id, exportFields.value)
+		exportPreview.value = await fetchOwnerSelectionExportPreview(props.galleryId, selection.id, activeExportFields.value)
 	} catch { showError(t('proofing_gallery', 'The export preview could not be created.')) } finally { exportWorking.value = false }
 }
 
@@ -195,16 +197,16 @@ onMounted(load)
 				<section v-if="composerId === selection.id" class="export-composer" :aria-label="t('proofing_gallery', 'Export composer')">
 					<header><div><h3>{{ t('proofing_gallery', 'Export composer') }}</h3><p>{{ t('proofing_gallery', 'Choose exactly which fields leave the gallery, then inspect the UTF-8 CSV before downloading it.') }}</p></div></header>
 					<div class="export-composer__fields">
-						<label v-for="option in exportOptions" :key="option[0]"><input v-model="exportFields" type="checkbox" :value="option[0]"> <span>{{ option[1] }}</span></label>
+						<label v-for="option in availableExportOptions" :key="option[0]"><input v-model="exportFields" type="checkbox" :value="option[0]"> <span>{{ option[1] }}</span></label>
 					</div>
 					<div class="export-composer__actions">
-						<NcButton :disabled="!exportFields.length || exportWorking" @click="previewExport(selection)">
+						<NcButton :disabled="!activeExportFields.length || exportWorking" @click="previewExport(selection)">
 							{{ t('proofing_gallery', 'Create preview') }}
 						</NcButton>
 						<NcButton :disabled="!exportPreview" variant="tertiary" @click="copyPreview">
 							{{ t('proofing_gallery', 'Copy preview') }}
 						</NcButton>
-						<NcButton :href="ownerSelectionExportUrl(galleryId, selection.id, 'csv', exportFields)" :disabled="!exportFields.length" variant="primary">
+						<NcButton :href="ownerSelectionExportUrl(galleryId, selection.id, 'csv', activeExportFields)" :disabled="!activeExportFields.length" variant="primary">
 							{{ t('proofing_gallery', 'Download UTF-8 CSV') }}
 						</NcButton>
 					</div>

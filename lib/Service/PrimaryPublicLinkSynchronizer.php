@@ -9,8 +9,6 @@ use OCA\ProofingGallery\Db\PublicLink;
 use OCA\ProofingGallery\Db\PublicLinkMapper;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Utility\ITimeFactory;
-use OCP\Share\IManager;
-use OCP\Share\Exceptions\ShareNotFound;
 
 final class PrimaryPublicLinkSynchronizer {
 	public function __construct(
@@ -18,7 +16,6 @@ final class PrimaryPublicLinkSynchronizer {
 		private PublicLinkPolicyService $policies,
 		private PolicyService $instancePolicies,
 		private ITimeFactory $clock,
-		private IManager $shareManager,
 	) {
 	}
 
@@ -41,7 +38,6 @@ final class PrimaryPublicLinkSynchronizer {
 				if ($scopeAnchorId !== null) $link->setScopeAnchorId($scopeAnchorId);
 				if ($link->getScopeMode() === 'legacy') $link->setScopeMode('empty');
 			}
-			$this->applyPrimaryNavigation($link, $gallery);
 			$link->setUpdatedAt($this->clock->getTime());
 			return $this->links->update($link);
 		} catch (DoesNotExistException) {
@@ -54,6 +50,9 @@ final class PrimaryPublicLinkSynchronizer {
 			$link->setName('Primary link');
 			$link->setStatus('active');
 			$link->setIsPrimary(true);
+			$link->setFeedbackPolicyMode($gallery->getDeliveryMode() === 'standard' ? 'inherit' : 'custom');
+			$link->setPermissionsPolicyMode($gallery->getDeliveryMode() === 'standard' ? 'inherit' : 'custom');
+			$link->setNavigationPolicyMode($gallery->getDeliveryMode() === 'standard' ? 'inherit' : 'custom');
 			$link->setPolicy(json_encode($this->policies->presets()['presentation'], JSON_THROW_ON_ERROR));
 			$link->setStartPath('');
 			if ($gallery->getDeliveryMode() === 'event') {
@@ -65,29 +64,6 @@ final class PrimaryPublicLinkSynchronizer {
 			$link->setCreatedAt($now);
 			$link->setUpdatedAt($now);
 			return $this->links->insert($link);
-		}
-	}
-
-	public function synchronizePrimaryNavigation(Gallery $gallery): void {
-		if ($gallery->getShareToken() === null) return;
-		$this->ensurePrimary($gallery);
-	}
-
-	public function synchronizeEventDownloadRestriction(Gallery $gallery): void {
-		if ($gallery->getDeliveryMode() !== 'event') return;
-		$settings = \OCA\ProofingGallery\Dto\GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
-		if ($settings->delivery->downloadScope->allowsIndividual()) return;
-		foreach ($this->links->findForGallery($gallery->getId()) as $link) {
-			if ($link->getIsPrimary() || $link->getStatus() !== 'active') continue;
-			try {
-				$share = $this->shareManager->getShareByToken($link->getToken());
-				if (!$share->getHideDownload()) {
-					$share->setHideDownload(true);
-					$this->shareManager->updateShare($share);
-				}
-			} catch (ShareNotFound) {
-				// Link reconciliation handles an already missing native share.
-			}
 		}
 	}
 
@@ -132,21 +108,11 @@ final class PrimaryPublicLinkSynchronizer {
 
 	private function applyPrimaryNavigation(PublicLink $link, Gallery $gallery): void {
 		$settings = \OCA\ProofingGallery\Dto\GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
-		$link->setPolicy(json_encode($this->policies->validate([
-			'view' => true,
-			'likes' => $settings->review->likes,
-			'colors' => $settings->review->colors,
-			'comments' => $settings->review->comments,
-			'annotations' => $settings->review->annotations,
-			'selections' => $settings->review->selections,
-			'ratings' => $settings->review->ratings,
-			'pick' => $settings->review->pick,
-			'upload' => $settings->delivery->guestUploads,
-			'export' => true,
-			'metadata' => $settings->metadata->publicFields !== [],
-			'downloadScope' => $settings->delivery->downloadScope->value,
-		]), JSON_THROW_ON_ERROR));
-		$link->setViewMode($settings->navigation->recursive ? 'recursive' : 'folder');
-		$link->setGroupDepth($settings->navigation->groupBy === 'folder' ? $settings->navigation->groupDepth : 0);
+		$policy = $this->policies->inheritPermissions(\OCA\ProofingGallery\Domain\PublicLinkPolicy::fromArray($this->policies->presets()['presentation']), $settings);
+		if ($link->getFeedbackPolicyMode() === 'inherit') $policy = $this->policies->inheritFeedback($policy, $settings);
+		$link->setPolicy(json_encode($policy, JSON_THROW_ON_ERROR));
+		$navigation = $this->policies->navigation($settings, $link);
+		$link->setViewMode($navigation['viewMode']);
+		$link->setGroupDepth($navigation['groupDepth']);
 	}
 }

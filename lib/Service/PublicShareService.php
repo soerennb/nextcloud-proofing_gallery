@@ -32,6 +32,7 @@ final class PublicShareService {
 		private ITimeFactory $clock,
 		private CapabilityPolicyService $capabilities,
 		private PrimaryPublicLinkSynchronizer $publicLinks,
+		private PublicLinkPolicyService $linkPolicies,
 		private IJobList $jobs,
 		private GalleryReadinessService $readiness,
 		private PreviewWarmService $previewWarm,
@@ -97,7 +98,9 @@ final class PublicShareService {
 		if (!in_array($downloadScope, ['none', 'individual', 'selection', 'all'], true)) {
 			throw new InvalidArgumentException('Invalid download scope');
 		}
-		$share->setHideDownload(!in_array($downloadScope, ['individual', 'all'], true));
+		$nextSettings = GallerySettings::merge(GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR)), ['delivery' => ['downloadScope' => $downloadScope]]);
+		$linkPolicy = $existingLink === null ? \OCA\ProofingGallery\Domain\PublicLinkPolicy::fromArray($this->linkPolicies->permissionDefaults($nextSettings)) : $this->linkPolicies->forLink($nextSettings, $existingLink);
+		$share->setHideDownload(!($this->capabilities->feature('downloads') && $this->linkPolicies->effectiveDownloadScope($nextSettings, $linkPolicy)->allowsIndividual()));
 		if ($gallery->getShareToken() === null || $password !== null) {
 			$share->setPassword($password === '' ? null : $password);
 		}
@@ -124,6 +127,7 @@ final class PublicShareService {
 			$updated = $this->atomic(function () use ($gallery, $share, $scopeAnchor): Gallery {
 				$updated = $this->galleries->update($gallery);
 				$this->publicLinks->ensurePrimary($updated, (int)$share->getId(), $scopeAnchor?->getId());
+				$this->synchronizeNativeDownloads($updated);
 				return $updated;
 			}, $this->db);
 		} catch (Throwable $exception) {
@@ -278,7 +282,8 @@ final class PublicShareService {
 			$this->publicLinks->list($gallery),
 			static fn ($link): bool => $link->getStatus() === 'suspended' && ($gallery->getDeliveryMode() === 'event' || $link->getScopeMode() !== 'empty'),
 		));
-		/** @var list<array{share: IShare, permissions: int}> $changed */
+		$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
+		/** @var list<array{share: IShare, permissions: int, hide: bool}> $changed */
 		$changed = [];
 		try {
 			foreach ($links as $link) {
@@ -287,11 +292,13 @@ final class PublicShareService {
 				} catch (ShareNotFound $exception) {
 					throw new InvalidArgumentException('A suspended native share is missing and must be repaired before restore', previous: $exception);
 				}
+				$hide = !($this->capabilities->feature('downloads') && $this->linkPolicies->effectiveDownloadScope($settings, $this->linkPolicies->forLink($settings, $link))->allowsIndividual());
 				$permissions = (int)$share->getPermissions();
-				if ($permissions !== Constants::PERMISSION_READ) {
+				if ($permissions !== Constants::PERMISSION_READ || $share->getHideDownload() !== $hide) {
+					$changed[] = ['share' => $share, 'permissions' => $permissions, 'hide' => $share->getHideDownload()];
+					$share->setHideDownload($hide);
 					$share->setPermissions(Constants::PERMISSION_READ);
 					$this->shareManager->updateShare($share);
-					$changed[] = ['share' => $share, 'permissions' => $permissions];
 				}
 			}
 
@@ -310,38 +317,55 @@ final class PublicShareService {
 		}
 	}
 
-	/** @param list<array{share: IShare, permissions: int}> $changed */
+	/** @param list<array{share: IShare, permissions: int, hide?: bool}> $changed */
 	private function restorePermissions(array $changed): void {
 		foreach (array_reverse($changed) as $snapshot) {
 			try {
 				$snapshot['share']->setPermissions($snapshot['permissions']);
+				if (isset($snapshot['hide'])) $snapshot['share']->setHideDownload($snapshot['hide']);
 				$this->shareManager->updateShare($snapshot['share']);
-			} catch (Throwable) {
-				// The original error remains authoritative. Health/reconciliation
-				// reports any cross-store drift for an administrator to repair.
+			} catch (Throwable $exception) {
+				$this->recovery->discard($snapshot['share'], $exception);
 			}
 		}
 	}
 
-	public function synchronizePrimaryNavigation(Gallery $gallery): void {
-		$this->recovery->locked((int)$gallery->getId(), fn () => $this->synchronizePrimaryNavigationLocked($this->galleries->find((int)$gallery->getId())));
+	/** Persist a gallery and its native download flags under the same lifecycle lock. */
+	public function updateGallery(Gallery $gallery, int $revision): Gallery {
+		return $this->recovery->locked((int)$gallery->getId(), function () use ($gallery, $revision): Gallery {
+			return $this->atomic(function () use ($gallery, $revision): Gallery {
+				$updated = $this->galleries->updateDocument($gallery, $revision);
+				$this->synchronizeNativeDownloads($updated);
+				return $updated;
+			}, $this->db);
+		});
 	}
 
-	private function synchronizePrimaryNavigationLocked(Gallery $gallery): void {
-		$this->publicLinks->synchronizePrimaryNavigation($gallery);
-		if ($gallery->getDeliveryMode() === 'event') {
-			$this->publicLinks->synchronizeEventDownloadRestriction($gallery);
-			return;
-		}
-		if ($gallery->getShareToken() === null) return;
+	private function synchronizeNativeDownloads(Gallery $gallery): void {
+		if ($gallery->getShareToken() === null || $gallery->getStatus() !== GalleryStatus::Published->value) return;
+		$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
+		$changed = [];
 		try {
-			$share = $this->shareManager->getShareByToken($gallery->getShareToken());
-			$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
-			$share->setHideDownload(!$settings->delivery->downloadScope->allowsIndividual());
-			$this->shareManager->updateShare($share);
-		} catch (ShareNotFound) {
-			// The public-link policy remains authoritative until the native share is
-			// recreated or repaired by the normal publishing flow.
+			foreach ($this->publicLinks->list($gallery) as $link) {
+				if ($link->getStatus() !== 'active') continue;
+				try { $share = $this->shareManager->getShareByToken($link->getToken()); }
+				catch (ShareNotFound) { continue; }
+				$hide = !($this->capabilities->feature('downloads') && $this->linkPolicies->effectiveDownloadScope($settings, $this->linkPolicies->forLink($settings, $link))->allowsIndividual());
+				if ($share->getHideDownload() === $hide) continue;
+				$changed[] = ['share' => $share, 'hide' => $share->getHideDownload()];
+				$share->setHideDownload($hide);
+				$this->shareManager->updateShare($share);
+			}
+		} catch (Throwable $exception) {
+			foreach (array_reverse($changed) as $snapshot) {
+				try {
+					$snapshot['share']->setHideDownload($snapshot['hide']);
+					$this->shareManager->updateShare($snapshot['share']);
+				} catch (Throwable) {
+					$this->recovery->discard($snapshot['share'], $exception);
+				}
+			}
+			throw $exception;
 		}
 	}
 

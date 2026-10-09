@@ -10,6 +10,16 @@ use OCP\IConfig;
 use PHPUnit\Framework\TestCase;
 
 final class PolicyServiceTest extends TestCase {
+	public function testNewInstallationEnablesRatingsWhileUpgradeFallbackAndExplicitChoicesArePreserved(): void {
+		foreach ([['', '1', true], ['', '0', false], ['{"features":{"guestRatings":true}}', '0', true], ['{"features":{"guestRatings":false}}', '1', false], ['broken', '0', false]] as [$document, $fallback, $expected]) {
+			$config = $this->createMock(IConfig::class);
+			$config->method('getAppValue')->willReturnCallback(static fn (string $app, string $key, string $default): string => match ($key) {
+				'instanceSettingsV2' => $document, 'guestRatingsDefault' => $fallback, default => $default,
+			});
+			self::assertSame($expected, (new PolicyService($config))->feature('guestRatings'));
+		}
+	}
+
 	public function testInvalidPersistedValuesFallBackToDefaults(): void {
 		$config = $this->createMock(IConfig::class);
 		$config->method('getAppValue')->willReturnCallback(

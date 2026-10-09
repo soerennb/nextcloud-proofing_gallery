@@ -28,6 +28,7 @@ final class PublicShareContextResolver {
 		private CapabilityPolicyService $capabilities,
 		private PublicLinkScopeService $scopes,
 		private PublicLinkAnchorService $anchors,
+		private PublicLinkPolicyService $policies,
 	) {
 	}
 
@@ -45,10 +46,12 @@ final class PublicShareContextResolver {
 		if (!$link->getIsPrimary() && !$this->capabilities->feature('multiplePublicLinks')) {
 			throw new \InvalidArgumentException('Additional public links are disabled');
 		}
+		$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
+		$link = $this->policies->resolvedLink($settings, $link);
 		if ($link->getViewMode() === 'recursive' && !$this->capabilities->feature('recursiveGalleries')) {
 			throw new \InvalidArgumentException('Recursive public galleries are disabled');
 		}
-		$policy = PublicLinkPolicy::fromArray(json_decode($link->getPolicy(), true, flags: JSON_THROW_ON_ERROR));
+		$policy = $this->policies->forLink($settings, $link);
 		if (!$policy->allows($permission)) throw new \InvalidArgumentException('Public link permission is disabled');
 		$galleryRoot = $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId());
 		$expected = $link->getStartPath() === '' ? $galleryRoot : $galleryRoot->get($link->getStartPath());
@@ -58,7 +61,6 @@ final class PublicShareContextResolver {
 			$shareRoot = $this->anchors->resolve($gallery->getOwnerUid(), $link->getScopeAnchorId());
 		}
 		if (!$expected instanceof Folder || $share->getNodeId() !== $shareRoot->getId()) throw new \InvalidArgumentException('Public link scope does not match its share');
-		$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
 		return new PublicShareContext($share, $gallery, $settings, $link, $policy, $expected);
 	}
 

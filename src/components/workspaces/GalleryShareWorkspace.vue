@@ -4,6 +4,7 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 
 import type { GallerySettings } from '../../domain/gallerySettings.ts'
+import type { GalleryWorkspace } from '../../domain/gallerySettingsOptions.ts'
 import type { EventSetup } from '../../services/eventApi.ts'
 import type { Gallery } from '../../types.ts'
 import DownloadPolicyFields from '../DownloadPolicyFields.vue'
@@ -12,7 +13,7 @@ import GallerySortSettings from '../GallerySortSettings.vue'
 import EventDeliveryWorkspace from '../EventDeliveryWorkspace.vue'
 
 const props = defineProps<{ gallery: Gallery; saveGallerySettings?: () => Promise<boolean> }>()
-const emit = defineEmits<{ 'open-sharing': []; updated: [gallery: Gallery]; 'event-setup-updated': [setup: EventSetup] }>()
+const emit = defineEmits<{ 'open-sharing': []; updated: [gallery: Gallery]; 'event-setup-updated': [setup: EventSetup]; navigate: [workspace: GalleryWorkspace] }>()
 const settings = defineModel<GallerySettings>('settings', { required: true })
 </script>
 
@@ -34,7 +35,12 @@ const settings = defineModel<GallerySettings>('settings', { required: true })
 		<NcButton variant="primary" @click="emit('open-sharing')">
 			{{ gallery.shareToken ? t('proofing_gallery', 'Invite clients') : t('proofing_gallery', 'Publish gallery') }}
 		</NcButton>
-		<PublicLinkManager v-if="gallery.shareToken" :gallery="gallery" @gallery-updated="emit('updated', $event)" />
+		<PublicLinkManager v-if="gallery.shareToken"
+			:gallery="gallery"
+			:settings="settings"
+			:save-gallery-settings="props.saveGallerySettings"
+			@gallery-updated="emit('updated', $event)"
+			@navigate="emit('navigate', $event)" />
 		<div class="settings-subsection">
 			<DownloadPolicyFields v-model:delivery="settings.delivery" />
 			<h3>{{ t('proofing_gallery', 'Gallery navigation') }}</h3>

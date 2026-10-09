@@ -37,7 +37,7 @@ separat am Kiosk eingerichtet. Die Referenz zur Fotobox-Anbindung beschreibt die
 
 ## Bilder sortieren
 
-Neue Galerien übernehmen eine Kopie der Instanz-Vorgabe. Unter **Ausliefern →
+Neue Galerien übernehmen eine Kopie der Instanz-Vorgabe. Unter **Teilen →
 Standardsortierung** stehen Dateiname, Aufnahmedatum, letztes Änderungsdatum und
 Dateigröße mit auf- oder absteigender Richtung zur Verfügung. **Aktuelle
 Instanz-Vorgabe übernehmen** kopiert die aktuelle Einstellung der Administration.
@@ -103,7 +103,7 @@ Auslieferung einzeln wiederholt werden.
 
 Der Arbeitsbereich ist nach Aufgaben gegliedert:
 
-- **Plan** zeigt Quelle, Status, Zweck und Medienübersicht.
+- **Übersicht** zeigt Quelle, Status, Zweck und Medienübersicht.
 - **Fotos** verwaltet Ordnerinhalt, Uploads, Metadaten und Sammlungen.
 - **Auswahl** bietet Bewertungen, Picks, Ablehnungen, Farblabel, gespeicherte
   Ansichten und eine ausdrücklich ausgelöste XMP-Synchronisation.
@@ -111,8 +111,8 @@ Der Arbeitsbereich ist nach Aufgaben gegliedert:
   der Fotoanzahl, Titelschrift, Layout, Theme, Logo, Titelbild, Akzentfarbe,
   Begrüßung, Metadaten und Vorschau-Wasserzeichen. Originale werden niemals
   mit einem Wasserzeichen verändert.
-- **Ausliefern** erzeugt voneinander unabhängige öffentliche Links.
-- **Ergebnisse** enthält Feedback, Kundenauswahlen, Exporte und Upload-Prüfung.
+- **Teilen** erzeugt voneinander unabhängige öffentliche Links.
+- **Prüfung** enthält Feedback, Kundenauswahlen, Exporte und Upload-Prüfung.
 - **Verlauf** protokolliert relevante Galerieereignisse.
 
 Änderungen verwenden Revisionsprüfungen. Hat ein anderes Browserfenster die
@@ -145,7 +145,33 @@ Sidecar stoppen den Schreibvorgang und werden als Konflikt gemeldet.
 
 ## Veröffentlichen und teilen
 
-Erzeuge unter **Ausliefern** einen Link und konfiguriere seine Zielgruppe. Jeder
+Der Standard-Hauptlink übernimmt zunächst die Feedbackrechte der Galerie.
+Wähle im Linkeditor **Diesen Link separat konfigurieren**, um eigene Rechte
+dauerhaft zu speichern. **Rechte für Rückmeldungen von der Galerie übernehmen**
+aktiviert die Vererbung wieder. **Linkrechte** und **Navigationseinstellungen**
+lassen sich unabhängig davon übernehmen oder separat speichern. Linkrechte
+umfassen Fotodownloads, Uploads, Auswahl-Exporte und Metadaten; die Navigation
+umfasst Ansichtsmodus und Ordnertiefe. Beim Wechsel zu eigenen Einstellungen
+werden die aktuellen Werte kopiert. Änderungen an Titel oder Design erhalten
+diese Entscheidungen. Fotodownload-Sperren gelten auch für den nativen
+Nextcloud-Share. Startordner und freigegebene Ordner bleiben linkbezogen;
+Mehrordnerlinks verwenden eine eigene Ordnernavigation. Beim Hauptlink-Wechsel
+werden übernommene Einstellungen des bisherigen Hauptlinks festgeschrieben.
+Zusätzliche Links behalten eigene Rechte;
+Admin- und Galeriesperren gelten weiterhin für jeden Link.
+
+Neue Projekte für gemeinsame Reviews starten im Proofing-Modus mit
+Sternebewertungen und Auswahl oder Ablehnung. Unter **Prüfung → Prüfung
+konfigurieren** kannst du die Funktionen einstellen. Gesperrte Schalter erklären
+den Grund. Die Administration kann **Sternebewertungen und Auswahl oder
+Ablehnung durch Kunden** in den Einstellungen von Proofing Gallery freigeben.
+Prüfe zusätzlich die Rechte des verwendeten Links unter **Teilen**.
+Bestehende Projekte behalten ihren Modus; bei Bedarf unter **Übersicht → Galeriemodus**
+auf Proofing umstellen. CSV-Exporte bieten nur freigegebene Bewertungsspalten an;
+Dateilisten funktionieren auch bei gesperrten Kundenbewertungen.
+
+
+Erzeuge unter **Teilen** einen Link und konfiguriere seine Zielgruppe. Jeder
 Link besitzt eigenen Startordner, Ordnertiefe, Sprache, Darstellung, Passwort,
 Ablaufdatum, Downloadumfang, Metadaten, Feedbackrechte, Uploadrecht und eine
 optionale Mindestbewertung. Die App verwendet native Nextcloud-Freigaben und
@@ -208,7 +234,7 @@ erneut öffnen. Dies ist eine
 Workflow-Entscheidung, keine elektronische Signatur oder rechtlich fixierte
 Momentaufnahme.
 
-Unter **Ergebnisse** stehen aktueller Status und nachvollziehbarer
+Unter **Prüfung** stehen aktueller Status und nachvollziehbarer
 Rundenverlauf. Sind die jeweiligen Apps verfügbar, lässt sich die Frist in
 einen beschreibbaren Nextcloud-Kalender übernehmen und die Prüfung als
 Deck-Karte anlegen. Die Ressourcen verwenden die Rechte des aktuellen

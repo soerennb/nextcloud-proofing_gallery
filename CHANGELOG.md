@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- preserve separately configured primary-link download, upload, export, metadata
+  and navigation settings; offer independent permission and navigation inheritance
+- synchronize native download restrictions with effective gallery and link rules
+
+- honor the chosen project purpose when applying gallery defaults; start new
+  proofing projects with private star ratings and pick/reject feedback
+- explain administrative, gallery and link feedback restrictions; let primary
+  links explicitly inherit feedback permissions or retain their own choices
+- enable client ratings by default on new installations while preserving
+  existing administrative settings and restrictions during upgrades
+- apply feedback permissions consistently to public viewing and mutations,
+  and keep filename CSV exports working when client ratings are disabled
+
 - show the white app icon in the header and app menu and the dark one on light
   backgrounds such as the administration settings, notifications and search
 

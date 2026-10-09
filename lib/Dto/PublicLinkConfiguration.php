@@ -26,6 +26,9 @@ final class PublicLinkConfiguration {
 		public readonly ?string $reviewDueDate,
 		public readonly ?int $reviewSelectionMinimum,
 		public readonly ?int $reviewSelectionMaximum,
+		public readonly ?string $feedbackPolicyMode,
+		public readonly ?string $permissionsPolicyMode,
+		public readonly ?string $navigationPolicyMode,
 	) {
 	}
 
@@ -36,6 +39,9 @@ final class PublicLinkConfiguration {
 		$policyInput = $input['policy'] ?? [];
 		if (!is_array($policyInput)) throw new InvalidArgumentException('Public link policy must be an object');
 		$policy = PublicLinkPolicy::fromArray($policyInput);
+		$feedbackPolicyMode = self::mode($input, 'feedbackPolicyMode');
+		$permissionsPolicyMode = self::mode($input, 'permissionsPolicyMode');
+		$navigationPolicyMode = self::mode($input, 'navigationPolicyMode');
 		if (!$policy->allows(PublicLinkCapability::View)) throw new InvalidArgumentException('Public links must allow viewing');
 		if ($policy->allows(PublicLinkCapability::Annotations) && !$policy->allows(PublicLinkCapability::Comments)) {
 			throw new InvalidArgumentException('Image annotations require comments');
@@ -81,6 +87,7 @@ final class PublicLinkConfiguration {
 			$reviewDueDate,
 			$reviewSelectionMinimum,
 			$reviewSelectionMaximum,
+			$feedbackPolicyMode, $permissionsPolicyMode, $navigationPolicyMode,
 		);
 	}
 
@@ -94,7 +101,32 @@ final class PublicLinkConfiguration {
 			$this->name, $this->policy, $startPath, $allowedRoots, $this->viewMode, $this->groupDepth,
 			$this->minOwnerRating, $this->publicLocale, $this->password, $this->expiresAt,
 			$this->reviewEnabled, $this->reviewDueDate, $this->reviewSelectionMinimum, $this->reviewSelectionMaximum,
+			$this->feedbackPolicyMode, $this->permissionsPolicyMode, $this->navigationPolicyMode,
 		);
+	}
+
+	public function withFeedback(PublicLinkPolicy $policy, string $mode): self {
+		return new self(
+			$this->name, $policy, $this->startPath, $this->allowedRoots, $this->viewMode, $this->groupDepth,
+			$this->minOwnerRating, $this->publicLocale, $this->password, $this->expiresAt,
+			$this->reviewEnabled, $this->reviewDueDate, $this->reviewSelectionMinimum, $this->reviewSelectionMaximum, $mode, $this->permissionsPolicyMode, $this->navigationPolicyMode,
+		);
+	}
+
+	public function withInheritance(PublicLinkPolicy $policy, string $permissionsMode, string $navigationMode, string $viewMode, int $groupDepth): self {
+		return new self(
+			$this->name, $policy, $this->startPath, $this->allowedRoots, $viewMode, $groupDepth,
+			$this->minOwnerRating, $this->publicLocale, $this->password, $this->expiresAt,
+			$this->reviewEnabled, $this->reviewDueDate, $this->reviewSelectionMinimum, $this->reviewSelectionMaximum,
+			$this->feedbackPolicyMode, $permissionsMode, $navigationMode,
+		);
+	}
+
+	/** @param array<string, mixed> $input */
+	private static function mode(array $input, string $key): ?string {
+		$value = $input[$key] ?? null;
+		if ($value !== null && !in_array($value, ['inherit', 'custom'], true)) throw new InvalidArgumentException('Invalid link inheritance mode: ' . $key);
+		return $value;
 	}
 
 	private static function string(mixed $value, string $label): string {

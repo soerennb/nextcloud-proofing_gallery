@@ -24,7 +24,7 @@ final class PolicyService {
 		'selections' => true,
 		'lifecycleAutomation' => true,
 		'ownerCulling' => true,
-		'guestRatings' => false,
+		'guestRatings' => true,
 		'recursiveGalleries' => true,
 		'multiplePublicLinks' => true,
 	];
@@ -119,7 +119,9 @@ final class PolicyService {
 		$defaults = [
 			'schemaVersion' => 2,
 			'access' => ['creatorGroups' => [], 'publisherGroups' => []],
-			'features' => self::FEATURE_DEFAULTS,
+			'features' => array_replace(self::FEATURE_DEFAULTS, [
+				'guestRatings' => $this->config->getAppValue(Application::APP_ID, 'guestRatingsDefault', '1') === '1',
+			]),
 			'workflow' => ['defaultPurpose' => 'delivery'],
 			'branding' => ['studioName' => '', 'accentColor' => '#E85D4A', 'logoAssetId' => null],
 			'media' => ['videoTranscoding' => true, 'ffmpegPath' => 'ffmpeg', 'transcodeConcurrency' => 1, 'transcodePreset' => 'medium'],

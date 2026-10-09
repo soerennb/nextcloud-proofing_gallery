@@ -9,6 +9,55 @@ use OCA\ProofingGallery\Service\PublicLinkPolicyService;
 use PHPUnit\Framework\TestCase;
 
 final class PublicLinkPolicyServiceTest extends TestCase {
+	public function testInheritedFeedbackChangesWhileCustomFeedbackAndOtherPermissionsStayStored(): void {
+		$settings = GallerySettings::fromArray(['mode' => 'collaboration', 'review' => ['ratings' => true, 'pick' => true]]);
+		$link = new \OCA\ProofingGallery\Db\PublicLink();
+		$link->setPolicy(json_encode(['ratings' => false, 'pick' => false, 'downloadScope' => 'individual', 'upload' => false], JSON_THROW_ON_ERROR));
+		$service = new PublicLinkPolicyService();
+		self::assertFalse($service->forLink($settings, $link)->allows('ratings'));
+		$link->setFeedbackPolicyMode('inherit');
+		self::assertTrue($service->forLink($settings, $link)->allows('ratings'));
+		self::assertTrue($service->forLink($settings, $link)->allows('pick'));
+		self::assertSame('individual', $service->forLink($settings, $link)->downloadScope->value);
+		self::assertFalse($service->forLink($settings, $link)->allows('upload'));
+		self::assertFalse($service->forLink(GallerySettings::merge($settings, ['review' => ['ratings' => false]]), $link)->allows('ratings'));
+		self::assertFalse(json_decode($link->getPolicy(), true)['ratings']);
+	}
+
+	public function testPermissionsAndNavigationResolveIndependentlyWithoutWritingTheEntity(): void {
+		$settings = GallerySettings::fromArray(['delivery' => ['downloadScope' => 'all', 'guestUploads' => true], 'navigation' => ['recursive' => true, 'groupBy' => 'folder', 'groupDepth' => 4]]);
+		$link = new \OCA\ProofingGallery\Db\PublicLink();
+		$link->setPolicy(json_encode(['downloadScope' => 'none'], JSON_THROW_ON_ERROR));
+		$link->setGroupDepth(2);
+		$service = new PublicLinkPolicyService();
+		self::assertSame('none', $service->forLink($settings, $link)->downloadScope->value);
+		self::assertSame(['viewMode' => 'folder', 'groupDepth' => 2], $service->navigation($settings, $link));
+		$link->setPermissionsPolicyMode('inherit');
+		self::assertSame('all', $service->forLink($settings, $link)->downloadScope->value);
+		self::assertTrue($service->forLink($settings, $link)->allows('export'));
+		self::assertSame('folder', $service->navigation($settings, $link)['viewMode']);
+		$link->setNavigationPolicyMode('inherit');
+		$resolved = $service->resolvedLink($settings, $link);
+		self::assertSame('recursive', $resolved->getViewMode());
+		self::assertSame(4, $resolved->getGroupDepth());
+		self::assertSame('folder', $link->getViewMode());
+		self::assertSame(2, $link->getGroupDepth());
+		self::assertSame('none', json_decode($link->getPolicy(), true)['downloadScope']);
+	}
+
+	public function testEffectiveNativeDownloadScopeUsesIntersectionRatherThanAnOrdering(): void {
+		$service = new PublicLinkPolicyService();
+		foreach (['none', 'individual', 'selection', 'all'] as $galleryScope) {
+			foreach (['none', 'individual', 'selection', 'all'] as $linkScope) {
+				$settings = GallerySettings::fromArray(['delivery' => ['downloadScope' => $galleryScope]]);
+				$link = \OCA\ProofingGallery\Domain\PublicLinkPolicy::fromArray(['downloadScope' => $linkScope]);
+				$effective = $service->effectiveDownloadScope($settings, $link);
+				self::assertSame(in_array($galleryScope, ['individual', 'all'], true) && in_array($linkScope, ['individual', 'all'], true), $effective->allowsIndividual());
+				self::assertSame(in_array($galleryScope, ['selection', 'all'], true) && in_array($linkScope, ['selection', 'all'], true), $effective->allowsSelection());
+			}
+		}
+	}
+
 	public function testPresetsRemainRestrictiveByDefault(): void {
 		$presets = (new PublicLinkPolicyService())->presets();
 

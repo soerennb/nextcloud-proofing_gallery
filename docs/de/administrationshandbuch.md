@@ -47,6 +47,14 @@ bewahre Backup und Logs auf, bevor du den neuen Fehler untersuchst.
 
 ## Zugriff und Richtlinien
 
+**Sternebewertungen und Auswahl oder Ablehnung durch Kunden** gibt beide
+privaten Feedbackfunktionen frei. Bei Neuinstallationen ist diese Freigabe
+standardmäßig aktiv. Upgrades erhalten den bisherigen Zustand einschließlich
+des früheren impliziten Aus-Standards. Galerie- und Linkeinstellungen legen
+weiterhin fest, welche Funktionen tatsächlich verfügbar sind. Gesperrte
+Feedback-Schalter erklären die Einschränkung direkt in der Oberfläche.
+
+
 Administration → Zusätzliche Einstellungen → Proofing Gallery steuert Gruppen,
 Funktionsfreigaben, Standardwerte, Branding, Mediendienste, Ressourcenlimits und
 Aufbewahrung. Die Regeln werden serverseitig erzwungen und sperren kritische
@@ -307,3 +315,5 @@ Fehlt ein Quellordner, stelle ihn regulär wieder her oder lasse einen geprüfte
 Ersatz auswählen. Für Reviewhistorie sind Datenbank und Appdata gemeinsam
 wiederherzustellen. Sicherheitsfehler werden privat über GitHub gemeldet – mit
 Version und Reproduktion, aber ohne echte Kundendaten oder Zugangsdaten.
+
+Bestehende Hauptlinks behalten ihre Rechte und Navigation beim Upgrade. Nur Bereiche mit identischen Galerievorgaben übernehmen diese weiterhin. Alte automatische Ordnertiefen werden bei eigener Navigation festgeschrieben. Bereits früher überschriebene Einstellungen lassen sich ohne historische Daten nicht wiederherstellen.

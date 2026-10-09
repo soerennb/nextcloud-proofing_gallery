@@ -7,14 +7,20 @@ import type { ShareRecoveryChoices } from '../domain/publicShareRecovery.ts'
 import PublicShareRecoveryForm from './PublicShareRecoveryForm.vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import QRCode from 'qrcode'
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import FeedbackPermissionFields from './FeedbackPermissionFields.vue'
+import PublicLinkAccessFields from './PublicLinkAccessFields.vue'
+import { inheritedLinkNavigation, inheritedLinkPermissions } from '../domain/publicLinkInheritance.ts'
+import { inheritedFeedback } from '../domain/feedbackPermissions.ts'
+import type { GallerySettings } from '../domain/gallerySettings.ts'
+import type { GalleryWorkspace } from '../domain/gallerySettingsOptions.ts'
 import { fetchGallery, fetchPublicLinks, fetchShareAudit, makePublicLinkPrimary, requestCustomDomain, revokeCustomDomain, revokePublicLink, savePublicLink } from '../services/galleryApi.ts'
 import type { Gallery, GalleryPublicLink, PublicLinkPolicy, ShareAuditItem } from '../types.ts'
 
 const recoveryNeeded = ref(false)
 const recoveryNotice = ref('')
-const props = defineProps<{ gallery: Gallery }>()
-const emit = defineEmits<{ 'gallery-updated': [gallery: Gallery] }>()
+const props = defineProps<{ gallery: Gallery; settings: GallerySettings; saveGallerySettings?: () => Promise<boolean> }>()
+const emit = defineEmits<{ 'gallery-updated': [gallery: Gallery]; navigate: [workspace: GalleryWorkspace] }>()
 const links = ref<GalleryPublicLink[]>([])
 const presets = ref<Record<string, PublicLinkPolicy>>({})
 const audit = ref<ShareAuditItem[]>([])
@@ -26,19 +32,6 @@ const saving = ref(false)
 const editingId = ref<number | null | 'new'>(null)
 const qrUrl = ref('')
 const qrData = ref('')
-const permissionKeys: Array<Exclude<keyof PublicLinkPolicy, 'view' | 'downloadScope'>> = ['likes', 'colors', 'comments', 'annotations', 'selections', 'ratings', 'pick', 'upload', 'export', 'metadata']
-const permissionLabels: Record<(typeof permissionKeys)[number], string> = {
-	likes: t('proofing_gallery', 'Likes'),
-	colors: t('proofing_gallery', 'Color workflow'),
-	comments: t('proofing_gallery', 'Comments'),
-	annotations: t('proofing_gallery', 'Image annotations'),
-	selections: t('proofing_gallery', 'Client selections'),
-	ratings: t('proofing_gallery', 'Client ratings'),
-	pick: t('proofing_gallery', 'Pick'),
-	upload: t('proofing_gallery', 'Upload'),
-	export: t('proofing_gallery', 'Export'),
-	metadata: t('proofing_gallery', 'Metadata'),
-}
 const downloadScopeLabels = scopeLabels()
 const presetLabels: Record<string, string> = {
 	presentation: t('proofing_gallery', 'Presentation'),
@@ -54,11 +47,16 @@ const reviewStatusLabels: Record<string, string> = {
 	approved: t('proofing_gallery', 'Approved'),
 }
 const draft = ref(createDraft())
+const editingPrimary = computed(() => links.value.some(link => link.id === editingId.value && link.primary))
+const feedbackPermissions = computed(() => draft.value.feedbackPolicyMode === 'inherit' ? inheritedFeedback(props.settings) : draft.value.policy)
 
 function createDraft() {
 	return {
 		name: '',
 		preset: 'presentation',
+		feedbackPolicyMode: 'custom' as 'inherit' | 'custom',
+		permissionsPolicyMode: 'custom' as 'inherit' | 'custom',
+		navigationPolicyMode: 'custom' as 'inherit' | 'custom',
 		startPath: '',
 		allowedRoots: [] as string[],
 		viewMode: 'folder' as 'folder' | 'recursive',
@@ -97,13 +95,15 @@ function startNew() {
 function edit(link: GalleryPublicLink) {
 	recoveryNeeded.value = false
 	recoveryNotice.value = ''
-	draft.value = { ...createDraft(), name: link.name, startPath: link.startPath, allowedRoots: link.scopeMode === 'nodes' ? [...(link.allowedRoots ?? [])] : [], viewMode: link.viewMode, groupDepth: link.groupDepth, minOwnerRating: link.minOwnerRating, publicLocale: link.publicLocale, reviewEnabled: link.reviewEnabled, reviewDueDate: link.reviewDueDate ?? '', reviewSelectionMinimum: link.reviewSelectionMinimum, reviewSelectionMaximum: link.reviewSelectionMaximum, policy: structuredClone(link.policy) }
+	draft.value = { ...createDraft(), name: link.name, feedbackPolicyMode: link.feedbackPolicyMode, permissionsPolicyMode: link.permissionsPolicyMode, navigationPolicyMode: link.navigationPolicyMode, startPath: link.startPath, allowedRoots: link.scopeMode === 'nodes' ? [...(link.allowedRoots ?? [])] : [], viewMode: link.viewMode, groupDepth: link.groupDepth, minOwnerRating: link.minOwnerRating, publicLocale: link.publicLocale, reviewEnabled: link.reviewEnabled, reviewDueDate: link.reviewDueDate ?? '', reviewSelectionMinimum: link.reviewSelectionMinimum, reviewSelectionMaximum: link.reviewSelectionMaximum, policy: structuredClone(link.policy) }
 	editingId.value = link.id
 }
 
 function applyPreset(name: string) {
 	draft.value.preset = name
 	if (presets.value[name]) draft.value.policy = structuredClone(presets.value[name])
+	draft.value.feedbackPolicyMode = 'custom'
+	draft.value.permissionsPolicyMode = 'custom'
 }
 
 function updatePermission(key: Exclude<keyof PublicLinkPolicy, 'view' | 'downloadScope'>, value: boolean) {
@@ -111,12 +111,23 @@ function updatePermission(key: Exclude<keyof PublicLinkPolicy, 'view' | 'downloa
 	if (key === 'comments' && !value) draft.value.policy.annotations = false
 }
 
+function setFeedbackMode(mode: 'inherit' | 'custom') {
+	if (draft.value.feedbackPolicyMode === 'inherit' && mode === 'custom') draft.value.policy = { ...draft.value.policy, ...inheritedFeedback(props.settings) }
+	draft.value.feedbackPolicyMode = mode
+}
+
+function configuredDraft() {
+	return { ...draft.value, ...(draft.value.navigationPolicyMode === 'inherit' ? inheritedLinkNavigation(props.settings) : {}),
+		policy: { ...draft.value.policy, ...feedbackPermissions.value, ...(draft.value.permissionsPolicyMode === 'inherit' ? inheritedLinkPermissions(props.settings) : {}) } }
+}
+
 async function save(choices?: ShareRecoveryChoices) {
 	if (recoveryNeeded.value && !choices) return
 	saving.value = true
 	try {
+		if (props.saveGallerySettings && !await props.saveGallerySettings()) return
 		const link = await savePublicLink(props.gallery.id, editingId.value === 'new' ? null : editingId.value as number, {
-			...draft.value, reviewDueDate: draft.value.reviewDueDate || null, password: draft.value.password || null, expiresAt: draft.value.expiresAt || null, ...choices,
+			...configuredDraft(), reviewDueDate: draft.value.reviewDueDate || null, password: draft.value.password || null, expiresAt: draft.value.expiresAt || null, ...choices,
 		})
 		links.value = editingId.value === 'new' ? [...links.value, link] : links.value.map(item => item.id === link.id ? link : item)
 		editingId.value = null
@@ -133,7 +144,7 @@ async function save(choices?: ShareRecoveryChoices) {
 async function makePrimary(link: GalleryPublicLink) {
 	try {
 		await makePublicLinkPrimary(props.gallery.id, link.id)
-		links.value = links.value.map(item => ({ ...item, primary: item.id === link.id }))
+		links.value = (await fetchPublicLinks(props.gallery.id)).items
 		emit('gallery-updated', await fetchGallery(props.gallery.id))
 		showSuccess(t('proofing_gallery', 'Primary link changed.'))
 	} catch { showError(t('proofing_gallery', 'The primary link could not be changed.')) }
@@ -221,6 +232,8 @@ onMounted(load)
 					<div><strong>{{ link.name }}</strong><span v-if="link.primary">{{ t('proofing_gallery', 'PRIMARY') }}</span></div><small>{{ link.status === 'active' ? t('proofing_gallery', 'Active') : link.status === 'suspended' ? t('proofing_gallery', 'Suspended') : t('proofing_gallery', 'Revoked') }}</small>
 				</div>
 				<p>{{ link.viewMode === 'recursive' ? t('proofing_gallery', 'Recursive') : t('proofing_gallery', 'Folder view') }} · {{ link.scopeMode === 'empty' ? t('proofing_gallery', 'No folders shared') : link.allowedRoots?.length ? link.allowedRoots.map(root => root || t('proofing_gallery', 'Gallery root')).join(' + ') : (link.startPath || t('proofing_gallery', 'Gallery root')) }} · {{ downloadScopeLabels[link.policy.downloadScope] }}</p>
+				<p>{{ link.feedbackPolicyMode === 'inherit' ? t('proofing_gallery', 'Feedback permissions follow the gallery.') : t('proofing_gallery', 'This link has its own feedback permissions.') }}</p>
+				<p>{{ t('proofing_gallery', 'Permissions: {permissions} · Navigation: {navigation}', { permissions: link.permissionsPolicyMode === 'inherit' ? t('proofing_gallery', 'Gallery default') : t('proofing_gallery', 'Custom'), navigation: link.navigationPolicyMode === 'inherit' ? t('proofing_gallery', 'Gallery default') : t('proofing_gallery', 'Custom') }) }}</p>
 				<p v-if="link.reviewEnabled" class="link-card__review">
 					{{ t('proofing_gallery', 'Review round {round}: {status}', { round: link.review.current?.round ?? 1, status: reviewStatusLabels[link.review.current?.status ?? 'awaiting_feedback'] ?? link.review.current?.status ?? '' }) }}<template v-if="link.reviewDueDate">
 						· {{ link.reviewDueDate }}
@@ -285,7 +298,6 @@ onMounted(load)
 					maxlength="120"></label>
 				<label><span>{{ t('proofing_gallery', 'Permission preset') }}</span><select v-model="draft.preset" name="linkPreset" @change="applyPreset(draft.preset)"><option v-for="(_, name) in presets" :key="name" :value="name">{{ presetLabels[name] ?? name }}</option></select></label>
 				<label><span>{{ t('proofing_gallery', 'Start folder') }}</span><input v-model="draft.startPath" name="linkStartPath" :placeholder="t('proofing_gallery', 'Client / Finals')"></label>
-				<label><span>{{ t('proofing_gallery', 'View mode') }}</span><select v-model="draft.viewMode" name="linkViewMode"><option value="folder">{{ t('proofing_gallery', 'Folder view') }}</option><option value="recursive">{{ t('proofing_gallery', 'Recursive') }}</option></select></label>
 				<label><span>{{ t('proofing_gallery', 'Minimum owner rating') }}</span><select v-model.number="draft.minOwnerRating" name="linkMinRating"><option v-for="rating in 6" :key="rating - 1" :value="rating - 1">{{ rating - 1 }} ★</option></select></label>
 				<label><span>{{ t('proofing_gallery', 'Public language') }}</span><select v-model="draft.publicLocale" name="linkLocale"><option :value="null">{{ t('proofing_gallery', 'Gallery default') }}</option><option value="de">{{ t('proofing_gallery', 'German') }}</option><option value="en">{{ t('proofing_gallery', 'English') }}</option></select></label>
 				<label><span>{{ t('proofing_gallery', 'Password') }}</span><input v-model="draft.password"
@@ -308,13 +320,28 @@ onMounted(load)
 					max="1000"
 					:placeholder="t('proofing_gallery', 'Gallery default')"></label>
 			</div>
-			<fieldset>
-				<legend>{{ t('proofing_gallery', 'Permissions') }}</legend><label v-for="key in permissionKeys" :key="key"><input :checked="draft.policy[key]"
-					type="checkbox"
-					:name="`policy-${key}`"
-					:disabled="key === 'annotations' && !draft.policy.comments"
-					@change="updatePermission(key, ($event.target as HTMLInputElement).checked)">{{ permissionLabels[key] }}</label><label><span>{{ t('proofing_gallery', 'Download access') }}</span><select v-model="draft.policy.downloadScope" name="linkDownloads"><option v-for="(label, scope) in downloadScopeLabels" :key="scope" :value="scope">{{ label }}</option></select></label>
+			<fieldset class="link-editor__feedback">
+				<legend>{{ t('proofing_gallery', 'Client feedback') }}</legend>
+				<label v-if="editingPrimary" class="link-editor__feedback-mode"><span>{{ t('proofing_gallery', 'Feedback permissions') }}</span><select :value="draft.feedbackPolicyMode" name="feedbackPolicyMode" @change="setFeedbackMode(($event.target as HTMLSelectElement).value as 'inherit' | 'custom')"><option value="inherit">{{ t('proofing_gallery', 'Use gallery feedback permissions') }}</option><option value="custom">{{ t('proofing_gallery', 'Configure this link separately') }}</option></select></label>
+				<FeedbackPermissionFields :settings="settings"
+					:available-capabilities="gallery.availableCapabilities"
+					:permissions="feedbackPermissions"
+					:inherited="draft.feedbackPolicyMode === 'inherit'"
+					context="link"
+					@change="updatePermission" />
+				<NcButton variant="tertiary" @click="emit('navigate', settings.mode === 'collaboration' ? 'review' : 'overview')">
+					{{ settings.mode === 'collaboration' ? t('proofing_gallery', 'Configure gallery feedback') : t('proofing_gallery', 'Change gallery mode') }}
+				</NcButton>
 			</fieldset>
+			<PublicLinkAccessFields v-model:policy="draft.policy"
+				v-model:permissions-mode="draft.permissionsPolicyMode"
+				v-model:navigation-mode="draft.navigationPolicyMode"
+				v-model:view-mode="draft.viewMode"
+				v-model:group-depth="draft.groupDepth"
+				:settings="settings"
+				:primary="editingPrimary"
+				:multi-root="draft.allowedRoots.length > 0" />
+
 			<div class="link-editor__actions">
 				<NcButton type="submit" variant="primary" :disabled="saving">
 					{{ saving ? t('proofing_gallery', 'Saving…') : t('proofing_gallery', 'Save link') }}
@@ -403,6 +430,8 @@ onMounted(load)
 .link-editor fieldset label { display: flex; align-items: center; }
 
 .link-editor fieldset input { width: auto; min-height: 0; }
+
+.link-editor__feedback .link-editor__feedback-mode { display: grid; width: 100%; gap: 6px; }
 
 .link-editor__actions { display: flex; gap: 8px; }
 

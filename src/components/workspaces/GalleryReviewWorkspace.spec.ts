@@ -40,6 +40,7 @@ function gallery(): Gallery {
 		mediaSummary: { total: 23, coverFileId: null, coverMimeType: null },
 		permissions: { role: 'owner', canEdit: true, canManageAccess: true, canArchive: true },
 		effectiveCapabilities: {} as Gallery['effectiveCapabilities'],
+		availableCapabilities: {} as Gallery['availableCapabilities'],
 		retention: { available: false, configuredTagId: '', assigned: false, lastAction: null },
 	}
 }

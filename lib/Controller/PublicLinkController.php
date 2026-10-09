@@ -128,13 +128,16 @@ final class PublicLinkController extends Controller {
 		?string $reviewDueDate = null,
 		?int $reviewSelectionMinimum = null,
 		?int $reviewSelectionMaximum = null,
+		?string $feedbackPolicyMode = null,
+		?string $permissionsPolicyMode = null,
+		?string $navigationPolicyMode = null,
 	): DataResponse {
 		try {
 			return new DataResponse($this->publicLinks->create(
 				$this->galleries->get($this->userId(), $id),
 				PublicLinkConfiguration::fromArray(compact(
 					'name', 'policy', 'startPath', 'allowedRoots', 'viewMode', 'groupDepth', 'minOwnerRating',
-					'publicLocale', 'password', 'expiresAt', 'reviewEnabled', 'reviewDueDate', 'reviewSelectionMinimum', 'reviewSelectionMaximum',
+					'publicLocale', 'password', 'expiresAt', 'reviewEnabled', 'reviewDueDate', 'reviewSelectionMinimum', 'reviewSelectionMaximum', 'feedbackPolicyMode', 'permissionsPolicyMode', 'navigationPolicyMode',
 				)),
 			), Http::STATUS_CREATED);
 		} catch (\OCA\ProofingGallery\Exception\GalleryConflictException $exception) {
@@ -173,6 +176,9 @@ final class PublicLinkController extends Controller {
 		?int $reviewSelectionMinimum = null,
 		?int $reviewSelectionMaximum = null,
 		bool $recoverMissingShare = false,
+		?string $feedbackPolicyMode = null,
+		?string $permissionsPolicyMode = null,
+		?string $navigationPolicyMode = null,
 	): DataResponse {
 		try {
 			if ($recoverMissingShare && ($password === null || $expiresAt === null)) throw new InvalidArgumentException('Choose a replacement password or no password, and an expiry or no expiry');
@@ -181,7 +187,7 @@ final class PublicLinkController extends Controller {
 				$linkId,
 				PublicLinkConfiguration::fromArray(compact(
 					'name', 'policy', 'startPath', 'allowedRoots', 'viewMode', 'groupDepth', 'minOwnerRating',
-					'publicLocale', 'password', 'expiresAt', 'reviewEnabled', 'reviewDueDate', 'reviewSelectionMinimum', 'reviewSelectionMaximum',
+					'publicLocale', 'password', 'expiresAt', 'reviewEnabled', 'reviewDueDate', 'reviewSelectionMinimum', 'reviewSelectionMaximum', 'feedbackPolicyMode', 'permissionsPolicyMode', 'navigationPolicyMode',
 				)),
 				$recoverMissingShare,
 			));

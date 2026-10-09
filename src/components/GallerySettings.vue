@@ -633,6 +633,7 @@ onBeforeUnmount(() => {
 					:save-gallery-settings="flushSave"
 					@open-sharing="openSharing"
 					@event-setup-updated="eventSetup = $event"
+					@navigate="setTab"
 					@updated="emit('updated', $event)" />
 
 				<GalleryTeamWorkspace v-else-if="activeTab === 'team'" :gallery="gallery" />

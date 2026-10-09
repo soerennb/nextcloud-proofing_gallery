@@ -13,6 +13,15 @@ use OCP\IGroupManager;
 use PHPUnit\Framework\TestCase;
 
 final class CapabilityPolicyServiceTest extends TestCase {
+	public function testAdministrativeAvailabilityDoesNotPreventEnablingGalleryOptions(): void {
+		$config = $this->createMock(IConfig::class);
+		$config->method('getAppValue')->willReturnArgument(2);
+		$service = new CapabilityPolicyService(new PolicyService($config), new CoreSharingPolicyService($config), $this->createMock(IGroupManager::class));
+		$settings = \OCA\ProofingGallery\Dto\GallerySettings::fromArray(['review' => ['comments' => false]]);
+		self::assertFalse($service->effective($settings)['comments']['allowed']);
+		self::assertTrue($service->effective()['comments']['allowed']);
+	}
+
 	public function testCoreSharingRulesCannotBeWeakenedByTheApp(): void {
 		$config = $this->createMock(IConfig::class);
 		$config->method('getAppValue')->willReturnCallback(

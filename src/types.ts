@@ -25,6 +25,7 @@ export interface LivePushOverview {
 export type CapabilityName = 'galleryCreation' | 'publicPublishing' | 'guestUploads' | 'downloads'
 	| 'emailInvitations' | 'likes' | 'colors' | 'comments' | 'annotations' | 'selections'
 	| 'lifecycleAutomation' | 'xmpWriting'
+	| 'nextcloudNotifications' | 'ownerCulling' | 'guestRatings' | 'recursiveGalleries' | 'multiplePublicLinks'
 
 export type EffectiveCapabilities = Record<CapabilityName, { allowed: boolean; reason: string | null }>
 
@@ -74,6 +75,7 @@ export interface Gallery {
 		canArchive: boolean
 	}
 	effectiveCapabilities: EffectiveCapabilities
+	availableCapabilities: EffectiveCapabilities
 	retention: { available: boolean; configuredTagId: string; assigned: boolean; lastAction: { action: string; outcome: string; errorCode: string | null; createdAt: number } | null }
 }
 
@@ -276,6 +278,9 @@ export interface GalleryPublicLink {
 	status: 'active' | 'suspended' | 'revoked'
 	primary: boolean
 	policy: PublicLinkPolicy
+	feedbackPolicyMode: 'inherit' | 'custom'
+	permissionsPolicyMode: 'inherit' | 'custom'
+	navigationPolicyMode: 'inherit' | 'custom'
 	startPath: string
 	allowedRoots?: string[]
 	scopeMode?: 'legacy' | 'nodes' | 'empty'

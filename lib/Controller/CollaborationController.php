@@ -38,7 +38,7 @@ final class CollaborationController extends ResolvedPublicShareController {
 		private GuestService $guests,
 		private CollaborationService $collaboration,
 		private \OCA\ProofingGallery\Service\GuestRatingService $guestRatings,
-		private \OCA\ProofingGallery\Service\CapabilityPolicyService $capabilities,
+		private \OCA\ProofingGallery\Service\FeedbackPolicyService $feedback,
 		private \OCA\ProofingGallery\Service\ShareAuditService $shareAudit,
 		private AuthenticatedCollaborationSession $authenticated,
 	) {
@@ -56,9 +56,10 @@ final class CollaborationController extends ResolvedPublicShareController {
 			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
 		if (($state['unchanged'] ?? false) === true) return new JSONResponse($state);
-		$features = $this->effectiveStateFeatures($state['policy']['features'] ?? []);
+		$features = $this->feedback->effective($this->publicContext()->settings, $this->publicContext()->policy);
 		$ratingEnabled = $this->ratingEnabled();
 		$state['policy']['features'] = $features;
+		$state['policy']['enabled'] = in_array(true, $features, true);
 		$state['likes'] = $features['likes']
 			? array_filter($state['likes'], fn (mixed $_, int $fileId): bool => $this->allowsFile($fileId), ARRAY_FILTER_USE_BOTH)
 			: [];
@@ -136,6 +137,8 @@ final class CollaborationController extends ResolvedPublicShareController {
 			return new JSONResponse($value);
 		} catch (DoesNotExistException) {
 			return new JSONResponse(['code' => 'guest_session_required', 'message' => 'Collaboration identity required'], Http::STATUS_UNAUTHORIZED);
+		} catch (PolicyViolationException $exception) {
+			return new JSONResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
 		} catch (InvalidArgumentException $exception) {
 			if ($exception->getMessage() === 'Invalid request nonce') {
 				return new JSONResponse(['code' => 'invalid_nonce', 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
@@ -174,7 +177,7 @@ final class CollaborationController extends ResolvedPublicShareController {
 	#[FrontpageRoute(verb: 'POST', url: '/public/{token}/collaboration/media/{fileId}/comments')]
 	public function addComment(int $fileId, string $body, ?array $annotation = null, ?int $parentId = null): JSONResponse {
 		if (!$this->allowsFile($fileId)) return new JSONResponse(['message' => 'Media not found'], Http::STATUS_NOT_FOUND);
-		if (($annotation !== null || $parentId !== null) && !$this->policy()['annotations']) {
+		if (($annotation !== null || $parentId !== null) && !$this->feedback->effective($this->publicContext()->settings, $this->publicContext()->policy)['annotations']) {
 			return new JSONResponse(['code' => 'policy_denied', 'message' => 'Image annotations are disabled for this link'], Http::STATUS_FORBIDDEN);
 		}
 		return $this->mutation('comments', fn (CollaborationActor $actor): array => [
@@ -240,10 +243,14 @@ final class CollaborationController extends ResolvedPublicShareController {
 			foreach ($this->collaboration->actorSelectionFileIds($this->resolvedGallery(), $actor, $selectionId) as $fileId) {
 				if (!$this->allowsFile($fileId)) throw new InvalidArgumentException('Selection not found');
 			}
+			$exportFields = \OCA\ProofingGallery\Domain\SelectionExportFields::reviewer(
+				array_values(array_filter(explode(',', $fields))),
+				$this->feedback->effective($this->publicContext()->settings, $this->publicContext()->policy),
+			);
 			$guest = $actor->isGuest() ? $this->optionalGuest() : null;
 			$export = $guest !== null
-				? $this->collaboration->exportSelection($this->resolvedGallery(), $guest, $selectionId, $format, array_filter(explode(',', $fields)))
-				: $this->collaboration->exportActorSelection($this->resolvedGallery(), $actor, $selectionId, $format, array_filter(explode(',', $fields)));
+				? $this->collaboration->exportSelection($this->resolvedGallery(), $guest, $selectionId, $format, $exportFields)
+				: $this->collaboration->exportActorSelection($this->resolvedGallery(), $actor, $selectionId, $format, $exportFields);
 			return new DataDownloadResponse(
 				$export['content'],
 				$export['filename'],
@@ -296,7 +303,7 @@ final class CollaborationController extends ResolvedPublicShareController {
 
 	/** @param Http::STATUS_OK|Http::STATUS_CREATED $status */
 	private function mutation(string $feature, callable $callback, int $status = Http::STATUS_OK): JSONResponse {
-		if (!$this->policy()[$feature]) return new JSONResponse(['code' => 'policy_denied', 'message' => 'This action is disabled for this link'], Http::STATUS_FORBIDDEN);
+		if (!$this->feedback->effective($this->publicContext()->settings, $this->publicContext()->policy)[$feature]) return new JSONResponse(['code' => 'policy_denied', 'message' => 'This action is disabled for this link'], Http::STATUS_FORBIDDEN);
 		try {
 			$actor = $this->authenticateActor();
 		} catch (DoesNotExistException) {
@@ -306,6 +313,8 @@ final class CollaborationController extends ResolvedPublicShareController {
 		}
 		try {
 			return new JSONResponse($callback($actor), $status);
+		} catch (PolicyViolationException $exception) {
+			return new JSONResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
 		} catch (InvalidArgumentException $exception) {
 			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
@@ -316,19 +325,6 @@ final class CollaborationController extends ResolvedPublicShareController {
 		return $this->publicContext()->policy->jsonSerialize();
 	}
 
-	/** @param array<string, bool> $serviceFeatures
-	 * @return array{likes: bool, colors: bool, comments: bool, annotations: bool, selections: bool}
-	 */
-	private function effectiveStateFeatures(array $serviceFeatures): array {
-		$policy = $this->policy();
-		$result = [];
-		foreach (['likes', 'colors', 'comments', 'annotations', 'selections'] as $feature) {
-			$result[$feature] = ($serviceFeatures[$feature] ?? false) && (bool)$policy[$feature];
-		}
-		$result['annotations'] = $result['annotations'] && $result['comments'];
-		return $result;
-	}
-
 	private function ratingEnabled(): bool {
 		$permissions = $this->ratingPermissions();
 		return $permissions['ratings'] || $permissions['pick'];
@@ -336,11 +332,10 @@ final class CollaborationController extends ResolvedPublicShareController {
 
 	/** @return array{ratings: bool, pick: bool} */
 	private function ratingPermissions(): array {
-		$settings = $this->publicContext()->settings;
-		$enabled = $this->capabilities->feature('guestRatings');
+		$features = $this->feedback->effective($this->publicContext()->settings, $this->publicContext()->policy);
 		return [
-			'ratings' => $enabled && $settings->review->ratings && $this->policy()['ratings'],
-			'pick' => $enabled && $settings->review->pick && $this->policy()['pick'],
+			'ratings' => $features['ratings'],
+			'pick' => $features['pick'],
 		];
 	}
 

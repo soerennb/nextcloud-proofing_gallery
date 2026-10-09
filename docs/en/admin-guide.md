@@ -54,6 +54,13 @@ the server, including existing galleries where a capability must fail closed.
 Native Nextcloud sharing, password, expiration, and upload restrictions remain
 authoritative; this app never weakens them.
 
+**Client star ratings and pick or reject** controls both private star ratings
+and photo decisions. It is enabled by default on new installations. Upgrades
+retain the previous instance choice, including the former implicit disabled
+default. This administrative permission allows gallery owners to enable the
+features; gallery and public-link settings still determine their actual use.
+Blocked feedback controls explain the restriction to owners.
+
 Public reviewers may use guest identities or existing signed-in Nextcloud
 accounts. Account UIDs establish authorship, not additional permissions. Earlier
 guest contributions are not reassigned by matching names or email addresses.
@@ -306,3 +313,5 @@ the owner select a validated replacement. Restore database and appdata together
 when recovering review history. For security defects use GitHub's private
 vulnerability reporting; include affected versions and reproduction steps but
 never real client data or credentials.
+
+Existing primary links retain their permission and navigation choices during upgrades. Only areas matching gallery defaults continue to inherit. Legacy automatic folder depths are frozen for separately configured navigation. Previously overwritten choices cannot be recovered without historical data.
