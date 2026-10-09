@@ -149,8 +149,8 @@ const orderedComments = computed(() => [...props.comments].sort((left, right) =>
 				<details class="guest-export-composer">
 					<summary>{{ t('proofing_gallery', 'Customize CSV') }}</summary>
 					<label><input checked disabled type="checkbox"> {{ t('proofing_gallery', 'Filename') }}</label>
-					<label><input v-model="guestExportFields" type="checkbox" value="rating"> {{ t('proofing_gallery', 'My rating') }}</label>
-					<label><input v-model="guestExportFields" type="checkbox" value="pick"> {{ t('proofing_gallery', 'My pick') }}</label>
+					<label v-if="settings.review.ratings"><input v-model="guestExportFields" type="checkbox" value="rating"> {{ t('proofing_gallery', 'My rating') }}</label>
+					<label v-if="settings.review.pick"><input v-model="guestExportFields" type="checkbox" value="pick"> {{ t('proofing_gallery', 'My pick') }}</label>
 					<a :href="selectionExportUrl(selection.id, 'csv', ['filename', ...guestExportFields.filter(field => field !== 'filename')])">{{ t('proofing_gallery', 'Download UTF-8 CSV') }}</a>
 				</details>
 				<a :href="selectionExportUrl(selection.id, 'plain')">{{ t('proofing_gallery', 'List') }}</a>

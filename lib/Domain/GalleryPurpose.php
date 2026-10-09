@@ -18,7 +18,7 @@ enum GalleryPurpose: string {
 			self::Showcase => [...self::patch('presentation', 'none'), 'presentation' => ['openerStyle' => 'cinematic']],
 			self::Delivery => [...self::patch('presentation', 'all'), 'presentation' => ['openerStyle' => 'cinematic']],
 			self::Selection => [...self::patch('collaboration', 'none', selections: true), 'presentation' => ['openerStyle' => 'compact']],
-			self::Proofing => [...self::patch('collaboration', 'none', likes: true, colors: true, comments: true, annotations: true, selections: true), 'presentation' => ['openerStyle' => 'compact']],
+			self::Proofing => [...self::patch('collaboration', 'none', likes: true, colors: true, comments: true, annotations: true, selections: true, ratings: true, pick: true), 'presentation' => ['openerStyle' => 'compact']],
 			self::Uploads => [...self::patch('presentation', 'none'), 'presentation' => ['openerStyle' => 'compact'], 'delivery' => [
 				'downloadScope' => 'none',
 				'guestUploads' => true,
@@ -36,10 +36,12 @@ enum GalleryPurpose: string {
 		bool $comments = false,
 		bool $annotations = false,
 		bool $selections = false,
+		bool $ratings = false,
+		bool $pick = false,
 	): array {
 		return [
 			'mode' => $mode,
-			'review' => compact('likes', 'colors', 'comments', 'annotations', 'selections'),
+			'review' => compact('likes', 'colors', 'comments', 'annotations', 'selections', 'ratings', 'pick'),
 			'delivery' => ['downloadScope' => $downloadScope, 'guestUploads' => false],
 		];
 	}

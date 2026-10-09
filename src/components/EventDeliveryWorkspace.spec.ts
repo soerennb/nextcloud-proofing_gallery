@@ -35,6 +35,7 @@ function gallery(): Gallery {
 		publishedAt: 1, completedAt: null, revokedAt: null, lifecycleRevokeAt: null, lifecycleArchiveAt: null, lifecycleNextAt: null,
 		source: { type: 'folder', folderId: 10, displayPath: '/Large event', state: 'readable' }, mediaSummary: { total: 1000, coverFileId: null, coverMimeType: null },
 		permissions: { role: 'owner', canEdit: true, canManageAccess: true, canArchive: true }, effectiveCapabilities: {} as Gallery['effectiveCapabilities'],
+		availableCapabilities: {} as Gallery['availableCapabilities'],
 		retention: { available: false, configuredTagId: '', assigned: false, lastAction: null },
 	}
 }

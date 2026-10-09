@@ -79,6 +79,8 @@ export interface CollaborationState {
 			comments: boolean
 			annotations: boolean
 			selections: boolean
+			ratings: boolean
+			pick: boolean
 		}
 	}
 	reset?: boolean

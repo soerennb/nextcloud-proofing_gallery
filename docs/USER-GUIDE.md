@@ -36,7 +36,7 @@ moderated upload inbox and do not support collections or event delivery.
 
 ## Image sorting
 
-New galleries copy the instance default sort. In **Deliver → Default sort**, choose
+New galleries copy the instance default sort. In **Share → Default sort**, choose
 filename, capture date, last modified date or file size and the direction. **Use
 current instance default** copies the current administrator setting; later changes
 to that setting do not change existing galleries. Collections can also use their
@@ -93,15 +93,15 @@ recipients can be retried without recreating successful links.
 
 The gallery workspace separates the common tasks:
 
-- **Plan** shows source, status, purpose, and media summary.
+- **Overview** shows source, status, purpose, and media summary.
 - **Photos** manages folder content, uploads, metadata, and collections.
 - **Cull** provides ratings, picks, rejects, color labels, saved views, and
   explicit XMP synchronization.
 - **Style** controls the opener, title visibility and size, photo-count
   visibility, title typeface, layout, theme, logo, cover, accent, welcome text,
   metadata, and preview watermark. Originals are never watermarked.
-- **Deliver** creates independently configured public links.
-- **Results** contains feedback, client selections, exports, and upload moderation.
+- **Share** creates independently configured public links.
+- **Review** contains feedback, client selections, exports, and upload moderation.
 - **History** records relevant gallery activity.
 
 Changes to gallery settings use revision checks. If another browser changed the
@@ -134,7 +134,7 @@ the write and are reported for review.
 
 ## Publish and share
 
-Open **Deliver**, create a public link, and configure its audience. Each link
+Open **Share**, create a public link, and configure its audience. Each link
 can have its own start folder, folder depth, language, presentation, password,
 expiry, download scope, metadata fields, feedback, upload permission, and
 minimum owner rating. Proofing Gallery uses native Nextcloud public-link rules
@@ -145,7 +145,32 @@ server. Leaving an existing password field empty preserves the password; use
 the explicit removal action to remove it. Revoking one link immediately blocks
 that audience without affecting other links or source files.
 
+The standard primary link follows the gallery's feedback permissions by default.
+In its editor, choose **Configure this link separately** to keep its own feedback
+permissions, or **Use gallery feedback permissions** to resume inheritance.
+The editor also offers **Link permissions** and **Navigation settings** as
+independent inheritance choices. Link permissions include photo downloads,
+uploads, selection exports and metadata. Navigation includes the view mode and
+folder grouping depth. Switching to separate settings copies the current values;
+changing the gallery title or design preserves those choices. Photo download
+restrictions also apply to the native Nextcloud share. Start folders and shared
+folder scopes always belong to the link. Links sharing several folders use their
+own folder navigation. Changing the primary link freezes inherited settings of
+the previous primary link. Additional links retain their own permissions. Restrictions from the
+administrator and gallery still apply to every link.
+
 ## Client proofing and selections
+
+New **Review together** projects start in Proofing mode with star ratings and
+pick/reject enabled. Under **Review → Configure review**, configure each
+feedback feature. A disabled switch explains the administrative restriction;
+request **Client star ratings and pick or reject** in the administrator's
+Proofing Gallery settings when those features are blocked. In **Share**, check
+the link's feedback permissions as well. Existing projects keep their settings;
+choose Proofing under **Overview → Gallery mode** when needed.
+
+CSV exports offer only permitted rating fields. Filename exports continue to
+work when client ratings are disabled.
 
 Proofing mode lets guests identify themselves and, when enabled, like, rate,
 pick, reject, label, comment, annotate, and save named selections. Guests do
@@ -197,7 +222,7 @@ approve it, request changes, or reopen an approved result in the same round.
 This is a workflow decision, not an electronic
 signature or a frozen legal snapshot.
 
-Under **Results**, owners see the current state and traceable round history.
+Under **Review**, owners see the current state and traceable round history.
 When the corresponding apps are available, a due date can be added to a
 writable Nextcloud Calendar and the review can be created as a Deck card. These
 resources run with the current user's permissions; Proofing Gallery stores no

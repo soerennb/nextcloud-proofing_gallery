@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { publicFeedbackError } from './domain/feedbackPermissions.ts'
 import { initialPublicGalleryLocation, matchesInitialGalleryPage, usePublicGallerySort } from './composables/usePublicGallerySort.ts'
 import { n, t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
@@ -500,7 +501,8 @@ async function performMutation(path: string, method: 'POST' | 'PUT' | 'DELETE', 
 			if (response.status === 401 || payload.code === 'invalid_nonce') {
 				if (!deferredMutation.isCompleting()) return deferredMutation.defer(path, method, body)
 			}
-			collaborationError.value = t('proofing_gallery', 'The review change could not be saved.')
+			if (response.status === 403) await loadPage(currentPage.value)
+			collaborationError.value = publicFeedbackError(response.status)
 			return false
 		}
 		await loadCollaboration()

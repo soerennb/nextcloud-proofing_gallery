@@ -72,7 +72,7 @@ const workflowFeatures = [
 	['likes', t('proofing_gallery', 'Likes')], ['colors', t('proofing_gallery', 'Color workflow')],
 	['comments', t('proofing_gallery', 'Comments')], ['annotations', t('proofing_gallery', 'Image annotations')],
 	['selections', t('proofing_gallery', 'Client selections')], ['lifecycleAutomation', t('proofing_gallery', 'Lifecycle automation')],
-	['ownerCulling', t('proofing_gallery', 'Photographer culling')], ['guestRatings', t('proofing_gallery', 'Client ratings')],
+	['ownerCulling', t('proofing_gallery', 'Photographer culling')], ['guestRatings', t('proofing_gallery', 'Client star ratings and pick or reject')],
 	['recursiveGalleries', t('proofing_gallery', 'Recursive galleries')], ['multiplePublicLinks', t('proofing_gallery', 'Multiple public links')],
 ] as const
 

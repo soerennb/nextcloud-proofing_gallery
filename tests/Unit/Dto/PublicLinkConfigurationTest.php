@@ -11,6 +11,14 @@ use OCA\ProofingGallery\Dto\PublicLinkConfiguration;
 use PHPUnit\Framework\TestCase;
 
 final class PublicLinkConfigurationTest extends TestCase {
+	public function testFeedbackModeSurvivesScopeChanges(): void {
+		$config = PublicLinkConfiguration::fromArray(['name' => 'Review', 'feedbackPolicyMode' => 'inherit']);
+		self::assertSame('inherit', $config->withScope('Client', [])->feedbackPolicyMode);
+		self::assertNull(PublicLinkConfiguration::fromArray(['name' => 'Legacy'])->feedbackPolicyMode);
+		$this->expectException(\InvalidArgumentException::class);
+		PublicLinkConfiguration::fromArray(['name' => 'Invalid', 'feedbackPolicyMode' => 'automatic']);
+	}
+
 	public function testMultiRootScopeIsParsedWithoutChangingLegacyStartPath(): void {
 		$config = PublicLinkConfiguration::fromArray(['name' => 'Anna', 'allowedRoots' => ['Allgemein', 'Anna']]);
 

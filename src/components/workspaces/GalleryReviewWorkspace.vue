@@ -9,6 +9,7 @@ import type { Gallery } from '../../types.ts'
 import GalleryActivity from '../GalleryActivity.vue'
 import ReviewWorkflowPanel from '../ReviewWorkflowPanel.vue'
 import SelectionManager from '../SelectionManager.vue'
+import FeedbackPermissionFields from '../FeedbackPermissionFields.vue'
 
 defineProps<{ gallery: Gallery }>()
 const emit = defineEmits<{ complete: [] }>()
@@ -29,7 +30,10 @@ function updateSelectionDueDate(event: Event) {
 			</NcButton>
 		</div>
 		<ReviewWorkflowPanel v-if="gallery.permissions.role === 'owner'" :gallery-id="gallery.id" />
-		<SelectionManager v-if="gallery.permissions.role === 'owner'" :gallery-id="gallery.id" :editable="true" />
+		<SelectionManager v-if="gallery.permissions.role === 'owner'"
+			:gallery-id="gallery.id"
+			:editable="true"
+			:ratings-available="gallery.availableCapabilities.guestRatings?.allowed === true" />
 		<GalleryActivity :gallery-id="gallery.id" mode="inbox" />
 
 		<details v-if="gallery.permissions.canEdit" class="review-config">
@@ -54,29 +58,12 @@ function updateSelectionDueDate(event: Event) {
 						:label="t('proofing_gallery', 'Maximum photos (0 means unlimited)')" />
 					<label><span>{{ t('proofing_gallery', 'Default selection due date') }}</span><input :value="settings.review.selectionDueDate ?? ''" type="date" @input="updateSelectionDueDate"></label>
 				</div>
-				<div v-if="settings.mode === 'collaboration'" class="feedback-switches">
-					<NcCheckboxRadioSwitch v-model="settings.review.likes" type="switch">
-						{{ t('proofing_gallery', 'Likes') }}
-					</NcCheckboxRadioSwitch>
-					<NcCheckboxRadioSwitch v-model="settings.review.colors" type="switch">
-						{{ t('proofing_gallery', 'Color labels') }}
-					</NcCheckboxRadioSwitch>
-					<NcCheckboxRadioSwitch v-model="settings.review.comments" type="switch">
-						{{ t('proofing_gallery', 'Comments') }}
-					</NcCheckboxRadioSwitch>
-					<NcCheckboxRadioSwitch v-model="settings.review.annotations" type="switch" :disabled="!settings.review.comments">
-						{{ t('proofing_gallery', 'Image annotations') }}
-					</NcCheckboxRadioSwitch>
-					<NcCheckboxRadioSwitch v-model="settings.review.selections" type="switch">
-						{{ t('proofing_gallery', 'Saved selections') }}
-					</NcCheckboxRadioSwitch>
-					<NcCheckboxRadioSwitch v-model="settings.review.ratings" type="switch">
-						{{ t('proofing_gallery', 'Private guest star ratings') }}
-					</NcCheckboxRadioSwitch>
-					<NcCheckboxRadioSwitch v-model="settings.review.pick" type="switch">
-						{{ t('proofing_gallery', 'Private guest pick or reject') }}
-					</NcCheckboxRadioSwitch>
-				</div>
+				<p>{{ t('proofing_gallery', 'Client star ratings and picks or rejects are private to each reviewer and the gallery owner. Each link can restrict the feedback enabled here.') }}</p>
+				<FeedbackPermissionFields :settings="settings"
+					:available-capabilities="gallery.availableCapabilities"
+					:permissions="settings.review"
+					context="gallery"
+					@change="(feature, enabled) => settings.review[feature] = enabled" />
 				<div v-if="settings.mode === 'collaboration'" class="color-labels">
 					<div v-for="(_, index) in settings.review.colorLabels" :key="index" class="color-label-row">
 						<NcCheckboxRadioSwitch v-model="settings.review.colorEnabled[index]" :aria-label="t('proofing_gallery', 'Enable color {number}', { number: index + 1 })" /><NcTextField v-model="settings.review.colorLabels[index]"
@@ -89,3 +76,19 @@ function updateSelectionDueDate(event: Event) {
 		</details>
 	</section>
 </template>
+
+<style scoped>
+.review-config summary { cursor: pointer; }
+
+.review-config summary strong { margin-inline-end: 8px; }
+
+.review-config summary span { color: var(--color-text-maxcontrast); }
+
+.review-config__content { display: grid; gap: 16px; padding-block-start: 16px; }
+
+.selection-rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr)); gap: 12px; align-items: end; }
+
+.selection-rules label { display: grid; gap: 6px; }
+
+.selection-rules input[type=date] { min-height: 44px; max-width: 100%; padding: 8px; border: 1px solid var(--color-border-maxcontrast); border-radius: var(--border-radius-large); background: var(--color-main-background); color: var(--color-main-text); }
+</style>

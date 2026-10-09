@@ -138,6 +138,9 @@ export async function fetchPublicLinks(id: number): Promise<{ items: GalleryPubl
 export async function savePublicLink(id: number, linkId: number | null, payload: {
 	name: string
 	policy: PublicLinkPolicy
+	feedbackPolicyMode?: 'inherit' | 'custom'
+	permissionsPolicyMode?: 'inherit' | 'custom'
+	navigationPolicyMode?: 'inherit' | 'custom'
 	startPath: string
 	allowedRoots?: string[]
 	viewMode: 'folder' | 'recursive'

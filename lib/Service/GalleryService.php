@@ -13,6 +13,7 @@ use OCA\ProofingGallery\Db\CollectionRepository;
 use OCA\ProofingGallery\Domain\GalleryStatus;
 use OCA\ProofingGallery\Domain\GalleryPurpose;
 use OCA\ProofingGallery\Domain\ProjectCreationOptions;
+use OCA\ProofingGallery\Domain\ProjectSettingsComposer;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
@@ -106,8 +107,8 @@ final class GalleryService {
 			&& !array_key_exists('logoBackground', $settings['presentation'])) {
 			$settings['presentation']['logoBackground'] = 'light';
 		}
-		$composed = array_replace_recursive(
-			$galleryPurpose->settings(),
+		$gallerySettings = ProjectSettingsComposer::compose(
+			$galleryPurpose,
 			$this->policies->galleryDefaults(),
 			['presentation' => [
 				'accentColor' => $this->policies->instanceSettings()['branding']['accentColor'],
@@ -118,7 +119,6 @@ final class GalleryService {
 			$personalDesign,
 			$settings,
 		);
-		$gallerySettings = GallerySettings::merge(GallerySettings::defaults(), $composed);
 		\OCA\ProofingGallery\Domain\MediaSort::assertValid($gallerySettings->navigation->sortBy, $gallerySettings->navigation->sortDirection, $sourceType === 'collection');
 		$this->assertPresentationAssets($gallery, $gallerySettings);
 		$gallery->setSettings(json_encode($gallerySettings, JSON_THROW_ON_ERROR));
@@ -370,6 +370,7 @@ final class GalleryService {
 		$permissions = $this->access->permissions($userId, $gallery);
 		$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
 		$effectiveCapabilities = $this->capabilities->effective($settings, $userId);
+		$availableCapabilities = $this->capabilities->effective(userId: $userId);
 		if ($gallery->getSourceType() === 'collection') {
 			return [
 				...$gallery->jsonSerialize(),
@@ -377,6 +378,7 @@ final class GalleryService {
 				'mediaSummary' => $this->collections->summary($gallery),
 				'permissions' => $permissions,
 				'effectiveCapabilities' => $effectiveCapabilities,
+				'availableCapabilities' => $availableCapabilities,
 				'retention' => $this->retention->status($gallery),
 			];
 		}
@@ -414,6 +416,7 @@ final class GalleryService {
 			'mediaSummary' => $mediaSummary,
 			'permissions' => $permissions,
 			'effectiveCapabilities' => $effectiveCapabilities,
+			'availableCapabilities' => $availableCapabilities,
 			'retention' => $this->retention->status($gallery),
 		];
 	}
@@ -455,9 +458,7 @@ final class GalleryService {
 		$this->lifecycleSchedule->project($gallery, $this->clock->getTime());
 		$this->listProjection->project($gallery);
 
-		$updated = $this->mapper->updateDocument($gallery, $revision);
-		$this->shares->synchronizePrimaryNavigation($updated);
-		return $updated;
+		return $this->shares->updateGallery($gallery, $revision);
 	}
 
 	public function archive(string $ownerUid, int $id): Gallery {

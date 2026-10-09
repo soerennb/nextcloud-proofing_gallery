@@ -34,6 +34,7 @@ final class PublicLinkManagerService {
 		private PublicLinkMapper $links,
 		private GalleryMapper $galleries,
 		private PublicLinkPolicyService $policies,
+		private PublicLinkInheritanceService $inheritance,
 		private PublicLinkScopeService $scopes,
 		private PrimaryPublicLinkSynchronizer $primaryLinks,
 		private FolderService $folders,
@@ -86,12 +87,15 @@ final class PublicLinkManagerService {
 	 * @return array<string, mixed>
 	 */
 	private function createLocked(Gallery $gallery, PublicLinkConfiguration $config, bool $eventOperation, ?string $privateRoot, array $groupRoots): array {
+		if (in_array('inherit', [$config->feedbackPolicyMode, $config->permissionsPolicyMode, $config->navigationPolicyMode], true)) throw new \InvalidArgumentException('Only the standard primary link can inherit feedback permissions');
 		if ($gallery->getDeliveryMode() === 'event' && !$eventOperation) {
 			throw new \InvalidArgumentException('Event links are managed by event delivery');
 		}
 		$this->assertLinkManagementAllowed($gallery, $config, true);
 		if (!$eventOperation) $this->primaryLinks->assertBelowLimit($gallery);
 		$config = $this->validateScope($gallery, $config);
+		$initial = new PublicLink();
+		$config = $this->inheritance->configure($gallery, $initial, $config);
 		$anchor = $config->allowedRoots === [] ? null : $this->anchors->create($gallery->getOwnerUid());
 		$share = $this->newShare($gallery);
 		try {
@@ -235,6 +239,7 @@ final class PublicLinkManagerService {
 	 */
 	private function updateLocked(Gallery $gallery, int $linkId, PublicLinkConfiguration $config, ?string $privateRoot, array $groupRoots, bool $recoverMissingShare): array {
 		$link = $this->owned($gallery, $linkId);
+		$config = $this->inheritance->configure($gallery, $link, $config);
 		$repairingScope = $gallery->getDeliveryMode() !== 'event' && $link->getStatus() === 'suspended' && $link->getScopeMode() === 'empty';
 		$this->assertLinkManagementAllowed($gallery, $config, false, $repairingScope);
 		if (!$link->getIsPrimary()) $this->capabilities->assertFeature('multiplePublicLinks');
@@ -267,6 +272,9 @@ final class PublicLinkManagerService {
 		$link->setCoreShareId((int)$share->getId());
 		$link->setToken($share->getToken());
 		$link->setPolicy(json_encode($config->policy, JSON_THROW_ON_ERROR));
+		$link->setFeedbackPolicyMode($config->feedbackPolicyMode ?? 'custom');
+		$link->setPermissionsPolicyMode($config->permissionsPolicyMode ?? 'custom');
+		$link->setNavigationPolicyMode($config->navigationPolicyMode ?? 'custom');
 		$link->setStartPath($config->startPath);
 		$link->setAllowedRootList($config->allowedRoots);
 		$link->setScopeMode($config->allowedRoots === [] ? 'legacy' : 'nodes');
@@ -340,6 +348,19 @@ final class PublicLinkManagerService {
 		$link = $this->owned($gallery, $linkId);
 		if ($link->getStatus() !== 'active') throw new \InvalidArgumentException('Only active links can be primary');
 		$link = $this->atomic(function () use ($gallery, $link): PublicLink {
+			foreach ($this->links->findForGallery($gallery->getId()) as $previous) {
+				if ($previous->getId() === $link->getId()) continue;
+				if (!in_array('inherit', [$previous->getFeedbackPolicyMode(), $previous->getPermissionsPolicyMode(), $previous->getNavigationPolicyMode()], true)) continue;
+				$settings = \OCA\ProofingGallery\Dto\GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
+				$previous->setPolicy(json_encode($this->policies->forLink($settings, $previous), JSON_THROW_ON_ERROR));
+				$navigation = $this->policies->navigation($settings, $previous);
+				$previous->setViewMode($navigation['viewMode']);
+				$previous->setGroupDepth($navigation['groupDepth']);
+				$previous->setFeedbackPolicyMode('custom');
+				$previous->setPermissionsPolicyMode('custom');
+				$previous->setNavigationPolicyMode('custom');
+				$this->links->update($previous);
+			}
 			$this->links->clearPrimary($gallery->getId());
 			$link->setIsPrimary(true);
 			$link->setUpdatedAt($this->clock->getTime());
@@ -386,6 +407,8 @@ final class PublicLinkManagerService {
 		$domain = $this->customDomains->activeLink((int)$link->getId());
 		return [
 			...$link->jsonSerialize(),
+			...$this->policies->navigation(\OCA\ProofingGallery\Dto\GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR)), $link),
+			'policy' => $this->policies->forLink(\OCA\ProofingGallery\Dto\GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR)), $link)->jsonSerialize(),
 			'allowedRoots' => $this->scopes->roots($link),
 			'url' => $domain !== null && $domain['status'] === 'verified'
 				? 'https://' . $domain['domain'] . '/'
@@ -527,7 +550,8 @@ final class PublicLinkManagerService {
 		$share->setNode($config->allowedRoots !== [] ? $anchor : ($config->startPath === '' ? $root : $root->get($config->startPath)));
 		$share->setLabel($this->recovery->label($gallery, $config->name));
 		$share->setPermissions(Constants::PERMISSION_READ);
-		$share->setHideDownload(!$config->policy->downloadScope->allowsIndividual());
+		$settings = \OCA\ProofingGallery\Dto\GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
+		$share->setHideDownload(!($this->capabilities->feature('downloads') && $this->policies->effectiveDownloadScope($settings, $config->policy)->allowsIndividual()));
 		if ($creating || $config->password !== null) $share->setPassword($config->password === '' ? null : $config->password);
 		$share->setExpirationDate($config->expiresAt);
 	}

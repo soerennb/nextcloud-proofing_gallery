@@ -24,6 +24,12 @@ use OCP\DB\Types;
  * @method void setIsPrimary(bool $isPrimary)
  * @method string getPolicy()
  * @method void setPolicy(string $policy)
+ * @method string getFeedbackPolicyMode()
+ * @method void setFeedbackPolicyMode(string $feedbackPolicyMode)
+ * @method string getPermissionsPolicyMode()
+ * @method void setPermissionsPolicyMode(string $mode)
+ * @method string getNavigationPolicyMode()
+ * @method void setNavigationPolicyMode(string $mode)
  * @method string getStartPath()
  * @method void setStartPath(string $startPath)
  * @method ?string getAllowedRoots()
@@ -62,6 +68,9 @@ final class PublicLink extends Entity implements \JsonSerializable {
 	protected string $status = 'active';
 	protected bool $isPrimary = false;
 	protected string $policy = '{}';
+	protected string $feedbackPolicyMode = 'custom';
+	protected string $permissionsPolicyMode = 'custom';
+	protected string $navigationPolicyMode = 'custom';
 	protected string $startPath = '';
 	protected ?string $allowedRoots = null;
 	protected string $scopeMode = 'legacy';
@@ -116,6 +125,9 @@ final class PublicLink extends Entity implements \JsonSerializable {
 			'status' => $this->getStatus(),
 			'primary' => $this->getIsPrimary(),
 			'policy' => json_decode($this->getPolicy(), true, flags: JSON_THROW_ON_ERROR),
+			'feedbackPolicyMode' => $this->getFeedbackPolicyMode(),
+			'permissionsPolicyMode' => $this->getPermissionsPolicyMode(),
+			'navigationPolicyMode' => $this->getNavigationPolicyMode(),
 			'startPath' => $this->getStartPath(),
 			'allowedRoots' => $this->allowedRootList(),
 			'scopeMode' => $this->getScopeMode(),

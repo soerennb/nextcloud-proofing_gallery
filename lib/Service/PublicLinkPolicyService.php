@@ -9,6 +9,7 @@ use OCA\ProofingGallery\Domain\PublicLinkPolicy;
 use OCA\ProofingGallery\Dto\GallerySettings;
 
 final class PublicLinkPolicyService {
+	public const PERMISSIONS = ['upload', 'export', 'metadata', 'downloadScope'];
 	/** @return array<string, bool|string> */
 	public function forGallery(Gallery $gallery): array {
 		$settings = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
@@ -32,6 +33,58 @@ final class PublicLinkPolicyService {
 			'metadata' => $settings->metadata->publicFields !== [],
 			'downloadScope' => $delivery->downloadScope->value,
 		])->jsonSerialize();
+	}
+
+	public function inheritFeedback(PublicLinkPolicy $policy, GallerySettings $settings): PublicLinkPolicy {
+		$values = $policy->jsonSerialize();
+		foreach (FeedbackPolicyService::FEATURES as $feature => $_capability) $values[$feature] = $settings->review->enabled($feature);
+		$values['annotations'] = $values['annotations'] && $values['comments'];
+		return PublicLinkPolicy::fromArray($values);
+	}
+
+	public function forLink(GallerySettings $settings, \OCA\ProofingGallery\Db\PublicLink $link): PublicLinkPolicy {
+		$policy = PublicLinkPolicy::fromArray(json_decode($link->getPolicy(), true, flags: JSON_THROW_ON_ERROR));
+		if ($link->getFeedbackPolicyMode() === 'inherit') $policy = $this->inheritFeedback($policy, $settings);
+		return $link->getPermissionsPolicyMode() === 'inherit' ? $this->inheritPermissions($policy, $settings) : $policy;
+	}
+
+	/** @return array{upload: bool, export: bool, metadata: bool, downloadScope: string} */
+	public function permissionDefaults(GallerySettings $settings): array {
+		return ['upload' => $settings->delivery->guestUploads, 'export' => true,
+			'metadata' => $settings->metadata->publicFields !== [], 'downloadScope' => $settings->delivery->downloadScope->value];
+	}
+
+	public function inheritPermissions(PublicLinkPolicy $policy, GallerySettings $settings): PublicLinkPolicy {
+		return PublicLinkPolicy::fromArray(array_replace($policy->jsonSerialize(), $this->permissionDefaults($settings)));
+	}
+
+	public function effectiveDownloadScope(GallerySettings $settings, PublicLinkPolicy $policy): \OCA\ProofingGallery\Domain\DownloadScope {
+		return $settings->delivery->downloadScope->restrict($policy->downloadScope);
+	}
+
+	/** Legacy defaults retain zero as the automatic depth marker for upgrade comparison.
+	 * @return array{viewMode: string, groupDepth: int}
+	 */
+	public function navigationDefaults(GallerySettings $settings): array {
+		return ['viewMode' => $settings->navigation->recursive ? 'recursive' : 'folder',
+			'groupDepth' => $settings->navigation->groupBy === 'folder' ? $settings->navigation->groupDepth : 0];
+	}
+
+	/** @return array{viewMode: string, groupDepth: int} */
+	public function navigation(GallerySettings $settings, \OCA\ProofingGallery\Db\PublicLink $link): array {
+		$value = $link->getNavigationPolicyMode() === 'inherit' ? $this->navigationDefaults($settings)
+			: ['viewMode' => $link->getViewMode(), 'groupDepth' => $link->getGroupDepth()];
+		$value['groupDepth'] = max(1, $value['groupDepth'] ?: $settings->navigation->groupDepth);
+		return $value;
+	}
+
+	/** A read-only projection: public consumers must never persist this clone. */
+	public function resolvedLink(GallerySettings $settings, \OCA\ProofingGallery\Db\PublicLink $link): \OCA\ProofingGallery\Db\PublicLink {
+		$resolved = clone $link;
+		$navigation = $this->navigation($settings, $link);
+		$resolved->setViewMode($navigation['viewMode']);
+		$resolved->setGroupDepth($navigation['groupDepth']);
+		return $resolved;
 	}
 
 	/** @return array<string, array<string, bool|string>> */

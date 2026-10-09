@@ -25,6 +25,7 @@ final class PublicGalleryDataService {
 		private MediaTypePolicy $mediaTypes,
 		private VideoTranscodeService $videoTranscodes,
 		private KioskRepository $kiosks,
+		private FeedbackPolicyService $feedback,
 	) {
 	}
 
@@ -47,7 +48,7 @@ final class PublicGalleryDataService {
 		$offset = $pageNumber === null ? max(0, $offset) : (max(1, $pageNumber) - 1) * $limit;
 		$path = trim($path, '/');
 		$search = mb_substr(trim($search), 0, 120);
-		$settings = $context->settings->withPublicPolicy($context->policy);
+		$settings = $this->feedback->publicSettings($context->settings, $context->policy);
 		$sortBy = $sortBy !== '' ? $sortBy : $settings->navigation->sortBy;
 		$sortDirection = $sortDirection !== '' ? $sortDirection : $settings->navigation->sortDirection;
 		$groupBy = $groupBy !== '' ? $groupBy : $settings->navigation->groupBy;
@@ -333,7 +334,7 @@ final class PublicGalleryDataService {
 		?int $focusIndex = null,
 	): array {
 		$gallery = $context->gallery;
-		$settings = $context->settings->withPublicPolicy($context->policy);
+		$settings = $this->feedback->publicSettings($context->settings, $context->policy);
 		$effective = $this->capabilities->effective($settings);
 		$serialized = $settings->jsonSerialize();
 		foreach ($serialized['presentation']['story']['sections'] ?? [] as &$section) {
@@ -350,11 +351,6 @@ final class PublicGalleryDataService {
 		if (!$effective['guestUploads']['allowed']) {
 			$serialized['delivery']['guestUploads'] = false;
 		}
-		foreach (['likes', 'colors', 'comments', 'annotations', 'selections'] as $feature) {
-			if (!$effective[$feature]['allowed']) $serialized['review'][$feature] = false;
-		}
-		$serialized['review']['ratings'] = $serialized['review']['ratings'] && $this->capabilities->feature('guestRatings');
-		$serialized['review']['pick'] = $serialized['review']['pick'] && $this->capabilities->feature('guestRatings');
 		if ($context->link->getPublicLocale() !== null) $serialized['publicLocale'] = $context->link->getPublicLocale();
 		$this->addPlayback($context, $items);
 		$this->addPlayback($context, $storyItems);

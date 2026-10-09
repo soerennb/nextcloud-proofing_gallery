@@ -41,6 +41,10 @@ for version in ${versions}; do
 		COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION="${version}" \
 			"${compose[@]}" exec -T --user www-data "${service}" php occ app:enable proofing_gallery
 		COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION="${version}" \
+			"${compose[@]}" exec -T --user www-data "${service}" php /dev/stdin fresh < "${repo_dir}/tests/smoke/UpgradeFeedbackPermissions.php"
+		COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION="${version}" \
+			"${compose[@]}" exec -T --user www-data "${service}" php /dev/stdin fresh < "${repo_dir}/tests/smoke/UpgradeLinkInheritance.php"
+		COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION="${version}" \
 			"${compose[@]}" exec -T --user www-data "${service}" php occ app:list --enabled --output=json \
 			| php -r '$apps=json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR); exit(isset($apps["enabled"]["proofing_gallery"]) ? 0 : 1);'
 		if [[ -f "${app_source}/appinfo/signature.json" ]]; then

@@ -37,6 +37,7 @@ final class CollaborationService {
 		private CullingService $culling,
 		private GuestRatingService $guestRatings,
 		private CsvEncoder $csv,
+		private FeedbackPolicyService $feedback,
 	) {
 	}
 
@@ -174,6 +175,7 @@ final class CollaborationService {
 
 	public function saveRating(PublicLink $link, Gallery $gallery, CollaborationActor $actor, int $fileId, int $rating, string $pick): GuestRating {
 		if ($link->getGalleryId() !== $gallery->getId()) throw new InvalidArgumentException('Public link does not belong to this gallery');
+		$this->assertCollaboration($gallery, $fileId);
 		return $this->atomic(function () use ($link, $gallery, $actor, $fileId, $rating, $pick): GuestRating {
 			$value = $this->guestRatings->saveForActor($link, $actor, $fileId, $rating, $pick);
 			$this->event($gallery, $actor, 'rating.changed', ['fileId' => $fileId]);
@@ -338,11 +340,9 @@ final class CollaborationService {
 		$names = array_map(fn (int $fileId): string => $this->resolveMedia($gallery, $fileId)->getName(), $fileIds);
 		$base = preg_replace('/[^a-z0-9._-]+/i', '-', (string)$row['name']) ?: 'selection';
 		if ($format === 'csv' || $format === 'preview') {
-			$allowed = $guest === null
-				? ['filename', 'path', 'mimeType', 'size', 'modifiedAt', 'ownerRating', 'ownerPick', 'ownerColor', 'guestAverage', 'guestCount', 'selection', 'comments']
-				: ['filename', 'rating', 'pick'];
-			$fields = array_values(array_unique(array_intersect($allowed, array_map('strval', $requestedFields))));
-			if ($fields === []) $fields = ['filename'];
+			$fields = $guest === null
+				? \OCA\ProofingGallery\Domain\SelectionExportFields::owner($requestedFields, $this->capabilities->feature('guestRatings'))
+				: \OCA\ProofingGallery\Domain\SelectionExportFields::reviewer($requestedFields, $this->feedback->effective($this->settings($gallery)));
 			$rows = $this->composeExportRows($gallery, $guest, $fileIds, $fields, (string)$row['name']);
 			$content = "\xEF\xBB\xBF" . $this->csv->encode([$fields, ...array_map(
 				static fn (array $values): array => array_map(static fn (string $field): string => (string)($values[$field] ?? ''), $fields),
@@ -408,8 +408,7 @@ final class CollaborationService {
 		}
 		$base = preg_replace('/[^a-z0-9._-]+/i', '-', (string)$row['name']) ?: 'selection';
 		if ($format === 'csv' || $format === 'preview') {
-			$fields = array_values(array_unique(array_intersect(['filename', 'rating', 'pick'], array_map('strval', $requestedFields))));
-			if ($fields === []) $fields = ['filename'];
+			$fields = \OCA\ProofingGallery\Domain\SelectionExportFields::reviewer($requestedFields, $this->feedback->effective($this->settings($gallery)));
 			$rows = $this->composeExportRows($gallery, null, $fileIds, $fields, (string)$row['name'], $actor);
 			$content = "\xEF\xBB\xBF" . $this->csv->encode([$fields, ...array_map(
 				static fn (array $values): array => array_map(static fn (string $field): string => (string)($values[$field] ?? ''), $fields),
@@ -433,10 +432,11 @@ final class CollaborationService {
 		if ($fileIds === []) return [];
 		$isOwner = $guest === null && $actor === null;
 		$culls = $isOwner ? $this->culling->forFiles($gallery->getOwnerUid(), $fileIds) : [];
-		$aggregates = $isOwner ? array_column($this->guestRatings->aggregate($gallery, $fileIds)['items'], null, 'fileId') : [];
-		$ratingValues = $guest !== null
+		$aggregates = $isOwner && array_intersect($fields, ['guestAverage', 'guestCount']) !== []
+			? array_column($this->guestRatings->aggregate($gallery, $fileIds)['items'], null, 'fileId') : [];
+		$ratingValues = array_intersect($fields, ['rating', 'pick']) === [] ? [] : ($guest !== null
 			? $this->guestRatings->forGuestFiles($guest, $fileIds)
-			: ($actor === null ? [] : $this->guestRatings->forActorFiles($gallery->getId(), $actor, $fileIds));
+			: ($actor === null ? [] : $this->guestRatings->forActorFiles($gallery->getId(), $actor, $fileIds)));
 		$guestValues = array_column(array_map(static fn (\OCA\ProofingGallery\Db\GuestRating $value): array => $value->jsonSerialize(), $ratingValues), null, 'fileId');
 		$comments = [];
 		if ($isOwner && in_array('comments', $fields, true)) {
