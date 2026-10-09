@@ -29,7 +29,16 @@ async function update(request: APIRequestContext, id: number, patch: Record<stri
 	return checked<Gallery>(await request.put(`${api}/${id}?format=json`, { headers, data: { ...patch, expectedRevision: current.revision } }))
 }
 async function save(request: APIRequestContext, id: number, link: GalleryPublicLink, patch: Record<string, unknown>) {
-	return checked<GalleryPublicLink>(await request.put(`${api}/${id}/public-links/${link.id}?format=json`, { headers, data: { ...link, allowedRoots: link.scopeMode === 'nodes' ? link.allowedRoots : [], ...patch } }))
+	const data = {
+		name: link.name, policy: link.policy,
+		feedbackPolicyMode: link.feedbackPolicyMode, permissionsPolicyMode: link.permissionsPolicyMode, navigationPolicyMode: link.navigationPolicyMode,
+		startPath: link.startPath, allowedRoots: link.scopeMode === 'nodes' ? link.allowedRoots : [],
+		viewMode: link.viewMode, groupDepth: link.groupDepth, minOwnerRating: link.minOwnerRating, publicLocale: link.publicLocale,
+		reviewEnabled: link.reviewEnabled, reviewDueDate: link.reviewDueDate,
+		reviewSelectionMinimum: link.reviewSelectionMinimum, reviewSelectionMaximum: link.reviewSelectionMaximum,
+		...patch,
+	}
+	return checked<GalleryPublicLink>(await request.put(`${api}/${id}/public-links/${link.id}?format=json`, { headers, data }))
 }
 function token(link: GalleryPublicLink) { return new URL(link.url).pathname.split('/').at(-1)! }
 async function native(request: APIRequestContext, link: GalleryPublicLink) {
