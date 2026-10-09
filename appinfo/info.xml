@@ -29,6 +29,10 @@ API provisions galleries and accepts JPEG uploads with stable photo links for
 QR codes. The API supports integration with external photobooth software;
 the external kiosk application is not included.
 
+Public links can inherit gallery feedback, delivery permissions, and navigation
+independently or retain their own settings. Review controls explain applicable
+administrator, gallery, and link restrictions.
+
 Clients can like, rate, pick, reject, comment, annotate, and save named
 selections. Owners get culling, review rounds, CSV exports, Adobe-compatible
 XMP sidecars, and explicit promotion of client decisions. Allow individual
@@ -72,6 +76,10 @@ Eine authentifizierte API richtet Galerien ein und nimmt JPEG-Uploads mit
 stabilen Bildlinks für QR-Codes an. Sie ermöglicht die Anbindung externer
 Fotobox-Software; eine externe Kiosk-Anwendung wird nicht mitgeliefert.
 
+Öffentliche Links können Feedback, Auslieferungsregeln und Navigation unabhängig
+von der Galerie übernehmen oder eigene Einstellungen behalten. Die
+Feedback-Steuerung erklärt geltende Administrations-, Galerie- und Linkregeln.
+
 Kunden können favorisieren, bewerten, auswählen, ablehnen, kommentieren,
 annotieren und benannte Auswahlen speichern. Eigentümer erhalten Culling,
 Prüfrunden, CSV-Exporte, Adobe-kompatible XMP-Sidecars und eine ausdrückliche
@@ -94,7 +102,7 @@ Vorlagen und Nextcloud-Integrationen, sofern aktiviert. Administrations-,
 Galerie-, Link- und Event-Wellen-Regeln werden gemeinsam ausgewertet, sodass
 ein öffentlicher Link nur erlauben kann, was alle geltenden Regeln zulassen.
 	]]></description>
-	<version>0.11.0</version>
+	<version>0.12.0</version>
 	<licence>AGPL-3.0-or-later</licence>
 	<author>soerennb</author>
 	<namespace>ProofingGallery</namespace>

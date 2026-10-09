@@ -84,6 +84,15 @@ try {
 		$assert($value['navigation']['sortBy'], 'collection', 'Legacy collection order');
 		$assert($value['navigation']['sortDirection'], 'asc', 'Legacy collection direction');
 	}
+	$config = \OC::$server->get(\OCP\IConfig::class);
+	if ($config->getAppValue('proofing_gallery', 'upgradeHasExplicitSort', '0') === '1') {
+		$qb = $db->getQueryBuilder();
+		$settings = $qb->select('settings')->from('proofing_galleries')->where($qb->expr()->eq('slug', $qb->createNamedParameter('upgrade-explicit-sort')))->executeQuery()->fetchOne();
+		if ($settings === false) throw new RuntimeException('Missing explicit collection sorting fixture');
+		$value = json_decode($settings, true, flags: JSON_THROW_ON_ERROR);
+		$assert($value['navigation']['sortBy'], 'name', 'Explicit collection order');
+		$assert($value['navigation']['sortDirection'], 'desc', 'Explicit collection direction');
+	}
 	$sortingVerified = true;
 	echo "Media sorting migration, binary keys, cursors and focus verified\n";
 } finally {

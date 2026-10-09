@@ -218,6 +218,21 @@ compose exec -T -e PG_BASELINE_HAS_LEGACY_REPAIR="${baseline_has_legacy_repair}"
 	$q = $db->getQueryBuilder();
 	$q->update("proofing_galleries")->set("source_type", $q->createNamedParameter("collection"))
 		->where($q->expr()->eq("id", $q->createNamedParameter($collectionSortId, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT)))->executeStatement();
+	// A baseline already containing sorting must seed its post-migration state.
+	$hasSorting = is_file("/var/www/html/custom_apps/proofing_gallery/lib/Migration/Version000142Date20261004.php");
+	$config->setAppValue("proofing_gallery", "upgradeHasExplicitSort", $hasSorting ? "1" : "0");
+	if ($hasSorting) {
+		$q = $db->getQueryBuilder();
+		$q->update("proofing_galleries")->set("settings", $q->createNamedParameter(json_encode([
+			"presentation" => ["accentColor" => $legacyAccent], "navigation" => ["sortBy" => "collection", "sortDirection" => "asc"],
+		], JSON_THROW_ON_ERROR)))->where($q->expr()->eq("id", $q->createNamedParameter($collectionSortId, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT)))->executeStatement();
+		$explicitSortId = $insertGallery("upgrade-explicit-sort", "upgrade-explicit-sort-token", "draft", null);
+		$q = $db->getQueryBuilder();
+		$q->update("proofing_galleries")->set("source_type", $q->createNamedParameter("collection"))
+			->set("settings", $q->createNamedParameter(json_encode([
+				"presentation" => ["accentColor" => $legacyAccent], "navigation" => ["sortBy" => "name", "sortDirection" => "desc"],
+			], JSON_THROW_ON_ERROR)))->where($q->expr()->eq("id", $q->createNamedParameter($explicitSortId, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT)))->executeStatement();
+	}
 	$jobs = \OC::$server->get(\OCP\BackgroundJob\IJobList::class);
 	$jobs->add(\OCA\ProofingGallery\BackgroundJob\CleanupGalleryDataJob::class, null);
 	$jobs->add(\OCA\ProofingGallery\BackgroundJob\ContinueCleanupGalleryDataJob::class, null);

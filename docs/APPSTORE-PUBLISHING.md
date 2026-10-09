@@ -146,8 +146,9 @@ contain one `proofing_gallery` directory, remain below 20 MiB, and contain both
    changelog and run all release gates.
 3. Create the annotated tag from sanitized public `main` and push it to the
    public repository.
-4. Approve the protected environment only after validation and the 12-target
-   compatibility matrix pass.
+4. Approve the protected environment only after validation, the 12-target
+   compatibility matrix, latest-stable upgrades on all three databases with
+   absent/disabled/enabled administrative rating choices, and recovery pass.
 5. The workflow builds the signed archive twice, checks reproducibility,
    installs it on Nextcloud 34, creates its checksum, SBOM and attestation,
    publishes the GitHub release, then submits the same HTTPS asset to the App

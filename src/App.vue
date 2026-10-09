@@ -2,7 +2,6 @@
 import ArchiveOutlineIcon from 'vue-material-design-icons/ArchiveOutline.vue'
 import HelpCircleOutlineIcon from 'vue-material-design-icons/HelpCircleOutline.vue'
 import ImageMultipleOutlineIcon from 'vue-material-design-icons/ImageMultipleOutline.vue'
-import OwnerSortControl from './components/OwnerSortControl.vue'
 import { emit } from '@nextcloud/event-bus'
 import { n, t } from '@nextcloud/l10n'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
@@ -21,17 +20,12 @@ import { galleryWorkspacePath, normalizeGalleryWorkspace } from './domain/galler
 import { archiveGallery, fetchGallery, fetchGalleryPage, restoreGallery } from './services/galleryApi.ts'
 import type { Gallery, GalleryListItem } from './types.ts'
 
+const OwnerSortControl = defineAsyncComponent(() => import('./components/OwnerSortControl.vue'))
 const CreateGalleryModal = defineAsyncComponent(() => import('./components/CreateGalleryModal.vue'))
 const GallerySettings = defineAsyncComponent(() => import('./components/GallerySettings.vue'))
 const HelpView = defineAsyncComponent(() => import('./components/HelpView.vue'))
 const SharingModal = defineAsyncComponent(() => import('./components/SharingModal.vue'))
 const { preference: studioTheme } = useStudioTheme()
-
-const initialGalleryRoute = window.location.hash.match(/^#gallery\/(\d+)(?:\/([^/]+))?/)
-if (initialGalleryRoute) {
-	const canonicalRoute = galleryWorkspacePath(Number(initialGalleryRoute[1]), normalizeGalleryWorkspace(initialGalleryRoute[2]))
-	if (window.location.hash !== canonicalRoute) history.replaceState(null, '', canonicalRoute)
-}
 
 const galleries = ref<GalleryListItem[]>([])
 const loading = ref(true)
@@ -54,6 +48,9 @@ const showCreate = ref(false)
 const selectedGallery = ref<Gallery | null>(null)
 const shareGallery = ref<Gallery | null>(null)
 const immersiveWorkspace = ref(false)
+const galleryEditor = ref<{ flushSave: () => Promise<boolean>; currentRoute: () => string } | null>(null)
+let routeRequest = 0
+let pendingRoute: string | null = null
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 
 const visibleGalleries = computed(() => galleries.value)
@@ -102,10 +99,7 @@ async function load(reset = true) {
 		galleries.value = reset ? page.items : [...galleries.value, ...page.items]
 		galleryTotal.value = page.total
 		nextCursor.value = page.nextCursor
-		const match = window.location.hash.match(/^#gallery\/(\d+)/)
-		if (match && !selectedGallery.value) {
-			selectedGallery.value = await fetchGallery(Number(match[1]))
-		}
+		await syncRouteFromHash()
 	} catch {
 		notify('error', t('proofing_gallery', 'Galleries could not be loaded.')).catch(() => {})
 	} finally {
@@ -126,27 +120,58 @@ function created(gallery: Gallery) {
 }
 
 async function selectGallery(gallery: Gallery | GalleryListItem, workspace?: string) {
-	helpOpen.value = false
 	window.location.hash = `gallery/${gallery.id}${workspace ? `/${workspace}` : ''}`
-	try {
-		selectedGallery.value = 'settings' in gallery ? gallery : await fetchGallery(gallery.id)
-	} catch {
-		notify('error', t('proofing_gallery', 'Gallery details could not be loaded.')).catch(() => {})
+	await syncRouteFromHash()
+}
+
+async function saveBeforeNavigation(galleryId: number | null, request: number, previousRoute?: string): Promise<boolean> {
+	if (!selectedGallery.value || selectedGallery.value.id === galleryId || !galleryEditor.value) return true
+	const saved = await galleryEditor.value.flushSave()
+	if (!saved && request === routeRequest && previousRoute) {
+		history.replaceState(null, '', previousRoute)
+		notify('error', t('proofing_gallery', 'Settings could not be saved.')).catch(() => {})
 	}
+	return saved
+}
+
+function syncRouteFromHistory() {
+	// Hash navigation emits popstate before the browser finishes updating history.
+	queueMicrotask(() => { syncRouteFromHash().catch(() => {}) })
+}
+
+function requestedGalleryRoute(): { galleryId: number | null; route: string } {
+	const match = window.location.hash.match(/^#gallery\/(\d+)(?:\/([^/]+))?/)
+	if (!match) return { galleryId: null, route: window.location.hash }
+	const galleryId = Number(match[1])
+	return { galleryId, route: galleryWorkspacePath(galleryId, normalizeGalleryWorkspace(match[2])) }
 }
 
 async function syncRouteFromHash() {
-	const match = window.location.hash.match(/^#gallery\/(\d+)(?:\/([^/]+))?/)
-	if (!match) return
-	const galleryId = Number(match[1])
-	const canonicalRoute = galleryWorkspacePath(galleryId, normalizeGalleryWorkspace(match[2]))
-	if (window.location.hash !== canonicalRoute) history.replaceState(null, '', canonicalRoute)
-	helpOpen.value = false
-	if (selectedGallery.value?.id === galleryId) return
+	const { galleryId, route } = requestedGalleryRoute()
+	if (galleryId !== null && window.location.hash !== route) history.replaceState(null, '', route)
+	if (pendingRoute === route) return
+	const request = ++routeRequest
+	pendingRoute = route
+	const previousRoute = galleryEditor.value?.currentRoute()
 	try {
-		selectedGallery.value = await fetchGallery(galleryId)
+		if (!await saveBeforeNavigation(galleryId, request, previousRoute)) return
+		if (request !== routeRequest) return
+		if (galleryId === null) {
+			selectedGallery.value = null
+			helpOpen.value = route === '#help'
+			immersiveWorkspace.value = false
+			return
+		}
+		helpOpen.value = false
+		if (selectedGallery.value?.id === galleryId) return
+		const gallery = await fetchGallery(galleryId)
+		if (request === routeRequest && window.location.hash === route) selectedGallery.value = gallery
 	} catch {
+		if (request !== routeRequest) return
+		history.replaceState(null, '', previousRoute ?? `${window.location.pathname}${window.location.search}`)
 		notify('error', t('proofing_gallery', 'Gallery details could not be loaded.')).catch(() => {})
+	} finally {
+		if (request === routeRequest) pendingRoute = null
 	}
 }
 
@@ -166,7 +191,7 @@ function showHelp() {
 }
 
 function updateSelected(gallery: Gallery) {
-	selectedGallery.value = gallery
+	if (selectedGallery.value?.id === gallery.id) selectedGallery.value = gallery
 	if (shareGallery.value?.id === gallery.id) {
 		shareGallery.value = gallery
 	}
@@ -213,11 +238,13 @@ watch(search, () => {
 watch([modeFilter, sourceFilter, statusFilter, gallerySort], () => load())
 onMounted(() => {
 	load()
-	window.addEventListener('hashchange', syncRouteFromHash)
+	window.addEventListener('hashchange', syncRouteFromHistory)
+	window.addEventListener('popstate', syncRouteFromHistory)
 	mobileViewportQuery.addEventListener('change', onMobileViewportChange)
 })
 onBeforeUnmount(() => {
-	window.removeEventListener('hashchange', syncRouteFromHash)
+	window.removeEventListener('hashchange', syncRouteFromHistory)
+	window.removeEventListener('popstate', syncRouteFromHistory)
 	mobileViewportQuery.removeEventListener('change', onMobileViewportChange)
 })
 
@@ -269,6 +296,8 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 			<HelpView v-if="helpOpen" />
 			<GallerySettings
 				v-else-if="selectedGallery"
+				:key="selectedGallery.id"
+				ref="galleryEditor"
 				:gallery="selectedGallery"
 				@back="closeSettings"
 				@workspace-mode="immersiveWorkspace = $event"

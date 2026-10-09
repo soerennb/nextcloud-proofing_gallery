@@ -245,3 +245,100 @@ test('design sections, theme and mobile preview remain usable without scrolling 
 		expect(accessibility.violations).toEqual([])
 	}
 })
+
+const routeApi = '/ocs/v2.php/apps/proofing_gallery/api/v1/galleries'
+const routeHeaders = { Authorization: `Basic ${Buffer.from('admin:admin').toString('base64')}`, 'OCS-APIRequest': 'true' }
+
+for (const width of [1440, 390]) {
+	test(`cross-gallery deep links save edits and preserve browser history at ${width}px`, async ({ page, request }) => {
+		const { folderId } = JSON.parse(await readFile('test-results-e2e-state.json', 'utf8')) as { folderId: number }
+		const galleries = []
+		for (const suffix of ['A', 'B']) {
+			const response = await request.post(`${routeApi}?format=json`, { headers: routeHeaders, data: { folderId, title: `Route ${suffix} ${Date.now()}`, settings: { mode: 'collaboration' } } })
+			expect(response.status()).toBe(201)
+			galleries.push(await response.json() as { id: number; title: string })
+		}
+		const [a, b] = galleries
+		try {
+			await page.setViewportSize({ width, height: 1000 })
+			await login(page)
+			await page.goto(`/apps/proofing_gallery/#gallery/${a.id}/overview`)
+			await page.getByRole('textbox', { name: 'Gallery title', exact: true }).fill(`${a.title} edited`)
+			await page.evaluate(id => { location.hash = `gallery/${id}/access` }, b.id)
+			await expect(page.locator('.settings-header h1')).toHaveText(b.title)
+			await expect(page).toHaveURL(new RegExp(`#gallery/${b.id}/share$`))
+			const saved = await request.get(`${routeApi}/${a.id}?format=json`, { headers: routeHeaders })
+			expect((await saved.json()).title).toBe(`${a.title} edited`)
+			await page.goBack()
+			await expect(page.locator('.settings-header h1')).toHaveText(`${a.title} edited`)
+			await expect(page).toHaveURL(new RegExp(`#gallery/${a.id}/overview$`))
+			await page.goForward()
+			await expect(page.locator('.settings-header h1')).toHaveText(b.title)
+			await expect(page).toHaveURL(new RegExp(`#gallery/${b.id}/share$`))
+			await expectNoOverflow(page)
+		} finally {
+			for (const gallery of galleries) await request.delete(`${routeApi}/${gallery.id}?format=json`, { headers: routeHeaders })
+		}
+	})
+}
+
+test('cross-gallery navigation ignores delayed loads and retains unsaved changes on failure', async ({ page, request }) => {
+	const { folderId } = JSON.parse(await readFile('test-results-e2e-state.json', 'utf8')) as { folderId: number }
+	const galleries = []
+	for (const suffix of ['A', 'B']) {
+		const response = await request.post(`${routeApi}?format=json`, { headers: routeHeaders, data: { folderId, title: `Delayed route ${suffix} ${Date.now()}`, settings: { mode: 'collaboration' } } })
+		expect(response.status()).toBe(201)
+		galleries.push(await response.json() as { id: number; title: string })
+	}
+	const [a, b] = galleries
+	let releaseLoad = () => {}
+	const loadGate = new Promise<void>(resolve => { releaseLoad = resolve })
+	let loadStarted = () => {}
+	const started = new Promise<void>(resolve => { loadStarted = resolve })
+	const bUrl = `**/api/v1/galleries/${b.id}`
+	try {
+		await login(page)
+		await page.goto(`/apps/proofing_gallery/#gallery/${a.id}/overview`)
+		await expect(page.locator('.settings-header h1')).toHaveText(a.title)
+		await page.route(bUrl, async route => {
+			const response = await route.fetch()
+			loadStarted()
+			await loadGate
+			await route.fulfill({ response })
+		})
+		await page.evaluate(id => { location.hash = `gallery/${id}/review` }, b.id)
+		await started
+		await page.evaluate(id => { location.hash = `gallery/${id}/design` }, a.id)
+		await expect(page).toHaveURL(new RegExp(`#gallery/${a.id}/design$`))
+		const delayed = page.waitForResponse(response => response.url().endsWith(`/api/v1/galleries/${b.id}`))
+		releaseLoad()
+		await delayed
+		await page.unroute(bUrl)
+		await expect(page.locator('.settings-header h1')).toHaveText(a.title)
+		await expect(page.getByRole('heading', { name: 'Appearance', exact: true })).toBeVisible()
+		await page.evaluate(id => { location.hash = `gallery/${id}/overview` }, a.id)
+		await page.route(`**/api/v1/galleries/${a.id}`, route => route.request().method() === 'PUT'
+			? route.fulfill({ status: 503, contentType: 'application/json', body: '{"message":"Save unavailable"}' }) : route.continue())
+		await page.getByRole('textbox', { name: 'Gallery title', exact: true }).fill(`${a.title} unsaved`)
+		await page.evaluate(id => { location.hash = `gallery/${id}/review` }, b.id)
+		await expect(page).toHaveURL(new RegExp(`#gallery/${a.id}/overview$`))
+		await expect(page.getByRole('textbox', { name: 'Gallery title', exact: true })).toHaveValue(`${a.title} unsaved`)
+		await expect(page.getByText('Settings could not be saved.', { exact: true })).toBeVisible()
+		await page.unrouteAll({ behavior: 'wait' })
+		await page.getByRole('textbox', { name: 'Gallery title', exact: true }).fill(a.title)
+		await page.evaluate(id => { location.hash = `gallery/${id}/overview` }, b.id)
+		await expect(page.locator('.settings-header h1')).toHaveText(b.title)
+		const missing = Number.MAX_SAFE_INTEGER
+		await page.evaluate(id => { location.hash = `gallery/${id}/overview` }, missing)
+		await expect(page).toHaveURL(new RegExp(`#gallery/${b.id}/overview$`))
+		await expect(page.locator('.settings-header h1')).toHaveText(b.title)
+		await page.route(`**/api/v1/galleries/${a.id}`, route => route.fulfill({ status: 403, contentType: 'application/json', body: '{\"message\":\"Access denied\"}' }))
+		await page.evaluate(id => { location.hash = `gallery/${id}/review` }, a.id)
+		await expect(page).toHaveURL(new RegExp(`#gallery/${b.id}/overview$`))
+		await expect(page.locator('.settings-header h1')).toHaveText(b.title)
+	} finally {
+		releaseLoad()
+		await page.unrouteAll({ behavior: 'wait' })
+		for (const gallery of galleries) await request.delete(`${routeApi}/${gallery.id}?format=json`, { headers: routeHeaders })
+	}
+})

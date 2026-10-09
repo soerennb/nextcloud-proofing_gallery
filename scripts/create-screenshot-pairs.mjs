@@ -22,7 +22,7 @@ try {
 		const thumbnail = path.join(targetDir, `${name}-small.png`)
 		await copyFile(source, target)
 		const page = await browser.newPage({ viewport: name.endsWith('-mobile') ? { width: 185, height: 400 } : { width: 640, height: 400 } })
-		await page.setContent(`<img src="data:image/png;base64,${image.toString('base64')}" alt="" style="display:block;width:100vw;height:100vh;object-fit:cover;background:#111">`)
+		await page.setContent(`<style>html,body{margin:0;width:100%;height:100%;overflow:hidden}</style><img src="data:image/png;base64,${image.toString('base64')}" alt="" style="display:block;width:100vw;height:100vh;object-fit:cover;background:#111">`)
 		await page.screenshot({ path: thumbnail, animations: 'disabled' })
 		await page.close()
 		console.log(`paired    ${name}.png + ${name}-small.png`)
