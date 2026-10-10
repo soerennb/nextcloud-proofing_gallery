@@ -3,6 +3,8 @@ import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 
+import GalleryCoverControl from '../GalleryCoverControl.vue'
+import { galleryMediaCountLabel } from '../../domain/galleryMediaCounts.ts'
 import type { GallerySettings } from '../../domain/gallerySettings.ts'
 import type { GalleryWorkspace } from '../../domain/gallerySettingsOptions.ts'
 import { ownerPreviewUrl } from '../../services/galleryApi.ts'
@@ -10,8 +12,6 @@ import type { Gallery, MediaItem } from '../../types.ts'
 
 const props = defineProps<{
 	gallery: Gallery
-	mediaLoading: boolean
-	mediaTotal: number
 	previewMedia: MediaItem[]
 	rebinding: boolean
 	presets: Array<{ id: number; name: string }>
@@ -59,6 +59,8 @@ function previewUrl(fileId: number): string {
 		</fieldset>
 		<label v-if="gallery.permissions.canEdit" class="select-field"><span>{{ t('proofing_gallery', 'Public gallery language') }}</span><select v-model="settings.publicLocale" name="publicLocale"><option value="auto">{{ t('proofing_gallery', 'Automatic') }}</option><option value="en">{{ t('proofing_gallery', 'English') }}</option><option value="de">{{ t('proofing_gallery', 'German') }}</option></select></label>
 
+		<GalleryCoverControl v-model="settings.presentation.coverFileId" :gallery="gallery" :hero-source="settings.presentation.heroSource" />
+
 		<details v-if="gallery.permissions.role === 'owner'" class="preset-panel">
 			<summary role="button">
 				<h3>{{ t('proofing_gallery', 'Reusable preset') }}</h3><p>{{ t('proofing_gallery', 'Apply saved design, access and feedback defaults without changing this gallery’s link or source.') }}</p>
@@ -102,7 +104,7 @@ function previewUrl(fileId: number): string {
 					</NcButton>
 				</dd>
 			</div>
-			<div><dt>{{ t('proofing_gallery', 'Files shown') }}</dt><dd>{{ mediaLoading ? gallery.mediaSummary.total : mediaTotal }}</dd></div>
+			<div><dt>{{ t('proofing_gallery', 'Gallery content') }}</dt><dd>{{ galleryMediaCountLabel(gallery.mediaSummary) }}</dd></div>
 			<div><dt>{{ t('proofing_gallery', 'Last changed') }}</dt><dd>{{ new Date(gallery.updatedAt * 1000).toLocaleString() }}</dd></div>
 		</dl>
 		<div v-if="previewMedia.length" class="contact-strip" :aria-label="t('proofing_gallery', 'Gallery preview')">

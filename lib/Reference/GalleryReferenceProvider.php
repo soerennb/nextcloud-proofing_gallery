@@ -57,13 +57,15 @@ final class GalleryReferenceProvider extends ADiscoverableReferenceProvider impl
 		}
 		$reference = new Reference($referenceText);
 		$reference->setTitle((string)$gallery['title']);
-		$reference->setDescription($this->l10n->t('%1$s · %2$d photos', [(string)$gallery['workflowState'], (int)$gallery['mediaSummary']['total']]));
+		$reference->setDescription((string)$gallery['workflowState'] . ' · ' . \OCA\ProofingGallery\Service\GalleryMediaCountLabel::format($this->l10n, $gallery['mediaSummary']));
 		$reference->setImageUrl($this->getIconUrl());
 		$reference->setUrl((string)$gallery['internalUrl']);
 		$reference->setRichObject('proofing_gallery', [
 			'title' => $gallery['title'],
 			'state' => $gallery['workflowState'],
-			'photoCount' => $gallery['mediaSummary']['total'],
+			'photoCount' => $gallery['mediaSummary']['imageCount'],
+			'videoCount' => $gallery['mediaSummary']['videoCount'],
+			'countState' => $gallery['mediaSummary']['countState'],
 			'url' => $gallery['internalUrl'],
 		]);
 		return $reference;

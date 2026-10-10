@@ -129,7 +129,7 @@ test('gallery archive paginates without losing mobile reachability', async ({ br
 		updatedAt: 1_700_000_000 + id,
 		heroFileId: null,
 		lifecycleNextAt: null,
-		mediaSummary: { total: id, coverFileId: null, coverMimeType: null },
+		mediaSummary: { total: id, imageCount: id, videoCount: 0, countState: 'ready', countedAt: 1, coverFileId: null, coverMimeType: null },
 		permissions: { role: 'owner', canEdit: true, canManageAccess: true, canArchive: true },
 	})
 	await page.route('**/api/v2/galleries**', async (route) => {
@@ -202,7 +202,7 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	const page = await context.newPage()
 	await page.route('**/api/v1/galleries/*/activity?**', (route) => route.fulfill({ json: [] }))
 	await login(page, baseURL)
-	await page.getByRole('button', { name: /^E2E Gallery (?:Presentation|Proofing)/ }).click()
+	await page.locator('.gallery-row').filter({ has: page.locator('strong', { hasText: /^E2E Gallery$/ }) }).locator('.gallery-row__main').click()
 	await expect(page.getByRole('heading', { name: /^E2E Gallery/, level: 1 })).toBeVisible()
 	await expect(page.getByRole('navigation', { name: 'Gallery settings' })).toBeVisible()
 	await expect(page.getByRole('heading', { name: 'Gallery details' })).toBeVisible()
@@ -314,6 +314,7 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await opening.selectOption('compact')
 	await expect(page.getByText('Cover image', { exact: true })).toHaveCount(0)
 	await opening.selectOption('cinematic')
+	await page.getByRole('combobox', { name: 'Public title image', exact: true }).selectOption('custom')
 	const coverField = page.getByText('Cover image', { exact: true }).locator('..')
 	await coverField.getByRole('button', { name: 'Choose' }).click()
 	const artworkPicker = page.getByRole('dialog', { name: 'Choose gallery artwork' })
@@ -411,7 +412,7 @@ test('owner duplicate uploads open the native conflict dialog on desktop and mob
 	const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
 	const page = await context.newPage()
 	await login(page, baseURL)
-	await page.getByRole('button', { name: /^E2E Gallery/ }).click()
+	await page.locator('.gallery-row').filter({ has: page.locator('strong', { hasText: /^E2E Gallery$/ }) }).locator('.gallery-row__main').click()
 	await page.getByRole('button', { name: 'Photos', exact: true }).click()
 	const upload = page.getByLabel('Choose files to upload')
 	const duplicate = {

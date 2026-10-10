@@ -410,6 +410,10 @@ onBeforeUnmount(() => {
 						<strong>{{ t('proofing_gallery', 'Integration queue') }}</strong><p>{{ t('proofing_gallery', '{count} pending events', { count: draft.health.integrations.outbox.pending }) }}</p>
 					</NcNoteCard><NcNoteCard :type="draft.health.mediaIndex.stalled > 0 ? 'warning' : 'success'">
 						<strong>{{ t('proofing_gallery', 'Media indexing') }}</strong><p>{{ draft.health.mediaIndex.stalled > 0 ? t('proofing_gallery', '{count} stalled scans', { count: draft.health.mediaIndex.stalled }) : t('proofing_gallery', '{count} scans running', { count: draft.health.mediaIndex.running }) }}</p>
+					</NcNoteCard><NcNoteCard v-if="draft.health.mediaCounts" :type="(draft.health.mediaCounts.error ?? 0) + (draft.health.mediaCounts.stalled ?? 0) > 0 ? 'warning' : 'success'">
+						<strong>{{ t('proofing_gallery', 'Media counting') }}</strong><p>{{ t('proofing_gallery', '{ready} ready · {pending} pending · {failed} failed', { ready: draft.health.mediaCounts.ready ?? 0, pending: (draft.health.mediaCounts.pending ?? 0) + (draft.health.mediaCounts.updating ?? 0), failed: draft.health.mediaCounts.error ?? 0 }) }}</p><p v-if="draft.health.mediaCounts.stalled">
+							{{ t('proofing_gallery', '{count} stalled scans', { count: draft.health.mediaCounts.stalled }) }}
+						</p>
 					</NcNoteCard><NcNoteCard :type="(draft.health.captureMetadata?.failed ?? 0) > 0 ? 'warning' : 'success'">
 						<strong>{{ t('proofing_gallery', 'Capture date indexing') }}</strong><p>{{ t('proofing_gallery', '{ready} ready · {pending} pending · {failed} failed', draft.health.captureMetadata ?? { ready: 0, pending: 0, failed: 0 }) }}</p>
 					</NcNoteCard><NcNoteCard :type="draft.health.retention.failed > 0 ? 'warning' : 'success'">

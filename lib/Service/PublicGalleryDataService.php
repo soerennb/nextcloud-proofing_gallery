@@ -26,6 +26,7 @@ final class PublicGalleryDataService {
 		private VideoTranscodeService $videoTranscodes,
 		private KioskRepository $kiosks,
 		private FeedbackPolicyService $feedback,
+		private GalleryArtworkService $artwork,
 	) {
 	}
 
@@ -337,6 +338,8 @@ final class PublicGalleryDataService {
 		$settings = $this->feedback->publicSettings($context->settings, $context->policy);
 		$effective = $this->capabilities->effective($settings);
 		$serialized = $settings->jsonSerialize();
+		$serialized['presentation']['heroFileId'] = $this->artwork->publicHeroFileId($context);
+		$serialized['presentation']['coverFileId'] = null;
 		foreach ($serialized['presentation']['story']['sections'] ?? [] as &$section) {
 			$section['mediaIds'] = array_values(array_filter(
 				$section['mediaIds'] ?? [],

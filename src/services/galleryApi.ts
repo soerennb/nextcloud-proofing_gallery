@@ -2,8 +2,11 @@ import type { PublicShareRecovery } from '../domain/publicShareRecovery.ts'
 import axios from '@nextcloud/axios'
 import { generateOcsUrl, generateUrl } from '@nextcloud/router'
 
-import type { CollectionDocument, CullingXmpReport, Gallery, GalleryCursorPage, GalleryPage, GalleryPublicLink, GalleryReadiness, GuestRatingAggregate, GuestRatingPromotion, IndexedMediaPage, InvitationTemplate, LivePushCredential, LivePushOverview, MediaCull, MediaItem, MediaMetadata, MediaPage, MediaVersion, OwnerSelection, PublicLinkPolicy, ReviewOverview, ShareAuditItem, SourceRebindReport } from '../types'
+import type { CollectionDocument, CullingXmpReport, Gallery, GalleryPage, GalleryPublicLink, GalleryReadiness, GuestRatingAggregate, GuestRatingPromotion, IndexedMediaPage, InvitationTemplate, LivePushCredential, LivePushOverview, MediaCull, MediaItem, MediaMetadata, MediaPage, MediaVersion, OwnerSelection, PublicLinkPolicy, ReviewOverview, ShareAuditItem, SourceRebindReport } from '../types'
 import type { CanonicalGallerySettings, GallerySettings } from '../domain/gallerySettings'
+
+export { archiveGallery, fetchGallery, fetchGalleryPage, restoreGallery } from './galleryOverviewApi.ts'
+export type { GalleryCursorQuery } from './galleryOverviewApi.ts'
 
 export { fetchOwnerUploadConflicts, ownerUploadConcurrency, prepareOwnerUploadSessions, uploadGalleryMedia } from './ownerUploadApi.ts'
 export type { OwnerUploadSession, UploadResolution } from './ownerUploadApi.ts'
@@ -68,31 +71,6 @@ export async function fetchGalleries(query: GalleryQuery = {}): Promise<GalleryP
 			format: 'json',
 		},
 	})
-	return data
-}
-
-export interface GalleryCursorQuery {
-	archived?: boolean
-	search?: string
-	limit?: number
-	cursor?: string | null
-	sourceType?: 'folder' | 'collection'
-	status?: 'draft' | 'published' | 'archived'
-	mode?: 'presentation' | 'collaboration'
-	purpose?: Gallery['purpose']
-	ownedOnly?: boolean
-	sort?: 'updated' | 'created' | 'title'
-}
-
-export async function fetchGalleryPage(query: GalleryCursorQuery = {}): Promise<GalleryCursorPage> {
-	const { data } = await axios.get<GalleryCursorPage>(galleriesV2Url, {
-		params: { ...query, archived: query.archived ?? false, limit: query.limit ?? 50, format: 'json' },
-	})
-	return data
-}
-
-export async function fetchGallery(id: number): Promise<Gallery> {
-	const { data } = await axios.get<Gallery>(`${galleriesUrl}/${id}`)
 	return data
 }
 
@@ -497,11 +475,6 @@ export function ownerDesignPreviewUrl(
 	return `${generateUrl(`/apps/proofing_gallery/media/${galleryId}/${fileId}/design-preview`)}?${query}`
 }
 
-export async function archiveGallery(id: number): Promise<Gallery> {
-	const { data } = await axios.delete<Gallery>(`${galleriesUrl}/${id}`)
-	return data
-}
-
 export interface GalleryPrivacyPreview {
 	galleryId: number
 	title: string
@@ -525,11 +498,6 @@ export async function cancelGalleryPurge(id: number, requestId: number): Promise
 export async function assignGalleryRetention(id: number): Promise<Gallery['retention']> { return (await axios.post<Gallery['retention']>(`${galleriesUrl}/${id}/retention`)).data }
 
 export async function removeGalleryRetention(id: number): Promise<Gallery['retention']> { return (await axios.delete<Gallery['retention']>(`${galleriesUrl}/${id}/retention`)).data }
-
-export async function restoreGallery(id: number): Promise<Gallery> {
-	const { data } = await axios.post<Gallery>(`${galleriesUrl}/${id}/restore`)
-	return data
-}
 
 export async function publishGallery(
 	id: number,

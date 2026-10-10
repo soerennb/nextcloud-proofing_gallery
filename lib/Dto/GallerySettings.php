@@ -18,7 +18,7 @@ use OCA\ProofingGallery\Dto\Settings\SecuritySettings;
 use OCA\ProofingGallery\Dto\Settings\SettingsInput;
 
 final class GallerySettings implements JsonSerializable {
-	public const SCHEMA_VERSION = 13;
+	public const SCHEMA_VERSION = 14;
 	public const PUBLIC_METADATA_FIELDS = MetadataSettings::PUBLIC_FIELDS;
 
 	private function __construct(
@@ -96,6 +96,12 @@ final class GallerySettings implements JsonSerializable {
 	/** @param array<string, mixed> $patch */
 	public static function merge(self $current, array $patch): self {
 		$base = $current->canonical();
+		foreach (['presentation', 'appearance'] as $section) {
+			if (isset($patch[$section]) && is_array($patch[$section])
+				&& array_key_exists('heroFileId', $patch[$section]) && !array_key_exists('heroSource', $patch[$section])) {
+				$patch[$section]['heroSource'] = $patch[$section]['heroFileId'] === null ? 'none' : 'custom';
+			}
+		}
 		if (($patch['presentation']['logoMode'] ?? null) === 'upload'
 			&& !array_key_exists('logoBackground', $patch['presentation'])) {
 			$patch['presentation']['logoBackground'] = 'light';

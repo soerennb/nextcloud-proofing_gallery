@@ -12,7 +12,7 @@ export function toGalleryListItem(gallery: Gallery): GalleryListItem {
 		workflowState: gallery.workflowState,
 		createdAt: gallery.createdAt,
 		updatedAt: gallery.updatedAt,
-		heroFileId: gallery.settings.presentation.heroFileId,
+		revision: gallery.revision,
 		lifecycleNextAt: gallery.lifecycleNextAt ?? null,
 		mediaSummary: gallery.mediaSummary,
 		permissions: gallery.permissions,

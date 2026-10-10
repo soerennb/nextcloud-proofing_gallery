@@ -115,6 +115,27 @@ Der Arbeitsbereich ist nach Aufgaben gegliedert:
 - **Prüfung** enthält Feedback, Kundenauswahlen, Exporte und Upload-Prüfung.
 - **Verlauf** protokolliert relevante Galerieereignisse.
 
+Galeriekarten und **Übersicht → Galerieinhalt** zeigen getrennte Bild- und
+Videozahlen einschließlich aller Unterordner. Es zählen nur unterstützte, lesbare
+Medien; Ordner, versteckte Dateien und fehlende Sammlungseinträge zählen nicht.
+Die Zählung läuft im Hintergrund und auch über das Medienindex-Limit hinaus.
+Während einer Aktualisierung bleiben die letzten vollständigen Zahlen mit einem
+Hinweis sichtbar. Die Veröffentlichung ist möglich, sobald mindestens ein
+verfügbares Bild oder Video bestätigt wurde.
+
+Die Karten in der Galerieübersicht wählen automatisch ein Bild aus, auch aus
+Unterordnern. Über **Vorschaubild ändern** im Aktionsmenü einer Karte oder in den
+**Galeriedetails** wählst du ein Bild oder kehrst mit **Automatisch auswählen** zur
+automatischen Auswahl zurück. Der Dialog bietet Ordnernavigation, eine Suche
+nach Dateinamen im aktuellen Ordner und das Laden weiterer Bilder.
+
+Unter **Design → Öffentliches Titelbild** folgt **Vorschaubild verwenden** deinem
+manuell gewählten Vorschaubild. **Anderes Bild wählen** legt ein separates
+Titelbild fest; **Kein Titelbild** deaktiviert es. Automatisch gewählte
+Kartenvorschauen werden nicht als öffentliche Titelbilder übernommen. Vererbte
+Bilder erscheinen nur innerhalb der erlaubten Ordner eines Links. Bestehende
+Titelbilder bleiben beim Upgrade separat erhalten.
+
 Änderungen verwenden Revisionsprüfungen. Hat ein anderes Browserfenster die
 Galerie verändert, lade den aktuellen Stand, statt ihn unbemerkt zu überschreiben.
 

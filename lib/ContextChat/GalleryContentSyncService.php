@@ -67,7 +67,9 @@ final class GalleryContentSyncService {
 			'Status: ' . $gallery->getStatus(),
 			'Workflow state: ' . $gallery->getWorkflowState(),
 			'Source type: ' . $gallery->getSourceType(),
-			'Photo count: ' . (int)$summary['mediaSummary']['total'],
+			'Image count: ' . ($summary['mediaSummary']['imageCount'] ?? 'unknown'),
+			'Video count: ' . ($summary['mediaSummary']['videoCount'] ?? 'unknown'),
+			'Media count state: ' . $summary['mediaSummary']['countState'],
 		]);
 		return new ContentItem(
 			(string)$gallery->getId(),

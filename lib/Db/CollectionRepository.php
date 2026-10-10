@@ -63,6 +63,22 @@ final class CollectionRepository {
 			->orderBy('position', 'ASC')->executeQuery());
 	}
 
+	/** @return list<array<string, mixed>> */
+	public function page(int $collectionId, int $afterId, int $limit): array {
+		$qb = $this->db->getQueryBuilder();
+		return QueryResult::rows($qb->select('*')->from('proofing_collection_items')
+			->where($qb->expr()->eq('collection_id', $qb->createNamedParameter($collectionId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->gt('id', $qb->createNamedParameter($afterId, IQueryBuilder::PARAM_INT)))
+			->orderBy('id', 'ASC')->setMaxResults($limit)->executeQuery());
+	}
+
+	/** @return list<int> */
+	public function dependents(int $sourceGalleryId): array {
+		$qb = $this->db->getQueryBuilder();
+		return array_map('intval', QueryResult::column($qb->selectDistinct('collection_id')->from('proofing_collection_items')
+			->where($qb->expr()->eq('source_gallery_id', $qb->createNamedParameter($sourceGalleryId, IQueryBuilder::PARAM_INT)))->executeQuery()));
+	}
+
 	/** @param list<int> $collectionIds
 	 * @return array<int, int>
 	 */

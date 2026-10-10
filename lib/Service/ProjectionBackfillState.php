@@ -10,6 +10,7 @@ use OCP\IConfig;
 
 final class ProjectionBackfillState {
 	public const MEDIA_SORT = 'mediaSortProjectionV1';
+	public const MEDIA_COUNTS = 'mediaCountsProjectionV1';
 	public const LIFECYCLE = 'lifecycleProjectionV1';
 	public const GALLERY_LIST = 'galleryListProjectionV1';
 

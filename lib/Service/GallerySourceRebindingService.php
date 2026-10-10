@@ -43,6 +43,7 @@ final class GallerySourceRebindingService {
 		private ITimeFactory $clock,
 		private LifecycleScheduleService $schedule,
 		private MediaSummaryService $summaries,
+		private GalleryMediaCountInvalidator $counts,
 		private IJobList $jobs,
 		private LoggerInterface $logger,
 	) {
@@ -109,6 +110,14 @@ final class GallerySourceRebindingService {
 					$this->links->update($link);
 				}
 				$gallery->setFolderId($folderId);
+				$settings = \OCA\ProofingGallery\Dto\GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
+				if ($settings->presentation->coverFileId !== null) {
+					try { $this->folders->resolveMedia($gallery->getOwnerUid(), $folderId, $settings->presentation->coverFileId); }
+					catch (FolderAccessException) {
+						$settings = \OCA\ProofingGallery\Dto\GallerySettings::merge($settings, ['presentation' => ['coverFileId' => null]]);
+						$gallery->setSettings(json_encode($settings, JSON_THROW_ON_ERROR));
+					}
+				}
 				$gallery->setUpdatedAt($this->clock->getTime());
 				$gallery->setRevision($gallery->getRevision() + 1);
 				$this->schedule->project($gallery, $this->clock->getTime());
@@ -123,6 +132,7 @@ final class GallerySourceRebindingService {
 			throw $exception;
 		}
 		$this->summaries->invalidate((int)$result->getId());
+		$this->counts->invalidate((int)$result->getId(), true);
 		// Database/native changes are committed. Queue failures must not restore the old source.
 		try { $this->jobs->add(RebuildMediaIndexJob::class, ['galleryId' => $result->getId()]); }
 		catch (Throwable $exception) { $this->logger->error('Could not queue media index after source rebind', ['exception' => $exception]); }

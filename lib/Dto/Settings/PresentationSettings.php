@@ -18,6 +18,8 @@ final class PresentationSettings implements JsonSerializable {
 		public readonly ?string $instanceLogoAssetId,
 		public readonly string $instanceStudioName,
 		public readonly ?int $heroFileId,
+		public readonly ?int $coverFileId,
+		public readonly string $heroSource,
 		public readonly string $openerStyle,
 		public readonly int $heroFocusX,
 		public readonly int $heroFocusY,
@@ -52,6 +54,7 @@ final class PresentationSettings implements JsonSerializable {
 	public static function defaults(): array {
 		return [
 			'accentColor' => '#E85D4A', 'welcomeMessage' => '', 'logoMode' => 'inherit', 'logoBackground' => 'transparent', 'logoFileId' => null, 'logoAssetId' => null, 'instanceLogoAssetId' => null, 'instanceStudioName' => '', 'heroFileId' => null,
+			'coverFileId' => null, 'heroSource' => 'cover',
 			'openerStyle' => 'minimal', 'heroFocusX' => 50, 'heroFocusY' => 50, 'fontPreset' => 'modern',
 			'watermarkText' => '', 'watermarkOpacity' => 24, 'watermarkTextPosition' => 'tile', 'watermarkTextSize' => 18,
 			'watermarkImageAssetId' => null, 'watermarkImageOpacity' => 24, 'watermarkImagePosition' => 'bottom-right', 'watermarkImageScale' => 20,
@@ -66,6 +69,11 @@ final class PresentationSettings implements JsonSerializable {
 
 	/** @param array<string, mixed> $input */
 	public static function fromArray(array $input): self {
+		// Preserve the artwork of documents written before separate card covers.
+		if (!array_key_exists('heroSource', $input) && ($input['heroFileId'] ?? null) !== null) {
+			$input['heroSource'] = 'custom';
+			$input['coverFileId'] ??= $input['heroFileId'];
+		}
 		// Schema <= 9 encoded compact and hidden titles through two unrelated
 		// fields. Keep accepting that shape at the boundary, but never emit it.
 		if (!array_key_exists('titleMode', $input)) {
@@ -107,6 +115,8 @@ final class PresentationSettings implements JsonSerializable {
 			SettingsInput::choice($value['logoBackground'], 'presentation.logoBackground', ['transparent', 'light', 'dark']),
 			SettingsInput::nullableInt($value['logoFileId'], 'presentation.logoFileId'), $value['logoAssetId'], $asset, $studioName,
 			SettingsInput::nullableInt($value['heroFileId'], 'presentation.heroFileId'),
+			SettingsInput::nullableInt($value['coverFileId'], 'presentation.coverFileId'),
+			SettingsInput::choice($value['heroSource'], 'presentation.heroSource', ['cover', 'custom', 'none']),
 			SettingsInput::choice($value['openerStyle'], 'presentation.openerStyle', ['minimal', 'compact', 'cinematic']),
 			$x, $y, SettingsInput::choice($value['fontPreset'], 'presentation.fontPreset', ['system', 'editorial', 'modern']),
 			$watermark, $opacity,

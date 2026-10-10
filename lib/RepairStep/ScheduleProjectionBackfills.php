@@ -24,6 +24,7 @@ final class ScheduleProjectionBackfills implements IRepairStep {
 	}
 
 	public function run(IOutput $output): void {
+		$this->schedule(\OCA\ProofingGallery\BackgroundJob\BackfillGalleryMediaCountsJob::class, ProjectionBackfillState::MEDIA_COUNTS);
 		$this->schedule(\OCA\ProofingGallery\BackgroundJob\BackfillMediaSortJob::class, ProjectionBackfillState::MEDIA_SORT);
 		$this->schedule(BackfillLifecycleScheduleJob::class, ProjectionBackfillState::LIFECYCLE);
 		$this->schedule(BackfillGalleryListProjectionJob::class, ProjectionBackfillState::GALLERY_LIST);

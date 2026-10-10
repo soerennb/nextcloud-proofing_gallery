@@ -66,7 +66,7 @@ final class EventSetupService {
 	}
 
 	/** @return array<string, mixed> */
-	public function designMedia(Gallery $gallery, string $scope, string $query, int $limit, int $offset): array {
+	public function designMedia(Gallery $gallery, string $scope, string $query, int $limit, int $offset, bool $imagesOnly = false): array {
 		$setup = $this->get($gallery);
 		$roles = [];
 		$paths = [];
@@ -94,7 +94,7 @@ final class EventSetupService {
 		$available = array_column($scopes, 'id');
 		if (!in_array($scope, $available, true)) $scope = in_array('shared', $available, true) ? 'shared' : (string)$available[0];
 		$roots = $scope === 'shared' ? $shared : ($recipientRoots[$scope] ?? []);
-		$page = $this->folders->listScopedMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $roots, $limit, $offset, $query);
+		$page = $this->folders->listScopedMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $roots, $limit, $offset, $query, $imagesOnly);
 		return ['scopes' => $scopes, 'activeScope' => $scope, ...$page->jsonSerialize()];
 	}
 

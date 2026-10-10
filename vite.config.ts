@@ -57,6 +57,7 @@ function documentationPlugin(): Plugin {
 export default createAppConfig(
 	{
 		main: resolve(join('src', 'main.ts')),
+		favicon: resolve(join('src', 'favicon.ts')),
 		public: resolve(join('src', 'public.ts')),
 		'public-preview': resolve(join('src', 'publicPreview.ts')),
 		admin: resolve(join('src', 'admin.ts')),

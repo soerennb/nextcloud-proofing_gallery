@@ -13,6 +13,7 @@ use OCP\IDBConnection;
 final class MediaCleanupService {
 	public function __construct(
 		private IDBConnection $db,
+		private GalleryMediaCountInvalidator $counts,
 		private IAppData $appData,
 	) {
 	}
@@ -57,6 +58,7 @@ final class MediaCleanupService {
 			$this->deleteAppDataFile('video-derivatives', $row['poster_key'] ?? null);
 		}
 
+		foreach ($galleryIds as $galleryId) $this->counts->invalidate($galleryId);
 		return $galleryIds;
 	}
 
@@ -99,7 +101,7 @@ final class MediaCleanupService {
 			if (!is_array($settings) || !is_array($settings['presentation'] ?? null)) continue;
 			$presentation = &$settings['presentation'];
 			$changed = false;
-			foreach (['heroFileId', 'logoFileId'] as $key) {
+			foreach (['coverFileId', 'heroFileId', 'logoFileId'] as $key) {
 				if (($presentation[$key] ?? null) === $fileId) {
 					$presentation[$key] = null;
 					$changed = true;

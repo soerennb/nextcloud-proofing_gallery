@@ -26,7 +26,7 @@ final class ApplicationTest extends TestCase {
 		$exporters = [];
 		foreach ($info->openmetrics->exporter as $exporter) $exporters[] = (string)$exporter;
 		self::assertContains('OCA\\ProofingGallery\\OpenMetrics\\GalleryTotalMetric', $exporters);
-		self::assertCount(6, $info->{'background-jobs'}->job);
+		self::assertCount(7, $info->{'background-jobs'}->job);
 		$jobs = [];
 		foreach ($info->{'background-jobs'}->job as $job) $jobs[] = (string)$job;
 		self::assertContains('OCA\\ProofingGallery\\BackgroundJob\\CleanupGalleryDataJob', $jobs);

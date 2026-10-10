@@ -108,6 +108,11 @@ test('collection membership protects originals and rejects stale revisions', asy
 		})
 		expect(saved.status()).toBe(200)
 		expect((await saved.json() as { revision: number }).revision).toBe(2)
+		const artwork = await request.get(`${galleries}/${collectionId}/artwork?format=json`, { headers: apiHeaders }).then(response => response.json()) as { items: Array<{ id: number }> }
+		expect(artwork.items.map(item => item.id)).toEqual([proof!.id, secondFileId])
+		expect((await request.get(`/apps/proofing_gallery/media/${collectionId}/cover-preview`, { headers: apiHeaders })).status()).toBe(200)
+		expect((await request.put(`${galleries}/${collectionId}?format=json`, { headers: apiHeaders, data: { settings: { presentation: { coverFileId: secondFileId } } } })).status()).toBe(200)
+
 
 		const stale = await request.put(`${galleries}/${collectionId}/collection?format=json`, {
 			headers: { ...apiHeaders, 'Content-Type': 'application/json' },

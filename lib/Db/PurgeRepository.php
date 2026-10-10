@@ -8,7 +8,9 @@ use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
 final class PurgeRepository {
-	/** Tables are ordered so child rows disappear before their parents. */
+	/** Existing child positions stay stable for persisted purge cursors.
+	 * New projections extend the final gallery stage without skipping old tables.
+	 */
 	public const TABLES = [
 		'proofing_annotations', 'proofing_selection_items', 'proofing_feedback', 'proofing_comments',
 		'proofing_selections', 'proofing_guest_ratings', 'proofing_review_rounds', 'proofing_share_audit',
@@ -17,7 +19,8 @@ final class PurgeRepository {
 		'proofing_live_push', 'proofing_retention_log', 'proofing_media_scan_queue', 'proofing_media_scans', 'proofing_media_index',
 		'proofing_semantic_idx', 'proofing_versions', 'proofing_ext_resources',
 		'proofing_collection_items', 'proofing_collections', 'proofing_pin_handoffs', 'proofing_event_audit', 'proofing_event_roots', 'proofing_event_recipients', 'proofing_event_waves', 'proofing_event_setups', 'proofing_summaries', 'proofing_guests',
-		'proofing_kiosk_photos', 'proofing_kiosk_events', 'proofing_managers', 'proofing_galleries',
+		'proofing_kiosk_photos', 'proofing_kiosk_events', 'proofing_managers',
+		'proofing_count_queue', 'proofing_media_counts', 'proofing_galleries',
 	];
 
 	public function __construct(private IDBConnection $db) {
@@ -89,7 +92,7 @@ final class PurgeRepository {
 
 	public function deleteBatch(string $table, int $galleryId, int $limit): int {
 		if (!in_array($table, self::TABLES, true)) throw new \InvalidArgumentException('Unsupported purge table');
-		if (in_array($table, ['proofing_media_scans', 'proofing_collections', 'proofing_summaries', 'proofing_galleries'], true)) {
+		if (in_array($table, ['proofing_media_scans', 'proofing_collections', 'proofing_media_counts', 'proofing_summaries', 'proofing_galleries'], true)) {
 			$qb = $this->db->getQueryBuilder();
 			return $qb->delete($table)->where($qb->expr()->eq($table === 'proofing_galleries' ? 'id' : 'gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))->executeStatement();
 		}
@@ -108,7 +111,7 @@ final class PurgeRepository {
 	/** @return list<array<string, mixed>> */
 	public function exportRows(string $table, int $galleryId, int $afterId, int $limit): array {
 		if (!in_array($table, self::TABLES, true) || $table === 'proofing_galleries') return [];
-		if (in_array($table, ['proofing_media_scans', 'proofing_collections', 'proofing_summaries'], true)) {
+		if (in_array($table, ['proofing_media_scans', 'proofing_collections', 'proofing_media_counts', 'proofing_summaries'], true)) {
 			if ($afterId > 0) return [];
 			$qb = $this->db->getQueryBuilder();
 			$rows = QueryResult::rows($qb->select('*')->from($table)

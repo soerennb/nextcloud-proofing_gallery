@@ -9,7 +9,6 @@ use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\GalleryMapper;
 use OCA\ProofingGallery\Db\PresetMapper;
 use OCA\ProofingGallery\Db\MediaSummaryRepository;
-use OCA\ProofingGallery\Db\CollectionRepository;
 use OCA\ProofingGallery\Domain\GalleryStatus;
 use OCA\ProofingGallery\Domain\GalleryPurpose;
 use OCA\ProofingGallery\Domain\ProjectCreationOptions;
@@ -38,9 +37,10 @@ final class GalleryService {
 		private GalleryListProjectionService $listProjection,
 		private GalleryCursorCodec $galleryCursors,
 		private MediaSummaryRepository $summaryRows,
-		private CollectionRepository $collectionRows,
 		private RetentionHandoffService $retention,
 		private DesignAssetService $designAssets,
+		private GalleryMediaCountService $mediaCounts,
+		private \OCA\ProofingGallery\Db\GalleryMediaCountRepository $countRows,
 	) {
 	}
 
@@ -314,13 +314,14 @@ final class GalleryService {
 		$galleries = array_slice($page['items'], 0, $limit);
 		$ids = array_map(static fn (Gallery $gallery): int => (int)$gallery->getId(), $galleries);
 		$summaries = $this->summaryRows->findMany($ids);
-		$collectionIds = [];
-		foreach ($galleries as $gallery) if ($gallery->getSourceType() === 'collection') $collectionIds[] = (int)$gallery->getId();
-		$collectionCounts = $this->collectionRows->counts($collectionIds);
-		$items = array_map(function (Gallery $gallery) use ($userUid, $page, $summaries, $collectionCounts): array {
+		$countRows = $this->countRows->findMany($ids);
+		$items = array_map(function (Gallery $gallery) use ($userUid, $page, $summaries, $countRows): array {
 			$id = (int)$gallery->getId();
 			$role = $gallery->getOwnerUid() === $userUid ? 'owner' : ($page['roles'][$id] ?? 'viewer');
 			$summary = $summaries[$id] ?? null;
+			$count = $countRows[$id] ?? null;
+			if ($count === null || in_array($count['state'], ['pending', 'updating', 'error'], true)) $this->mediaCounts->queue($id);
+			$presentation = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR))->presentation;
 			return [
 				'id' => $id,
 				'title' => $gallery->getTitle(),
@@ -332,10 +333,12 @@ final class GalleryService {
 				'workflowState' => $gallery->getWorkflowState(),
 				'createdAt' => $gallery->getCreatedAt(),
 				'updatedAt' => $gallery->getUpdatedAt(),
-				'heroFileId' => GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR))->presentation->heroFileId,
+				'revision' => $gallery->getRevision(),
+				'heroFileId' => $presentation->heroFileId,
+				'coverFileId' => $presentation->coverFileId,
 				'lifecycleNextAt' => $gallery->getLifecycleNextAt(),
 				'mediaSummary' => [
-					'total' => $gallery->getSourceType() === 'collection' ? ($collectionCounts[$id] ?? 0) : (int)($summary['media_total'] ?? 0),
+					...GalleryMediaCountService::present($count),
 					'coverFileId' => isset($summary['cover_file_id']) ? (int)$summary['cover_file_id'] : null,
 					'coverMimeType' => $summary['cover_mime_type'] ?? null,
 				],
@@ -375,7 +378,7 @@ final class GalleryService {
 			return [
 				...$gallery->jsonSerialize(),
 				'source' => $this->collections->sourceStatus($gallery),
-				'mediaSummary' => $this->collections->summary($gallery),
+				'mediaSummary' => [...$this->collections->summary($gallery), ...$this->mediaCounts->summary((int)$gallery->getId())],
 				'permissions' => $permissions,
 				'effectiveCapabilities' => $effectiveCapabilities,
 				'availableCapabilities' => $availableCapabilities,
@@ -396,6 +399,7 @@ final class GalleryService {
 				$gallery->getFolderId(),
 				$folder,
 			);
+			$mediaSummary = [...$mediaSummary, ...$this->mediaCounts->summary((int)$gallery->getId())];
 		} catch (\OCA\ProofingGallery\Exception\FolderAccessException) {
 			$source = [
 					'type' => 'folder',
@@ -404,7 +408,7 @@ final class GalleryService {
 					'state' => 'missing',
 			];
 			$mediaSummary = [
-					'total' => 0,
+					...GalleryMediaCountService::present(['state' => 'unavailable']),
 					'coverFileId' => null,
 					'coverMimeType' => null,
 			];
@@ -451,7 +455,7 @@ final class GalleryService {
 			$current = GallerySettings::fromArray(json_decode($gallery->getSettings(), true, flags: JSON_THROW_ON_ERROR));
 			$merged = GallerySettings::merge($current, $settings);
 			\OCA\ProofingGallery\Domain\MediaSort::assertValid($merged->navigation->sortBy, $merged->navigation->sortDirection, $gallery->getSourceType() === 'collection');
-			$this->assertPresentationAssets($gallery, $merged);
+			$this->assertPresentationAssets($gallery, $merged, $current);
 			$gallery->setSettings(json_encode($merged, JSON_THROW_ON_ERROR));
 		}
 		$gallery->setUpdatedAt($this->clock->getTime());
@@ -474,7 +478,10 @@ final class GalleryService {
 			throw new InvalidArgumentException('Only archived galleries can be restored');
 		}
 		$this->retention->remove($gallery, $ownerUid);
-		return $this->shares->restore($gallery);
+		$restored = $this->shares->restore($gallery);
+		$this->mediaCounts->queue((int)$restored->getId());
+		if ($restored->getSourceType() === 'folder') $this->jobs->add(RebuildMediaIndexJob::class, ['galleryId' => (int)$restored->getId()]);
+		return $restored;
 	}
 
 	public function complete(string $ownerUid, int $id): Gallery {
@@ -496,14 +503,16 @@ final class GalleryService {
 		return $title;
 	}
 
-	private function assertPresentationAssets(Gallery $gallery, GallerySettings $settings): void {
-		foreach ([$settings->presentation->heroFileId, $settings->presentation->logoFileId] as $fileId) {
-			if ($fileId === null) continue;
+	private function assertPresentationAssets(Gallery $gallery, GallerySettings $settings, ?GallerySettings $previous = null): void {
+		$ids = [$settings->presentation->coverFileId, GalleryArtworkService::heroFileId($settings->presentation), $settings->presentation->logoFileId];
+		$previousIds = $previous === null ? [] : [$previous->presentation->coverFileId, GalleryArtworkService::heroFileId($previous->presentation), $previous->presentation->logoFileId];
+		foreach ($ids as $index => $fileId) {
+			if ($fileId === null || ($previous !== null && $previousIds[$index] === $fileId)) continue;
 			try {
 				$file = $gallery->getSourceType() === 'collection'
 					? $this->collections->resolveMedia($gallery, $fileId)
 					: $this->folders->resolveMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $fileId);
-			} catch (\OCA\ProofingGallery\Exception\FolderAccessException $exception) {
+			} catch (\OCA\ProofingGallery\Exception\FolderAccessException|\OCP\Files\NotFoundException|\OCP\AppFramework\Db\DoesNotExistException $exception) {
 				throw new InvalidArgumentException('Gallery artwork must be an image inside the gallery source', previous: $exception);
 			}
 			if (!str_starts_with($file->getMimeType(), 'image/')) {

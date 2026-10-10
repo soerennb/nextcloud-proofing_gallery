@@ -128,6 +128,7 @@ final class SettingsRolloutService {
 		if (in_array('appearance', $categories, true)) {
 			$patch['publicLocale'] = $defaults['publicLocale'];
 			$patch['presentation'] = $defaults['presentation'];
+			foreach (['coverFileId', 'heroSource', 'heroFileId'] as $field) unset($patch['presentation'][$field]);
 			$patch['navigation'] = $defaults['navigation'];
 		}
 		if (in_array('branding', $categories, true)) {

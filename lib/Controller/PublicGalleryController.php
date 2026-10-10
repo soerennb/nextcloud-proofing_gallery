@@ -47,6 +47,7 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		private VideoTranscodeService $videoTranscodes,
 		private \OCA\ProofingGallery\Service\PublicGalleryDownloadService $galleryDownloads,
 		private \OCA\ProofingGallery\Service\WebJpegDerivativeService $webJpegs,
+		private \OCA\ProofingGallery\Service\GalleryArtworkService $artwork,
 	) {
 		parent::__construct($request, $session, $contextResolver);
 	}
@@ -269,7 +270,7 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 			return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
 		}
 		$presentation = $this->publicContext()->settings->presentation;
-		$fileId = $kind === 'hero' ? $presentation->heroFileId : ($presentation->logoMode === 'gallery' ? $presentation->logoFileId : null);
+		$fileId = $kind === 'hero' ? $this->artwork->publicHeroFileId($this->publicContext()) : ($presentation->logoMode === 'gallery' ? $presentation->logoFileId : null);
 		if ($kind === 'logo' && $presentation->logoMode === 'upload' && $presentation->logoAssetId !== null) {
 			try {
 				$asset = $this->designAssets->owned($this->resolvedGallery()->getOwnerUid(), $presentation->logoAssetId, 'logo');
@@ -347,8 +348,8 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 			);
 			return new DataDisplayResponse($preview->getContent(), Http::STATUS_OK, [
 				'Content-Type' => $preview->getMimeType(),
-				'Cache-Control' => 'private, max-age=3600',
-				'ETag' => '"' . $file->getEtag() . '"',
+				'Cache-Control' => 'private, no-cache',
+				'ETag' => '"' . hash('sha256', $file->getId() . ':' . $file->getEtag() . ':' . $x . ':' . $y . ':' . $mode) . '"',
 			]);
 		} catch (\OCP\Files\NotFoundException|\InvalidArgumentException) {
 			return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);

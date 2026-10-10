@@ -156,6 +156,7 @@ ein öffentlicher Link nur erlauben kann, was alle geltenden Regeln zulassen.
 		<exporter>OCA\ProofingGallery\OpenMetrics\DerivativeBytesMetric</exporter>
 	</openmetrics>
 	<background-jobs>
+		<job>OCA\ProofingGallery\BackgroundJob\ReconcileGalleryMediaCountsJob</job>
 		<job>OCA\ProofingGallery\BackgroundJob\PurgeGuestsJob</job>
 		<job>OCA\ProofingGallery\BackgroundJob\CleanupGalleryDataJob</job>
 		<job>OCA\ProofingGallery\BackgroundJob\SendNotificationDigestsJob</job>

@@ -1,5 +1,6 @@
 import axios from '@nextcloud/axios'
 import { generateOcsUrl } from '@nextcloud/router'
+import type { Gallery } from '../types.ts'
 
 export interface FolderGallery {
 	id: number
@@ -7,7 +8,7 @@ export interface FolderGallery {
 	status: string
 	workflowState: string
 	internalUrl: string
-	mediaSummary: { total: number }
+	mediaSummary: Gallery['mediaSummary']
 }
 
 export interface FolderGalleryResolution {

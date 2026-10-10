@@ -280,6 +280,17 @@ von Proofing Gallery; Originale bleiben in Nextcloud. Der Systemstatus zeigt
 fällige Löschungen, Lebenszyklusaktionen, Gastsitzungen, Medienindex-,
 Integrations- und Retention-Rückstände über indizierte Zähler.
 
+Die Medienzählung speichert einen eigenen Zustand und gilt unabhängig vom
+Limit des Medienindex. Ein Auftrag prüft höchstens 500 Einträge und setzt am
+gespeicherten Cursor fort. Erst eine vollständig abgeschlossene Zählung ersetzt
+die vorherigen Zahlen. Das Upgrade reiht alle bestehenden Galerien ein, auch
+archivierte. Der Systemstatus zeigt fertige, ausstehende, fehlgeschlagene und
+festhängende Zählungen. Alle 15 Minuten setzt ein Cron-Auftrag seit 15 Minuten
+unterbrochene Arbeit fort und erneuert Zahlen, die älter als einen Tag sind.
+Datei-Ereignisse stoßen die Aktualisierung normalerweise sofort an. Nicht lesbare
+Quellen werden als nicht verfügbar angezeigt, statt als leere Galerie. Nach
+wiederhergestelltem Zugriff nimmt der Cron-Auftrag die Zählung erneut auf.
+
 Für die optionale Übergabe an Files Retention wird unter Sicherheit ein
 vorhandener System-Tag gewählt. Eigentümer aktivieren sie je Ordnergalerie. Der
 Tag wird beim Archivieren gesetzt und beim Wiederherstellen entfernt. Proofing

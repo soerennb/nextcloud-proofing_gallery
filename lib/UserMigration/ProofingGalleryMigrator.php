@@ -226,6 +226,8 @@ final class ProofingGalleryMigrator implements IMigrator, ISizeEstimationMigrato
 		$canonical = GallerySettings::fromArray($settings)->canonical();
 		$canonical['presentation']['logoFileId'] = null;
 		$canonical['presentation']['heroFileId'] = null;
+		$canonical['presentation']['coverFileId'] = null;
+		if ($canonical['presentation']['heroSource'] === 'custom') $canonical['presentation']['heroSource'] = 'cover';
 		$canonical['presentation']['instanceLogoAssetId'] = null;
 		$canonical['presentation']['instanceStudioName'] = '';
 		return $canonical;

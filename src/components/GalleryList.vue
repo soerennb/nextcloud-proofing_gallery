@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { n, t } from '@nextcloud/l10n'
+import { t } from '@nextcloud/l10n'
+import { galleryMediaCountLabel } from '../domain/galleryMediaCounts.ts'
 import CheckIcon from 'vue-material-design-icons/Check.vue'
 import ImageMultipleIcon from 'vue-material-design-icons/ImageMultiple.vue'
-import { ownerPreviewUrl } from '../services/galleryApi.ts'
+import { ownerCoverPreviewUrl } from '../services/galleryCoverPreview.ts'
 import type { GalleryListItem } from '../types.ts'
 import GalleryActionsMenu from './GalleryActionsMenu.vue'
 
@@ -13,19 +14,17 @@ const emit = defineEmits<{
 	share: [gallery: GalleryListItem]
 	archive: [gallery: GalleryListItem]
 	restore: [gallery: GalleryListItem]
+	cover: [gallery: GalleryListItem]
 }>()
 
-const failedPreviews = ref(new Set<string>())
+const failedPreviews = ref(new WeakSet<GalleryListItem>())
 
 function formattedDate(timestamp: number): string {
 	return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(timestamp * 1000))
 }
 
 function previewUrl(gallery: GalleryListItem): string {
-	const fileId = gallery.heroFileId ?? gallery.mediaSummary.coverFileId
-	return fileId
-		? ownerPreviewUrl(gallery.id, fileId, 360, 204)
-		: ''
+	return ownerCoverPreviewUrl(gallery.id, gallery.revision ?? gallery.updatedAt)
 }
 
 </script>
@@ -34,17 +33,17 @@ function previewUrl(gallery: GalleryListItem): string {
 	<div class="gallery-list" :class="`gallery-list--${view}`">
 		<article v-for="gallery in galleries" :key="gallery.id" class="gallery-row">
 			<button class="gallery-row__main" type="button" @click="emit('select', gallery)">
-				<span class="gallery-row__cover" aria-hidden="true">
-					<img v-if="previewUrl(gallery) && !failedPreviews.has(previewUrl(gallery))"
+				<span class="gallery-row__cover">
+					<img v-if="!failedPreviews.has(gallery)"
 						:src="previewUrl(gallery)"
 						alt=""
 						loading="lazy"
-						@error="failedPreviews.add(previewUrl(gallery))">
-					<span v-else class="gallery-row__fallback">
+						@error="failedPreviews.add(gallery)">
+					<span v-else class="gallery-row__fallback" aria-hidden="true">
 						<CheckIcon v-if="gallery.mode === 'collaboration'" :size="26" />
 						<ImageMultipleIcon v-else :size="26" />
 					</span>
-					<span class="gallery-row__frame">{{ n('proofing_gallery', '%n image', '%n images', gallery.mediaSummary.total) }}</span>
+					<span class="gallery-row__frame">{{ galleryMediaCountLabel(gallery.mediaSummary) }}</span>
 				</span>
 				<span class="gallery-row__identity">
 					<strong>{{ gallery.title }}</strong>
@@ -67,6 +66,12 @@ function previewUrl(gallery: GalleryListItem): string {
 			<GalleryActionsMenu
 				class="gallery-row__actions"
 				:label="t('proofing_gallery', 'Actions for {title}', { title: gallery.title })">
+				<button v-if="gallery.permissions.canEdit"
+					role="menuitem"
+					type="button"
+					@click="emit('cover', gallery)">
+					{{ t('proofing_gallery', 'Change preview image') }}
+				</button>
 				<button
 					v-if="!archived && gallery.permissions.canManageAccess"
 					role="menuitem"
@@ -164,6 +169,9 @@ function previewUrl(gallery: GalleryListItem): string {
 	position: absolute;
 	inset: auto 8px 8px auto;
 	padding: 3px 6px;
+	max-inline-size: calc(100% - 16px);
+	box-sizing: border-box;
+	overflow-wrap: anywhere;
 	border-radius: 4px;
 	background: rgb(10 12 14 / 76%);
 	color: #fff;

@@ -33,13 +33,14 @@ final class ScheduleProjectionBackfillsTest extends TestCase {
 		$state = new ProjectionBackfillState($config, $time);
 		$jobs->method('has')->willReturn(false);
 		$added = [];
-		$jobs->expects(self::exactly(3))->method('add')->willReturnCallback(
+		$jobs->expects(self::exactly(4))->method('add')->willReturnCallback(
 			static function (string $job, array $argument) use (&$added): void { $added[] = [$job, $argument]; },
 		);
 
 		(new ScheduleProjectionBackfills($jobs, $state))->run($this->createMock(IOutput::class));
 
 		self::assertSame([
+			[\OCA\ProofingGallery\BackgroundJob\BackfillGalleryMediaCountsJob::class, ['afterId' => 0]],
 			[\OCA\ProofingGallery\BackgroundJob\BackfillMediaSortJob::class, ['afterId' => 0]],
 			[BackfillLifecycleScheduleJob::class, ['afterId' => 7]],
 			[BackfillGalleryListProjectionJob::class, ['afterId' => 11]],
