@@ -170,7 +170,7 @@ final class GalleryController extends Controller {
 	}
 
 	#[NoAdminRequired]
-	#[ApiRoute(verb: 'GET', url: '/api/v1/galleries/{id}')]
+	#[ApiRoute(verb: 'GET', url: '/api/v1/galleries/{id}', requirements: ['id' => '\d+'])]
 	public function show(int $id): DataResponse {
 		try {
 			$userId = $this->userId();
