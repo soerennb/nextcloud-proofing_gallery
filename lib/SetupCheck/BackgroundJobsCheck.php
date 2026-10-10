@@ -43,7 +43,7 @@ final class BackgroundJobsCheck implements ISetupCheck {
 		if ($cleanup['state'] === 'failed' || $outbox['dead'] > 0) {
 			return SetupResult::error($this->l10n->t('Proofing Gallery has failed background work that requires attention.'), self::DOCS);
 		}
-		if ($cleanup['state'] === 'stale' || $status['mediaIndex']['stalled'] > 0 || $backlogs['purges']['due'] > 0 || in_array('running', $backfillStates, true)) {
+		if ($cleanup['state'] === 'stale' || $status['mediaIndex']['stalled'] > 0 || ($status['mediaCounts']['stalled'] ?? 0) > 0 || ($status['mediaCounts']['error'] ?? 0) > 0 || $backlogs['purges']['due'] > 0 || in_array('running', $backfillStates, true)) {
 			return SetupResult::warning($this->l10n->t('Proofing Gallery background work is delayed.'), self::DOCS);
 		}
 		if ($cleanup['state'] === 'never') {

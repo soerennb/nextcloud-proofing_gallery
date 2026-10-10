@@ -19,6 +19,8 @@ export interface GalleryAppearance {
 	instanceLogoAssetId: string | null
 	instanceStudioName: string
 	heroFileId: number | null
+	coverFileId: number | null
+	heroSource: 'cover' | 'custom' | 'none'
 	openerStyle: 'minimal' | 'compact' | 'cinematic'
 	heroFocusX: number
 	heroFocusY: number
@@ -52,7 +54,7 @@ export interface GalleryPresentation extends GalleryAppearance {
 }
 
 export interface GallerySettings {
-	schemaVersion?: 13
+	schemaVersion?: 14
 	mode: GalleryMode
 	publicLocale: 'auto' | 'en' | 'de'
 	review: {
@@ -108,7 +110,7 @@ export type CanonicalGallerySettings = Pick<GallerySettings,
 
 export function canonicalGallerySettings(settings: GallerySettings): CanonicalGallerySettings {
 	return {
-		schemaVersion: 13,
+		schemaVersion: 14,
 		mode: settings.mode,
 		publicLocale: settings.publicLocale,
 		review: structuredClone(settings.review),
@@ -139,6 +141,8 @@ export function createDefaultGallerySettings(): GallerySettings {
 		instanceLogoAssetId: null,
 		instanceStudioName: '',
 		heroFileId: null,
+		coverFileId: null,
+		heroSource: 'cover',
 		openerStyle: 'minimal',
 		heroFocusX: 50,
 		heroFocusY: 50,
@@ -168,7 +172,7 @@ export function createDefaultGallerySettings(): GallerySettings {
 		story: { sections: [], showAllMedia: true },
 	}
 	return {
-		schemaVersion: 13,
+		schemaVersion: 14,
 		mode: 'presentation',
 		publicLocale: 'auto',
 		review: {

@@ -15,15 +15,17 @@ import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch 
 import GalleryList from './components/GalleryList.vue'
 import StudioThemeSwitch from './components/StudioThemeSwitch.vue'
 import { useStudioTheme } from './composables/useStudioTheme.ts'
+import { useGalleryMediaCounts } from './composables/useGalleryMediaCounts.ts'
 import { toGalleryListItem } from './domain/galleryListItem.ts'
 import { galleryWorkspacePath, normalizeGalleryWorkspace } from './domain/gallerySettingsOptions.ts'
-import { archiveGallery, fetchGallery, fetchGalleryPage, restoreGallery } from './services/galleryApi.ts'
+import { archiveGallery, fetchGallery, fetchGalleryPage, restoreGallery } from './services/galleryOverviewApi.ts'
 import type { Gallery, GalleryListItem } from './types.ts'
 
 const OwnerSortControl = defineAsyncComponent(() => import('./components/OwnerSortControl.vue'))
 const CreateGalleryModal = defineAsyncComponent(() => import('./components/CreateGalleryModal.vue'))
 const GallerySettings = defineAsyncComponent(() => import('./components/GallerySettings.vue'))
 const HelpView = defineAsyncComponent(() => import('./components/HelpView.vue'))
+const GalleryCoverDialog = defineAsyncComponent(() => import('./components/GalleryCoverDialog.vue'))
 const SharingModal = defineAsyncComponent(() => import('./components/SharingModal.vue'))
 const { preference: studioTheme } = useStudioTheme()
 
@@ -47,6 +49,7 @@ const mobileViewport = ref(mobileViewportQuery.matches)
 const showCreate = ref(false)
 const selectedGallery = ref<Gallery | null>(null)
 const shareGallery = ref<Gallery | null>(null)
+const coverGallery = ref<Gallery | null>(null)
 const immersiveWorkspace = ref(false)
 const galleryEditor = ref<{ flushSave: () => Promise<boolean>; currentRoute: () => string } | null>(null)
 let routeRequest = 0
@@ -57,6 +60,7 @@ const visibleGalleries = computed(() => galleries.value)
 const activeFilterCount = computed(() => Number(modeFilter.value !== 'all')
 	+ Number(sourceFilter.value !== 'all')
 	+ Number(!archived.value && statusFilter.value !== 'all'))
+useGalleryMediaCounts(galleries, computed(() => !selectedGallery.value && !helpOpen.value && !loading.value))
 
 watch(dashboardView, value => localStorage.setItem('proofing-gallery-dashboard-view', value))
 
@@ -175,9 +179,10 @@ async function syncRouteFromHash() {
 	}
 }
 
-async function openShare(gallery: GalleryListItem) {
+async function openShare(gallery: GalleryListItem, cover = false) {
 	try {
-		shareGallery.value = await fetchGallery(gallery.id)
+		const target = cover ? coverGallery : shareGallery
+		target.value = await fetchGallery(gallery.id)
 	} catch {
 		notify('error', t('proofing_gallery', 'Gallery details could not be loaded.')).catch(() => {})
 	}
@@ -400,6 +405,7 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 					:view="dashboardView"
 					@select="selectGallery"
 					@share="openShare"
+					@cover="openShare($event, true)"
 					@archive="archive"
 					@restore="restore" />
 
@@ -434,6 +440,11 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 			:show="showCreate"
 			@close="showCreate = false"
 			@created="created" />
+		<GalleryCoverDialog v-if="coverGallery"
+			:gallery="coverGallery"
+			@close="coverGallery = null"
+			@updated="updateSelected" />
+
 		<SharingModal
 			v-if="shareGallery"
 			:show="true"

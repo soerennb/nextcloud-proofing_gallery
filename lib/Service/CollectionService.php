@@ -24,6 +24,8 @@ final class CollectionService {
 		private GalleryMapper $galleries,
 		private FolderService $folders,
 		private ITimeFactory $clock,
+		private GalleryMediaCountInvalidator $countInvalidator,
+		private \OCA\ProofingGallery\Db\GalleryMediaCountRepository $counts,
 	) {
 	}
 
@@ -72,6 +74,7 @@ final class CollectionService {
 
 		$collection->setUpdatedAt($now);
 		$this->galleries->update($collection);
+		$this->countInvalidator->invalidate((int)$collection->getId());
 		return $this->document($collection);
 	}
 
@@ -178,7 +181,7 @@ final class CollectionService {
 			}
 		}
 		return [
-			'total' => count($rows),
+			...GalleryMediaCountService::present($this->counts->find((int)$collection->getId())),
 			'coverFileId' => $cover?->getId(),
 			'coverMimeType' => $cover?->getMimeType(),
 		];

@@ -37,7 +37,7 @@ final class GallerySearchProvider implements IProvider {
 		$entries = array_map(fn (array $gallery): SearchResultEntry => new SearchResultEntry(
 			$this->urls->imagePath('proofing_gallery', 'app-dark.svg'),
 			(string)$gallery['title'],
-			$this->l10n->t('%1$s · %2$d photos', [(string)$gallery['workflowState'], (int)$gallery['mediaSummary']['total']]),
+			(string)$gallery['workflowState'] . ' · ' . \OCA\ProofingGallery\Service\GalleryMediaCountLabel::format($this->l10n, $gallery['mediaSummary']),
 			(string)$gallery['internalUrl'],
 		), $page['items']);
 		return $page['nextCursor'] === null

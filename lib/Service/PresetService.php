@@ -78,7 +78,7 @@ final class PresetService {
 	 * @return array<string, mixed>
 	 */
 	private function preserveGalleryReferences(array $preset, array $current): array {
-		foreach (['heroFileId', 'logoFileId', 'instanceLogoAssetId', 'instanceStudioName'] as $field) {
+		foreach (['coverFileId', 'heroSource', 'heroFileId', 'logoFileId', 'instanceLogoAssetId', 'instanceStudioName'] as $field) {
 			$preset['presentation'][$field] = $current['presentation'][$field];
 		}
 		$currentSections = array_column($current['presentation']['story']['sections'], null, 'id');
@@ -115,6 +115,8 @@ final class PresetService {
 		}
 		$portable = $settings->canonical();
 		$portable['presentation']['heroFileId'] = null;
+		$portable['presentation']['coverFileId'] = null;
+		if ($portable['presentation']['heroSource'] === 'custom') $portable['presentation']['heroSource'] = 'cover';
 		$portable['presentation']['logoFileId'] = null;
 		$portable['presentation']['instanceLogoAssetId'] = null;
 		$portable['presentation']['instanceStudioName'] = '';

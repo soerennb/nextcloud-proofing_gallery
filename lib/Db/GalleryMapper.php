@@ -293,7 +293,7 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 	/** @param list<int> $folderIds
 	 * @return list<Gallery>
 	 */
-	public function findActiveFolderSources(array $folderIds): array {
+	public function findActiveFolderSources(array $folderIds, bool $includeArchived = false): array {
 		$folderIds = array_values(array_unique(array_filter(array_map('intval', $folderIds), static fn (int $id): bool => $id > 0)));
 		if ($folderIds === []) return [];
 		$result = [];
@@ -301,8 +301,8 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 			$qb = $this->db->getQueryBuilder();
 			$qb->select('*')->from($this->tableName)
 				->where($qb->expr()->in('folder_id', $qb->createNamedParameter($chunk, IQueryBuilder::PARAM_INT_ARRAY)))
-				->andWhere($qb->expr()->eq('source_type', $qb->createNamedParameter('folder')))
-				->andWhere($qb->expr()->neq('status', $qb->createNamedParameter('archived')));
+				->andWhere($qb->expr()->eq('source_type', $qb->createNamedParameter('folder')));
+			if (!$includeArchived) $qb->andWhere($qb->expr()->neq('status', $qb->createNamedParameter('archived')));
 			array_push($result, ...$this->findEntities($qb));
 		}
 		return $result;

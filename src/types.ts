@@ -65,6 +65,10 @@ export interface Gallery {
 	}
 	mediaSummary: {
 		total: number
+		imageCount?: number | null
+		videoCount?: number | null
+		countState?: 'pending' | 'updating' | 'ready' | 'error' | 'unavailable'
+		countedAt?: number | null
 		coverFileId: number | null
 		coverMimeType: string | null
 	}
@@ -347,7 +351,9 @@ export interface GalleryListItem {
 	workflowState: Gallery['workflowState']
 	createdAt: number
 	updatedAt: number
-	heroFileId: number | null
+	heroFileId?: number | null
+	coverFileId?: number | null
+	revision?: number
 	lifecycleNextAt: number | null
 	mediaSummary: Gallery['mediaSummary']
 	permissions: Gallery['permissions']

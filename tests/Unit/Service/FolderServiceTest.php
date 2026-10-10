@@ -151,7 +151,7 @@ final class FolderServiceTest extends TestCase {
 			new MediaMetadataService($this->createMock(IFilesMetadataManager::class), $policies, new EmbeddedMetadataExtractor($policies), $this->createMock(\OCP\EventDispatcher\IEventDispatcher::class)),
 			new MediaTypePolicy(),
 			new UploadLockService($provider),
-			new MediaCleanupService($this->createMock(IDBConnection::class), $this->createMock(IAppData::class)),
+			new MediaCleanupService($this->createMock(IDBConnection::class), (new \ReflectionClass(\OCA\ProofingGallery\Service\GalleryMediaCountInvalidator::class))->newInstanceWithoutConstructor(), $this->createMock(IAppData::class)),
 		);
 		$temporaryPath = tempnam(sys_get_temp_dir(), 'proofing-test-');
 		self::assertIsString($temporaryPath);
@@ -191,7 +191,7 @@ final class FolderServiceTest extends TestCase {
 		);
 
 		$provider = $this->createMock(ILockingProvider::class);
-		$cleanup = new MediaCleanupService($this->createMock(IDBConnection::class), $this->createMock(IAppData::class));
+		$cleanup = new MediaCleanupService($this->createMock(IDBConnection::class), (new \ReflectionClass(\OCA\ProofingGallery\Service\GalleryMediaCountInvalidator::class))->newInstanceWithoutConstructor(), $this->createMock(IAppData::class));
 		return new FolderService($root, $metadata, new MediaTypePolicy(), new UploadLockService($provider), $cleanup);
 	}
 

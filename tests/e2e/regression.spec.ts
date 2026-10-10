@@ -302,11 +302,20 @@ test('source cache refreshes and a missing published source recovers without cha
 			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
 			data: { folderId, title: 'Recovery regression' },
 		})
-		const gallery = await created.json() as { id: number, mediaSummary: { total: number } }
+		const gallery = await created.json() as { id: number, mediaSummary: { total: number; imageCount: number | null; countState: string } }
 		galleryId = gallery.id
-		expect(gallery.mediaSummary.total).toBe(1)
+		expect(gallery.mediaSummary.imageCount).toBeNull()
+		expect(gallery.mediaSummary.countState).toBe('pending')
+		const finishCounts = async () => {
+			const php = 'require "/var/www/html/lib/base.php"; $job=\\OC::$server->get(\\OCA\\ProofingGallery\\BackgroundJob\\RebuildGalleryMediaCountsJob::class); (new ReflectionMethod($job,"run"))->invoke($job,["galleryId"=>(int)$argv[1]]);'
+			await execFileAsync('docker', ['compose', 'exec', '-T', '--user', 'www-data', 'nextcloud', 'php', '-r', php, String(galleryId)], { cwd: process.cwd() })
+		}
+		await finishCounts()
 
 		expect((await request.put(`${dav}/two.png`, { headers: { ...apiHeaders, 'Content-Type': 'image/png' }, data: image })).ok()).toBe(true)
+		const pending = await request.get(`${galleries}/${galleryId}?format=json`, { headers: apiHeaders }).then(response => response.json()) as { mediaSummary: { total: number; countState: string } }
+		expect(pending.mediaSummary).toMatchObject({ total: 1, countState: 'pending' })
+		await finishCounts()
 		const refreshed = await request.get(`${galleries}/${galleryId}?format=json`, { headers: apiHeaders }).then(response => response.json()) as {
 			mediaSummary: { total: number }
 		}
@@ -963,7 +972,7 @@ test('owner preset and locale controls remain clear and responsive', async ({ pa
 	await page.getByRole('textbox', { name: /Account name/ }).fill('admin')
 	await page.getByRole('textbox', { name: 'Password' }).fill('admin')
 	await page.getByRole('button', { name: 'Log in', exact: true }).click()
-	await page.getByRole('button', { name: /^E2E Gallery (?:Presentation|Proofing)/ }).click()
+	await page.locator('.gallery-row').filter({ has: page.locator('strong', { hasText: /^E2E Gallery$/ }) }).locator('.gallery-row__main').click()
 	await expect(page.getByRole('heading', { name: 'Reusable preset' })).toBeVisible()
 
 	const locale = page.getByRole('combobox', { name: 'Public gallery language' })
@@ -1204,7 +1213,7 @@ test('notification and invitation controls stay understandable and responsive', 
 	await page.getByRole('textbox', { name: /Account name/ }).fill('admin')
 	await page.getByRole('textbox', { name: 'Password' }).fill('admin')
 	await page.getByRole('button', { name: 'Log in', exact: true }).click()
-	await page.getByRole('button', { name: /^E2E Gallery (?:Presentation|Proofing)/ }).click()
+	await page.locator('.gallery-row').filter({ has: page.locator('strong', { hasText: /^E2E Gallery$/ }) }).locator('.gallery-row__main').click()
 	const settingsNavigation = page.getByRole('navigation', { name: 'Gallery settings' })
 	await settingsNavigation.getByRole('button', { name: 'More', exact: true }).click()
 	await page.getByRole('menuitem', { name: 'Team', exact: true }).click()

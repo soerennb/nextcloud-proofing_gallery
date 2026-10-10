@@ -17,6 +17,7 @@ import { computed, ref, watch } from 'vue'
 import {
 	createInvitationTemplate,
 	deleteInvitationTemplate,
+	fetchGalleryReadiness,
 	fetchInvitationTemplates,
 	publishGallery,
 	renderInvitationTemplate,
@@ -25,6 +26,7 @@ import {
 	updateInvitationTemplate,
 } from '../services/galleryApi.ts'
 import type { Gallery, InvitationTemplate } from '../types.ts'
+import { useGalleryMediaCounts } from '../composables/useGalleryMediaCounts.ts'
 
 const recoveryNeeded = ref(false)
 const recoveryNotice = ref('')
@@ -50,8 +52,23 @@ const templateName = ref('')
 const qrDataUrl = ref('')
 const qrSvg = ref('')
 const published = computed(() => publicUrl.value !== '')
+useGalleryMediaCounts(computed(() => [props.gallery]), computed(() => props.show))
+const mediaAvailable = ref<boolean | null>(null)
+let readinessRequest = 0
 const publishDisabled = computed(() => publishing.value
-	|| (!published.value && props.gallery.sourceType === 'collection' && props.gallery.mediaSummary.total === 0))
+	|| (!published.value && mediaAvailable.value !== true))
+
+async function refreshReadiness() {
+	if (!props.show) return
+	const request = ++readinessRequest
+	const id = props.gallery.id
+	try {
+		const report = await fetchGalleryReadiness(id)
+		if (request !== readinessRequest || !props.show || props.gallery.id !== id) return
+		mediaAvailable.value = report.checks.find(check => check.code === 'media_available')?.state === 'ready'
+	} catch { if (request === readinessRequest && props.show && props.gallery.id === id) mediaAvailable.value = false }
+}
+watch(() => props.gallery.mediaSummary, () => { void refreshReadiness() })
 
 watch(() => props.gallery, gallery => {
 	publicUrl.value = gallery.shareToken ? absoluteShareUrl(gallery.shareToken) : ''
@@ -77,7 +94,9 @@ watch(publicUrl, async url => {
 }, { immediate: true })
 
 watch(() => props.show, async show => {
-	if (!show) return
+	if (!show) { readinessRequest++; return }
+	mediaAvailable.value = null
+	void refreshReadiness()
 	recoveryNeeded.value = false
 	recoveryNotice.value = ''
 	templatesLoading.value = true
@@ -89,7 +108,7 @@ watch(() => props.show, async show => {
 	} finally {
 		templatesLoading.value = false
 	}
-})
+}, { immediate: true })
 
 async function selectTemplate() {
 	if (selectedTemplateId.value === null) {
@@ -303,8 +322,10 @@ function updateOpen(open: boolean) {
 					<span>{{ downloadScopeLabels()[gallery.settings.delivery.downloadScope] }}</span>
 					<small>{{ t('proofing_gallery', 'Change downloads in the Share workspace.') }}</small>
 				</div>
-				<p v-if="!published && gallery.sourceType === 'collection' && gallery.mediaSummary.total === 0" class="sharing-dialog__hint">
-					{{ t('proofing_gallery', 'Add at least one available file before publishing this collection.') }}
+				<p v-if="!published && mediaAvailable !== true" class="sharing-dialog__hint">
+					{{ mediaAvailable === null || gallery.mediaSummary.countState !== 'ready'
+						? t('proofing_gallery', 'Checking media availability…')
+						: t('proofing_gallery', 'Add at least one available image or video before publishing.') }}
 				</p>
 				<NcButton variant="primary" :disabled="publishDisabled" @click="publish()">
 					{{ publishing

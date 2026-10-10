@@ -11,6 +11,8 @@ use OCP\IDBConnection;
 final class MigrationStatusService {
 	private const REQUIRED_TABLES = [
 		'proofing_galleries',
+		'proofing_media_counts',
+		'proofing_count_queue',
 		'proofing_guests',
 		'proofing_purge_requests',
 		'proofing_int_outbox',

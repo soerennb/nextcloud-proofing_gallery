@@ -65,7 +65,7 @@ final class PrivacyService {
 			'feedback' => $this->sum($tables, ['proofing_feedback', 'proofing_comments', 'proofing_annotations', 'proofing_selections', 'proofing_selection_items', 'proofing_guest_ratings', 'proofing_review_rounds']),
 			'access' => $this->sum($tables, ['proofing_public_links', 'proofing_link_roots', 'proofing_share_audit', 'proofing_domains', 'proofing_guests', 'proofing_managers']),
 			'operations' => $this->sum($tables, ['proofing_kiosk_events', 'proofing_kiosk_photos', 'proofing_events', 'proofing_event_waves', 'proofing_event_recipients', 'proofing_event_setups', 'proofing_pin_handoffs', 'proofing_uploads', 'proofing_notify_queue', 'proofing_native_notify', 'proofing_notify_subs', 'proofing_int_outbox', 'proofing_live_push', 'proofing_retention_log']),
-			'processing' => $this->sum($tables, ['proofing_media_index', 'proofing_media_scan_queue', 'proofing_media_scans', 'proofing_semantic_idx', 'proofing_versions', 'proofing_ext_resources', 'proofing_summaries']),
+			'processing' => $this->sum($tables, ['proofing_media_counts', 'proofing_count_queue', 'proofing_media_index', 'proofing_media_scan_queue', 'proofing_media_scans', 'proofing_semantic_idx', 'proofing_versions', 'proofing_ext_resources', 'proofing_summaries']),
 		];
 		return [
 			'galleryId' => (int)$gallery->getId(), 'title' => $gallery->getTitle(), 'categories' => $categories,

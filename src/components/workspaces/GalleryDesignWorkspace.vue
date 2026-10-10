@@ -9,6 +9,7 @@ import EyeOutlineIcon from 'vue-material-design-icons/EyeOutline.vue'
 import DesignSection from '../DesignSection.vue'
 
 import type { GallerySettings } from '../../domain/gallerySettings.ts'
+import { galleryHeroFileId } from '../../domain/galleryArtwork.ts'
 import { publicMetadataOptions } from '../../domain/gallerySettingsOptions.ts'
 import { applyGalleryTitleMode, galleryTitleMode } from '../../domain/galleryTitlePresentation.ts'
 import type { GalleryTitleMode } from '../../domain/galleryTitlePresentation.ts'
@@ -52,6 +53,7 @@ const logoInput = ref<HTMLInputElement | null>(null)
 const watermarkInput = ref<HTMLInputElement | null>(null)
 const logoAssets = computed(() => props.assets.filter(asset => asset.kind === 'logo'))
 const watermarkAssets = computed(() => props.assets.filter(asset => asset.kind === 'watermark'))
+const effectiveHeroFileId = computed(() => galleryHeroFileId(settings.value.presentation))
 const artworkKind = ref<'heroFileId' | 'logoFileId' | null>(null)
 const eventScopeQuery = ref('')
 const visibleEventScopes = computed(() => {
@@ -68,10 +70,11 @@ function selectedUpload(kind: 'logo' | 'watermark', event: Event) {
 	if (file) emit('upload-asset', kind, file)
 }
 
-function selectArtwork(fileId: number) {
-	if (!artworkKind.value) return
+function selectArtwork(fileId: number | null) {
+	if (!artworkKind.value || fileId === null) return
 	settings.value.presentation[artworkKind.value] = fileId
 	if (artworkKind.value === 'logoFileId') settings.value.presentation.logoMode = 'gallery'
+	else settings.value.presentation.heroSource = 'custom'
 	artworkKind.value = null
 }
 
@@ -120,7 +123,7 @@ function previewUrl(fileId: number, width = 560, height = 360): string {
 						<option value="cinematic">{{ t('proofing_gallery', 'Cinematic cover') }}</option>
 					</select>
 				</label>
-				<p v-if="settings.presentation.openerStyle === 'cinematic' && !settings.presentation.heroFileId" class="field-hint">
+				<p v-if="settings.presentation.openerStyle === 'cinematic' && !effectiveHeroFileId" class="field-hint">
 					{{ t('proofing_gallery', 'Choose a cover image for the cinematic opening. Until then, the gallery opens compactly.') }}
 				</p>
 				<div class="header-visibility">
@@ -131,18 +134,22 @@ function previewUrl(fileId: number, width = 560, height = 360): string {
 				</div>
 				<label v-if="titleMode !== 'hidden'" class="select-field"><span>{{ t('proofing_gallery', 'Title alignment') }}</span><select v-model="settings.presentation.titleAlignment" name="titleAlignment"><option value="left">{{ t('proofing_gallery', 'Left') }}</option><option value="center">{{ t('proofing_gallery', 'Centered') }}</option></select></label>
 				<NcTextArea v-model="settings.presentation.welcomeMessage" name="welcomeMessage" :label="t('proofing_gallery', 'Welcome message')" />
-				<div v-if="settings.presentation.openerStyle === 'cinematic'" class="asset-fields">
+				<label class="select-field"><span>{{ t('proofing_gallery', 'Public title image') }}</span><select v-model="settings.presentation.heroSource" name="heroSource"><option value="cover">{{ t('proofing_gallery', 'Use preview image') }}</option><option value="custom">{{ t('proofing_gallery', 'Choose a different image') }}</option><option value="none">{{ t('proofing_gallery', 'No title image') }}</option></select></label>
+				<p v-if="settings.presentation.heroSource === 'cover'" class="field-hint">
+					{{ t('proofing_gallery', 'Follows your manually selected preview image. Choose it in Gallery details or from the overview card.') }}
+				</p>
+				<div v-if="settings.presentation.heroSource === 'custom'" class="asset-fields">
 					<div>
 						<span>{{ t('proofing_gallery', 'Cover image') }}</span><NcButton @click="artworkKind = 'heroFileId'">
 							{{ settings.presentation.heroFileId ? t('proofing_gallery', 'Change') : t('proofing_gallery', 'Choose') }}
-						</NcButton><NcButton v-if="settings.presentation.heroFileId" variant="tertiary" @click="settings.presentation.heroFileId = null">
+						</NcButton><NcButton v-if="settings.presentation.heroFileId" variant="tertiary" @click="settings.presentation.heroFileId = null; settings.presentation.heroSource = 'none'">
 							{{ t('proofing_gallery', 'Remove') }}
 						</NcButton>
 					</div>
 				</div>
 				<label class="select-field"><span>{{ t('proofing_gallery', 'Title typeface') }}</span><select v-model="settings.presentation.fontPreset" name="fontPreset"><option value="system">{{ t('proofing_gallery', 'System') }}</option><option value="editorial">{{ t('proofing_gallery', 'Editorial serif') }}</option><option value="modern">{{ t('proofing_gallery', 'Studio sans') }}</option></select></label>
 				<label v-if="titleMode === 'large'" class="select-field"><span>{{ t('proofing_gallery', 'Large title size') }}</span><select v-model="settings.presentation.titleSize" name="titleSize"><option value="medium">{{ t('proofing_gallery', 'Standard') }}</option><option value="large">{{ t('proofing_gallery', 'Statement') }}</option></select></label>
-				<div v-if="settings.presentation.openerStyle === 'cinematic' && settings.presentation.heroFileId" class="range-fields">
+				<div v-if="settings.presentation.openerStyle !== 'minimal' && effectiveHeroFileId" class="range-fields">
 					<label><span>{{ t('proofing_gallery', 'Horizontal cover focus') }}</span><input v-model.number="settings.presentation.heroFocusX"
 						name="heroFocusX"
 						type="range"
@@ -291,8 +298,9 @@ function previewUrl(fileId: number, width = 560, height = 360): string {
 			:expanded="previewOpen"
 			@close="emit('update:preview-open', false)" />
 		<GalleryArtworkPicker :open="artworkKind !== null"
-			:media="media"
-			:search-media="searchMedia"
+			:gallery-id="gallery.id"
+			:scope="gallery.deliveryMode === 'event' ? eventScope : undefined"
+			:selected-file-id="artworkKind ? settings.presentation[artworkKind] : null"
 			:preview-url="previewUrl"
 			@close="artworkKind = null"
 			@select="selectArtwork" />

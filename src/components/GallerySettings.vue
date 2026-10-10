@@ -14,6 +14,7 @@ import RefreshIcon from 'vue-material-design-icons/Refresh.vue'
 import { canonicalGallerySettings } from '../domain/gallerySettings.ts'
 import { availableGalleryWorkspaces, galleryWorkspaceFromReadinessAction, galleryWorkspacePath, normalizeGalleryWorkspace, galleryPurposeLabels as purposeLabels } from '../domain/gallerySettingsOptions.ts'
 import type { GalleryWorkspace } from '../domain/gallerySettingsOptions.ts'
+import { useGalleryMediaCounts } from '../composables/useGalleryMediaCounts.ts'
 import { useGalleryPresets } from '../composables/useGalleryPresets.ts'
 import { completeGallery, fetchCollection, fetchDesignAssets, fetchGalleryMedia, fetchGalleryReadiness, fetchStoryMedia, updateGallery, updateGallerySource, uploadDesignAsset } from '../services/galleryApi.ts'
 import type { DesignAsset } from '../services/galleryApi.ts'
@@ -62,6 +63,8 @@ const mediaTotal = ref(0)
 const mediaLoading = ref(true)
 const missingStoryMediaIds = ref<number[]>([])
 const serverReadiness = ref<GalleryReadiness | null>(null)
+const mediaCounts = useGalleryMediaCounts(computed(() => [props.gallery]), computed(() => true))
+watch(() => props.gallery.mediaSummary, () => { void loadReadiness() })
 const eventSetup = ref<EventSetup | null>(null)
 const eventDesignScopes = ref<EventDesignScope[]>([])
 const eventDesignScope = ref('shared')
@@ -84,7 +87,7 @@ const saveStateLabel = computed(() => ({
 const storyMedia = computed(() => media.value.filter(item => !item.folder)); const previewMedia = computed(() => storyMedia.value.slice(0, 8))
 const readinessLabels = computed<Record<GalleryReadiness['checks'][number]['code'], string>>(() => ({
 	source_readable: t('proofing_gallery', 'Project folder is available'),
-	media_available: t('proofing_gallery', 'At least one photo is ready'),
+	media_available: t('proofing_gallery', 'At least one image or video is available'),
 	publishing_allowed: t('proofing_gallery', 'Publishing is allowed'),
 	collection_complete: t('proofing_gallery', 'All collection files are available'),
 	artwork_scoped: t('proofing_gallery', 'Gallery artwork is safely scoped'),
@@ -98,9 +101,11 @@ const eventReadinessLabels: Record<string, string> = {
 const standardReadiness = computed(() => [
 	...(serverReadiness.value?.checks ?? [
 		{ code: 'source_readable', state: props.gallery.source.state === 'readable' ? 'ready' : 'blocked', action: 'overview' },
-		{ code: 'media_available', state: (mediaLoading.value ? props.gallery.mediaSummary.total : mediaTotal.value) > 0 ? 'ready' : 'blocked', action: 'content' },
+		{ code: 'media_available', state: 'blocked', action: 'content' },
 	] as GalleryReadiness['checks']).map(check => ({
-		label: readinessLabels.value[check.code],
+		label: check.code === 'media_available' && check.state === 'blocked' && !['ready', 'unavailable'].includes(props.gallery.mediaSummary.countState ?? 'pending')
+			? t('proofing_gallery', 'Checking media availability…')
+			: readinessLabels.value[check.code],
 		ready: check.state !== 'blocked',
 		warning: check.state === 'warning',
 		action: galleryWorkspaceFromReadinessAction(check.action),
@@ -283,15 +288,20 @@ async function selectEventDesignScope(scope: string) {
 	await loadMedia()
 }
 
+let readinessRequest = 0
 async function loadReadiness() {
+	const request = ++readinessRequest
+	const id = props.gallery.id
 	try {
 		const [galleryReadiness, setup] = await Promise.all([
-			fetchGalleryReadiness(props.gallery.id),
-			props.gallery.deliveryMode === 'event' ? fetchEventSetup(props.gallery.id) : Promise.resolve(null),
+			fetchGalleryReadiness(id),
+			props.gallery.deliveryMode === 'event' ? fetchEventSetup(id) : Promise.resolve(null),
 		])
+		if (request !== readinessRequest || props.gallery.id !== id) return
 		serverReadiness.value = galleryReadiness
 		eventSetup.value = setup
 	} catch {
+		if (request !== readinessRequest || props.gallery.id !== id) return
 		serverReadiness.value = null
 		eventSetup.value = null
 	}
@@ -299,6 +309,8 @@ async function loadReadiness() {
 
 function collectionChanged() {
 	loadMedia()
+	void mediaCounts.refresh(true)
+	void loadReadiness()
 }
 
 async function uploadAsset(kind: 'logo' | 'watermark', file: File) {
@@ -584,8 +596,6 @@ onBeforeUnmount(() => {
 					v-model:selected-preset-id="selectedPresetId"
 					v-model:preset-name="presetName"
 					:gallery="gallery"
-					:media-loading="mediaLoading"
-					:media-total="mediaTotal"
 					:preview-media="previewMedia"
 					:rebinding="rebinding"
 					:presets="presets"

@@ -6,9 +6,7 @@ namespace OCA\ProofingGallery\Service;
 
 use OCA\ProofingGallery\Db\MediaSummaryRepository;
 use OCP\AppFramework\Utility\ITimeFactory;
-use OCP\Files\File;
 use OCP\Files\Folder;
-use OCP\Files\Node;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -17,12 +15,14 @@ final class MediaSummaryService {
 		private MediaSummaryRepository $repository,
 		private ITimeFactory $clock,
 		private LoggerInterface $logger,
+		private AutomaticCoverSelector $covers,
+		private GalleryMediaCountInvalidator $counts,
 	) {
 	}
 
 	/** @return array{total: int, coverFileId: ?int, coverMimeType: ?string} */
 	public function forFolder(int $galleryId, int $folderId, Folder $folder): array {
-		$etag = $folder->getEtag();
+		$etag = hash('sha256', 'cover-v2:' . $folder->getEtag());
 		try {
 			$cached = $this->repository->find($galleryId);
 		} catch (Throwable $exception) {
@@ -48,6 +48,7 @@ final class MediaSummaryService {
 	public function invalidate(int $galleryId): void {
 		try {
 			$this->repository->delete($galleryId);
+			$this->counts->invalidate($galleryId);
 		} catch (Throwable $exception) {
 			// A stale row is harmless because folder ID and ETag are revalidated.
 			$this->logger->warning('Gallery summary cache could not be invalidated', ['exception' => $exception]);
@@ -56,27 +57,10 @@ final class MediaSummaryService {
 
 	/** @return array{total: int, coverFileId: ?int, coverMimeType: ?string} */
 	private function scan(Folder $folder): array {
-		$nodes = array_values(array_filter(
-			$folder->getDirectoryListing(),
-			fn (Node $node): bool => !str_starts_with($node->getName(), '.')
-				&& ($node instanceof Folder || ($node instanceof File && $this->isSupported($node))),
-		));
-		usort($nodes, static fn (Node $left, Node $right): int => strnatcasecmp($left->getName(), $right->getName()));
-
-		$cover = null;
-		foreach ($nodes as $node) {
-			if (!$node instanceof File) {
-				continue;
-			}
-			$cover ??= $node;
-			if (str_starts_with($node->getMimeType(), 'image/')) {
-				$cover = $node;
-				break;
-			}
-		}
+		$cover = $this->covers->find($folder);
 
 		return [
-			'total' => count($nodes),
+			'total' => 0,
 			'coverFileId' => $cover?->getId(),
 			'coverMimeType' => $cover?->getMimeType(),
 		];
@@ -87,13 +71,10 @@ final class MediaSummaryService {
 	 */
 	private function present(array $row): array {
 		return [
-			'total' => (int)$row['media_total'],
+			'total' => 0,
 			'coverFileId' => $row['cover_file_id'] === null ? null : (int)$row['cover_file_id'],
 			'coverMimeType' => $row['cover_mime_type'] === null ? null : (string)$row['cover_mime_type'],
 		];
 	}
 
-	private function isSupported(File $file): bool {
-		return str_starts_with($file->getMimeType(), 'image/') || str_starts_with($file->getMimeType(), 'video/');
-	}
 }

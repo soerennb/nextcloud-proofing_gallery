@@ -37,7 +37,8 @@ async function expectSortReadable(select: Locator) {
 }
 
 test('gallery details keep readable contrast on hover and focus in both app themes', async ({ page }) => {
-	await page.route('**/proofing_gallery/media/*/*/preview?*', route => route.fulfill({ status: 404 }))
+	await page.route('**/proofing_gallery/media/**/preview?*', route => route.fulfill({ status: 404 }))
+	await page.route('**/proofing_gallery/media/*/cover-preview?*', route => route.fulfill({ status: 404 }))
 	await page.setViewportSize({ width: 1440, height: 1000 })
 	await login(page)
 	const main = page.locator('.gallery-row__main').first()
@@ -80,7 +81,8 @@ test('gallery details keep readable contrast on hover and focus in both app them
 
 test('owner sorting stays visible and local ordering does not change the guest default', async ({ page, request, baseURL }) => {
 	await page.setViewportSize({ width: 390, height: 844 })
-	await page.route('**/proofing_gallery/media/*/*/preview?*', route => route.fulfill({ status: 404 }))
+	await page.route('**/proofing_gallery/media/**/preview?*', route => route.fulfill({ status: 404 }))
+	await page.route('**/proofing_gallery/media/*/cover-preview?*', route => route.fulfill({ status: 404 }))
 	await login(page)
 	const sort = page.getByRole('combobox', { name: 'Sort galleries' })
 	await expectReachable(sort)

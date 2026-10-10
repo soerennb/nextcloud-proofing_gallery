@@ -104,6 +104,24 @@ The gallery workspace separates the common tasks:
 - **Review** contains feedback, client selections, exports, and upload moderation.
 - **History** records relevant gallery activity.
 
+Gallery cards and **Overview → Gallery content** show separate image and video
+counts across all subfolders. Only supported, readable media counts; folders,
+hidden files, and unavailable collection entries do not. Counting runs in the
+background, including beyond the media-index limit. While it updates, the last
+complete numbers remain visible with a status message. A gallery can be published
+as soon as at least one available image or video has been confirmed.
+
+The overview cards choose an image automatically, including images in subfolders.
+Use **Change preview image** in a card's action menu or in **Gallery details** to
+select an image or return to **Choose automatically**. The picker lets you browse
+folders, search filenames in the current folder, and load further images.
+
+Under **Design → Public title image**, **Use preview image** follows your manually
+selected preview image. **Choose a different image** keeps a separate title image;
+**No title image** disables it. An automatically chosen card image does not become
+a public title image. Inherited images are only shown within a link's permitted
+folders. Existing title images remain separate on upgrade.
+
 Changes to gallery settings use revision checks. If another browser changed the
 same gallery, reload the current state instead of overwriting it blindly.
 

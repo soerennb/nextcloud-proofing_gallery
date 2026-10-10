@@ -10,15 +10,15 @@ use OCP\IDBConnection;
 final class LifecycleRepository {
 	private const ORPHAN_TABLES = [
 		'proofing_events', 'proofing_uploads', 'proofing_collections', 'proofing_notify_subs',
-		'proofing_native_notify', 'proofing_media_index', 'proofing_media_scans', 'proofing_media_scan_queue', 'proofing_public_links',
+		'proofing_native_notify', 'proofing_media_index', 'proofing_media_scans', 'proofing_count_queue', 'proofing_media_scan_queue', 'proofing_public_links',
 		'proofing_guest_ratings', 'proofing_share_audit', 'proofing_live_push', 'proofing_domains',
 		'proofing_feedback', 'proofing_comments', 'proofing_annotations', 'proofing_selections',
-		'proofing_managers', 'proofing_semantic_idx', 'proofing_summaries', 'proofing_versions',
+		'proofing_managers', 'proofing_semantic_idx', 'proofing_media_counts', 'proofing_summaries', 'proofing_versions',
 		'proofing_review_rounds', 'proofing_ext_resources', 'proofing_int_outbox',
 		'proofing_retention_log',
 		'proofing_event_recipients', 'proofing_event_waves', 'proofing_event_setups',
 	];
-	private const GALLERY_PRIMARY_KEY_TABLES = ['proofing_collections', 'proofing_summaries', 'proofing_media_scans'];
+	private const GALLERY_PRIMARY_KEY_TABLES = ['proofing_collections', 'proofing_media_counts', 'proofing_summaries', 'proofing_media_scans'];
 
 	public function __construct(private IDBConnection $db) {
 	}

@@ -275,6 +275,16 @@ only Proofing Gallery records and private appdata; originals remain in
 Nextcloud. System status exposes due purge, lifecycle, guest-session,
 media-index, integration, and retention backlogs through indexed counters.
 
+Media counting has a separate persisted projection and is independent of the
+media-index limit. Each job examines at most 500 entries and resumes from its
+saved cursor; only a complete generation replaces the previous count. The
+upgrade queues all existing galleries, including archives. System status shows
+ready, pending, failed and stalled counts. Cron reconciliation runs every
+15 minutes to resume work stalled for 15 minutes and refresh snapshots older
+than one day. File events normally invalidate counts immediately. A source
+that becomes unreadable is reported as unavailable rather than as an empty
+gallery; restoring access is picked up by reconciliation.
+
 For an optional Files Retention handoff, select one existing system tag under
 Security. Owners opt in per folder gallery. The tag is set on archive and
 removed on restore. Proofing Gallery never deletes the tagged folder; test the

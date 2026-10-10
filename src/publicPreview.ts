@@ -22,6 +22,7 @@ import { createApp, reactive } from 'vue'
 
 import PublicApp from './PublicApp.vue'
 import { compareMedia } from './domain/mediaSorting.ts'
+import { galleryHeroFileId } from './domain/galleryArtwork.ts'
 import type { GallerySettings } from './domain/gallerySettings.ts'
 import type { MediaItem, PublicGallery } from './publicTypes.ts'
 import { applyPublicLocale } from './publicLocale.ts'
@@ -42,7 +43,7 @@ interface PreviewBootstrap {
 type PreviewUpdate = PreviewBootstrap & { type: string }
 
 function previewSettings(settings: GallerySettings): GallerySettings {
-	return { ...settings, mode: 'presentation' }
+	return { ...settings, mode: 'presentation', presentation: { ...settings.presentation, heroFileId: galleryHeroFileId(settings.presentation) } }
 }
 
 function toGallery(bootstrap: PreviewBootstrap): PublicGallery {
@@ -123,7 +124,7 @@ function previewEndpoint(gallery: PublicGallery, path: string): string {
 			query.get('mode') === 'fit' ? 'fit' : 'cover',
 		)
 	}
-	if (path === 'asset/hero' && gallery.settings.presentation.heroFileId) {
+	if (path.split('?')[0] === 'asset/hero' && gallery.settings.presentation.heroFileId) {
 		return ownerPreviewUrl(gallery.id, gallery.settings.presentation.heroFileId, 1200, 800, 'cover')
 	}
 	if (path === 'asset/logo') return previewLogoEndpoint(gallery)

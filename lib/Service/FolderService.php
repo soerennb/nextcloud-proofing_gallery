@@ -386,6 +386,7 @@ final class FolderService {
 		string $lens = '',
 		string $keyword = '',
 		int $ratingMin = 0,
+		bool $imagesOnly = false,
 	): MediaPage {
 		$limit = max(1, min(200, $limit));
 		$offset = max(0, $offset);
@@ -400,7 +401,9 @@ final class FolderService {
 			$current->getDirectoryListing(),
 			fn (Node $node): bool => !str_starts_with($node->getName(), '.')
 				&& ($node instanceof Folder || ($node instanceof File && $this->isSupported($node)))
-				&& ($search === '' || mb_stripos($node->getName(), $search) !== false),
+				&& (!$imagesOnly || $node->isReadable())
+				&& (!$imagesOnly || $node instanceof Folder || str_starts_with($node->getMimeType(), 'image/'))
+				&& (($imagesOnly && $node instanceof Folder) || $search === '' || mb_stripos($node->getName(), $search) !== false),
 		));
 		$metadataById = [];
 		if ($capturedFrom !== '' || $capturedTo !== '' || $camera !== '' || $lens !== '' || $keyword !== '' || $ratingMin > 0 || $sortBy === 'capturedAt') {
@@ -413,8 +416,8 @@ final class FolderService {
 					|| $this->matchesMetadata($summary, $capturedFromTime, $capturedToTime, $camera, $lens, $keyword, $ratingMin);
 			}));
 		}
-		usort($nodes, static function (Node $left, Node $right) use ($sortBy, $sortDirection, $metadataById): int {
-			if ($sortBy !== 'name') {
+		usort($nodes, static function (Node $left, Node $right) use ($sortBy, $sortDirection, $metadataById, $imagesOnly): int {
+			if ($sortBy !== 'name' || $imagesOnly) {
 				$folderOrder = ($left instanceof Folder ? 0 : 1) <=> ($right instanceof Folder ? 0 : 1);
 				if ($folderOrder !== 0) return $folderOrder;
 			}
@@ -443,6 +446,7 @@ final class FolderService {
 		int $limit = 60,
 		int $offset = 0,
 		string $search = '',
+		bool $imagesOnly = false,
 	): MediaPage {
 		$limit = max(1, min(100, $limit));
 		$offset = max(0, $offset);
@@ -452,7 +456,7 @@ final class FolderService {
 		$seen = [];
 		foreach (array_values(array_unique($paths)) as $path) {
 			$current = $this->folderAt($root, trim($path, '/'));
-			$this->appendScopedMedia($current, $search, $files, $seen);
+			$this->appendScopedMedia($current, $search, $files, $seen, $imagesOnly);
 		}
 		usort($files, static function (File $left, File $right): int {
 			$result = strnatcasecmp($left->getName(), $right->getName());
@@ -467,14 +471,15 @@ final class FolderService {
 	/** @param list<File> $files
 	 * @param array<int, true> $seen
 	 */
-	private function appendScopedMedia(Folder $folder, string $search, array &$files, array &$seen): void {
+	private function appendScopedMedia(Folder $folder, string $search, array &$files, array &$seen, bool $imagesOnly): void {
 		foreach ($folder->getDirectoryListing() as $node) {
 			if (str_starts_with($node->getName(), '.')) continue;
 			if ($node instanceof Folder) {
-				$this->appendScopedMedia($node, $search, $files, $seen);
+				$this->appendScopedMedia($node, $search, $files, $seen, $imagesOnly);
 				continue;
 			}
 			if (!$node instanceof File || !$node->isReadable() || !$this->isSupported($node)) continue;
+			if ($imagesOnly && !str_starts_with($node->getMimeType(), 'image/')) continue;
 			$id = (int)$node->getId();
 			if (isset($seen[$id]) || ($search !== '' && mb_stripos($node->getName(), $search) === false)) continue;
 			$seen[$id] = true;

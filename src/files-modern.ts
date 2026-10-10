@@ -2,6 +2,7 @@ import type { ISidebarContext } from '@nextcloud/files'
 import { registerFileAction, registerSidebarTab } from '@nextcloud/files'
 import { showError } from '@nextcloud/dialogs'
 import { t } from '@nextcloud/l10n'
+import { galleryMediaCountLabel } from './domain/galleryMediaCounts.ts'
 import type { FolderGalleryResolution } from './services/filesIntegrationApi'
 import { createFolderGallery, openOrCreateFolderGallery, resolveFolderGallery } from './services/filesIntegrationApi'
 import './styles/files-integration.css'
@@ -97,7 +98,7 @@ class ProofingGallerySidebar extends HTMLElement {
 			const title = document.createElement('strong')
 			title.textContent = gallery.title
 			const detail = document.createElement('span')
-			detail.textContent = t('proofing_gallery', '{count} photos · {state}', { count: gallery.mediaSummary.total, state: gallery.workflowState })
+			detail.textContent = `${galleryMediaCountLabel(gallery.mediaSummary)} · ${gallery.workflowState}`
 			link.append(title, detail)
 			root.append(link)
 		}

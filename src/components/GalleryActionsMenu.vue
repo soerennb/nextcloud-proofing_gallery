@@ -65,7 +65,7 @@ function onMenuKeyDown(event: KeyboardEvent) {
 }
 
 function onMenuClick(event: MouseEvent) {
-	if ((event.target as Element).closest('[role="menuitem"]')) close()
+	if ((event.target as Element).closest('[role="menuitem"]')) close({ returnFocus: true })
 }
 
 watch(open, async value => {

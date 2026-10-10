@@ -9,6 +9,29 @@ use OCA\ProofingGallery\Dto\GallerySettings;
 use PHPUnit\Framework\TestCase;
 
 final class GallerySettingsTest extends TestCase {
+	public function testLegacyHeroRemainsCustomAndAlsoSeedsTheCardCover(): void {
+		$settings = GallerySettings::fromArray(['presentation' => ['heroFileId' => 42]])->presentation;
+		self::assertSame('custom', $settings->heroSource);
+		self::assertSame(42, $settings->coverFileId);
+		self::assertSame(42, \OCA\ProofingGallery\Service\GalleryArtworkService::heroFileId($settings));
+	}
+
+	public function testManualCoversFollowUntilCustomHeroOrNoneIsChosen(): void {
+		$settings = GallerySettings::merge(GallerySettings::defaults(), ['presentation' => ['coverFileId' => 12]]);
+		self::assertSame(12, \OCA\ProofingGallery\Service\GalleryArtworkService::heroFileId($settings->presentation));
+		self::assertSame('minimal', $settings->presentation->openerStyle);
+		$custom = GallerySettings::merge($settings, ['presentation' => ['heroFileId' => 42]]);
+		self::assertSame('custom', $custom->presentation->heroSource);
+		$custom = GallerySettings::merge($custom, ['presentation' => ['coverFileId' => 13]]);
+		self::assertSame(42, \OCA\ProofingGallery\Service\GalleryArtworkService::heroFileId($custom->presentation));
+		$none = GallerySettings::merge($custom, ['presentation' => ['heroFileId' => null]]);
+		self::assertSame('none', $none->presentation->heroSource);
+		self::assertNull(\OCA\ProofingGallery\Service\GalleryArtworkService::heroFileId($none->presentation));
+		self::assertSame(13, $none->presentation->coverFileId);
+		$reset = GallerySettings::merge($settings, ['presentation' => ['coverFileId' => null]]);
+		self::assertNull(\OCA\ProofingGallery\Service\GalleryArtworkService::heroFileId($reset->presentation));
+	}
+
 	public function testRecursiveNavigationDefaultsAreBounded(): void {
 		$settings = GallerySettings::merge(GallerySettings::defaults(), [
 			'navigation' => ['recursive' => true, 'groupBy' => 'folder', 'groupDepth' => 3],
@@ -37,7 +60,7 @@ final class GallerySettingsTest extends TestCase {
 		self::assertTrue($settings['presentation']['showMediaCount']);
 		self::assertSame('medium', $settings['presentation']['titleSize']);
 		self::assertSame('auto', $settings['publicLocale']);
-		self::assertSame(13, $settings['schemaVersion']);
+		self::assertSame(14, $settings['schemaVersion']);
 		self::assertSame(['sections' => [], 'showAllMedia' => true], $settings['presentation']['story']);
 		self::assertSame('subtle', $settings['presentation']['motionPreset']);
 		self::assertSame('auto', $settings['presentation']['lightboxFilmstripPlacement']);

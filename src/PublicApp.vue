@@ -601,7 +601,7 @@ function rememberDimensions(item: MediaItem, event: Event) {
 }
 
 function assetUrl(kind: 'logo' | 'hero'): string {
-	return publicEndpoint(`asset/${kind}`)
+	return publicEndpoint(`asset/${kind}${kind === 'hero' ? `?v=${settings.value.presentation.heroFileId}` : ''}`)
 }
 
 function streamUrl(item: MediaItem): string {

@@ -58,6 +58,7 @@ final class Application extends App implements IBootstrap {
 	}
 
 	public function register(IRegistrationContext $context): void {
+		$context->registerEventListener(\OCP\AppFramework\Http\Events\BeforeTemplateRenderedEvent::class, \OCA\ProofingGallery\Listener\GalleryFaviconListener::class);
 		$context->registerService(CleanupGalleryDataJob::class, static function (ContainerInterface $container): CleanupGalleryDataJob {
 			return new CleanupGalleryDataJob(
 				$container->get(ITimeFactory::class),
@@ -90,6 +91,11 @@ final class Application extends App implements IBootstrap {
 		$context->registerEventListener(FileCacheUpdated::class, MediaIndexCacheListener::class);
 		$context->registerEventListener(NodeAddedToCache::class, MediaIndexCacheListener::class);
 		$context->registerEventListener(NodeRemovedFromCache::class, MediaIndexCacheListener::class);
+		$context->registerEventListener(\OCP\Files\Events\Node\BeforeNodeDeletedEvent::class, MediaIndexCacheListener::class);
+		$context->registerEventListener(\OCP\Files\Events\Node\NodeCreatedEvent::class, MediaIndexCacheListener::class);
+		$context->registerEventListener(\OCP\Files\Events\Node\NodeWrittenEvent::class, MediaIndexCacheListener::class);
+		$context->registerEventListener(\OCP\Files\Events\Node\BeforeNodeRenamedEvent::class, MediaIndexCacheListener::class);
+		$context->registerEventListener(\OCP\Files\Events\Node\NodeRenamedEvent::class, MediaIndexCacheListener::class);
 		$context->registerEventListener(LoadAdditionalScriptsEvent::class, FilesLoadAdditionalScriptsListener::class);
 		$context->registerEventListener(MetadataLiveEvent::class, GalleryFilesMetadataProvider::class);
 		$context->registerEventListener(MetadataBackgroundEvent::class, GalleryFilesMetadataProvider::class);

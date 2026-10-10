@@ -13,10 +13,10 @@ use OCA\ProofingGallery\Exception\GalleryNotReadyException;
 final class GalleryReadinessService {
 	public function __construct(
 		private FolderService $folders,
-		private MediaSummaryService $summaries,
 		private CollectionService $collections,
 		private CapabilityPolicyService $capabilities,
 		private KioskRepository $kiosks,
+		private GalleryMediaCountService $counts,
 	) {
 	}
 
@@ -29,9 +29,8 @@ final class GalleryReadinessService {
 		$collectionState = null;
 		if ($gallery->getSourceType() === 'collection') {
 			$status = $this->collections->sourceStatus($gallery);
-			$summary = $this->collections->summary($gallery);
 			$sourceState = 'ready';
-			$mediaState = $summary['total'] > 0 ? 'ready' : 'blocked';
+			$mediaState = $this->counts->hasMedia($gallery) ? 'ready' : 'blocked';
 			$collectionState = $status['state'] === 'degraded' ? 'warning' : 'ready';
 		} else {
 			try {
@@ -40,7 +39,7 @@ final class GalleryReadinessService {
 				$kiosk = $this->kiosks->forGallery((int)$gallery->getId());
 				$allowEmpty = $kiosk !== null && (int)$kiosk['folder_id'] === $gallery->getFolderId()
 					&& $kiosk['owner_uid'] === $gallery->getOwnerUid() && $gallery->getDeliveryMode() === 'standard';
-				$mediaState = $this->summaries->forFolder((int)$gallery->getId(), $gallery->getFolderId(), $folder)['total'] > 0 || $allowEmpty
+				$mediaState = $this->counts->hasMedia($gallery) || $allowEmpty
 					? 'ready' : 'blocked';
 			} catch (FolderAccessException) {
 			}
@@ -50,15 +49,19 @@ final class GalleryReadinessService {
 			['code' => 'media_available', 'state' => $mediaState, 'action' => 'content'],
 			['code' => 'publishing_allowed', 'state' => $this->capabilities->effective($settings, $userId)['publicPublishing']['allowed'] ? 'ready' : 'blocked', 'action' => 'access'],
 		];
-		foreach ([$settings->presentation->heroFileId, $settings->presentation->logoFileId] as $fileId) {
+		foreach ([
+			[GalleryArtworkService::heroFileId($settings->presentation), $settings->presentation->heroSource === 'cover'],
+			[$settings->presentation->logoFileId, false],
+		] as [$fileId, $inherited]) {
 			if ($fileId === null) continue;
+			$invalidState = $inherited && $artworkState !== 'blocked' ? 'warning' : 'blocked';
 			try {
 				$file = $gallery->getSourceType() === 'collection'
 					? $this->collections->resolveMedia($gallery, $fileId)
 					: $this->folders->resolveMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $fileId);
-				if (!str_starts_with($file->getMimeType(), 'image/')) $artworkState = 'blocked';
+				if (!str_starts_with($file->getMimeType(), 'image/')) $artworkState = $invalidState;
 			} catch (FolderAccessException|\OCP\Files\NotFoundException) {
-				$artworkState = 'blocked';
+				$artworkState = $invalidState;
 			}
 		}
 		$checks[] = ['code' => 'artwork_scoped', 'state' => $artworkState, 'action' => 'style'];

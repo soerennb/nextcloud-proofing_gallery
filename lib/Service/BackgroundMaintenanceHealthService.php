@@ -15,6 +15,7 @@ use OCP\BackgroundJob\IJobList;
 final class BackgroundMaintenanceHealthService {
 	/** @var list<class-string> */
 	public const PERIODIC_JOBS = [
+		\OCA\ProofingGallery\BackgroundJob\ReconcileGalleryMediaCountsJob::class,
 		PurgeGuestsJob::class,
 		CleanupGalleryDataJob::class,
 		SendNotificationDigestsJob::class,
@@ -42,6 +43,7 @@ final class BackgroundMaintenanceHealthService {
 		return [
 			'periodicJobs' => ['registered' => count(self::PERIODIC_JOBS) - count($missing), 'expected' => count(self::PERIODIC_JOBS), 'missing' => $missing, 'duplicates' => $duplicates],
 			'backfills' => [
+				'mediaCounts' => $this->backfills->health(ProjectionBackfillState::MEDIA_COUNTS),
 				'lifecycle' => $this->backfills->health(ProjectionBackfillState::LIFECYCLE),
 				'galleryList' => $this->backfills->health(ProjectionBackfillState::GALLERY_LIST),
 			],

@@ -20,6 +20,7 @@ export interface AdminSettingsState {
 		integrations: { outbox: { pending: number } }
 		captureMetadata?: { pending: number; ready: number; failed: number }
 		mediaIndex: { running: number; stalled: number; lastCompletedAt: number | null }
+		mediaCounts?: { ready?: number; pending?: number; updating?: number; error?: number; unavailable?: number; stalled?: number }
 		retention: { assigned: number; failed: number }
 		backlogs: { purges: { scheduled: number; running: number; due: number; oldestExecuteAfter: number | null }; lifecycleDue: number; expiredGuests: number; mediaFolders: number }
 	}

@@ -35,6 +35,7 @@ final class HealthService {
 		private RetentionRepository $retention,
 		private BackgroundMaintenanceHealthService $maintenance,
 		private \OCA\ProofingGallery\Db\MediaSortRepository $mediaSorts,
+		private \OCA\ProofingGallery\Db\GalleryMediaCountRepository $mediaCounts,
 	) {
 	}
 
@@ -106,6 +107,7 @@ final class HealthService {
 			'integrations' => ['outbox' => $this->integrationOutbox->health()],
 			'reviews' => $this->reviewRounds->health(gmdate('Y-m-d')),
 			'mediaIndex' => $this->mediaIndexHealth(),
+			'mediaCounts' => $this->mediaCounts->health(time()),
 			'retention' => $this->retention->health(),
 			'backlogs' => $this->backlogs(),
 			'cleanup' => $this->cleanupTelemetry->status(),
