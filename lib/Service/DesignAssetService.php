@@ -117,7 +117,6 @@ final class DesignAssetService {
 			default => imagepng($image, null, 7),
 		};
 		$normalized = (string)ob_get_clean();
-		imagedestroy($image);
 		return [$normalized, $mime, $extension, (int)$info[0], (int)$info[1]];
 	}
 

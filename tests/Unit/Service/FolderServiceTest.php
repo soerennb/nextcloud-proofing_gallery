@@ -152,6 +152,7 @@ final class FolderServiceTest extends TestCase {
 			new MediaTypePolicy(),
 			new UploadLockService($provider),
 			new MediaCleanupService($this->createMock(IDBConnection::class), (new \ReflectionClass(\OCA\ProofingGallery\Service\GalleryMediaCountInvalidator::class))->newInstanceWithoutConstructor(), $this->createMock(IAppData::class)),
+			new \OCA\ProofingGallery\Service\MediaReplacementService(new MediaCleanupService($this->createMock(IDBConnection::class), (new \ReflectionClass(\OCA\ProofingGallery\Service\GalleryMediaCountInvalidator::class))->newInstanceWithoutConstructor(), $this->createMock(IAppData::class)), $this->createMock(\OCP\BackgroundJob\IJobList::class), $this->createMock(\Psr\Log\LoggerInterface::class)),
 		);
 		$temporaryPath = tempnam(sys_get_temp_dir(), 'proofing-test-');
 		self::assertIsString($temporaryPath);
@@ -192,7 +193,7 @@ final class FolderServiceTest extends TestCase {
 
 		$provider = $this->createMock(ILockingProvider::class);
 		$cleanup = new MediaCleanupService($this->createMock(IDBConnection::class), (new \ReflectionClass(\OCA\ProofingGallery\Service\GalleryMediaCountInvalidator::class))->newInstanceWithoutConstructor(), $this->createMock(IAppData::class));
-		return new FolderService($root, $metadata, new MediaTypePolicy(), new UploadLockService($provider), $cleanup);
+		return new FolderService($root, $metadata, new MediaTypePolicy(), new UploadLockService($provider), $cleanup, new \OCA\ProofingGallery\Service\MediaReplacementService($cleanup, $this->createMock(\OCP\BackgroundJob\IJobList::class), $this->createMock(\Psr\Log\LoggerInterface::class)));
 	}
 
 	private function file(int $id, string $name, string $mime, int $modifiedAt = 1_700_000_000): File {

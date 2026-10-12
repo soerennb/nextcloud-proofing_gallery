@@ -19,4 +19,12 @@ describe('usePublicCollaborationIdentity', () => {
 		expect(identity.hydratedIds.size).toBe(0)
 		expect(sessionStorage.getItem('proofing-gallery-nonce:token')).toBeNull()
 	})
+	it('keeps preview identities isolated from stored guest sessions', () => {
+		sessionStorage.setItem('proofing-gallery-nonce:token', 'real-secret')
+		const identity = usePublicCollaborationIdentity('token', false)
+		expect(identity.nonce.value).toBe('')
+		identity.saveNonce('preview-secret')
+		identity.clearIdentity()
+		expect(sessionStorage.getItem('proofing-gallery-nonce:token')).toBe('real-secret')
+	})
 })

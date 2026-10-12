@@ -20,6 +20,7 @@ final class FolderService {
 		private MediaTypePolicy $mediaTypes,
 		private UploadLockService $uploadLocks,
 		private MediaCleanupService $cleanup,
+		private MediaReplacementService $replacements,
 	) {
 	}
 
@@ -107,6 +108,7 @@ final class FolderService {
 		return '.' . $stem . '.upload-' . $uploadId . ($extension === '' ? '' : '.' . $extension);
 	}
 
+	/** @param callable(?MediaItem):void|null $acknowledge */
 	public function commitStagedMedia(
 		string $userId,
 		int $folderId,
@@ -117,6 +119,7 @@ final class FolderService {
 		string $conflict = 'fail',
 		?int $expectedFileId = null,
 		?string $expectedEtag = null,
+		?callable $acknowledge = null,
 	): ?MediaItem {
 		$path = trim($path, '/');
 		$lockScope = hash('sha256', $userId . "\0" . $folderId . "\0" . $path);
@@ -125,11 +128,12 @@ final class FolderService {
 			'Proofing Gallery media upload destination',
 			fn (): ?MediaItem => $this->commitStagedMediaLocked(
 				$userId, $folderId, $path, $filename, $stagingFileId, $stagingName,
-				$conflict, $expectedFileId, $expectedEtag,
+				$conflict, $expectedFileId, $expectedEtag, $acknowledge,
 			),
 		);
 	}
 
+	/** @param callable(?MediaItem):void|null $acknowledge */
 	private function commitStagedMediaLocked(
 		string $userId,
 		int $folderId,
@@ -140,12 +144,26 @@ final class FolderService {
 		string $conflict,
 		?int $expectedFileId,
 		?string $expectedEtag,
+		?callable $acknowledge,
 	): ?MediaItem {
 		$root = $this->resolveFolder($userId, $folderId);
 		$target = $this->folderAt($root, $path);
 		$filename = $this->safeName($filename);
 		if (!$target->isUpdateable()) throw new FolderAccessException('The destination is not writable');
 		if (!in_array($conflict, ['fail', 'rename', 'overwrite', 'skip'], true)) throw new \InvalidArgumentException('Unknown conflict strategy');
+		if (!$target->nodeExists($stagingName)) {
+			foreach ($target->getById($stagingFileId) as $committed) {
+				if (!$committed instanceof File || $committed->getParent()->getId() !== $target->getId() || str_starts_with($committed->getName(), '.')) continue;
+				$item = $this->mediaItem($committed);
+				if ($acknowledge !== null) $acknowledge($item);
+				$backupName = '.' . $filename . '.replaced-' . $stagingFileId;
+				$sidecarName = '.' . pathinfo($filename, PATHINFO_FILENAME) . '.xmp.replaced-' . $stagingFileId;
+				$backup = $target->nodeExists($backupName) ? $target->get($backupName) : null;
+				$sidecar = $target->nodeExists($sidecarName) ? $target->get($sidecarName) : null;
+				$this->replacements->cleanupAcknowledged($userId, $stagingFileId, $backup instanceof File ? $backup : null, $sidecar instanceof File ? $sidecar : null);
+				return $item;
+			}
+		}
 		if (!str_starts_with($stagingName, '.') || !str_contains($stagingName, '.upload-') || !$target->nodeExists($stagingName)) {
 			throw new FolderAccessException('The staged upload is unavailable');
 		}
@@ -153,11 +171,13 @@ final class FolderService {
 		if (!$file instanceof File || (int)$file->getId() !== $stagingFileId) throw new FolderAccessException('The staged upload changed');
 		$committedName = $filename;
 		$existing = null;
-		if (!$target->nodeExists($committedName) && $conflict === 'overwrite' && $expectedFileId !== null) {
-			throw new \OCA\ProofingGallery\Exception\UploadConflictException('The existing file changed after conflict resolution');
+		if (!$target->nodeExists($committedName) && $conflict === 'overwrite') {
+			$existing = $this->replacements->recoverOriginal($target, $filename, $stagingFileId, $expectedFileId, $expectedEtag);
+			if ($existing === null && $expectedFileId !== null) throw new \OCA\ProofingGallery\Exception\UploadConflictException('The existing file changed after conflict resolution');
 		}
 		if ($target->nodeExists($committedName)) {
 			if ($conflict === 'skip') {
+				if ($acknowledge !== null) $acknowledge(null);
 				$file->delete();
 				return null;
 			}
@@ -172,30 +192,11 @@ final class FolderService {
 			elseif ($conflict === 'rename') $committedName = $this->conflictFreeName($target, $committedName);
 			else throw new FolderAccessException('The filename already exists');
 		}
-		$backup = null;
-		$sidecar = $existing instanceof File ? $this->sidecarFor($existing) : null;
-		$sidecarBackup = null;
-		try {
-			if ($existing !== null) {
-				$backupName = '.' . $committedName . '.replaced-' . bin2hex(random_bytes(8));
-				$existing->move($target->getPath() . '/' . $backupName);
-				$backup = $existing;
-				if ($sidecar !== null) {
-					$sidecar->move($target->getPath() . '/.' . $sidecar->getName() . '.replaced-' . bin2hex(random_bytes(8)));
-					$sidecarBackup = $sidecar;
-				}
-			}
-			$file->move($target->getPath() . '/' . $committedName);
-			if ($backup !== null) $this->cleanup->purge((int)$backup->getId());
-			$backup?->delete();
-			$sidecarBackup?->delete();
-		} catch (\Throwable $exception) {
-			try { if ($file->getName() === $committedName) $file->move($target->getPath() . '/' . $stagingName); } catch (\Throwable) {}
-			try { $backup?->move($target->getPath() . '/' . $committedName); } catch (\Throwable) {}
-			try { $sidecarBackup?->move($target->getPath() . '/' . pathinfo($committedName, PATHINFO_FILENAME) . '.xmp'); } catch (\Throwable) {}
-			if ($exception instanceof \OCA\ProofingGallery\Exception\UploadConflictException) throw $exception;
-			throw new FolderAccessException('The uploaded file could not be committed safely', previous: $exception);
-		}
+		$sidecar = $existing instanceof File
+			? (str_starts_with($existing->getName(), '.') ? $this->replacements->recoverSidecar($target, $filename, $stagingFileId) : $this->sidecarFor($existing)) : null;
+		$this->replacements->replace($userId, $file, $existing, $sidecar, $target, $committedName, $stagingName, function (File $committed) use ($acknowledge): void {
+			if ($acknowledge !== null) $acknowledge($this->mediaItem($committed));
+		});
 		return $this->mediaItem($file);
 	}
 
@@ -288,8 +289,7 @@ final class FolderService {
 			|| ($sidecar !== null && (!$sidecar->isUpdateable() || ($newSidecarName !== $sidecar->getName() && $parent->nodeExists((string)$newSidecarName))))) {
 			throw new FolderAccessException('The item cannot be renamed or the name already exists');
 		}
-		$node->move($parent->getPath() . '/' . $name);
-		if ($sidecar !== null && $newSidecarName !== $sidecar->getName()) $sidecar->move($parent->getPath() . '/' . $newSidecarName);
+		$this->replacements->movePair($node, $sidecar, $parent->getPath() . '/' . $name, $newSidecarName === null ? null : $parent->getPath() . '/' . $newSidecarName);
 		return $this->mediaItem($node);
 	}
 
@@ -303,7 +303,7 @@ final class FolderService {
 		$fileIds = $this->fileIdsForCleanup($node);
 		$node->delete();
 		$sidecar?->delete();
-		foreach ($fileIds as $fileId) $this->cleanup->purge($fileId);
+		$this->cleanup->purgeMany($fileIds);
 	}
 
 	/** @param list<int> $nodeIds */
@@ -316,13 +316,16 @@ final class FolderService {
 				throw new FolderAccessException('At least one selected item cannot be deleted');
 			}
 		}
-		foreach ($nodes as $node) {
-			$sidecar = $this->sidecarFor($node);
-			$fileIds = $this->fileIdsForCleanup($node);
-			$node->delete();
-			$sidecar?->delete();
-			foreach ($fileIds as $fileId) $this->cleanup->purge($fileId);
-		}
+		$deletedIds = [];
+		try {
+			foreach ($nodes as $node) {
+				$sidecar = $this->sidecarFor($node);
+				$fileIds = $this->fileIdsForCleanup($node);
+				$node->delete();
+				array_push($deletedIds, ...$fileIds);
+				$sidecar?->delete();
+			}
+		} finally { $this->cleanup->purgeMany($deletedIds); }
 		return count($nodes);
 	}
 
@@ -346,8 +349,7 @@ final class FolderService {
 		}
 		foreach ($nodes as $node) {
 			$sidecar = $this->sidecarFor($node);
-			$node->move($destination->getPath() . '/' . $node->getName());
-			if ($sidecar !== null) $sidecar->move($destination->getPath() . '/' . $sidecar->getName());
+			$this->replacements->movePair($node, $sidecar, $destination->getPath() . '/' . $node->getName(), $sidecar === null ? null : $destination->getPath() . '/' . $sidecar->getName());
 		}
 		return count($nodes);
 	}

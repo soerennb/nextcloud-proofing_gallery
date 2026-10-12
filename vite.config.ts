@@ -88,6 +88,14 @@ export default createAppConfig(
 			}],
 			build: {
 				manifest: 'build/vite-manifest.json',
+				rollupOptions: {
+					treeshake: {
+						// Ionic's generated component modules export constructors and
+						// registration functions. Vue calls registration only for used
+						// components; unused ion-* modules need no startup evaluation.
+						moduleSideEffects: id => !/node_modules\/@ionic\/core\/components\/ion-[^/]+\.js$/.test(id),
+					},
+				},
 			},
 		},
 	},

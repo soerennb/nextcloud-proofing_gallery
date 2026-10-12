@@ -96,7 +96,6 @@ final class WatermarkPreviewService {
 		if ($format === 'webp') imagewebp($image, null, 84);
 		else imagepng($image, null, 7);
 		$content = (string)ob_get_clean();
-		imagedestroy($image);
 		$folder->newFile($filename, $content);
 
 		return ['content' => $content, 'mimeType' => 'image/' . $format, 'etag' => $cacheKey, 'cached' => false];
@@ -137,14 +136,12 @@ final class WatermarkPreviewService {
 		$targetWidth = max(1, (int)round(imagesx($image) * $settings->watermarkImageScale / 100));
 		$targetHeight = max(1, (int)round(imagesy($mark) * $targetWidth / max(1, imagesx($mark))));
 		$resized = imagescale($mark, $targetWidth, $targetHeight, IMG_BICUBIC_FIXED);
-		imagedestroy($mark);
 		if (!$resized instanceof \GdImage) return;
 		[$x, $baseline] = $this->position(imagesx($image), imagesy($image), $targetWidth, $targetHeight, $settings->watermarkImagePosition);
 		$y = $baseline - $targetHeight;
 		$this->applyOpacity($resized, $settings->watermarkImageOpacity);
 		imagealphablending($image, true);
 		imagecopy($image, $resized, $x, $y, 0, 0, $targetWidth, $targetHeight);
-		imagedestroy($resized);
 	}
 
 	private function applyOpacity(\GdImage $image, int $opacity): void {
@@ -212,7 +209,6 @@ final class WatermarkPreviewService {
 			$cropWidth,
 			$cropHeight,
 		);
-		imagedestroy($source);
 		return $target;
 	}
 

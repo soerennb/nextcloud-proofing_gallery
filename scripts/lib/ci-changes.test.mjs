@@ -2,6 +2,13 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { classifyCiChanges } from './ci-changes.mjs'
 
+test('validates startup graph and budget tooling with the frontend baseline', () => {
+	for (const file of ['scripts/check-bundle-size.mjs', 'scripts/measure-public-lcp.mjs', 'scripts/lib/bundle-assets.mjs']) {
+		assert.equal(classifyCiChanges([file]).web, true)
+		assert.equal(classifyCiChanges([file]).php, false)
+	}
+})
+
 test('keeps documentation changes on the documentation surface', () => {
 	assert.deepEqual(classifyCiChanges(['docs/en/development.md']), {
 		web: false, php: false, workflow: false, docs: true, dependencies: false,

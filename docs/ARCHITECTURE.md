@@ -14,6 +14,14 @@ while the link is active and the native share node still matches its configured
 start folder. Password verification remains delegated to Nextcloud's public-share
 controller.
 
+`GalleryCreationService` owns validation and initial persistence,
+`GalleryReadService` owns owner projections and pagination, and
+`GalleryService` retains the compatible public service interface and mutations.
+`GalleryMediaController` owns media routes; their URLs and authorization remain
+unchanged. The v1 list applies its offset in SQL, while collection source pickers
+use the v2 cursor API. Event recipient projections resolve only the link IDs on
+the requested page, including exports and reconciliation batches.
+
 Folder galleries validate media below their shared source folder. Collection
 galleries instead share a generated, permanently empty folder below
 `.proofing-gallery/collections`; the app stores an ordered list of source-gallery
@@ -48,6 +56,12 @@ optimistic gallery revisions. The contract intentionally omits permanent
 deletion, password access, arbitrary filesystem operations, guest identities,
 and privileged impersonation. Integration events carry a unique event ID and
 are written to an outbox before dispatch so consumers can deduplicate delivery.
+Database-only mutations persist their effects, outbox entries and response
+receipts in one transaction. Dispatch waits for committed rows. Requests with
+native share or filesystem effects retain uncertain outcomes when completion
+fails; retrying the same key cannot execute them again. Stored applied responses
+can be replayed, while incomplete reservations survive expiry and appear in
+integration health for investigation.
 
 ## Data
 
@@ -93,18 +107,36 @@ rejects DTDs and network access, preserves unknown namespaces, and applies
 optimistic source/sidecar ETag checks. Proofing exports use standard XMP/DC/
 Lightroom fields plus `urn:nextcloud:proofing-gallery:1.0` for lossless workflow
 identity.
+`XmpDocument` owns the pure XML transformations; `MediaMetadataService` owns
+sidecar I/O, public allowlists and ETag checks.
 
 Folder galleries maintain a bounded recursive media index. Cursor, path, search,
 sorting and minimum-owner-rating form one typed query contract; rating filtering
 is performed before database pagination and counting. File-cache events resolve
 only the changed path's ancestor file IDs and enqueue matching galleries, never
 scan the complete gallery table synchronously.
+Each scan batch shares one transaction for index rows, folder cursors and scan
+progress. A failed write cannot skip a file on retry. `FolderMediaReader`
+resolves each directory through the owner's file tree and its current storage,
+including nested mounts. The 500-entry budget includes examined cache rows and
+folder traversal, and duplicate mounted file identities count only once.
 
 Public-link policies and download scopes are typed value objects in PHP while
 their persisted and HTTP representations remain the existing JSON strings. A
 primary-link change is atomic inside the app database. Updates spanning the
 Nextcloud share API and app data snapshot the native share and compensate it if
 app persistence fails.
+Link creation persists the link, roots, review state and event recipient
+reference atomically. Read projection happens after commit; a projection failure
+cannot revoke an already published link. Invitation delivery follows publication
+and records its own failure state.
+
+Owner uploads store their staging file ID before replacement. Originals and
+XMP files move to deterministic hidden backups; the upload receipt is saved
+before those backups are removed. A retry recognizes the committed file by its
+stable ID or resumes an interrupted backup move. Cleanup failures never roll
+back acknowledged media, and a bounded background retry removes the backups.
+Bulk media cleanup resolves application references in batches of at most 500 IDs.
 
 Public-link responses expose `feedbackPolicyMode`, `permissionsPolicyMode`, and
 `navigationPolicyMode`, each either `inherit` or `custom`. Owner link updates
@@ -141,14 +173,32 @@ queue with starvation protection; aborting queued or running work always
 settles its promise. Preset orchestration lives in a composable. Large component
 styles live beside their owning components rather than inside orchestration
 files.
+Public page loading owns one server snapshot and one cancellable request.
+Navigation/history, collaboration hydration, selection and lightbox playback
+have separate lifetimes. Stale page and guest identity responses cannot replace
+current state. Preview sessions disable guest persistence, polling and playback
+timers. Owner upload queues capture their gallery and destination path before
+conflict resolution, so navigation and retries cannot redirect a queued file.
+Metadata and version editors reject responses for old selections or unmounted
+panels. Workspaces load when selected instead of loading every editor at startup.
+The collaboration sheet loads on first opening and remains mounted afterward.
+Public startup loads its coordinator and locale concurrently. The Vite build
+omits unused generated Ionic `ion-*` modules; used Vue components still call
+Ionic's registration functions, and shared runtime initialization remains intact.
 
 `l10n/de.json` is the canonical German translation catalog. The localization
 builder discovers PHP, TypeScript and Vue sources recursively; local generation
 uses `npm run build:l10n`, while CI uses the non-mutating `check:l10n` path.
 PHPStan level 6 runs without a generated baseline and fails on unmatched
 suppressions. TypeScript, ESLint complexity/function-size checks and per-language
-source budgets (PHP 650, TypeScript 500, Vue 950 significant lines) prevent
+source budgets (PHP 650, TypeScript 500, Vue 650 significant lines) prevent
 renewed boundary and giant-file regressions.
+Pure domain tests run in Node; DOM-dependent suites use jsdom. Bundle budgets
+include static imports, required startup dynamic modules, public locale bundles
+and CSS. The same graph generates `js/public-startup.json`; public HTML emits
+module preload hints from it without hardcoded chunk hashes. The public
+performance trace additionally records the actual asset
+transfers through the first decoded grid image, under Slow 4G and 4x CPU slowdown.
 
 ## Background work
 

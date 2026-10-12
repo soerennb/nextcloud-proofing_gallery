@@ -154,10 +154,13 @@ export default async function globalSetup(config: FullConfig) {
 		body: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>',
 	}).then(result => result.text())
 	const largeRoot = new URL(largeDav, baseURL).pathname.replace(/\/?$/, '/')
-	await Promise.all([...largeContents.matchAll(/<(?:d:)?href>([^<]+)<\/(?:d:)?href>/g)].map(async ([, href]) => {
+	const oldMedia = [...largeContents.matchAll(/<(?:d:)?href>([^<]+)<\/(?:d:)?href>/g)].map(([, href]) => {
 		const pathname = new URL(href, baseURL).pathname
-		if (pathname.replace(/\/?$/, '/') !== largeRoot) await e2eFetch(new URL(pathname, baseURL), { method: 'DELETE', headers })
-	}))
+		return pathname.replace(/\/?$/, '/') === largeRoot ? null : new URL(pathname, baseURL)
+	}).filter((url): url is URL => url !== null)
+	for (let offset = 0; offset < oldMedia.length; offset += 25) {
+		await Promise.all(oldMedia.slice(offset, offset + 25).map(url => e2eFetch(url, { method: 'DELETE', headers })))
+	}
 	const localFixtureDirectory = path.join(process.cwd(), '.local/test-assets/remote-gallery-DjNAceoSQSpYKYL')
 	const localFixtureNames = await readdir(localFixtureDirectory).catch(() => [])
 	const localFixtures = localFixtureNames.filter(name => name.endsWith('.webp')).sort()

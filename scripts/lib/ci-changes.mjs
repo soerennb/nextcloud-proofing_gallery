@@ -20,6 +20,7 @@ export function classifyCiChanges(files) {
 
 	for (const file of files) {
 		if (match(file, [/^src\//, /^l10n\//, /^(vite|vitest|eslint|stylelint|tsconfig)\./, /^playwright\.config\.ts$/, /^package(-lock)?\.json$/])) selected.web = true
+		if (match(file, [/^scripts\/(check-bundle-size|check-source-size|measure-public-lcp)\.mjs$/, /^scripts\/lib\/bundle-assets/])) selected.web = true
 		if (match(file, [/^lib\//, /^appinfo\//, /^templates\//, /^tests\/(Unit|smoke)\//, /^composer\.(json|lock)$/, /^phpstan\.neon$/])) selected.php = true
 		if (match(file, [/^\.github\/workflows\//, /^\.github\/actions\//, /^scripts\/(classify-ci-changes|check-workflows)\.mjs$/, /^scripts\/lib\/ci-changes/])) selected.workflow = true
 		if (match(file, [/^src\//, /^\.github\/(workflows|actions)\//])) selected.codeql = true

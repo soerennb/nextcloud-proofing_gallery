@@ -97,6 +97,12 @@ final class MediaIndexScanRepository {
 	}
 
 	public function enqueue(int $galleryId, string $generation, int $parentFileId, string $path, int $depth): void {
+		$existing = $this->db->getQueryBuilder();
+		$found = QueryResult::row($existing->select('id')->from('proofing_media_scan_queue')
+			->where($existing->expr()->eq('gallery_id', $existing->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->andWhere($existing->expr()->eq('generation', $existing->createNamedParameter($generation)))
+			->andWhere($existing->expr()->eq('parent_file_id', $existing->createNamedParameter($parentFileId, IQueryBuilder::PARAM_INT)))->executeQuery());
+		if ($found !== false) return;
 		$qb = $this->db->getQueryBuilder();
 		try {
 			$qb->insert('proofing_media_scan_queue')->values([

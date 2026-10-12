@@ -36,9 +36,15 @@ final class MediaSummaryRepository {
 	}
 
 	public function delete(int $galleryId): void {
+		$this->deleteMany([$galleryId]);
+	}
+
+	/** @param list<int> $galleryIds */
+	public function deleteMany(array $galleryIds): void {
+		if ($galleryIds === []) return;
 		$qb = $this->db->getQueryBuilder();
 		$qb->delete('proofing_summaries')
-			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->where($qb->expr()->in('gallery_id', $qb->createNamedParameter($galleryIds, IQueryBuilder::PARAM_INT_ARRAY)))
 			->executeStatement();
 	}
 

@@ -165,7 +165,6 @@ final class EventWaveService {
 	 * @param array<string, mixed> $policy
 	 */
 	private function publish(Gallery $gallery, array $wave, array $recipient, array $sharedRoots, array $policy): void {
-		$link = null;
 		$now = $this->clock->getTime();
 		try {
 			$pin = $recipient['pin_cipher'] === null ? '' : $this->crypto->decrypt((string)$recipient['pin_cipher']);
@@ -176,20 +175,25 @@ final class EventWaveService {
 				'allowedRoots' => [...$sharedRoots, ...$groupRoots, $privateRoot], 'viewMode' => 'folder', 'groupDepth' => 1,
 				'publicLocale' => $recipient['locale'], 'password' => $pin, 'expiresAt' => $wave['expires_at'],
 				'reviewEnabled' => in_array($gallery->getPurpose(), ['selection', 'proofing'], true),
-			]), true, $privateRoot, $groupRoots);
-			$invitationStatus = (bool)$wave['send_invitations'] ? 'pending' : 'not_requested';
-			$invitedAt = null;
-			if ((bool)$wave['send_invitations'] && $recipient['email_cipher'] !== null) {
-				try {
-					$this->invitations->sendPublicLink($gallery, $this->crypto->decrypt((string)$recipient['email_cipher']), (string)$link['url'], is_string($recipient['locale']) ? $recipient['locale'] : null);
-					$invitationStatus = 'sent'; $invitedAt = $now;
-				} catch (\Throwable) { $invitationStatus = 'failed'; }
-			}
-			$this->repository->published((int)$recipient['id'], (int)$link['id'], $invitationStatus, $invitedAt, $now);
+			]), true, $privateRoot, $groupRoots, fn (int $linkId) => $this->repository->published((int)$recipient['id'], $linkId, (bool)$wave['send_invitations'] ? 'pending' : 'not_requested', null, $now));
 		} catch (\Throwable $exception) {
-			if ($link !== null) try { $this->links->revoke($gallery, (int)$link['id'], $gallery->getOwnerUid()); } catch (\Throwable) {}
+			$current = $this->repository->recipient((int)$gallery->getId(), (int)$recipient['id']);
+			if ($current !== false && $current['public_link_id'] !== null) {
+				$this->repository->published((int)$recipient['id'], (int)$current['public_link_id'], (bool)$wave['send_invitations'] ? 'failed' : 'not_requested', null, $now);
+				return;
+			}
 			$this->repository->failed((int)$recipient['id'], $this->failureCode($exception), $now);
+			return;
 		}
+		// Invitations are delivery side effects, never part of publication rollback.
+		if ((bool)$wave['send_invitations'] && $recipient['email_cipher'] !== null) {
+			$invitationStatus = 'sent'; $invitedAt = $now;
+			try {
+				$this->invitations->sendPublicLink($gallery, $this->crypto->decrypt((string)$recipient['email_cipher']), (string)$link['url'], is_string($recipient['locale']) ? $recipient['locale'] : null);
+			} catch (\Throwable) { $invitationStatus = 'failed'; $invitedAt = null; }
+			$this->repository->published((int)$recipient['id'], (int)$link['id'], $invitationStatus, $invitedAt, $now);
+		}
+
 	}
 
 	/** @param array<string, mixed> $wave */

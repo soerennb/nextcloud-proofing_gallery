@@ -8,6 +8,10 @@ import { useReducedMotion } from 'motion-v'
 import type PhotoSwipe from 'photoswipe'
 import type { SlideData } from 'photoswipe'
 import 'photoswipe/style.css'
+import { usePublicLightboxComments } from '../composables/usePublicLightboxComments.ts'
+import { publicLightboxSlide } from '../domain/publicLightboxSlide.ts'
+import { usePublicLightboxChrome } from '../composables/usePublicLightboxChrome.ts'
+import { usePublicLightboxPlayback } from '../composables/usePublicLightboxPlayback.ts'
 import { usePublicLightboxLiveMedia } from '../composables/usePublicLightboxLiveMedia.ts'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
@@ -51,16 +55,13 @@ const canDownloadIndividual = computed(() => ['individual', 'all'].includes(prop
 const activeGuestRating = computed(() => props.collaboration?.ratings?.find(value => value.fileId === activeItem.value?.id)
 	?? { rating: 0, pick: 'none' as const })
 
-const shell = ref<HTMLElement | null>(null), feedbackOpen = ref(false), metadataOpen = ref(props.previewScene === 'metadata'), slideshow = ref(props.previewScene === 'slideshow'), shortcutsOpen = ref(false), actionMenuOpen = ref(false)
-const slideshowSuspended = ref(false), slideshowCycle = ref(0)
-const touchHint = ref(false), chromeVisible = ref(true), fullscreen = ref(Boolean(document.fullscreenElement))
+const shell = ref<HTMLElement | null>(null), feedbackOpen = ref(false), metadataOpen = ref(props.previewScene === 'metadata'), shortcutsOpen = ref(false), actionMenuOpen = ref(false)
+const touchHint = ref(false)
 const filmstripSessionKey = `proofing-gallery-filmstrip:${window.location.pathname}`
-const guestFilmstripHidden = ref(readBrowserStorage('session', filmstripSessionKey) === 'hidden')
+const guestFilmstripHidden = ref(!props.previewScene && readBrowserStorage('session', filmstripSessionKey) === 'hidden')
 const viewportWidth = ref(window.innerWidth), viewportHeight = ref(window.visualViewport?.height ?? window.innerHeight)
 const viewportTop = ref(window.visualViewport?.offsetTop ?? 0), viewportBottom = ref(0)
-const commentBody = ref(''), annotationReplyBody = ref('')
 const feedbackTab = ref<'comments' | 'pins'>('comments')
-const editingCommentId = ref<number | null>(null), editingCommentBody = ref('')
 const guestExportFields = ref(['filename', 'rating', 'pick'])
 const reduceMotion = useReducedMotion()
 const motionPreset = computed(() => reduceMotion.value ? 'off' : props.settings.presentation?.motionPreset ?? 'expressive')
@@ -74,8 +75,8 @@ const autoHideChrome = computed(() => shouldAutoHideLightboxChrome(
 	props.settings.presentation?.lightboxChromeBehavior ?? 'autoHide',
 ))
 const chromeAutoHideDelay = computed(() => viewportWidth.value <= 760 ? 4500 : 2200)
+const { chromeVisible, wakeChrome, toggleChrome } = usePublicLightboxChrome({ autoHide: autoHideChrome, delay: chromeAutoHideDelay, blocked: () => feedbackOpen.value || metadataOpen.value || shortcutsOpen.value })
 const loop = computed(() => props.mediaItems.length > 2), canStepPrevious = computed(() => loop.value || activeIndex.value > 0), canStepNext = computed(() => loop.value || activeIndex.value < props.mediaItems.length - 1)
-const slideshowDuration = computed(() => Math.max(3, Math.min(15, props.settings.presentation?.slideshowInterval ?? 5)) * 1000)
 const actionSheetClass = computed(() => ['proofing-public-overlay', 'lightbox-action-sheet'])
 const hasPublicMetadata = computed(() => hasReadyPublicMetadata(activeItem.value?.metadata))
 const actionSheetButtons = computed(() => [
@@ -115,18 +116,23 @@ const actionSheetButtons = computed(() => [
 ])
 
 let pswp: PhotoSwipe | null = null
+const { slideshow, slideshowSuspended, slideshowCycle, slideshowDuration, fullscreen, scheduleSlideshow, setSlideshow, toggleFullscreen } = usePublicLightboxPlayback({
+	shell, preview: () => !!props.previewScene, initialSlideshow: props.previewScene === 'slideshow',
+	interval: () => props.settings.presentation.slideshowInterval,
+	busy: () => actionMenuOpen.value || feedbackOpen.value || metadataOpen.value || shortcutsOpen.value,
+	canNext: () => canStepNext.value, next: () => pswp?.next(),
+})
 const mediaUpdates = usePublicLightboxLiveMedia({
 	items: () => props.mediaItems, activeIndex, viewer: () => pswp, toSlide: toSlideData,
 	changed: item => emit('active-change', item), close: () => emit('close'),
 })
 let unbindZoomSurface: (() => void) | null = null
 let zoomSurface: ReturnType<typeof usePublicLightboxZoomSurface> | null = null
-let slideshowTimer: number | undefined, hintTimer: number | undefined, chromeTimer: number | undefined
-let lastTouchPointerUpAt = 0, lastChromeToggleAt = 0
+let hintTimer: number | undefined
+let lastTouchPointerUpAt = 0
 let previousBodyOverflow = ''
 let previouslyFocused: HTMLElement | null = null
 let unmounting = false
-let wakeLock: { release(): Promise<void> } | null = null
 const annotations = usePublicLightboxAnnotations({
 	activeItem,
 	activeComments,
@@ -160,6 +166,7 @@ const {
 
 const annotationNumbers = computed(() => annotationNumbersByComment(activeComments.value))
 const selectedAnnotationComment = computed(() => findSelectedAnnotationComment(activeComments.value, selectedCommentId.value))
+const { commentBody, annotationReplyBody, editingCommentId, editingCommentBody, addComment, addAnnotationReply, editComment, saveEditedComment } = usePublicLightboxComments({ item: activeItem, annotation: selectedAnnotationComment, mutate: props.mutate })
 const visibleComments = computed(() => commentsForAnnotationThread(activeComments.value, selectedCommentId.value))
 const generalComments = computed(() => activeComments.value.filter(comment => comment.annotations.length === 0))
 const selectedAnnotationPoint = computed(() => {
@@ -232,7 +239,7 @@ function bindPhotoSwipeEvents() {
 		pswp?.element?.removeAttribute('aria-label')
 		unbindZoomSurface = zoomSurface?.bind() ?? (() => {})
 		nextTick(() => { zoomSurface?.mount(); annotations.syncHost() })
-		if (window.matchMedia('(pointer: coarse)').matches
+		if (!props.previewScene && window.matchMedia('(pointer: coarse)').matches
 			&& readBrowserStorage('local', 'proofing-gallery-touch-hint') !== 'seen') {
 			touchHint.value = true
 			safelyStore(() => localStorage.setItem('proofing-gallery-touch-hint', 'seen'))
@@ -257,8 +264,6 @@ onMounted(async () => {
 	previousBodyOverflow = document.body.style.overflow
 	document.body.style.overflow = 'hidden'
 	window.addEventListener('keydown', onKeydown, true)
-	document.addEventListener('visibilitychange', onSlideshowVisibility)
-	document.addEventListener('fullscreenchange', onFullscreenChange)
 	window.addEventListener('resize', updateViewport, { passive: true })
 
 	const { default: PhotoSwipeConstructor } = await import('photoswipe')
@@ -311,9 +316,8 @@ onBeforeUnmount(() => {
 	window.visualViewport?.removeEventListener('scroll', updateViewport)
 	unmounting = true
 	window.removeEventListener('keydown', onKeydown, true); window.removeEventListener('resize', updateViewport)
-	document.removeEventListener('visibilitychange', onSlideshowVisibility); document.removeEventListener('fullscreenchange', onFullscreenChange)
-	window.clearTimeout(slideshowTimer); window.clearTimeout(hintTimer); window.clearTimeout(chromeTimer)
-	annotations.destroy(); releaseWakeLock(); unbindZoomSurface?.(); unbindZoomSurface = null; pswp?.destroy()
+	window.clearTimeout(hintTimer)
+	annotations.destroy(); unbindZoomSurface?.(); unbindZoomSurface = null; pswp?.destroy()
 	pswp = null
 	document.body.style.overflow = previousBodyOverflow
 	previouslyFocused?.focus()
@@ -324,13 +328,6 @@ watch(metadataOpen, () => { wakeChrome(); nextTick(() => pswp?.updateSize(true))
 watch(shortcutsOpen, wakeChrome)
 watch(actionMenuOpen, wakeChrome)
 watch(selectedCommentId, () => { annotationReplyBody.value = '' })
-watch(autoHideChrome, value => {
-	if (value) wakeChrome()
-	else {
-		window.clearTimeout(chromeTimer)
-		chromeVisible.value = true
-	}
-})
 watch([actionMenuOpen, feedbackOpen, metadataOpen, shortcutsOpen], () => {
 	if (slideshow.value) scheduleSlideshow()
 })
@@ -340,42 +337,7 @@ watch(() => props.previewScene, scene => {
 	setSlideshow(scene === 'slideshow')
 })
 
-function toSlideData(item: MediaItem, index: number): SlideData {
-	if (!item.mimeType.startsWith('image/')) {
-		if (item.playback && !item.playback.playable) {
-			const message = ['pending', 'processing'].includes(item.playback.state)
-				? t('proofing_gallery', 'This video is being prepared. Reload the gallery in a moment.')
-				: t('proofing_gallery', 'This video cannot be played in this browser.')
-			return {
-				html: `<div class="proofing-video-state" role="status"><span aria-hidden="true"><svg width="42" height="42" viewBox="0 0 24 24"><path fill="currentColor" d="M8,5.14V19.14L19,12.14L8,5.14Z"/></svg></span><p>${escapeHtml(message)}</p></div>`,
-				width: 1280,
-				height: 720,
-			}
-		}
-		return {
-			html: `<video class="proofing-pswp-video" src="${props.streamUrl(item)}" controls playsinline preload="metadata"></video>`,
-			width: 1920,
-			height: 1080,
-		}
-	}
-	const source = props.dimensions[item.id]
-	const ratio = source && source.width > 0 && source.height > 0
-		? source.width / source.height
-		: 3 / 2
-	const width = ratio >= 1 ? 2400 : Math.max(1, Math.round(2400 * ratio))
-	const height = ratio >= 1 ? Math.max(1, Math.round(2400 / ratio)) : 2400
-	const src = escapeHtml(props.previewUrl(item, 2400, 2400, 'fit'))
-	return {
-		html: `<div class="proofing-zoom-surface"><img class="pswp__img proofing-zoom-image" src="${src}" alt="${escapeHtml(item.name)}"></div>`,
-		width,
-		height,
-		element: index === props.initialIndex ? props.initialElement ?? undefined : undefined,
-	}
-}
-
-function escapeHtml(value: string): string {
-	return value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!)
-}
+function toSlideData(item: MediaItem, index: number): SlideData { return publicLightboxSlide(item, index, { dimensions: props.dimensions, initialIndex: props.initialIndex, initialElement: props.initialElement, streamUrl: props.streamUrl, previewUrl: props.previewUrl }) }
 
 function close() { setSlideshow(false); emit('close') }
 
@@ -389,32 +351,9 @@ function updateViewport() {
 	annotations.updateAnchor()
 }
 
-function wakeChrome() {
-	chromeVisible.value = true
-	window.clearTimeout(chromeTimer)
-	if (autoHideChrome.value && !feedbackOpen.value && !metadataOpen.value && !shortcutsOpen.value) {
-		chromeTimer = window.setTimeout(() => { chromeVisible.value = false }, chromeAutoHideDelay.value)
-	}
-}
-
-function toggleChrome() {
-	if (!autoHideChrome.value) {
-		wakeChrome()
-		return
-	}
-	const now = Date.now()
-	if (now - lastChromeToggleAt < 500) return
-	lastChromeToggleAt = now
-	window.clearTimeout(chromeTimer)
-	chromeVisible.value = !chromeVisible.value
-	if (chromeVisible.value) {
-		chromeTimer = window.setTimeout(() => { chromeVisible.value = false }, chromeAutoHideDelay.value)
-	}
-}
-
 function toggleFilmstrip() {
 	guestFilmstripHidden.value = !guestFilmstripHidden.value
-	safelyStore(() => sessionStorage.setItem(filmstripSessionKey, guestFilmstripHidden.value ? 'hidden' : 'visible'))
+	if (!props.previewScene) safelyStore(() => sessionStorage.setItem(filmstripSessionKey, guestFilmstripHidden.value ? 'hidden' : 'visible'))
 	wakeChrome()
 	nextTick(() => pswp?.updateSize(true))
 }
@@ -430,51 +369,6 @@ function goTo(index: number) {
 
 function zoom(direction: number) {
 	zoomSurface?.zoom(direction)
-}
-
-function setSlideshow(enabled: boolean) {
-	slideshow.value = enabled
-	if (enabled && !props.previewScene) requestWakeLock()
-	else releaseWakeLock()
-	scheduleSlideshow()
-}
-
-function scheduleSlideshow() {
-	window.clearTimeout(slideshowTimer)
-	slideshowTimer = undefined
-	slideshowSuspended.value = document.hidden || actionMenuOpen.value || feedbackOpen.value || metadataOpen.value || shortcutsOpen.value
-	if (!slideshow.value || slideshowSuspended.value) return
-	slideshowCycle.value++
-	if (props.previewScene) return
-	slideshowTimer = window.setTimeout(() => {
-		if (canStepNext.value) pswp?.next()
-		else setSlideshow(false)
-	}, slideshowDuration.value)
-}
-
-function onSlideshowVisibility() {
-	scheduleSlideshow()
-	if (slideshow.value && !document.hidden) requestWakeLock()
-	else releaseWakeLock()
-}
-
-function onFullscreenChange() { fullscreen.value = Boolean(document.fullscreenElement) }
-async function toggleFullscreen() {
-	try {
-		if (document.fullscreenElement) await document.exitFullscreen()
-		else await shell.value?.requestFullscreen()
-	} catch { /* Fullscreen is optional and may be denied by the browser. */ }
-}
-async function requestWakeLock() {
-	try {
-		const manager = (navigator as Navigator & { wakeLock?: { request(type: 'screen'): Promise<{ release(): Promise<void> }> } }).wakeLock
-		if (manager && !wakeLock) wakeLock = await manager.request('screen')
-	} catch { wakeLock = null }
-}
-async function releaseWakeLock() {
-	const lock = wakeLock
-	wakeLock = null
-	try { await lock?.release() } catch { /* The browser may already have released it. */ }
 }
 
 function onKeydown(event: KeyboardEvent) {
@@ -541,41 +435,6 @@ async function setGuestRating(rating: number, pick = activeGuestRating.value.pic
 	await props.mutate(`media/${item.id}/rating`, 'PUT', { rating, pick })
 }
 
-async function addComment() {
-	const item = activeItem.value
-	if (!item || !commentBody.value.trim()) return
-	if (await props.mutate(`media/${item.id}/comments`, 'POST', {
-		body: commentBody.value,
-		annotation: null,
-	})) {
-		commentBody.value = ''
-	}
-}
-
-async function addAnnotationReply() {
-	const item = activeItem.value
-	const comment = selectedAnnotationComment.value
-	if (!item || !comment || !annotationReplyBody.value.trim()) return
-	if (await props.mutate(`media/${item.id}/comments`, 'POST', {
-		body: annotationReplyBody.value,
-		parentId: comment.threadId ?? comment.id,
-	})) {
-		annotationReplyBody.value = ''
-	}
-}
-
-function editComment(comment: CollaborationState['comments'][number]) {
-	editingCommentId.value = comment.id
-	editingCommentBody.value = comment.body
-}
-
-async function saveEditedComment(commentId: number) {
-	if (editingCommentBody.value.trim()
-		&& await props.mutate(`comments/${commentId}`, 'PUT', { body: editingCommentBody.value })) {
-		editingCommentId.value = null
-		editingCommentBody.value = ''
-	}
-}
 </script>
 
 <template>

@@ -89,7 +89,10 @@ final class MediaMetadataServiceTest extends TestCase {
 	public function testLightroomRejectRatingImportsAsCanonicalReject(): void {
 		$service = $this->service();
 		$document = $this->invoke($service, 'newXmpDocument');
-		$description = $this->invoke($service, 'description', $document);
+		$xpath = new \DOMXPath($document);
+		$xpath->registerNamespace('rdf', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#');
+		$description = $xpath->query('//rdf:Description')->item(0);
+		self::assertInstanceOf(\DOMElement::class, $description);
 		$description->setAttributeNS('http://ns.adobe.com/xap/1.0/', 'xmp:Rating', '-1');
 
 		self::assertSame(
@@ -128,8 +131,7 @@ final class MediaMetadataServiceTest extends TestCase {
 	public function testGpsCoordinatesAreNormalizedFromExifFractions(): void {
 		$extractor = new EmbeddedMetadataExtractor(new PolicyService($this->createMock(IConfig::class)));
 		$method = new \ReflectionMethod($extractor, 'gps');
-		$method->setAccessible(true);
-		$gps = $method->invoke($extractor, [
+				$gps = $method->invoke($extractor, [
 			'gpslatitude' => ['52/1', '31/1', '12/1'],
 			'gpslatituderef' => 'N',
 			'gpslongitude' => ['13/1', '24/1', '18/1'],
@@ -139,19 +141,11 @@ final class MediaMetadataServiceTest extends TestCase {
 		self::assertSame(['latitude' => 52.52, 'longitude' => 13.405], $gps);
 	}
 
-	private function service(): MediaMetadataService {
-		$policies = new PolicyService($this->createMock(IConfig::class));
-		return new MediaMetadataService(
-			$this->createMock(IFilesMetadataManager::class),
-			$policies,
-			new EmbeddedMetadataExtractor($policies),
-			$this->createMock(\OCP\EventDispatcher\IEventDispatcher::class),
-		);
+	private function service(): \OCA\ProofingGallery\Service\XmpDocument {
+		return new \OCA\ProofingGallery\Service\XmpDocument();
 	}
 
-	private function invoke(MediaMetadataService $service, string $method, mixed ...$arguments): mixed {
-		$reflection = new \ReflectionMethod($service, $method);
-		$reflection->setAccessible(true);
-		return $reflection->invoke($service, ...$arguments);
+	private function invoke(\OCA\ProofingGallery\Service\XmpDocument $service, string $method, mixed ...$arguments): mixed {
+		return $service->{$method}(...$arguments);
 	}
 }

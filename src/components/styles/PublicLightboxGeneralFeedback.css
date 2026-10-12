@@ -21,11 +21,11 @@
 
 .feedback-state-picker summary > span:last-child { display: flex; min-height: 100%; align-items: center; }
 
-.feedback-state-picker summary::after { width: 6px; height: 6px; flex: 0 0 6px; margin-inline: auto 2px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; content: ''; transform: rotate(45deg); }
+.feedback-state-picker summary::after { width: 6px; height: 6px; flex: 0 0 6px; margin-inline: auto 2px; border-inline-end: 1px solid currentColor; border-bottom: 1px solid currentColor; content: ''; transform: rotate(45deg); }
 
 .feedback-state-picker[open] summary::after { transform: rotate(225deg); }
 
-.feedback-state-picker > div { position: absolute; z-index: 4; top: calc(100% + 4px); right: 0; left: 0; display: grid; padding: 4px; border: 1px solid var(--ion-border-color); border-radius: 8px; background: var(--ion-background-color); box-shadow: 0 8px 18px rgb(0 0 0 / 24%); }
+.feedback-state-picker > div { position: absolute; z-index: 4; top: calc(100% + 4px); inset-inline-end: 0; inset-inline-start: 0; display: grid; padding: 4px; border: 1px solid var(--ion-border-color); border-radius: 8px; background: var(--ion-background-color); box-shadow: 0 8px 18px rgb(0 0 0 / 24%); }
 
 .feedback-state-picker__option { display: flex; min-height: 32px; align-items: center; gap: 8px; padding: 0 9px; border: 0; border-radius: 5px; background: transparent; color: var(--ion-text-color); cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; text-align: start; }
 

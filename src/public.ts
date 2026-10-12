@@ -1,7 +1,6 @@
 import { loadState } from '@nextcloud/initial-state'
-import { register, setLanguage, setLocale, unregister } from '@nextcloud/l10n'
 import { IonicVue } from '@ionic/vue'
-import { createApp, defineAsyncComponent } from 'vue'
+import { createApp } from 'vue'
 import '@ionic/vue/css/core.css'
 import '@ionic/vue/css/normalize.css'
 import '@ionic/vue/css/structure.css'
@@ -15,10 +14,7 @@ import './public-shell.css'
 
 import type { GallerySettings } from './domain/gallerySettings'
 import type { PublicGalleryPage, PublicReviewState } from './publicTypes.ts'
-
-// Keep the large public interaction coordinator outside the eager entry. The
-// server preview remains visible until this chunk has mounted.
-const PublicApp = defineAsyncComponent(() => import('./PublicApp.vue'))
+import { applyPublicLocale } from './publicLocale.ts'
 
 interface PublicGalleryState {
 	id: number
@@ -35,21 +31,11 @@ interface PublicGalleryState {
 const state = loadState<PublicGalleryState>('proofing_gallery', 'public-gallery')
 
 async function mount() {
-	const locale = state.settings.publicLocale
-	if (locale !== 'auto') {
-		setLanguage(locale)
-		setLocale(locale === 'de' ? 'de_DE' : 'en_US')
-		document.documentElement.lang = locale
-		unregister('proofing_gallery')
-		try {
-			const bundle = locale === 'de'
-				? (await import('../l10n/de.json')).default
-				: (await import('../l10n/en.json')).default
-			register('proofing_gallery', bundle.translations)
-		} catch {
-			// Source strings are English and remain a safe fallback.
-		}
-	}
+	// Load the coordinator and locale together; keep the server image until mount.
+	const [{ default: PublicApp }] = await Promise.all([
+		import('./PublicApp.vue'),
+		state.settings.publicLocale === 'auto' ? Promise.resolve() : applyPublicLocale(state.settings.publicLocale),
+	])
 	document.body.classList.add('proofing-gallery-public-page')
 	document.documentElement.classList.add('proofing-gallery-public-page')
 	document.title = state.title

@@ -3,7 +3,7 @@ import { showError, showSuccess } from '@nextcloud/dialogs'
 import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ArrowDownIcon from 'vue-material-design-icons/ArrowDown.vue'
 import ArrowUpIcon from 'vue-material-design-icons/ArrowUp.vue'
 import CloseIcon from 'vue-material-design-icons/Close.vue'
@@ -11,12 +11,12 @@ import DragHorizontalIcon from 'vue-material-design-icons/DragHorizontal.vue'
 
 import {
 	fetchCollection,
-	fetchGalleries,
 	fetchGalleryMedia,
+	fetchGalleryPage,
 	ownerPreviewUrl,
 	saveCollection,
 } from '../services/galleryApi.ts'
-import type { CollectionDocument, CollectionItem, Gallery, MediaItem } from '../types.ts'
+import type { CollectionDocument, CollectionItem, Gallery, GalleryListItem, MediaItem } from '../types.ts'
 
 const props = defineProps<{ gallery: Gallery }>()
 const emit = defineEmits<{ changed: []; 'guest-order': [] }>()
@@ -25,8 +25,9 @@ const MEDIA_PAGE_SIZE = 100
 
 const document = ref<CollectionDocument | null>(null)
 const items = ref<CollectionItem[]>([])
-const sources = ref<Gallery[]>([])
+const sources = ref<GalleryListItem[]>([])
 const sourceTotal = ref(0)
+const sourceCursor = ref<string | null>(null)
 const sourceSearch = ref('')
 const sourceId = ref<number | null>(null)
 const sourcePath = ref('')
@@ -45,6 +46,10 @@ let sourceSearchTimer: ReturnType<typeof setTimeout> | undefined
 let mediaSearchTimer: ReturnType<typeof setTimeout> | undefined
 let sourcesRequest = 0
 let mediaRequest = 0
+let disposed = false
+let initialController: AbortController | undefined
+let sourcesController: AbortController | undefined
+let mediaController: AbortController | undefined
 
 const dirty = computed(() => document.value !== null
 	&& JSON.stringify(items.value.map(item => [item.sourceGalleryId, item.fileId]))
@@ -53,10 +58,16 @@ const selectedSource = computed(() => sources.value.find(source => source.id ===
 const folders = computed(() => sourceMedia.value.filter(item => item.folder))
 const files = computed(() => sourceMedia.value.filter(item => !item.folder))
 const selectedIds = computed(() => selectedMedia.value.map(item => item.id))
-const hasMoreSources = computed(() => sources.value.length < sourceTotal.value)
+const hasMoreSources = computed(() => sourceCursor.value !== null)
 const hasMoreMedia = computed(() => sourceMedia.value.length < mediaTotal.value)
 
 onMounted(load)
+onBeforeUnmount(() => {
+	disposed = true
+	clearTimeout(sourceSearchTimer); clearTimeout(mediaSearchTimer)
+	sourcesRequest++; mediaRequest++
+	initialController?.abort(); sourcesController?.abort(); mediaController?.abort()
+})
 watch(sourceId, () => {
 	sourcePath.value = ''
 	selectedMedia.value = []
@@ -76,42 +87,51 @@ watch(mediaSearch, () => {
 })
 
 async function load() {
+	initialController?.abort()
+	const controller = new AbortController()
+	initialController = controller
 	loading.value = true
 	try {
 		const [current, galleryPage] = await Promise.all([
-			fetchCollection(props.gallery.id),
-			fetchGalleries({
+			fetchCollection(props.gallery.id, controller.signal),
+			fetchGalleryPage({
 				limit: SOURCE_PAGE_SIZE,
 				sourceType: 'folder',
 				ownedOnly: true,
-			}),
+			}, controller.signal),
 		])
+		if (disposed || controller !== initialController) return
 		document.value = current
 		items.value = structuredClone(current.items)
 		sources.value = galleryPage.items
 		sourceTotal.value = galleryPage.total
+		sourceCursor.value = galleryPage.nextCursor
 		sourceId.value = sources.value[0]?.id ?? null
 	} catch {
+		if (disposed || controller !== initialController) return
 		showError(t('proofing_gallery', 'Collection content could not be loaded.'))
 	} finally {
-		loading.value = false
+		if (!disposed && controller === initialController) loading.value = false
 	}
 }
 
 async function loadSources(reset: boolean) {
 	const request = ++sourcesRequest
+	sourcesController?.abort()
+	sourcesController = new AbortController()
 	reset ? sourcesLoading.value = true : sourcesLoadingMore.value = true
 	try {
-		const page = await fetchGalleries({
+		const page = await fetchGalleryPage({
 			search: sourceSearch.value,
 			limit: SOURCE_PAGE_SIZE,
-			offset: reset ? 0 : sources.value.length,
+			cursor: reset ? null : sourceCursor.value,
 			sourceType: 'folder',
 			ownedOnly: true,
-		})
+		}, sourcesController.signal)
 		if (request !== sourcesRequest) return
 		sources.value = reset ? page.items : [...sources.value, ...page.items]
 		sourceTotal.value = page.total
+		sourceCursor.value = page.nextCursor
 		if (reset && !sources.value.some(source => source.id === sourceId.value)) {
 			sourceId.value = sources.value[0]?.id ?? null
 		}
@@ -133,9 +153,13 @@ async function loadSources(reset: boolean) {
 
 async function loadSource(reset: boolean) {
 	const request = ++mediaRequest
+	mediaController?.abort()
+	mediaController = new AbortController()
 	if (sourceId.value === null) {
 		sourceMedia.value = []
 		mediaTotal.value = 0
+		sourceLoading.value = false
+		sourceLoadingMore.value = false
 		return
 	}
 	reset ? sourceLoading.value = true : sourceLoadingMore.value = true
@@ -146,6 +170,10 @@ async function loadSource(reset: boolean) {
 			reset ? 0 : sourceMedia.value.length,
 			sourcePath.value,
 			mediaSearch.value,
+			'name',
+			'asc',
+			{},
+			mediaController.signal,
 		)
 		if (request !== mediaRequest) return
 		sourceMedia.value = reset ? page.items : [...sourceMedia.value, ...page.items]
@@ -228,23 +256,26 @@ function drop(target: number) {
 
 async function save() {
 	if (!document.value || !dirty.value) return
+	const galleryId = props.gallery.id
 	saving.value = true
 	try {
-		const current = await saveCollection(props.gallery.id, document.value.revision, items.value.map(item => ({
+		const current = await saveCollection(galleryId, document.value.revision, items.value.map(item => ({
 			sourceGalleryId: item.sourceGalleryId,
 			fileId: item.fileId,
 		})))
+		if (disposed || props.gallery.id !== galleryId) return
 		document.value = current
 		items.value = structuredClone(current.items)
 		emit('changed')
 		showSuccess(t('proofing_gallery', 'Collection content saved.'))
 	} catch (error: unknown) {
+		if (disposed || props.gallery.id !== galleryId) return
 		const status = (error as { response?: { status?: number } }).response?.status
 		showError(status === 409
 			? t('proofing_gallery', 'The collection changed elsewhere. Reload it before saving.')
 			: t('proofing_gallery', 'Collection content could not be saved.'))
 	} finally {
-		saving.value = false
+		if (!disposed) saving.value = false
 	}
 }
 </script>
@@ -428,280 +459,4 @@ async function save() {
 	</section>
 </template>
 
-<style scoped>
-.collection-content {
-	display: grid;
-	max-width: 980px;
-	gap: 28px;
-}
-
-.collection-heading,
-.collection-current header,
-.collection-browser > div:first-child {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 20px;
-}
-
-.collection-heading h2,
-.collection-heading p,
-.collection-current h3,
-.collection-browser h3 {
-	margin: 0;
-}
-
-.collection-heading p {
-	margin-top: 5px;
-	color: var(--color-text-maxcontrast);
-}
-
-.collection-current,
-.collection-browser {
-	display: grid;
-	gap: 16px;
-	padding-top: 20px;
-	border-top: 1px solid var(--color-border);
-}
-
-.collection-loading,
-.collection-empty {
-	padding: 24px;
-	border: 1px dashed var(--color-border-maxcontrast);
-	border-radius: 8px;
-	color: var(--color-text-maxcontrast);
-}
-
-.collection-list {
-	display: grid;
-	gap: 1px;
-	margin: 0;
-	padding: 0;
-	list-style: none;
-	background: var(--color-border);
-	border: 1px solid var(--color-border);
-	border-radius: 8px;
-	overflow: hidden;
-}
-
-.collection-list li {
-	display: grid;
-	grid-template-columns: 22px 80px minmax(0, 1fr) auto;
-	align-items: center;
-	gap: 12px;
-	min-height: 76px;
-	padding: 8px 12px;
-	background: var(--color-main-background);
-}
-
-.collection-list img,
-.collection-placeholder {
-	width: 80px;
-	height: 60px;
-	object-fit: cover;
-	background: var(--color-background-dark);
-}
-
-.collection-placeholder {
-	display: grid;
-	place-items: center;
-	font-size: 24px;
-}
-
-.collection-grip {
-	color: var(--color-text-maxcontrast);
-	cursor: grab;
-}
-
-.collection-name,
-.collection-name strong,
-.collection-name span {
-	display: block;
-	min-width: 0;
-}
-
-.collection-name strong,
-.collection-name span {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.collection-name span {
-	margin-top: 3px;
-	color: var(--color-text-maxcontrast);
-}
-
-.collection-item--missing {
-	color: var(--color-text-maxcontrast);
-}
-
-.collection-actions {
-	display: flex;
-	gap: 4px;
-}
-
-.collection-actions button {
-	width: 34px;
-	height: 34px;
-	border: 0;
-	border-radius: 6px;
-	background: transparent;
-	color: inherit;
-	cursor: pointer;
-}
-
-.collection-actions button:hover,
-.collection-actions button:focus-visible {
-	background: var(--color-background-hover);
-}
-
-.collection-actions button:disabled {
-	opacity: .35;
-	cursor: default;
-}
-
-.collection-browser label {
-	display: grid;
-	gap: 5px;
-}
-
-.source-controls {
-	display: grid;
-	grid-template-columns: minmax(180px, 1fr) minmax(220px, 1fr) auto;
-	align-items: end;
-	gap: 8px;
-}
-
-.collection-browser select,
-.collection-browser input[type='search'] {
-	min-width: 260px;
-	min-height: 40px;
-	padding: 6px 10px;
-	border: 1px solid var(--color-border-maxcontrast);
-	border-radius: 8px;
-	background: var(--color-main-background);
-	color: var(--color-main-text);
-}
-
-.media-search {
-	max-width: 420px;
-}
-
-.collection-path {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	min-height: 36px;
-	color: var(--color-text-maxcontrast);
-}
-
-.source-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-	gap: 8px;
-}
-
-.source-folder,
-.source-file {
-	min-height: 118px;
-	padding: 8px;
-	border: 1px solid var(--color-border);
-	border-radius: 8px;
-	background: var(--color-main-background);
-	color: var(--color-main-text);
-	text-align: start;
-}
-
-.source-folder {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	cursor: pointer;
-}
-
-.source-file {
-	position: relative;
-	cursor: pointer;
-}
-
-.source-file input {
-	position: absolute;
-	top: 14px;
-	inset-inline-start: 14px;
-	z-index: 1;
-}
-
-.source-file img {
-	display: block;
-	width: 100%;
-	height: 90px;
-	margin-bottom: 6px;
-	object-fit: cover;
-	background: var(--color-background-dark);
-}
-
-.source-file span {
-	display: block;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.source-actions {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-}
-
-.source-actions > span {
-	margin-inline-end: auto;
-	color: var(--color-text-maxcontrast);
-	font-size: 13px;
-}
-
-@media (max-width: 700px) {
-	.collection-heading,
-	.collection-browser > div:first-child {
-		align-items: stretch;
-		flex-direction: column;
-	}
-
-	.collection-browser select {
-		width: 100%;
-		min-width: 0;
-	}
-
-	.source-controls {
-		grid-template-columns: 1fr;
-	}
-
-	.collection-browser input[type='search'] {
-		width: 100%;
-		min-width: 0;
-	}
-
-	.source-actions {
-		align-items: stretch;
-		flex-direction: column;
-	}
-
-	.source-actions > span {
-		margin-inline-end: 0;
-	}
-
-	.collection-list li {
-		grid-template-columns: 18px 56px minmax(0, 1fr);
-	}
-
-	.collection-list img,
-	.collection-placeholder {
-		width: 56px;
-		height: 48px;
-	}
-
-	.collection-actions {
-		grid-column: 3;
-	}
-}
-</style>
+<style scoped src="./styles/CollectionContent.css" />

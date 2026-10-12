@@ -106,6 +106,7 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 		string $sort,
 		?array $cursor,
 		int $limit,
+		int $offset = 0,
 	): array {
 		$qb = $this->accessibleQuery($userUid, $groupIds, $archived, $search, $sourceType, $status, $mode, $purpose, $ownedOnly);
 		$qb->selectDistinct('g.*');
@@ -125,7 +126,7 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 				),
 			));
 		}
-		$qb->orderBy($field, $direction)->addOrderBy('g.id', $direction)->setMaxResults($limit);
+		$qb->orderBy($field, $direction)->addOrderBy('g.id', $direction)->setMaxResults($limit)->setFirstResult(max(0, $offset));
 		$items = $this->findEntities($qb);
 
 		$count = $this->accessibleQuery($userUid, $groupIds, $archived, $search, $sourceType, $status, $mode, $purpose, $ownedOnly);

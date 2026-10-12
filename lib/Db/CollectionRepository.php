@@ -74,9 +74,16 @@ final class CollectionRepository {
 
 	/** @return list<int> */
 	public function dependents(int $sourceGalleryId): array {
+		return $this->dependentsMany([$sourceGalleryId]);
+	}
+
+	/** @param list<int> $sourceGalleryIds
+	 * @return list<int> */
+	public function dependentsMany(array $sourceGalleryIds): array {
+		if ($sourceGalleryIds === []) return [];
 		$qb = $this->db->getQueryBuilder();
 		return array_map('intval', QueryResult::column($qb->selectDistinct('collection_id')->from('proofing_collection_items')
-			->where($qb->expr()->eq('source_gallery_id', $qb->createNamedParameter($sourceGalleryId, IQueryBuilder::PARAM_INT)))->executeQuery()));
+			->where($qb->expr()->in('source_gallery_id', $qb->createNamedParameter($sourceGalleryIds, IQueryBuilder::PARAM_INT_ARRAY)))->executeQuery()));
 	}
 
 	/** @param list<int> $collectionIds

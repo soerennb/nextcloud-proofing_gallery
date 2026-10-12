@@ -1,5 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 
 import { expect, test } from '@playwright/test'
 
@@ -8,7 +10,7 @@ const auth = `Basic ${Buffer.from('admin:admin').toString('base64')}`
 const headers = { Authorization: auth, 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' }
 
 test('bounded gallery and media pagination remains complete @scaling', async ({ request, baseURL }) => {
-	test.setTimeout(120_000)
+	test.setTimeout(300_000)
 	test.skip(!enabled, 'Set E2E_SCALING=1 to run the scaling fixture')
 	const fixture = JSON.parse(await readFile(path.join(process.cwd(), 'test-results-e2e-state.json'), 'utf8')) as { largeFolderId: number; largeImageCount: number }
 	const galleryCount = Math.max(10, Math.min(10000, Number(process.env.E2E_SCALE_GALLERIES ?? 60)))
@@ -34,6 +36,14 @@ test('bounded gallery and media pagination remains complete @scaling', async ({ 
 		cursor = page.nextCursor
 	} while (cursor)
 	expect(found.size).toBe(galleryCount)
+	// The compatible v1 offset must keep working beyond the former 1000-row read cap.
+	const offset = Math.max(0, galleryCount - 5)
+	const legacy = await request.get(`${galleries}?format=json&limit=100&offset=${offset}&search=E2E%20Scale`, { headers })
+	expect(legacy.status()).toBe(200)
+	const legacyPage = await legacy.json() as { items: Array<{ id: number }>; total: number }
+	expect(legacyPage.total).toBe(galleryCount)
+	expect(legacyPage.items).toHaveLength(5)
+	legacyPage.items.forEach(item => expect(found.has(item.id)).toBe(true))
 
 	const mediaGallery = await request.post(`${galleries}?format=json`, { headers, data: { folderId: fixture.largeFolderId, title: 'E2E Scale media' } }).then(response => response.json()) as { id: number }
 	let mediaCount = 0
@@ -43,4 +53,8 @@ test('bounded gallery and media pagination remains complete @scaling', async ({ 
 		mediaCount += ((await response.json()) as { items: unknown[] }).items.length
 	}
 	expect(mediaCount).toBe(fixture.largeImageCount)
+	if (fixture.largeImageCount > 500) {
+		const { stdout } = await promisify(execFile)('docker', ['compose', 'exec', '-T', '--user', 'www-data', 'nextcloud', 'php', '/var/www/html/custom_apps/proofing_gallery/tests/smoke/MediaIndexRecovery.php', String(fixture.largeFolderId), String(fixture.largeImageCount)])
+		expect(stdout).toContain(`Bounded scan rollback and persisted restart verified for ${fixture.largeImageCount} media files.`)
+	}
 })

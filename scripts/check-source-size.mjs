@@ -10,11 +10,6 @@ const limits = new Map([
 	['.ts', 500],
 	['.vue', 650],
 ])
-const fileLimits = new Map([
-	// Public delivery remains isolated and is tracked for later extraction.
-	['src/PublicApp.vue', 950],
-	['src/components/PublicLightbox.vue', 760],
-])
 
 async function files(directory) {
 	const result = []
@@ -33,7 +28,7 @@ for (const file of (await Promise.all(['lib', 'src'].map(directory => files(path
 	const source = await readFile(file, 'utf8')
 	const extension = path.extname(file)
 	const relative = path.relative(root, file).split(path.sep).join('/')
-	const limit = fileLimits.get(relative) ?? limits.get(extension)
+	const limit = limits.get(extension)
 	if (limit === undefined) continue
 	const significant = source.split('\n').filter(line => {
 		const value = line.trim()
@@ -42,4 +37,4 @@ for (const file of (await Promise.all(['lib', 'src'].map(directory => files(path
 	if (significant > limit) oversized.push(`${relative}: ${significant} > ${limit}`)
 }
 if (oversized.length) throw new Error(`Source files exceed their significant-line budgets:\n${oversized.join('\n')}`)
-console.log(`Source-size gate passed (${[...limits].map(([extension, limit]) => `${extension} ${limit}`).join(', ')}; ${fileLimits.size} reviewed exceptions).`)
+console.log(`Source-size gate passed (${[...limits].map(([extension, limit]) => `${extension} ${limit}`).join(', ')}).`)

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { mediaSortOptions } from '../domain/mediaSorting.ts'
-import { showError, showInfo, showSuccess } from '@nextcloud/dialogs'
+import { showError, showSuccess } from '@nextcloud/dialogs'
 import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
@@ -13,10 +13,11 @@ import DotsHorizontalIcon from 'vue-material-design-icons/DotsHorizontal.vue'
 import FolderIcon from 'vue-material-design-icons/Folder.vue'
 import PlayIcon from 'vue-material-design-icons/Play.vue'
 
-import { bulkGalleryMedia, createGalleryFolder, deleteGalleryMedia, fetchGalleryMedia, fetchMediaMetadata, fetchMediaVersions, indexGalleryMetadata, ownerMediaDownloadUrl, ownerPreviewUrl, ownerUploadConcurrency, prepareOwnerUploadSessions, renameGalleryMedia, replaceGalleryMedia, restoreMediaVersion, updateMediaMetadata, uploadGalleryMedia } from '../services/galleryApi.ts'
-import type { OwnerUploadSession, UploadResolution } from '../services/galleryApi.ts'
-import { resolveOwnerUploadSelection } from '../services/uploadConflictResolver.ts'
-import type { Gallery, MediaItem, MediaMetadata, MediaVersion } from '../types.ts'
+import { bulkGalleryMedia, createGalleryFolder, deleteGalleryMedia, fetchGalleryMedia, indexGalleryMetadata, ownerMediaDownloadUrl, ownerPreviewUrl, renameGalleryMedia } from '../services/galleryApi.ts'
+import { useOwnerMediaMetadata } from '../composables/useOwnerMediaMetadata.ts'
+import { useOwnerMediaVersions } from '../composables/useOwnerMediaVersions.ts'
+import { useOwnerUploadQueue } from '../composables/useOwnerUploadQueue.ts'
+import type { Gallery, MediaItem } from '../types.ts'
 import ProgressiveImage from './ProgressiveImage.vue'
 import VirtualMediaGrid from './VirtualMediaGrid.vue'
 
@@ -31,20 +32,13 @@ const sortBy = ref(props.gallery.settings.navigation.sortBy)
 const sortDirection = ref(props.gallery.settings.navigation.sortDirection)
 const loading = ref(false)
 const loadingMore = ref(false)
-const uploading = ref(false)
-type UploadQueueItem = { id: string; file: File; progress: number; state: 'waiting' | 'uploading' | 'done' | 'skipped' | 'failed'; attempts: number; resolution: UploadResolution; session?: OwnerUploadSession }
-const uploadQueue = ref<UploadQueueItem[]>([])
+const { uploadQueue, uploading, uploadFiles, retryUpload } = useOwnerUploadQueue({ gallery: () => props.gallery, path: () => path.value, changed: () => emit('changed'), reload: () => load() })
 const fileInput = ref<HTMLInputElement | null>(null)
 const replacementInput = ref<HTMLInputElement | null>(null)
-const versionItem = ref<MediaItem | null>(null)
-const versions = ref<MediaVersion[]>([])
-const versionsLoading = ref(false)
+const { versionItem, versions, versionsLoading, showVersions, replaceVersion, restoreVersion } = useOwnerMediaVersions({ galleryId: () => props.gallery.id, reload: () => load(), changed: () => emit('changed') })
 const selectedIds = ref<number[]>([])
 const bulkWorking = ref(false)
-const metadataItem = ref<MediaItem | null>(null)
-const metadataDraft = ref<MediaMetadata>({ state: 'pending' })
-const metadataLoading = ref(false)
-const metadataSaving = ref(false)
+const { metadataItem, metadataDraft, metadataLoading, metadataSaving, showMetadata, saveMetadata } = useOwnerMediaMetadata({ galleryId: () => props.gallery.id, reload: () => load() })
 const metadataIndexing = ref(false)
 const metadataFiltersOpen = ref(false)
 const capturedFrom = ref('')
@@ -123,41 +117,6 @@ async function indexMetadata() {
 	}
 }
 
-async function showMetadata(item: MediaItem) {
-	metadataItem.value = item
-	metadataLoading.value = true
-	try {
-		metadataDraft.value = await fetchMediaMetadata(props.gallery.id, item.id)
-	} catch {
-		showError(t('proofing_gallery', 'Metadata could not be loaded.'))
-		metadataItem.value = null
-	} finally {
-		metadataLoading.value = false
-	}
-}
-
-async function saveMetadata() {
-	if (!metadataItem.value) return
-	metadataSaving.value = true
-	try {
-		metadataDraft.value = await updateMediaMetadata(props.gallery.id, metadataItem.value.id, {
-			title: metadataDraft.value.title ?? null,
-			description: metadataDraft.value.description ?? null,
-			creator: metadataDraft.value.creator ?? null,
-			copyright: metadataDraft.value.copyright ?? null,
-			keywords: metadataDraft.value.keywords ?? [],
-			rating: metadataDraft.value.rating ?? null,
-			label: metadataDraft.value.label ?? null,
-		}, metadataItem.value.etag, metadataDraft.value.sidecar?.etag)
-		showSuccess(t('proofing_gallery', 'XMP sidecar saved.'))
-		await load()
-	} catch {
-		showError(t('proofing_gallery', 'The sidecar changed or could not be saved. Reload metadata and try again.'))
-	} finally {
-		metadataSaving.value = false
-	}
-}
-
 function metadataKeywords(value: string) {
 	metadataDraft.value.keywords = value.split(',').map(item => item.trim()).filter(Boolean)
 }
@@ -233,106 +192,7 @@ function openCrumb(index: number) {
 
 async function upload(event: Event) {
 	const input = event.target as HTMLInputElement
-	const files = Array.from(input.files ?? [])
-	if (files.length === 0) return
-	let resolutions: Map<File, UploadResolution> | null
-	try {
-		resolutions = await resolveOwnerUploadSelection(props.gallery, path.value, files)
-	} catch {
-		showError(t('proofing_gallery', 'File conflicts could not be checked. No files were uploaded.'))
-		input.value = ''
-		return
-	}
-	if (resolutions === null) {
-		input.value = ''
-		return
-	}
-	uploading.value = true
-	uploadQueue.value = files.map((file, index) => ({
-		id: `${file.name}-${file.size}-${file.lastModified}-${index}`,
-		file,
-		progress: 0,
-		state: resolutions.get(file)?.conflict === 'skip' ? 'skipped' : 'waiting',
-		attempts: 0,
-		resolution: resolutions.get(file) ?? { conflict: 'rename' },
-	}))
-	const pending = uploadQueue.value.filter(item => item.state === 'waiting')
-	try {
-		const sessions = pending.length === 0
-			? []
-			: await prepareOwnerUploadSessions(props.gallery.id, pending.map(item => ({
-					file: item.file,
-					path: path.value,
-					resolution: item.resolution,
-				})))
-		pending.forEach((item, index) => item.session = sessions[index])
-		let cursor = 0
-		const worker = async () => {
-			while (cursor < pending.length) {
-				const item = pending[cursor++]
-				item.state = 'uploading'
-				while (item.attempts < 3 && item.state !== 'done' && item.state !== 'skipped') {
-					item.attempts++
-					try {
-						const uploaded = await uploadGalleryMedia(props.gallery.id, item.file, path.value, (loaded, total) => {
-							item.progress = Math.min(100, Math.round(loaded / Math.max(1, total) * 100))
-						}, item.resolution, async () => {
-							const updated = await resolveOwnerUploadSelection(props.gallery, path.value, [item.file])
-							const resolution = updated?.get(item.file) ?? null
-							if (resolution !== null) item.resolution = resolution
-							return resolution
-						}, item.session)
-						item.progress = uploaded === null ? 0 : 100
-						item.state = uploaded === null ? 'skipped' : 'done'
-					} catch {
-						if (item.attempts >= 3) item.state = 'failed'
-						else await new Promise(resolve => setTimeout(resolve, 500 * 2 ** (item.attempts - 1)))
-					}
-				}
-			}
-		}
-		await Promise.all(Array.from({ length: Math.min(ownerUploadConcurrency(), pending.length) }, worker))
-		const uploaded = uploadQueue.value.filter(item => item.state === 'done').length
-		const replaced = uploadQueue.value.filter(item => item.state === 'done' && item.resolution.conflict === 'overwrite').length
-		const skipped = uploadQueue.value.filter(item => item.state === 'skipped').length
-		const failed = uploadQueue.value.filter(item => item.state === 'failed').length
-		if (uploaded > 0) showSuccess(t('proofing_gallery', '{count} files uploaded', { count: uploaded }))
-		if (replaced > 0) showInfo(t('proofing_gallery', '{count} existing files replaced.', { count: replaced }))
-		if (skipped > 0) showInfo(t('proofing_gallery', '{count} files skipped.', { count: skipped }))
-		if (failed > 0) showError(t('proofing_gallery', '{count} files need attention. You can retry them individually.', { count: failed }))
-		emit('changed')
-		await load()
-	} catch {
-		pending.filter(item => item.state !== 'done' && item.state !== 'skipped').forEach(item => item.state = 'failed')
-		showError(t('proofing_gallery', 'Upload sessions could not be prepared. No pending files were uploaded.'))
-	} finally {
-		uploading.value = false
-		input.value = ''
-	}
-}
-
-async function retryUpload(item: UploadQueueItem) {
-	item.state = 'uploading'
-	item.attempts = 0
-	try {
-		if (!item.session) {
-			item.session = (await prepareOwnerUploadSessions(props.gallery.id, [{ file: item.file, path: path.value, resolution: item.resolution }]))[0]
-		}
-		const uploaded = await uploadGalleryMedia(props.gallery.id, item.file, path.value, (loaded, total) => {
-			item.progress = Math.min(100, Math.round(loaded / Math.max(1, total) * 100))
-		}, item.resolution, async () => {
-			const updated = await resolveOwnerUploadSelection(props.gallery, path.value, [item.file])
-			const resolution = updated?.get(item.file) ?? null
-			if (resolution !== null) item.resolution = resolution
-			return resolution
-		}, item.session)
-		item.state = uploaded === null ? 'skipped' : 'done'
-		item.progress = uploaded === null ? 0 : 100
-		emit('changed')
-		await load()
-	} catch {
-		item.state = 'failed'
-	}
+	try { await uploadFiles(Array.from(input.files ?? [])) } finally { input.value = '' }
 }
 
 async function addFolder() {
@@ -368,51 +228,6 @@ async function remove(item: MediaItem) {
 		showSuccess(t('proofing_gallery', 'Item deleted.'))
 	} catch {
 		showError(t('proofing_gallery', 'The item could not be deleted.'))
-	}
-}
-
-async function showVersions(item: MediaItem) {
-	versionItem.value = item
-	versionsLoading.value = true
-	try {
-		versions.value = await fetchMediaVersions(props.gallery.id, item.id)
-	} catch {
-		showError(t('proofing_gallery', 'File versions could not be loaded.'))
-	} finally {
-		versionsLoading.value = false
-	}
-}
-
-async function replaceVersion(event: Event) {
-	const input = event.target as HTMLInputElement
-	const file = input.files?.[0]
-	if (!file || !versionItem.value) return
-	versionsLoading.value = true
-	try {
-		versions.value = await replaceGalleryMedia(props.gallery.id, versionItem.value.id, file)
-		await load()
-		emit('changed')
-		showSuccess(t('proofing_gallery', 'New file version uploaded. Existing feedback stays attached.'))
-	} catch {
-		showError(t('proofing_gallery', 'The new file version could not be uploaded.'))
-	} finally {
-		versionsLoading.value = false
-		input.value = ''
-	}
-}
-
-async function restoreVersion(version: MediaVersion) {
-	if (!versionItem.value || !window.confirm(t('proofing_gallery', 'Restore this file version? The current file will be archived first.'))) return
-	versionsLoading.value = true
-	try {
-		versions.value = await restoreMediaVersion(props.gallery.id, versionItem.value.id, version.id)
-		await load()
-		emit('changed')
-		showSuccess(t('proofing_gallery', 'File version restored.'))
-	} catch {
-		showError(t('proofing_gallery', 'The file version could not be restored.'))
-	} finally {
-		versionsLoading.value = false
 	}
 }
 

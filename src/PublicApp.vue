@@ -1,25 +1,24 @@
 <script setup lang="ts">
-import { publicFeedbackError } from './domain/feedbackPermissions.ts'
-import { initialPublicGalleryLocation, matchesInitialGalleryPage, usePublicGallerySort } from './composables/usePublicGallerySort.ts'
+import { matchesInitialGalleryPage } from './composables/usePublicGallerySort.ts'
 import { n, t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import type {Gesture, GestureDetail} from '@ionic/core'
 import { IonAlert, IonApp, IonContent, IonLoading, IonPage } from '@ionic/vue'
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import { calculateMediaLayout } from './domain/mediaGridLayout.ts'
+import { usePublicGridGeometry } from './composables/usePublicGridGeometry.ts'
 import { publicGalleryThemeStyle } from './domain/publicGalleryThemeStyle.ts'
-import { PUBLIC_GALLERY_PAGE_SIZE, readPublicGalleryLocation, writePublicGalleryLocation } from './domain/publicGalleryNavigation.ts'
-import { continuationStorageKey, layoutSessionStorageKey, loadPublicGalleryCompareIds, loadPublicGalleryContinuation, safelyStore, viewStorageKey } from './domain/publicGalleryPreferences.ts'
-import { serialTask } from './domain/serialTask.ts'
+import { PUBLIC_GALLERY_PAGE_SIZE } from './domain/publicGalleryNavigation.ts'
+import { continuationStorageKey, loadPublicGalleryContinuation, safelyStore } from './domain/publicGalleryPreferences.ts'
 import { galleryHasLogo, galleryTitleMode } from './domain/galleryTitlePresentation.ts'
 import { downloadQuery } from './domain/publicDownloadOptions.ts'
 import type { PublicDownloadPreset } from './domain/publicDownloadOptions.ts'
-import type { CollaborationState, GuestIdentity, MediaItem, PublicGallery, PublicGalleryPage } from './publicTypes.ts'
-import { useDeferredMutation } from './composables/useDeferredMutation.ts'
-import { resumeGuestSession, useGuestRequest } from './composables/useGuestRequest.ts'
-import { usePublicCollaborationIdentity } from './composables/usePublicCollaborationIdentity.ts'
-import { fetchPublicGalleryPage, publicGalleryPageQuery } from './services/publicGalleryApi.ts'
+import type { MediaItem, PublicGallery, PublicGalleryPage } from './publicTypes.ts'
+import { publicGalleryPageQuery } from './services/publicGalleryApi.ts'
+import { usePublicSelection } from './composables/usePublicSelection.ts'
+import { usePublicGalleryNavigation } from './composables/usePublicGalleryNavigation.ts'
+import { usePublicGalleryPage } from './composables/usePublicGalleryPage.ts'
+import { usePublicCollaboration } from './composables/usePublicCollaboration.ts'
 import { usePublicLiveUpdates } from './composables/usePublicLiveUpdates.ts'
 import { usePublicAppearance } from './composables/usePublicAppearance.ts'
 const PublicGalleryControls = defineAsyncComponent(() => import('./components/PublicGalleryControls.vue'))
@@ -46,51 +45,51 @@ const props = defineProps<{
 	staticPreview?: { scene: 'gallery' | 'photo' | 'slideshow' | 'metadata' }
 }>()
 const isStaticPreview = !!props.staticPreview, publicEndpoint = (path: string) => props.endpointResolver?.(path) ?? generateUrl(`/apps/proofing_gallery/public/${props.gallery.token}/${path}`)
-const items = ref<MediaItem[]>(props.gallery.initialPage?.items ?? [])
-const story = ref<MediaItem[]>(props.gallery.initialPage?.s ?? [])
-const total = ref(props.gallery.initialPage?.total ?? 0)
-const loading = ref(!props.gallery.initialPage)
-const error = ref(false)
-const currentPath = ref(props.gallery.initialPage?.path ?? '')
-const groups = ref(props.gallery.initialPage?.groups ?? {})
-const indexState = ref(props.gallery.initialPage?.indexState ?? null)
-const scope = ref(props.gallery.initialPage?.scope ?? null)
-const settings = ref(props.gallery.initialPage?.gallery.settings ?? props.gallery.settings)
-const title = ref(props.gallery.initialPage?.gallery.title ?? props.gallery.title)
-const deliveryMode = ref(props.gallery.initialPage?.gallery.deliveryMode ?? props.gallery.deliveryMode ?? 'standard'), accentColor = computed(() => settings.value.presentation.accentColor || '#E85D4A')
-const { visitorPreference, effectiveTheme, setVisitorPreference } = usePublicAppearance(computed(() => settings.value.presentation.theme), accentColor)
+let disposed = false
+let collaborationFrame: number | undefined
+const pageState = usePublicGalleryPage({
+	initial: props.gallery.initialPage,
+	url: (page, focusId) => publicEndpoint(pageQuery(page, focusId)),
+	apply: async (payload, focusId, current) => { applyGalleryPage(payload); await nextTick(); if (current() && focusId) openPhotoFromLocation(focusId) },
+})
+const { load: loadPage, loading, error } = pageState
+const items = computed(() => pageState.snapshot.value?.items ?? [])
+const story = computed(() => pageState.snapshot.value?.s ?? [])
+const total = computed(() => pageState.snapshot.value?.total ?? 0)
+const groups = computed(() => pageState.snapshot.value?.groups ?? {})
+const indexState = computed(() => pageState.snapshot.value?.indexState ?? null)
+const scope = computed(() => pageState.snapshot.value?.scope ?? null)
+const settings = computed(() => pageState.snapshot.value?.gallery.settings ?? props.gallery.settings)
+const title = computed(() => pageState.snapshot.value?.gallery.title ?? props.gallery.title)
+const deliveryMode = computed(() => pageState.snapshot.value?.gallery.deliveryMode ?? props.gallery.deliveryMode ?? 'standard')
+const accentColor = computed(() => settings.value.presentation.accentColor || '#E85D4A')
+const { visitorPreference, effectiveTheme, setVisitorPreference } = usePublicAppearance(computed(() => settings.value.presentation.theme), accentColor, !isStaticPreview)
 const appearancePreference = computed({ get: () => visitorPreference.value, set: setVisitorPreference })
 const pageStyle = computed(() => publicGalleryThemeStyle(settings.value))
 
+const pageCount = computed(() => pageState.snapshot.value?.pageCount ?? Math.max(1, Math.ceil(total.value / PUBLIC_GALLERY_PAGE_SIZE)))
+const navigation = usePublicGalleryNavigation({
+	token: props.gallery.token, settings, preview: isStaticPreview, collection: props.gallery.initialPage?.scope.viewMode === 'collection', pageCount, loadPage,
+	openPhoto: openPhotoFromLocation, closePhoto: () => { activeIndex.value = null; activeOpener.value = null }, closePanel: () => { activePanel.value = null }, scrollToGrid,
+	clearContinuation: () => { continuation.value = null; continueVisible.value = false },
+})
+const { currentPath, currentPage, search, sortBy, sortDirection, sortOverride, groupBy, layout, initialLocation, updateLocation, changeSort, resetSort, queueSearch, navigateToPage, upOneLevel, applyView, locationState } = navigation
 const mediaItems = computed(() => items.value.filter(item => !item.folder))
 const eventAlbumRoot = computed(() => deliveryMode.value === 'event' && currentPath.value === '' && scope.value?.viewMode === 'folder'), openerTotalLabel = computed(() => eventAlbumRoot.value ? n('proofing_gallery', '%n album', '%n albums', total.value) : undefined)
 const headerHeroUrl = computed(() => settings.value.presentation.heroFileId ? assetUrl('hero') : null)
 const headerLogoUrl = computed(() => galleryHasLogo(settings.value.presentation) ? assetUrl('logo') : null)
 const activeIndex = ref<number | null>(props.staticPreview?.scene && props.staticPreview.scene !== 'gallery' ? 0 : null)
 const activeOpener = ref<HTMLElement | null>(null)
-const selectedIds = ref<number[]>([])
-const selectionMode = ref(false)
-const compareIds = ref<number[]>(!isStaticPreview && settings.value.mode === 'collaboration' ? loadPublicGalleryCompareIds(props.gallery.token) : [])
-const compareOpen = ref(false)
-const compareItems = computed(() => compareIds.value.map(id => mediaItems.value.find(item => item.id === id)).filter((item): item is MediaItem => !!item))
-let collaborationTimer: number | undefined
-const { guest, collaboration, hydratedIds: collaborationHydratedIds, nonce, restoreIdentity, clearIdentity } = usePublicCollaborationIdentity(props.gallery.token)
-const joining = ref(false)
-const collaborationError = ref('')
+const { guest, collaboration, nonce, requestAsGuest, clearIdentity, joining, collaborationError, guestDialogOpen, initializeCollaboration, loadCollaboration, joinCollaboration, mutateCollaboration, cancelPendingMutation } = usePublicCollaboration({
+	token: props.gallery.token, enabled: !isStaticPreview, settings, mediaItems, endpoint: publicEndpoint, reloadPage: () => loadPage(currentPage.value),
+})
+const { selectedIds, selectionMode, compareOpen, compareItems, selectionName, selectionMessage, savingSelection, saveSelection, toggleSelection, startSelectionMode, finishSelectionMode, openSelectionCompare, toggleCompare } = usePublicSelection({
+	token: props.gallery.token, preview: isStaticPreview, settings, mediaItems, mutate: mutateCollaboration, closePanel: () => { activePanel.value = null },
+})
 const galleryDownloadBusy = ref(false)
 const galleryDownloadError = ref('')
-const [selectionName, selectionMessage] = [ref(''), ref('')]
 const [downloadPreset, downloadWatermark] = [ref<PublicDownloadPreset>('original'), ref(false)]
-const savingSelection = ref(false)
-const guestDialogOpen = ref(false)
 const review = ref(props.gallery.review ?? { enabled: false, dueDate: null, rules: { minimum: 0, maximum: 0 }, progress: null, current: null })
-const initialView = initialPublicGalleryLocation(props.gallery.token, settings.value, isStaticPreview, props.gallery.initialPage?.scope.viewMode === 'collection')
-const initialLocation = initialView.location
-currentPath.value = initialLocation.path
-const search = ref(initialLocation.search)
-const { sortBy, sortDirection, sortOverride, changeSort, resetSort } = usePublicGallerySort(props.gallery.token, settings, initialView, applyView, () => { continuation.value = null; continueVisible.value = false })
-const groupBy = ref(initialLocation.groupBy)
-const layout = ref<'grid' | 'masonry' | 'list' | 'story'>(initialLocation.layout)
 const lightboxMediaItems = computed(() => layout.value === 'story' ? mediaItems.value.concat(story.value) : mediaItems.value)
 usePublicLiveUpdates({
 	enabled: () => !isStaticPreview && props.gallery.initialPage?.gallery.liveUpdates === true,
@@ -105,26 +104,23 @@ usePublicLiveUpdates({
 		}
 	},
 })
-const currentPage = ref(initialLocation.page)
-const pageCount = ref(props.gallery.initialPage?.pageCount ?? Math.max(1, Math.ceil(total.value / PUBLIC_GALLERY_PAGE_SIZE)))
 const activePanel = ref<'menu' | 'search' | 'view' | 'pages' | 'download' | 'selection' | null>(null)
 const searchOpen = ref(false)
 const collaborationSheetOpen = ref(false)
+const collaborationSheetLoaded = ref(false)
+watch(collaborationSheetOpen, open => { if (open) collaborationSheetLoaded.value = true })
 const mediaDimensions = ref<Record<number, { width: number; height: number }>>({})
 // Panel mode changes only on phone-sized viewports. Narrow desktop windows keep
 // centered dialogs and floating annotation controls instead of mobile sheets.
 const mobileViewportQuery = window.matchMedia('(max-width: 520px)')
 const mobileViewport = ref(mobileViewportQuery.matches)
 const viewportWidth = ref(window.innerWidth)
-let searchTimer: number | undefined
 let scrollTimer: number | undefined
 const contentRef = ref<InstanceType<typeof IonContent> | null>(null)
 const scrollElement = ref<HTMLElement | null>(null)
 let pageSwipeGesture: Gesture | undefined
-let applyingHistory = false
 const continuation = ref(isStaticPreview ? null : loadPublicGalleryContinuation(props.gallery.token))
 const continueVisible = ref(!!(continuation.value && continuation.value.scrollY > 240))
-let pageController: AbortController | undefined
 const downloadScope = computed(() => settings.value.delivery.downloadScope)
 function galleryControlProps() {
 	return {
@@ -149,65 +145,29 @@ function galleryControlProps() {
 		albumRoot: eventAlbumRoot.value,
 	}
 }
-const tileGap = computed(() => mobileViewport.value
-	? settings.value.presentation.tileGap === 'wide' ? 6 : settings.value.presentation.tileGap === 'tight' ? 1 : 2
-	: settings.value.presentation.tileGap === 'wide' ? 12 : settings.value.presentation.tileGap === 'tight' ? 2 : 5)
-const tileMinWidth = computed(() => mobileViewport.value
-	? settings.value.presentation.tileSize === 'large' ? 156 : settings.value.presentation.tileSize === 'small' ? 88 : 112
-	: settings.value.presentation.tileSize === 'large' ? 300 : settings.value.presentation.tileSize === 'small' ? 150 : 190)
-const targetRowHeight = computed(() => mobileViewport.value
-	? settings.value.presentation.tileSize === 'large' ? 174 : settings.value.presentation.tileSize === 'small' ? 104 : 132
-	: settings.value.presentation.tileSize === 'large' ? 300 : settings.value.presentation.tileSize === 'small' ? 170 : 230)
-const gridPlaceholderStyle = computed(() => {
-	if (virtualGridResolved.value) return undefined
-	const horizontalPadding = Math.max(8, Math.min(viewportWidth.value * 0.02, 28)) * 2
-	const available = Math.max(1, viewportWidth.value - horizontalPadding)
-	const grid = calculateMediaLayout({
-		containerWidth: available,
-		aspectRatios: items.value.map(itemRatio),
-		mode: layout.value === 'story' ? 'grid' : layout.value,
-		minItemWidth: tileMinWidth.value,
-		gap: tileGap.value,
-		targetRowHeight: targetRowHeight.value,
-		listRowHeight: mobileViewport.value ? 132 : 172,
-		singleColumn: false,
-	})
-	return { minHeight: `${grid.totalHeight}px` }
-})
+const { tileGap, tileMinWidth, targetRowHeight, gridPlaceholderStyle } = usePublicGridGeometry({ settings, mobile: mobileViewport, width: viewportWidth, items, layout, resolved: virtualGridResolved, ratio: itemRatio })
 
 // The gallery prop is immutable on the public page; the design preview
 // iframe mutates it to stream unsaved settings changes into the app.
 watch(() => props.gallery, gallery => {
 	const page = gallery.initialPage
 	if (!page) return
-	items.value = page.items; total.value = page.total
-	settings.value = page.gallery.settings ?? gallery.settings; title.value = page.gallery.title ?? gallery.title
-	deliveryMode.value = page.gallery.deliveryMode ?? gallery.deliveryMode ?? 'standard'
+	pageState.replace(page)
 	if (isStaticPreview) layout.value = settings.value.presentation.layout
 }, { deep: true })
 
 watch(() => props.staticPreview?.scene, async scene => { if (scene === 'gallery') await nextTick(); activeIndex.value = scene && scene !== 'gallery' && mediaItems.value.length > 0 ? 0 : null })
 
-watch([layout, sortBy, sortDirection, sortOverride, groupBy, search], () => {
-	if (isStaticPreview) return
-	safelyStore(() => sessionStorage.setItem(layoutSessionStorageKey(props.gallery.token), layout.value))
-	safelyStore(() => localStorage.setItem(viewStorageKey(props.gallery.token), JSON.stringify({
-		sortOverride: sortOverride.value,
-		sortBy: sortBy.value,
-		sortDirection: sortDirection.value,
-		groupBy: groupBy.value,
-		search: search.value,
-	})))
-})
-
 onMounted(async () => {
 	const contentElement = contentRef.value?.$el as HTMLElement & { getScrollElement?: () => Promise<HTMLElement> }
 	scrollElement.value = await contentElement?.getScrollElement?.() ?? null
+	if (disposed) return
 	if (isStaticPreview) {
 		mobileViewportQuery.addEventListener('change', onMobileViewportChange); window.addEventListener('resize', onViewportResize, { passive: true })
 		return
 	}
 	const { createGesture } = await import('@ionic/core')
+	if (disposed) return
 	if (scrollElement.value) {
 		pageSwipeGesture = createGesture({
 			el: scrollElement.value,
@@ -223,16 +183,16 @@ onMounted(async () => {
 	const initialMatches = matchesInitialGalleryPage(props.gallery.initialPage, { ...locationState(), photoId: initialLocation.photoId }, settings.value)
 	if (initialMatches) deferCollaborationInitialization()
 	else loadPage(currentPage.value, initialLocation.photoId).then(() => deferCollaborationInitialization())
-	document.addEventListener('visibilitychange', onVisibilityChange)
 	mobileViewportQuery.addEventListener('change', onMobileViewportChange)
 	window.addEventListener('resize', onViewportResize, { passive: true })
-	window.addEventListener('popstate', onHistoryChange)
 })
 onBeforeUnmount(() => {
-	document.removeEventListener('visibilitychange', onVisibilityChange); mobileViewportQuery.removeEventListener('change', onMobileViewportChange)
-	window.removeEventListener('resize', onViewportResize); window.removeEventListener('popstate', onHistoryChange)
-	window.clearInterval(collaborationTimer); window.clearTimeout(searchTimer); window.clearTimeout(scrollTimer)
-	pageController?.abort(); pageSwipeGesture?.destroy(); deferredMutation.cancel()
+	disposed = true
+	window.cancelAnimationFrame(collaborationFrame ?? 0)
+	mobileViewportQuery.removeEventListener('change', onMobileViewportChange)
+	window.removeEventListener('resize', onViewportResize)
+	window.clearTimeout(scrollTimer)
+	pageSwipeGesture?.destroy()
 })
 
 function canStartPageSwipe(detail: GestureDetail): boolean {
@@ -255,104 +215,26 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 
 function onViewportResize() { viewportWidth.value = window.innerWidth }
 
-function locationState(photoId: number | null = null) {
-	return {
-		page: currentPage.value,
-		path: currentPath.value,
-		search: search.value,
-		sortBy: sortBy.value,
-		sortDirection: sortDirection.value,
-		groupBy: groupBy.value,
-		layout: layout.value,
-		photoId,
-	}
-}
-
-function updateLocation(mode: 'push' | 'replace', photoId: number | null = null, state: Record<string, unknown> = {}) {
-	const url = writePublicGalleryLocation(new URL(window.location.href), locationState(photoId), sortOverride.value)
-	window.history[mode === 'push' ? 'pushState' : 'replaceState'](state, '', url)
-}
-
-async function onHistoryChange() {
-	applyingHistory = true
-	activePanel.value = null
-	const historyUrl = new URL(window.location.href)
-	sortOverride.value = historyUrl.searchParams.has('sort') || historyUrl.searchParams.has('order')
-	const location = readPublicGalleryLocation(historyUrl, { ...locationState(), sortBy: settings.value.navigation.sortBy, sortDirection: settings.value.navigation.sortDirection })
-	const reload = location.page !== currentPage.value
-		|| location.path !== currentPath.value
-		|| location.search !== search.value
-		|| location.sortBy !== sortBy.value
-		|| location.sortDirection !== sortDirection.value
-		|| location.groupBy !== groupBy.value
-	currentPage.value = location.page
-	currentPath.value = location.path
-	search.value = location.search
-	sortBy.value = location.sortBy
-	sortDirection.value = location.sortDirection
-	groupBy.value = location.groupBy
-	layout.value = location.layout
-	if (reload) await loadPage(location.page, location.photoId)
-	else if (location.photoId) openPhotoFromLocation(location.photoId)
-	else {
-		activeIndex.value = null
-		activeOpener.value = null
-	}
-	applyingHistory = false
-}
-
 function setPanel(panel: 'menu' | 'search' | 'view' | 'pages' | 'download' | 'selection' | null) {
 	activePanel.value = panel
 }
 
 function deferCollaborationInitialization() {
-	requestAnimationFrame(() => requestAnimationFrame(() => initializeCollaboration()))
+	if (disposed) return
+	window.cancelAnimationFrame(collaborationFrame ?? 0)
+	collaborationFrame = requestAnimationFrame(() => {
+		if (!disposed) collaborationFrame = requestAnimationFrame(() => initializeCollaboration())
+	})
 }
 
 function pageQuery(page: number, focusId: number | null = null) {
 	return publicGalleryPageQuery({ limit: PUBLIC_GALLERY_PAGE_SIZE, page, path: currentPath.value, search: search.value, sortBy: sortOverride.value ? sortBy.value : '', sortDirection: sortOverride.value ? sortDirection.value : '', groupBy: groupBy.value, focusId })
 }
 
-async function loadPage(page: number, focusId: number | null = null) {
-	pageController?.abort()
-	const controller = new AbortController()
-	pageController = controller
-	loading.value = true
-	try {
-		const payload = await fetchPublicGalleryPage(publicEndpoint(pageQuery(page, focusId)), controller.signal)
-		if (pageController !== controller) return
-		applyGalleryPage(payload)
-		await nextTick()
-		if (focusId) openPhotoFromLocation(focusId)
-	} catch (exception) {
-		if (exception instanceof DOMException && exception.name === 'AbortError') return
-		error.value = true
-	} finally {
-		if (pageController === controller) {
-			loading.value = false
-		}
-	}
-}
-
 function applyGalleryPage(payload: PublicGalleryPage) {
 	const activeId = activeIndex.value === null ? null : lightboxMediaItems.value[activeIndex.value]?.id
-	items.value = payload.items
-	story.value = payload.s
-	total.value = payload.total
-	settings.value = payload.gallery.settings
-	title.value = payload.gallery.title
-	deliveryMode.value = payload.gallery.deliveryMode
-	currentPath.value = payload.path
-	currentPage.value = payload.page
-	pageCount.value = payload.pageCount
-	groups.value = payload.groups
-	indexState.value = payload.indexState
-	scope.value = payload.scope
-	if (payload.view) {
-		sortBy.value = payload.view.sortBy
-		sortDirection.value = payload.view.sortDirection
-		groupBy.value = payload.view.groupBy
-	}
+	pageState.replace(payload)
+	navigation.synchronize(payload)
 	if (activeId !== undefined && activeId !== null) {
 		const index = lightboxMediaItems.value.findIndex(item => item.id === activeId)
 		activeIndex.value = index < 0 ? null : index
@@ -396,183 +278,12 @@ async function shareGallery() {
 	await sharePublicGallery(title.value)
 }
 
-async function initializeCollaboration() {
-	if (settings.value.mode !== 'collaboration') return
-	await resumeGuestIdentity()
-	await loadCollaboration()
-	if (guest.value && nonce.value) guestDialogOpen.value = false
-	if (guest.value && nonce.value && deferredMutation.hasPending()) await deferredMutation.complete()
-	startCollaborationPolling()
-}
-
-const resumeGuestIdentity = () => resumeGuestSession<GuestIdentity>(publicEndpoint('session'), restoreIdentity)
-
-const requestAsGuest = useGuestRequest({
-	endpoint: publicEndpoint,
-	nonce: () => nonce.value,
-	clearIdentity,
-	resumeIdentity: resumeGuestIdentity,
-})
-
-function startCollaborationPolling() {
-	window.clearInterval(collaborationTimer)
-	if (!document.hidden) {
-		collaborationTimer = window.setInterval(() => loadCollaboration(), 8000)
-	}
-}
-
-function onVisibilityChange() {
-	if (settings.value.mode !== 'collaboration') return
-	if (!document.hidden) loadCollaboration()
-	startCollaborationPolling()
-}
-
-async function joinCollaboration(identity: { displayName: string; email: string }) {
-	joining.value = true
-	collaborationError.value = ''
-	try {
-		const response = await fetch(publicEndpoint('session'), {
-			method: 'POST',
-			credentials: 'same-origin',
-			headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-			body: JSON.stringify({ displayName: identity.displayName, email: identity.email || null }),
-		})
-		const payload = await response.json() as { guest?: GuestIdentity, nonce?: string, message?: string }
-		if (!response.ok || !payload.guest || !payload.nonce) {
-			throw new Error(t('proofing_gallery', 'Could not start review session'))
-		}
-		restoreIdentity(payload.guest, payload.nonce)
-		await loadCollaboration()
-		guestDialogOpen.value = false
-		if (deferredMutation.hasPending()) await deferredMutation.complete()
-	} catch (exception) {
-		collaborationError.value = exception instanceof Error ? exception.message : String(exception)
-	} finally {
-		joining.value = false
-	}
-}
-
-async function performCollaborationLoad(forceHydration = false): Promise<void> {
-	try {
-		const visibleIds = mediaItems.value.slice(0, 200).map(item => item.id); const unhydratedIds = visibleIds.filter(id => !collaborationHydratedIds.has(id))
-		const hydration = forceHydration || unhydratedIds.length > 0
-		const query = new URLSearchParams({ cursor: String(hydration ? 0 : collaboration.value?.cursor ?? 0), fileIds: (hydration ? unhydratedIds : visibleIds).join(',') })
-		const response = await fetch(publicEndpoint(`collaboration?${query}`), { headers: { Accept: 'application/json' } })
-		if (!response.ok) throw response; const payload = await response.json() as CollaborationState | { unchanged: true; cursor: number }
-		if (!('unchanged' in payload)) {
-			if (payload.reset === true) {
-				collaboration.value = null; collaborationHydratedIds.clear()
-				return performCollaborationLoad(true)
-			}
-			const { mergeCollaborationState } = await import('./domain/collaboration.ts')
-			collaboration.value = collaboration.value === null ? payload : mergeCollaborationState(collaboration.value, payload, hydration ? unhydratedIds : [])
-			for (const id of unhydratedIds) collaborationHydratedIds.add(id)
-		}
-		collaborationError.value = ''
-	} catch {
-		collaborationError.value = t('proofing_gallery', 'Review updates are temporarily unavailable.')
-	}
-}
-
-const loadCollaboration = serialTask(async () => {
-	if (settings.value.mode === 'collaboration') await performCollaborationLoad()
-})
-
-async function mutateCollaboration(path: string, method: 'POST' | 'PUT' | 'DELETE', body?: unknown) {
-	return deferredMutation.mutate(path, method, body)
-}
-
-function cancelPendingMutation() {
-	deferredMutation.cancel()
-	guestDialogOpen.value = false
-}
-
-async function performMutation(path: string, method: 'POST' | 'PUT' | 'DELETE', body?: unknown, mayRecover = true): Promise<boolean> {
-	try {
-		const response = await requestAsGuest(`collaboration/${path}`, {
-			method,
-			headers: {
-				'Content-Type': 'application/json',
-			},
-			body: body === undefined ? undefined : JSON.stringify(body),
-		}, mayRecover)
-		if (!response.ok) {
-			const payload = await response.json().catch(() => ({})) as { code?: string; message?: string }
-			if (response.status === 401 || payload.code === 'invalid_nonce') {
-				if (!deferredMutation.isCompleting()) return deferredMutation.defer(path, method, body)
-			}
-			if (response.status === 403) await loadPage(currentPage.value)
-			collaborationError.value = publicFeedbackError(response.status)
-			return false
-		}
-		await loadCollaboration()
-		return true
-	} catch {
-		collaborationError.value = t('proofing_gallery', 'The review change could not be saved.')
-		return false
-	}
-}
-
-const deferredMutation = useDeferredMutation(
-	() => !!(guest.value && nonce.value),
-	() => { guestDialogOpen.value = true },
-	performMutation,
-)
-
-function applyView() {
-	error.value = false
-	currentPage.value = 1
-	updateLocation('push')
-	loadPage(1)
-}
-
-function queueSearch() {
-	window.clearTimeout(searchTimer)
-	searchTimer = window.setTimeout(() => {
-		currentPage.value = 1
-		updateLocation('replace')
-		loadPage(1)
-	}, 250)
-}
-
-async function navigateToPage(page: number) {
-	const target = Math.max(1, Math.min(pageCount.value, page))
-	if (target === currentPage.value) {
-		setPanel(null)
-		scrollToGrid()
-		return
-	}
-	activePanel.value = null
-	currentPage.value = target
-	updateLocation('push')
-	await loadPage(target)
-	await nextTick()
-	scrollToGrid()
-}
-
 function scrollToGrid() {
 	const grid = document.querySelector<HTMLElement>('.media-grid-shell')
 	const scroller = scrollElement.value
 	if (!grid || !scroller) return
 	const top = grid.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 12
 	scroller.scrollTo({ top, behavior: 'smooth' })
-}
-
-async function saveSelection() {
-	if (!selectionName.value.trim() || selectedIds.value.length === 0) return
-	savingSelection.value = true
-	if (await mutateCollaboration('selections', 'POST', {
-		name: selectionName.value,
-		message: selectionMessage.value,
-		fileIds: selectedIds.value,
-	})) {
-		selectionName.value = ''
-		selectionMessage.value = ''
-		selectedIds.value = []
-		selectionMode.value = false
-		activePanel.value = null
-	}
-	savingSelection.value = false
 }
 
 function previewUrl(item: Pick<MediaItem, 'id'>, width = 900, height = 900, mode: 'cover' | 'fit' = 'cover'): string {
@@ -652,37 +363,6 @@ function selectionExportUrl(selectionId: string, format: 'csv' | 'plain' | 'sear
 	return url.toString()
 }
 
-function toggleSelection(item: MediaItem) {
-	selectedIds.value = selectedIds.value.includes(item.id)
-		? selectedIds.value.filter(id => id !== item.id)
-		: [...selectedIds.value, item.id]
-}
-
-function startSelectionMode() {
-	selectionMode.value = true
-	setPanel(null)
-}
-
-function finishSelectionMode() {
-	selectionMode.value = false
-	selectedIds.value = []
-}
-
-function openSelectionCompare() {
-	if (settings.value.mode !== 'collaboration' || selectedIds.value.length < 2) return
-	compareIds.value = selectedIds.value.slice(0, 4)
-	if (!isStaticPreview) safelyStore(() => localStorage.setItem(`proofing-gallery-compare:${props.gallery.token}`, JSON.stringify(compareIds.value)))
-	compareOpen.value = true
-}
-
-function toggleCompare(item: MediaItem) {
-	if (settings.value.mode !== 'collaboration') return
-	compareIds.value = compareIds.value.includes(item.id)
-		? compareIds.value.filter(id => id !== item.id)
-		: compareIds.value.length < 4 ? [...compareIds.value, item.id] : compareIds.value
-	if (!isStaticPreview) safelyStore(() => localStorage.setItem(`proofing-gallery-compare:${props.gallery.token}`, JSON.stringify(compareIds.value)))
-}
-
 function openItem(item: MediaItem, event?: MouseEvent) {
 	activePanel.value = null
 	if (selectionMode.value && !item.folder) {
@@ -701,7 +381,6 @@ function openItem(item: MediaItem, event?: MouseEvent) {
 	}
 	currentPath.value = item.relativePath ?? [currentPath.value, item.name].filter(Boolean).join('/')
 	currentPage.value = 1
-	error.value = false
 	updateLocation('push')
 	loadPage(1)
 }
@@ -714,11 +393,11 @@ function openPhotoFromLocation(fileId: number) {
 
 function onLightboxActive(item: MediaItem) {
 	activeIndex.value = lightboxMediaItems.value.findIndex(media => media.id === item.id)
-	if (!applyingHistory) updateLocation('replace', item.id, { proofingGalleryPhoto: true })
+	if (!navigation.applyingHistory.value) updateLocation('replace', item.id, { proofingGalleryPhoto: true })
 }
 
 function closeLightbox() {
-	if (!applyingHistory && new URL(window.location.href).searchParams.has('photo')) {
+	if (!navigation.applyingHistory.value && new URL(window.location.href).searchParams.has('photo')) {
 		window.history.back()
 		return
 	}
@@ -747,13 +426,6 @@ function groupLabel(group: string | undefined): string {
 	return group || t('proofing_gallery', 'Other')
 }
 
-function upOneLevel() {
-	currentPath.value = currentPath.value.split('/').slice(0, -1).join('/')
-	currentPage.value = 1
-	error.value = false
-	updateLocation('push')
-	loadPage(1)
-}
 </script>
 
 <template>
@@ -969,7 +641,7 @@ function upOneLevel() {
 						</div>
 					</section>
 
-					<PublicCollaborationSheet v-if="settings.mode === 'collaboration'"
+					<PublicCollaborationSheet v-if="settings.mode === 'collaboration' && collaborationSheetLoaded"
 						:open="collaborationSheetOpen"
 						:mobile="mobileViewport"
 						:guest="guest"

@@ -6,6 +6,7 @@ namespace OCA\ProofingGallery\Listener;
 
 use OCA\ProofingGallery\BackgroundJob\RebuildMediaIndexJob;
 use OCA\ProofingGallery\Db\GalleryMapper;
+use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Service\CacheAncestorResolver;
 use OCP\BackgroundJob\IJobList;
 use OCP\EventDispatcher\Event;
@@ -45,10 +46,10 @@ final class MediaIndexCacheListener implements IEventListener {
 		if (strtolower(pathinfo($event->getPath(), PATHINFO_EXTENSION)) === 'xmp') {
 			foreach ($this->sorts->sidecarFileIds($folderIds, pathinfo($event->getPath(), PATHINFO_FILENAME)) as $fileId) $this->metadata->invalidate($fileId);
 		}
-		foreach ($this->galleries->findActiveFolderSources($folderIds, true) as $gallery) {
-			$this->summaries->invalidate((int)$gallery->getId());
-			if ($gallery->getStatus() !== 'archived') $this->jobs->add(RebuildMediaIndexJob::class, ['galleryId' => $gallery->getId()]);
-		}
+		$galleries = $this->galleries->findActiveFolderSources($folderIds, true);
+		$this->summaries->invalidateMany(array_map(static fn (Gallery $gallery): int => (int)$gallery->getId(), $galleries));
+		$activeIds = array_values(array_map(static fn (Gallery $gallery): int => (int)$gallery->getId(), array_filter($galleries, static fn (Gallery $gallery): bool => $gallery->getStatus() !== 'archived')));
+		foreach (array_chunk($activeIds, 500) as $batch) $this->jobs->add(RebuildMediaIndexJob::class, count($batch) === 1 ? ['galleryId' => $batch[0]] : ['galleryIds' => $batch]);
 	}
 
 	/** The actual owner tree crosses mounted storage boundaries, unlike cache parents.
@@ -64,6 +65,6 @@ final class MediaIndexCacheListener implements IEventListener {
 				}
 			} catch (\OCP\Files\NotFoundException|\OCP\Files\NotPermittedException) {}
 		}
-		foreach ($this->galleries->findActiveFolderSources(array_keys($ids), true) as $gallery) $this->summaries->invalidate((int)$gallery->getId());
+		$this->summaries->invalidateMany(array_map(static fn (Gallery $gallery): int => (int)$gallery->getId(), $this->galleries->findActiveFolderSources(array_keys($ids), true)));
 	}
 }

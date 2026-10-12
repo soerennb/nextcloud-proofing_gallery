@@ -363,6 +363,7 @@ test('public HTML bootstraps media without a gallery discovery request', async (
 
 	await page.goto(`${baseURL}/s/${token}`)
 	await expect(page.getByRole('button', { name: 'Open proof.png' })).toBeVisible()
+	expect(await page.locator('link[rel="modulepreload"][href*="/proofing_gallery/"]').count()).toBeGreaterThan(0)
 	expect(discoveryRequests).toEqual([])
 	expect(failedAppResponses).toEqual([])
 })

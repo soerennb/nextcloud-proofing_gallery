@@ -40,12 +40,19 @@ final class GalleryMediaCountRepository {
 	}
 
 	public function invalidate(int $id, int $now, bool $clear = false): void {
-		$this->ensure($id, $now);
+		$this->invalidateMany([$id], $now, $clear);
+	}
+
+	/** @param list<int> $ids */
+	public function invalidateMany(array $ids, int $now, bool $clear = false): void {
+		if ($ids === []) return;
+		$existing = array_keys($this->findMany($ids));
+		foreach (array_diff($ids, $existing) as $id) $this->ensure($id, $now);
 		$qb = $this->db->getQueryBuilder();
 		$qb->update('proofing_media_counts')->set('revision', $qb->createFunction('revision + 1'))
 			->set('state', $qb->createNamedParameter('pending'))->set('updated_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT));
 		if ($clear) foreach (['image_count', 'video_count', 'counted_at', 'witness_file_id'] as $column) $qb->set($column, $qb->createNamedParameter(null));
-		$qb->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))->executeStatement();
+		$qb->where($qb->expr()->in('gallery_id', $qb->createNamedParameter($ids, IQueryBuilder::PARAM_INT_ARRAY)))->executeStatement();
 	}
 
 	/** @param array<string, int|string|null> $values */

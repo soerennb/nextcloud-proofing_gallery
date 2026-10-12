@@ -76,17 +76,28 @@ final class PublicLinkManagerService {
 		];
 	}
 
-	/** @param list<string> $groupRoots
-	 * @return array<string, mixed>
-	 */
-	public function create(Gallery $gallery, PublicLinkConfiguration $config, bool $eventOperation = false, ?string $privateRoot = null, array $groupRoots = []): array {
-		return $this->recovery->locked((int)$gallery->getId(), fn (): array => $this->createLocked($this->galleries->find((int)$gallery->getId()), $config, $eventOperation, $privateRoot, $groupRoots));
+	/** @param list<int> $ids
+	 * @return array<int, array<string, mixed>> */
+	public function presentMany(Gallery $gallery, array $ids): array {
+		$ids = array_values(array_unique(array_filter($ids, static fn (int $id): bool => $id > 0)));
+		$result = [];
+		foreach ($this->links->findForGalleryIds((int)$gallery->getId(), $ids) as $link) $result[(int)$link->getId()] = $this->present($gallery, $link);
+		return $result;
 	}
 
 	/** @param list<string> $groupRoots
+	 * @param callable(int):void|null $persist
 	 * @return array<string, mixed>
 	 */
-	private function createLocked(Gallery $gallery, PublicLinkConfiguration $config, bool $eventOperation, ?string $privateRoot, array $groupRoots): array {
+	public function create(Gallery $gallery, PublicLinkConfiguration $config, bool $eventOperation = false, ?string $privateRoot = null, array $groupRoots = [], ?callable $persist = null): array {
+		return $this->recovery->locked((int)$gallery->getId(), fn (): array => $this->createLocked($this->galleries->find((int)$gallery->getId()), $config, $eventOperation, $privateRoot, $groupRoots, $persist));
+	}
+
+	/** @param list<string> $groupRoots
+	 * @param callable(int):void|null $persist
+	 * @return array<string, mixed>
+	 */
+	private function createLocked(Gallery $gallery, PublicLinkConfiguration $config, bool $eventOperation, ?string $privateRoot, array $groupRoots, ?callable $persist): array {
 		if (in_array('inherit', [$config->feedbackPolicyMode, $config->permissionsPolicyMode, $config->navigationPolicyMode], true)) throw new \InvalidArgumentException('Only the standard primary link can inherit feedback permissions');
 		if ($gallery->getDeliveryMode() === 'event' && !$eventOperation) {
 			throw new \InvalidArgumentException('Event links are managed by event delivery');
@@ -96,8 +107,10 @@ final class PublicLinkManagerService {
 		$config = $this->validateScope($gallery, $config);
 		$initial = new PublicLink();
 		$config = $this->inheritance->configure($gallery, $initial, $config);
-		$anchor = $config->allowedRoots === [] ? null : $this->anchors->create($gallery->getOwnerUid());
+		$policyJson = json_encode($config->policy, JSON_THROW_ON_ERROR);
+		$roots = $this->stableRoots($gallery, $config->allowedRoots, $privateRoot, $groupRoots);
 		$share = $this->newShare($gallery);
+		$anchor = $config->allowedRoots === [] ? null : $this->anchors->create($gallery->getOwnerUid());
 		try {
 			$this->applyShare($share, $gallery, $config, true, $anchor);
 			$share = $this->shareManager->createShare($share);
@@ -114,7 +127,7 @@ final class PublicLinkManagerService {
 		$link->setName($config->name);
 		$link->setStatus('active');
 		$link->setIsPrimary(false);
-		$link->setPolicy(json_encode($config->policy, JSON_THROW_ON_ERROR));
+		$link->setPolicy($policyJson);
 		$link->setStartPath($config->startPath);
 		$link->setAllowedRootList($config->allowedRoots);
 		$link->setScopeMode($config->allowedRoots === [] ? 'legacy' : 'nodes');
@@ -129,19 +142,20 @@ final class PublicLinkManagerService {
 		$link->setCreatedAt($now);
 		$link->setUpdatedAt($now);
 		try {
-			$link = $this->links->insert($link);
-			$this->rootRows->replace((int)$link->getId(), $this->stableRoots($gallery, $config->allowedRoots, $privateRoot, $groupRoots));
-			$this->reviews->synchronize($gallery, $link);
-			return $this->present($gallery, $link);
+			$link = $this->atomic(function () use ($gallery, $link, $roots, $persist): PublicLink {
+				$link = $this->links->insert($link);
+				$this->rootRows->replace((int)$link->getId(), $roots);
+				$this->reviews->synchronize($gallery, $link);
+				if ($persist !== null) $persist((int)$link->getId());
+				return $link;
+			}, $this->db);
 		} catch (\Throwable $exception) {
-			try {
-				$this->shareManager->deleteShare($share);
-			} catch (\Throwable $compensation) {
-				$this->logCompensationFailure('delete a newly created public share', $compensation, $exception);
-			}
+			$this->recovery->discard($share, $exception);
 			if ($anchor !== null) $this->deleteAnchor($anchor, $exception);
 			throw $exception;
 		}
+		// Projection failure must never undo an already committed link.
+		return $this->present($gallery, $link);
 	}
 
 	/** @return array<string, mixed> */
@@ -164,18 +178,21 @@ final class PublicLinkManagerService {
 	 * @param list<string> $allowedRoots
 	 * @param list<string> $groupRoots
 	 * @return array<string, mixed>
+	 * @param callable():void|null $persistRecipient
 	 */
-	public function updateEventRecipient(Gallery $gallery, int $linkId, string $name, array $allowedRoots, string $privateRoot, ?string $locale, ?string $password = null, array $groupRoots = [], bool $recoverMissingShare = false, ?string $expiresAt = null): array {
-		return $this->recovery->locked((int)$gallery->getId(), fn (): array => $this->updateEventRecipientLocked($this->galleries->find((int)$gallery->getId()), $linkId, $name, $allowedRoots, $privateRoot, $locale, $password, $groupRoots, $recoverMissingShare, $expiresAt));
+	public function updateEventRecipient(Gallery $gallery, int $linkId, string $name, array $allowedRoots, string $privateRoot, ?string $locale, ?string $password = null, array $groupRoots = [], bool $recoverMissingShare = false, ?string $expiresAt = null, ?callable $persistRecipient = null): array {
+		return $this->recovery->locked((int)$gallery->getId(), fn (): array => $this->updateEventRecipientLocked($this->galleries->find((int)$gallery->getId()), $linkId, $name, $allowedRoots, $privateRoot, $locale, $password, $groupRoots, $recoverMissingShare, $expiresAt, $persistRecipient));
 	}
 
 	/** @param list<string> $allowedRoots
 	 * @param list<string> $groupRoots
 	 * @return array<string, mixed>
+	 * @param callable():void|null $persistRecipient
 	 */
-	private function updateEventRecipientLocked(Gallery $gallery, int $linkId, string $name, array $allowedRoots, string $privateRoot, ?string $locale, ?string $password, array $groupRoots, bool $recoverMissingShare, ?string $expiresAt): array {
+	private function updateEventRecipientLocked(Gallery $gallery, int $linkId, string $name, array $allowedRoots, string $privateRoot, ?string $locale, ?string $password, array $groupRoots, bool $recoverMissingShare, ?string $expiresAt, ?callable $persistRecipient): array {
+		if ($gallery->getDeliveryMode() !== 'event') throw new \InvalidArgumentException('Event link operation requires an event project');
 		$link = $this->owned($gallery, $linkId);
-		return $this->updateEvent($gallery, $linkId, $this->eventConfiguration($link, $name, $allowedRoots, $locale, $password, $recoverMissingShare, $expiresAt), $privateRoot, $groupRoots, $recoverMissingShare);
+		return $this->updateInternal($gallery, $linkId, $this->eventConfiguration($link, $name, $allowedRoots, $locale, $password, $recoverMissingShare, $expiresAt), $privateRoot, $groupRoots, $recoverMissingShare, $persistRecipient);
 	}
 
 	/** @return array{updated: int, skipped: int} */
@@ -229,15 +246,17 @@ final class PublicLinkManagerService {
 
 	/** @param list<string> $groupRoots
 	 * @return array<string, mixed>
+	 * @param callable():void|null $persistRecipient
 	 */
-	private function updateInternal(Gallery $gallery, int $linkId, PublicLinkConfiguration $config, ?string $privateRoot = null, array $groupRoots = [], bool $recoverMissingShare = false): array {
-		return $this->recovery->locked((int)$gallery->getId(), fn (): array => $this->updateLocked($this->galleries->find((int)$gallery->getId()), $linkId, $config, $privateRoot, $groupRoots, $recoverMissingShare));
+	private function updateInternal(Gallery $gallery, int $linkId, PublicLinkConfiguration $config, ?string $privateRoot = null, array $groupRoots = [], bool $recoverMissingShare = false, ?callable $persistRecipient = null): array {
+		return $this->recovery->locked((int)$gallery->getId(), fn (): array => $this->updateLocked($this->galleries->find((int)$gallery->getId()), $linkId, $config, $privateRoot, $groupRoots, $recoverMissingShare, $persistRecipient));
 	}
 
 	/** @param list<string> $groupRoots
 	 * @return array<string, mixed>
+	 * @param callable():void|null $persistRecipient
 	 */
-	private function updateLocked(Gallery $gallery, int $linkId, PublicLinkConfiguration $config, ?string $privateRoot, array $groupRoots, bool $recoverMissingShare): array {
+	private function updateLocked(Gallery $gallery, int $linkId, PublicLinkConfiguration $config, ?string $privateRoot, array $groupRoots, bool $recoverMissingShare, ?callable $persistRecipient): array {
 		$link = $this->owned($gallery, $linkId);
 		$config = $this->inheritance->configure($gallery, $link, $config);
 		$repairingScope = $gallery->getDeliveryMode() !== 'event' && $link->getStatus() === 'suspended' && $link->getScopeMode() === 'empty';
@@ -289,10 +308,11 @@ final class PublicLinkManagerService {
 		$link->setReviewSelectionMax($config->reviewEnabled ? $config->reviewSelectionMaximum : null);
 		$link->setUpdatedAt($this->clock->getTime());
 		try {
-			$link = $this->atomic(function () use ($gallery, $link, $config, $privateRoot, $groupRoots, $repairingScope): PublicLink {
+			$link = $this->atomic(function () use ($gallery, $link, $config, $privateRoot, $groupRoots, $repairingScope, $persistRecipient): PublicLink {
 				$link = $this->links->update($link);
 				$this->rootRows->replace((int)$link->getId(), $this->stableRoots($gallery, $config->allowedRoots, $privateRoot, $groupRoots));
 				$this->reviews->synchronize($gallery, $link);
+				if ($persistRecipient !== null) $persistRecipient();
 				if ($link->getIsPrimary() || ($repairingScope && $gallery->getStatus() === 'draft')) {
 					if ($link->getIsPrimary()) $gallery->setShareToken($link->getToken());
 					if ($repairingScope) $gallery->setStatus('published');
