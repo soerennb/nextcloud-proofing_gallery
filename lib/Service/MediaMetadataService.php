@@ -17,6 +17,14 @@ final class MediaMetadataService {
 	private const PUBLIC_FIELDS = ['capturedAt', 'camera', 'lens', 'exposure', 'title', 'description', 'creator', 'copyright'];
 	private const CULL_COLORS = ['none' => null, 'red' => 'Red', 'yellow' => 'Yellow', 'green' => 'Green', 'blue' => 'Blue', 'purple' => 'Purple'];
 
+	/** @return array{width?: int, height?: int} */
+	public function publicGeometry(File $file): array {
+		$summary = $this->summary($file);
+		$width = (int)($summary['width'] ?? 0);
+		$height = (int)($summary['height'] ?? 0);
+		return $width > 0 && $height > 0 ? compact('width', 'height') : [];
+	}
+
 	public function __construct(
 		private IFilesMetadataManager $metadataManager,
 		private PolicyService $policies,

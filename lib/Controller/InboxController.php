@@ -68,7 +68,7 @@ final class InboxController extends Controller {
 	private function moderate(int $galleryId, string $uploadId, bool $accept): DataResponse {
 		try {
 			$this->uploads->moderate(
-				$this->galleries->get($this->userId(), $galleryId),
+				$this->galleries->edit($this->userId(), $galleryId),
 				$uploadId,
 				$accept,
 			);

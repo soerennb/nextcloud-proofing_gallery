@@ -307,9 +307,11 @@ export async function revokeLivePushCredential(id: number, credentialId: number)
 	await axios.delete(`${galleriesUrl}/${id}/live-push/${credentialId}`)
 }
 
-export async function fetchIndexedMedia(id: number, limit = 200, cursor?: string | null, path = '', signal?: AbortSignal, sortBy: 'name' | 'modified' | 'size' | 'capturedAt' = 'name', sortDirection: 'asc' | 'desc' = 'asc'): Promise<IndexedMediaPage> {
+export interface CullingFilters { ownerRating?: number; ownerPick?: string; ownerColor?: string; fileIds?: number[] }
+
+export async function fetchIndexedMedia(id: number, limit = 200, cursor?: string | null, path = '', signal?: AbortSignal, sortBy: 'name' | 'modified' | 'size' | 'capturedAt' = 'name', sortDirection: 'asc' | 'desc' = 'asc', filters: CullingFilters = {}): Promise<IndexedMediaPage> {
 	const { data } = await axios.get<IndexedMediaPage>(`${galleriesUrl}/${id}/indexed-media`, {
-		params: { limit, cursor: cursor || undefined, path, sortBy, sortDirection },
+		params: { limit, cursor: cursor || undefined, path, sortBy, sortDirection, ...filters, fileIds: filters.fileIds?.join(',') },
 		signal,
 	})
 	return data

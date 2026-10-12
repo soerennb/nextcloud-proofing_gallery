@@ -32,6 +32,7 @@ final class PrivacyService {
 		private \OCP\Security\ICrypto $crypto,
 		private ExternalResourceRepository $externalResources,
 		private TalkBroker $talk,
+		private PrivateGuestInboxService $privateInbox,
 	) {
 	}
 
@@ -53,7 +54,8 @@ final class PrivacyService {
 
 	public function deleteGuest(Guest $guest): int {
 		foreach ($this->repository->guestUploadIds((int)$guest->getId()) as $uploadId) {
-			try { $this->appData->getFolder('guest-uploads')->getFolder($uploadId)->delete(); } catch (\Throwable) {}
+			$this->privateInbox->delete($uploadId);
+			try { $this->appData->getFolder('guest-uploads')->getFolder($uploadId)->delete(); } catch (\OCP\Files\NotFoundException) {}
 		}
 		return $this->repository->deleteGuestData((int)$guest->getId(), (int)$guest->getGalleryId());
 	}
@@ -200,7 +202,8 @@ final class PrivacyService {
 
 	private function deleteUploadChunks(int $galleryId): void {
 		foreach ($this->repository->uploadIds($galleryId) as $uploadId) {
-			try { $this->appData->getFolder('guest-uploads')->getFolder($uploadId)->delete(); } catch (\Throwable) {}
+			$this->privateInbox->delete($uploadId);
+			try { $this->appData->getFolder('guest-uploads')->getFolder($uploadId)->delete(); } catch (\OCP\Files\NotFoundException) {}
 		}
 		try { $this->appData->getFolder('versions')->getFolder((string)$galleryId)->delete(); } catch (\Throwable) {}
 	}

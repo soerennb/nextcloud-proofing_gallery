@@ -73,7 +73,6 @@ OC.L10N.register("proofing_gallery", {
   ],
   "{assigned} folders tagged · {failed} failed": "{assigned} folders tagged · {failed} failed",
   "{count} client links prepared": "{count} client links prepared",
-  "{count} event photos uploaded with their folder structure.": "{count} event photos uploaded with their folder structure.",
   "{count} existing files replaced.": "{count} existing files replaced.",
   "{count} failed": "{count} failed",
   "{count} files": "{count} files",

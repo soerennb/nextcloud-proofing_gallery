@@ -85,15 +85,16 @@ final class ReviewWorkflowService {
 		$count = (int)$selection['item_count'];
 		if ($count < $rules['minimum']) throw new \InvalidArgumentException('Select at least ' . $rules['minimum'] . ' photos before submitting');
 		if ($rules['maximum'] > 0 && $count > $rules['maximum']) throw new \InvalidArgumentException('Select no more than ' . $rules['maximum'] . ' photos before submitting');
-		$this->atomic(function () use ($selection, $link, $current, $actor, $now): void {
+		$this->atomic(function () use ($gallery, $selection, $link, $current, $actor, $now): void {
 			if (!$this->collaboration->submitSelection((int)$selection['id'], (int)$link->getId(), $now)
 				|| !$this->rounds->submit((int)$current['id'], $actor->guestId(), $actor->userUid(), $now)) {
 				throw new ReviewConflictException('This review round is no longer open');
 			}
+			$this->collaboration->markResponseReceived((int)$gallery->getId(), $now);
+			$this->activity->recordActor($gallery, $actor, 'review.submitted', ['publicLinkId' => (int)$link->getId(), 'round' => (int)$current['round_number']]);
+			$this->integrations->emit('review.submitted', (int)$gallery->getId(), ['publicLinkId' => (int)$link->getId(), 'round' => (int)$current['round_number']]);
 		}, $this->db);
-		$this->collaboration->markResponseReceived((int)$gallery->getId(), $now);
-		$this->activity->recordActor($gallery, $actor, 'review.submitted', ['publicLinkId' => (int)$link->getId(), 'round' => (int)$current['round_number']]);
-		$this->integrations->emit('review.submitted', (int)$gallery->getId(), ['publicLinkId' => (int)$link->getId(), 'round' => (int)$current['round_number']]);
+
 		return $this->publicState($gallery, $link, $actor);
 	}
 
@@ -105,7 +106,7 @@ final class ReviewWorkflowService {
 		$current = $this->ensure($link);
 		$now = $this->clock->getTime();
 		try {
-			$this->atomic(function () use ($action, $current, $gallery, $link, $now): void {
+			$this->atomic(function () use ($action, $current, $gallery, $link, $now, $linkId, $galleryId): void {
 				$selection = $this->collaboration->latestSubmittedSelectionForLink((int)$gallery->getId(), (int)$link->getId());
 				$changed = match ($action) {
 					'approve' => $this->rounds->decide((int)$current['id'], 'submitted', 'approved', $now),
@@ -118,19 +119,20 @@ final class ReviewWorkflowService {
 				$from = $action === 'reopen' ? 'completed' : 'submitted';
 				$to = $action === 'approve' ? 'completed' : 'open';
 				if (!$this->collaboration->transitionSelection((int)$selection['id'], $from, $to, $now)) throw new ReviewConflictException('The selection state changed in another session');
+				$type = match ($action) {
+					'approve' => 'review.approved',
+					'request-changes' => 'review.changes_requested',
+					default => 'review.reopened',
+				};
+				$this->activity->record($gallery, null, $type, ['publicLinkId' => $linkId, 'round' => (int)$current['round_number']]);
+				$this->integrations->emit($type, $galleryId, ['publicLinkId' => $linkId, 'round' => (int)$current['round_number']]);
 			}, $this->db);
 		} catch (ReviewConflictException|\InvalidArgumentException $exception) {
 			throw $exception;
 		} catch (\Throwable) {
 			throw new ReviewConflictException('The review state changed in another session');
 		}
-		$type = match ($action) {
-			'approve' => 'review.approved',
-			'request-changes' => 'review.changes_requested',
-			default => 'review.reopened',
-		};
-		$this->activity->record($gallery, null, $type, ['publicLinkId' => $linkId, 'round' => (int)$current['round_number']]);
-		$this->integrations->emit($type, $galleryId, ['publicLinkId' => $linkId, 'round' => (int)$current['round_number']]);
+
 		return $this->overview($userUid, $galleryId);
 	}
 

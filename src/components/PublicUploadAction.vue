@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { t } from '@nextcloud/l10n'
-import { ref } from 'vue'
+import { onBeforeUnmount, ref } from 'vue'
 
 import { missingChunkIndexes } from '../domain/collaboration.ts'
 
@@ -10,6 +10,10 @@ const props = defineProps<{
 	request(path: string, init?: RequestInit, mayRecover?: boolean): Promise<Response>
 }>()
 const emit = defineEmits<{ error: [message: string] }>()
+interface UploadSession { id: string; filename?: string; chunkSize: number; uploadedChunks: number[]; status?: 'pending' | 'awaiting_review' | 'accepted' | 'rejected' }
+class UploadRequestError extends Error { constructor(message: string, readonly status: number) { super(message) } }
+const controller = new AbortController()
+onBeforeUnmount(() => controller.abort())
 const uploading = ref(false)
 const progress = ref<Record<string, number>>({})
 
@@ -35,28 +39,36 @@ async function uploadFile(file: File) {
 	let chunkSize = 5 * 1024 * 1024
 	let uploadedChunks: number[] = []
 	if (uploadId) {
-		const status = await requestJson(`uploads/${uploadId}`, 'GET')
-		if (status.status === 'pending') {
-			chunkSize = status.chunkSize as number
-			uploadedChunks = status.uploadedChunks as number[]
-		} else {
+		let status: UploadSession | null
+		try { status = await requestJson<UploadSession>(`uploads/${uploadId}`, 'GET') } catch (error) {
+			if (!(error instanceof UploadRequestError) || error.status !== 404) throw error
 			localStorage.removeItem(storageKey)
 			uploadId = null
+			status = null
+		}
+		if (status?.status === 'pending') {
+			chunkSize = status.chunkSize
+			uploadedChunks = status.uploadedChunks
+		} else if (status) {
+			// Keep the durable receipt so selecting this file again cannot duplicate it.
+			progress.value[file.name] = 100
+			return
 		}
 	}
 	if (!uploadId) {
-		const initiated = await requestJson('uploads', 'POST', {
+		const initiated = await requestJson<UploadSession>('uploads', 'POST', {
 			filename: file.name,
 			mimeType: file.type || 'application/octet-stream',
 			size: file.size,
 		})
-		uploadId = initiated.id as string
-		chunkSize = initiated.chunkSize as number
+		uploadId = initiated.id
+		chunkSize = initiated.chunkSize
 		localStorage.setItem(storageKey, uploadId)
 	}
 	const totalChunks = Math.ceil(file.size / chunkSize)
 	for (const index of missingChunkIndexes(file.size, chunkSize, uploadedChunks)) {
 		const response = await props.request(`uploads/${uploadId}/chunks/${index}`, {
+			signal: controller.signal,
 			method: 'PUT',
 			headers: { 'Content-Type': 'application/octet-stream' },
 			body: file.slice(index * chunkSize, Math.min(file.size, (index + 1) * chunkSize)),
@@ -64,19 +76,19 @@ async function uploadFile(file: File) {
 		if (!response.ok) throw new Error(t('proofing_gallery', 'A file chunk could not be uploaded.'))
 		progress.value[file.name] = Math.round(((index + 1) / totalChunks) * 100)
 	}
-	await requestJson(`uploads/${uploadId}/finalize`, 'POST')
-	localStorage.removeItem(storageKey)
+	await requestJson<{ id: string; filename: string; status: string }>(`uploads/${uploadId}/finalize`, 'POST')
 	progress.value[file.name] = 100
 }
 
-async function requestJson(path: string, method: 'GET' | 'POST', body?: unknown): Promise<Record<string, unknown>> {
+async function requestJson<T>(path: string, method: 'GET' | 'POST', body?: unknown): Promise<T> {
 	const response = await props.request(path, {
+		signal: controller.signal,
 		method,
 		headers: { 'Content-Type': 'application/json' },
 		body: body === undefined ? undefined : JSON.stringify(body),
 	})
-	const payload = await response.json() as Record<string, unknown> & { message?: string }
-	if (!response.ok) throw new Error(payload.message || t('proofing_gallery', 'Upload failed'))
+	const payload = await response.json() as T & { message?: string }
+	if (!response.ok) throw new UploadRequestError(payload.message || t('proofing_gallery', 'Upload failed'), response.status)
 	return payload
 }
 

@@ -13,6 +13,50 @@ final class SemanticIndexRepository {
 	public function __construct(private IDBConnection $db) {
 	}
 
+	/** Freeze membership once; retries and batches address stable positions.
+	 * @param iterable<int> $ids */
+	public function snapshot(int $galleryId, string $generation, iterable $ids, int $limit): void {
+		$this->db->beginTransaction();
+		try {
+			$this->deleteCandidates($galleryId);
+			$position = 0;
+			foreach ($ids as $id) {
+				$qb = $this->db->getQueryBuilder();
+				$qb->insert('proofing_sem_candidates')->values([
+					'gallery_id' => $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT),
+					'generation' => $qb->createNamedParameter($generation),
+					'position' => $qb->createNamedParameter($position++, IQueryBuilder::PARAM_INT),
+					'file_id' => $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT),
+				])->executeStatement();
+				if ($position >= $limit) break;
+			}
+			$this->db->commit();
+		} catch (\Throwable $error) { $this->db->rollBack(); throw $error; }
+	}
+
+	/** @return list<int> */
+	public function candidates(int $galleryId, string $generation, int $offset, int $limit): array {
+		$qb = $this->candidateQuery($galleryId, $generation);
+		return array_map('intval', QueryResult::column($qb->select('file_id')->andWhere($qb->expr()->gte('position', $qb->createNamedParameter($offset, IQueryBuilder::PARAM_INT)))
+			->orderBy('position', 'ASC')->setMaxResults($limit)->executeQuery()));
+	}
+
+	public function candidateCount(int $galleryId, string $generation): int {
+		$qb = $this->candidateQuery($galleryId, $generation);
+		return (int)$qb->select($qb->func()->count())->executeQuery()->fetchOne();
+	}
+
+	private function candidateQuery(int $galleryId, string $generation): IQueryBuilder {
+		$qb = $this->db->getQueryBuilder();
+		return $qb->from('proofing_sem_candidates')->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('generation', $qb->createNamedParameter($generation)));
+	}
+
+	public function deleteCandidates(int $galleryId): void {
+		$qb = $this->db->getQueryBuilder();
+		$qb->delete('proofing_sem_candidates')->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))->executeStatement();
+	}
+
 	/** @param list<float> $vector
 	 * @param list<string> $concepts
 	 */
@@ -58,6 +102,7 @@ final class SemanticIndexRepository {
 	}
 
 	public function deleteGallery(int $galleryId): int {
+		$this->deleteCandidates($galleryId);
 		$qb = $this->db->getQueryBuilder();
 		$qb->delete(self::TABLE)->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
 		return $qb->executeStatement();
@@ -72,6 +117,7 @@ final class SemanticIndexRepository {
 	}
 
 	public function deleteAll(): int {
+		$this->db->getQueryBuilder()->delete('proofing_sem_candidates')->executeStatement();
 		return $this->db->getQueryBuilder()->delete(self::TABLE)->executeStatement();
 	}
 

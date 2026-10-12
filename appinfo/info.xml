@@ -156,6 +156,7 @@ ein öffentlicher Link nur erlauben kann, was alle geltenden Regeln zulassen.
 		<exporter>OCA\ProofingGallery\OpenMetrics\DerivativeBytesMetric</exporter>
 	</openmetrics>
 	<background-jobs>
+		<job>OCA\ProofingGallery\BackgroundJob\RecoverEventWavesJob</job>
 		<job>OCA\ProofingGallery\BackgroundJob\ReconcileGalleryMediaCountsJob</job>
 		<job>OCA\ProofingGallery\BackgroundJob\PurgeGuestsJob</job>
 		<job>OCA\ProofingGallery\BackgroundJob\CleanupGalleryDataJob</job>
@@ -171,6 +172,7 @@ ein öffentlicher Link nur erlauben kann, was alle geltenden Regeln zulassen.
 			<step>OCA\ProofingGallery\RepairStep\ScheduleProjectionBackfills</step>
 		</install>
 		<post-migration>
+			<step>OCA\ProofingGallery\RepairStep\PrivatizeGuestInbox</step>
 			<step>OCA\ProofingGallery\RepairStep\InitFilesMetadata</step>
 			<step>OCA\ProofingGallery\RepairStep\NormalizeBackgroundJobs</step>
 			<step>OCA\ProofingGallery\RepairStep\ScheduleProjectionBackfills</step>

@@ -65,7 +65,8 @@ final class ReviewSettings implements JsonSerializable {
 			throw new InvalidArgumentException('Invalid selection limits');
 		}
 		$dueDate = $value['selectionDueDate'];
-		if ($dueDate !== null && (!is_string($dueDate) || \DateTimeImmutable::createFromFormat('!Y-m-d', $dueDate)?->format('Y-m-d') !== $dueDate)) {
+		$parsedDate = is_string($dueDate) ? \DateTimeImmutable::createFromFormat('!Y-m-d', $dueDate) : false;
+		if ($dueDate !== null && ($parsedDate === false || $parsedDate->format('Y-m-d') !== $dueDate)) {
 			throw new InvalidArgumentException('Invalid selection due date');
 		}
 		return new self(

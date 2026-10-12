@@ -9,6 +9,11 @@ use OCA\ProofingGallery\Dto\GallerySettings;
 use PHPUnit\Framework\TestCase;
 
 final class GallerySettingsTest extends TestCase {
+	public function testMalformedSelectionDateIsAValidationFailure(): void {
+		$this->expectException(\InvalidArgumentException::class);
+		GallerySettings::fromArray(['review' => ['selectionDueDate' => 'not-a-date']]);
+	}
+
 	public function testLegacyHeroRemainsCustomAndAlsoSeedsTheCardCover(): void {
 		$settings = GallerySettings::fromArray(['presentation' => ['heroFileId' => 42]])->presentation;
 		self::assertSame('custom', $settings->heroSource);

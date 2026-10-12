@@ -207,17 +207,11 @@ export interface CullingXmpReport {
 	dryRun: boolean
 }
 
-export interface CollectionItem {
-	sourceGalleryId: number
-	sourceGalleryTitle: string | null
-	fileId: number
-	name: string | null
-	mimeType: string | null
-	size: number | null
-	modifiedAt: number | null
-	etag: string | null
-	state: 'available' | 'unavailable'
-}
+interface CollectionReference { sourceGalleryId: number; fileId: number }
+export type CollectionItem = CollectionReference & (
+	| { state: 'available'; sourceGalleryTitle: string; name: string; mimeType: string; size: number; modifiedAt: number; etag: string }
+	| { state: 'unavailable'; sourceGalleryTitle: null; name: null; mimeType: null; size: null; modifiedAt: null; etag: null }
+)
 
 export interface CollectionDocument {
 	revision: number

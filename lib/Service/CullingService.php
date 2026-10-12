@@ -64,6 +64,13 @@ final class CullingService {
 		return $result;
 	}
 
+	/** @param list<int> $fileIds
+	 * @return array<int, MediaCull> */
+	public function forGalleryFiles(Gallery $gallery, array $fileIds): array {
+		foreach ($fileIds as $fileId) $this->folders->resolveMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $fileId);
+		return $this->forFiles($gallery->getOwnerUid(), $fileIds);
+	}
+
 	public function synchronize(
 		string $userId,
 		Gallery $gallery,

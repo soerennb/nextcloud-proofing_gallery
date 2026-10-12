@@ -122,13 +122,17 @@ final class CollectionService {
 
 	/** @return list<array<string, mixed>> */
 	public function availableItems(Gallery $collection): array {
+		return iterator_to_array($this->availableItemStream($collection), false);
+	}
+
+	/** @return \Generator<int, array<string, mixed>> */
+	public function availableItemStream(Gallery $collection): \Generator {
 		$this->assertCollection($collection);
-		$items = [];
-		foreach ($this->rows($collection->getId()) as $row) {
+		foreach ($this->collectionRows($collection) as $row) {
 			try {
 				$source = $this->ownedFolderGallery($collection, (int)$row['source_gallery_id']);
 				$file = $this->folders->resolveMedia($source->getOwnerUid(), $source->getFolderId(), (int)$row['file_id']);
-				$items[] = [
+				yield [
 					'id' => $file->getId(),
 					'name' => $file->getName(),
 					'mimeType' => $file->getMimeType(),
@@ -143,7 +147,15 @@ final class CollectionService {
 				// Unavailable references remain visible to the owner, but never to guests.
 			}
 		}
-		return $items;
+	}
+
+	/** @return \Generator<int, array<string, mixed>> */
+	private function collectionRows(Gallery $collection): \Generator {
+		$after = 0;
+		do {
+			$rows = $this->repository->page((int)$collection->getId(), $after, 1000);
+			foreach ($rows as $row) { $after = (int)$row['id']; yield $row; }
+		} while (count($rows) === 1000);
 	}
 
 	public function resolveMedia(Gallery $collection, int $fileId): File {

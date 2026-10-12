@@ -20,89 +20,38 @@ final class PublicLinkScopeService {
 
 	public function normalize(string $path): string {
 		$path = trim($path, '/');
-		if (str_contains($path, "\0") || in_array('..', explode('/', $path), true)) {
+		if (!MediaTypePolicy::visiblePath($path)) {
 			throw new NotFoundException('Invalid gallery path');
 		}
 		return $path;
 	}
 
-	public function indexPath(PublicLink $link, string $guestPath): string {
-		if ($this->isMultiRoot($link)) return $this->normalize($guestPath);
-		return implode('/', array_filter([
-			$this->normalize($link->getStartPath()),
-			$this->normalize($guestPath),
-		], static fn (string $part): bool => $part !== ''));
-	}
-
-	/** @return list<string> */
-	public function roots(PublicLink $link): array {
-		if ($link->getScopeMode() === 'empty') return [];
-		if ($link->getScopeMode() === 'nodes') return $this->nodeRoots($link)['paths'];
-		$roots = $link->allowedRootList();
-		if ($roots !== []) return array_values(array_unique(array_map($this->normalize(...), $roots)));
-		return [$this->normalize($link->getStartPath())];
-	}
-
-	/** @return list<array{path: string, name: string, role: string}> */
-	public function rootDetails(PublicLink $link): array {
-		if ($link->getScopeMode() === 'empty') return [];
+	public function resolve(PublicLink $link): \OCA\ProofingGallery\Dto\PublicLinkScope {
+		$multi = $this->isMultiRoot($link);
+		$start = $this->normalize($link->getStartPath());
 		if ($link->getScopeMode() === 'nodes') {
-			return array_map(static fn (array $entry): array => [
-				'path' => $entry['path'],
-				'name' => basename($entry['path']),
-				'role' => in_array($entry['role'], ['shared', 'group', 'private'], true) ? $entry['role'] : 'shared',
-			], $this->nodeRoots($link)['entries']);
+			$resolved = $this->nodeRoots($link);
+			$roots = $resolved['paths']; $total = $resolved['total']; $missing = $resolved['missing'];
+			$details = array_map(static fn (array $entry): array => ['path' => $entry['path'], 'name' => basename($entry['path']), 'role' => in_array($entry['role'], ['shared', 'group', 'private'], true) ? $entry['role'] : 'shared'], $resolved['entries']);
+		} else {
+			$roots = $link->getScopeMode() === 'empty' ? [] : ($link->allowedRootList() ?: [$start]);
+			$roots = array_values(array_unique(array_map($this->normalize(...), $roots)));
+			$total = count($roots); $missing = 0;
+			$details = array_map(static fn (string $path): array => ['path' => $path, 'name' => basename($path), 'role' => 'shared'], $roots);
 		}
-		return array_map(static fn (string $path): array => [
-			'path' => $path,
-			'name' => basename($path),
-			'role' => 'shared',
-		], $this->roots($link));
+		return new \OCA\ProofingGallery\Dto\PublicLinkScope($multi, $start, $roots, $details, ['state' => $missing > 0 ? 'degraded' : ($roots === [] ? 'empty' : 'healthy'), 'total' => $total, 'available' => count($roots), 'missing' => $missing]);
 	}
 
-	public function isMultiRoot(PublicLink $link): bool {
-		return in_array($link->getScopeMode(), ['nodes', 'empty'], true) || $link->allowedRootList() !== [];
-	}
-
-	/** @return array{state: 'healthy'|'degraded'|'empty', total: int, available: int, missing: int} */
-	public function health(PublicLink $link): array {
-		if ($link->getScopeMode() === 'empty') return ['state' => 'empty', 'total' => 0, 'available' => 0, 'missing' => 0];
-		if ($link->getScopeMode() !== 'nodes') return ['state' => 'healthy', 'total' => count($this->roots($link)), 'available' => count($this->roots($link)), 'missing' => 0];
-		$resolved = $this->nodeRoots($link);
-		return [
-			'state' => $resolved['missing'] === 0 ? 'healthy' : 'degraded',
-			'total' => $resolved['total'],
-			'available' => count($resolved['paths']),
-			'missing' => $resolved['missing'],
-		];
-	}
-
-	/** A folder is visible when it is an allowed root, below one, or leads to one. */
-	public function visiblePath(PublicLink $link, string $path): bool {
-		try { $path = $this->normalize($path); } catch (NotFoundException) { return false; }
-		foreach ($this->roots($link) as $root) {
-			if ($path === $root || str_starts_with($path, $root . '/') || ($path !== '' && str_starts_with($root, $path . '/'))) return true;
-		}
-		return $path === '';
-	}
-
-	public function contains(PublicLink $link, GallerySettings $settings, string $relativeFilePath): bool {
-		try {
-			$relativeFilePath = $this->normalize($relativeFilePath);
-		} catch (NotFoundException) {
-			return false;
-		}
-		$matchedRoot = null;
-		foreach ($this->roots($link) as $root) {
-			if ($root === '' || $relativeFilePath === $root || str_starts_with($relativeFilePath, $root . '/')) {
-				$matchedRoot = $root;
-				break;
-			}
-		}
-		if ($matchedRoot === null) return false;
-		if ($this->isMultiRoot($link) || $link->getViewMode() === 'recursive' || $settings->navigation->folders) return true;
-		return trim(dirname($relativeFilePath), './') === $matchedRoot;
-	}
+	public function indexPath(PublicLink $link, string $guestPath): string { return $this->resolve($link)->indexPath($guestPath); }
+	/** @return list<string> */
+	public function roots(PublicLink $link): array { return $this->resolve($link)->roots; }
+	/** @return list<array{path: string, name: string, role: string}> */
+	public function rootDetails(PublicLink $link): array { return $this->resolve($link)->details; }
+	public function isMultiRoot(PublicLink $link): bool { return in_array($link->getScopeMode(), ['nodes', 'empty'], true) || $link->allowedRootList() !== []; }
+	/** @return array{state:string, total:int, available:int, missing:int} */
+	public function health(PublicLink $link): array { return $this->resolve($link)->health; }
+	public function visiblePath(PublicLink $link, string $path): bool { return $this->resolve($link)->visiblePath($path); }
+	public function contains(PublicLink $link, GallerySettings $settings, string $relativeFilePath): bool { return $this->resolve($link)->contains($relativeFilePath, $link->getViewMode() === 'recursive' || $settings->navigation->folders); }
 
 	/** @return array{paths: list<string>, entries: list<array{path: string, role: string}>, total: int, missing: int} */
 	private function nodeRoots(PublicLink $link): array {
@@ -119,12 +68,12 @@ final class PublicLinkScopeService {
 		foreach ($rows as $row) {
 			$node = null;
 			foreach ($root->getById($row['folderId']) as $candidate) {
-				if ($candidate instanceof \OCP\Files\Folder && $root->isSubNode($candidate)) { $node = $candidate; break; }
+				if ($candidate instanceof \OCP\Files\Folder && $candidate->isReadable() && $root->isSubNode($candidate)) { $node = $candidate; break; }
 			}
 			if ($node === null) { $missing++; continue; }
 			$path = str_starts_with($node->getPath(), $prefix) ? substr($node->getPath(), strlen($prefix)) : '';
 			if ($path === '') { $missing++; continue; }
-			$path = $this->normalize($path);
+			try { $path = $this->normalize($path); } catch (NotFoundException) { $missing++; continue; }
 			if (in_array($path, $paths, true)) continue;
 			$paths[] = $path;
 			$entries[] = ['path' => $path, 'role' => (string)$row['role']];

@@ -18,6 +18,7 @@ final class MediaIndexQuery {
 		public readonly string $sortDirection,
 		public readonly int $minOwnerRating,
 		public readonly string $sortRevision = '',
+		public readonly CullingFilter $culling = new CullingFilter(),
 	) {
 		if ($galleryId <= 0 || $ownerUid === '') throw new \InvalidArgumentException('Invalid media index owner');
 		if ($limit < 1 || $limit > 201) throw new \InvalidArgumentException('Invalid media index limit');
@@ -40,6 +41,7 @@ final class MediaIndexQuery {
 		string $sortDirection,
 		int $minOwnerRating,
 		string $sortRevision = '',
+		CullingFilter $culling = new CullingFilter(),
 	): self {
 		return new self(
 			$galleryId,
@@ -51,12 +53,14 @@ final class MediaIndexQuery {
 			$sortDirection,
 			$minOwnerRating,
 			$sortRevision,
+			$culling,
 		);
 	}
 
 	public function cursorScope(bool $legacy = false): string {
 		$scope = [(string)$this->galleryId, $this->ownerUid, $this->pathPrefix, $this->search, (string)$this->minOwnerRating];
 		if (!$legacy) $scope[] = $this->sortRevision;
+		if ($this->culling->active()) $scope[] = json_encode($this->culling, JSON_THROW_ON_ERROR);
 		return hash('sha256', implode("\0", $scope));
 	}
 
@@ -71,6 +75,7 @@ final class MediaIndexQuery {
 			$this->sortDirection,
 			$this->minOwnerRating,
 			$this->sortRevision,
+			$this->culling,
 		);
 	}
 }

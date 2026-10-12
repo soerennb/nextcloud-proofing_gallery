@@ -10,14 +10,12 @@ use OCA\ProofingGallery\Db\Guest;
 use OCA\ProofingGallery\Db\UploadRepository;
 use OCA\ProofingGallery\Dto\GallerySettings;
 use OCP\AppFramework\Utility\ITimeFactory;
-use OCP\Files\File;
-use OCP\Files\Folder;
 use OCP\Files\IAppData;
 use OCP\Security\ISecureRandom;
 
 final class UploadService {
 	public const CHUNK_SIZE = 5 * 1024 * 1024;
-	private const INBOX_NAME = '.proofing-gallery-inbox';
+	use \OCP\AppFramework\Db\TTransactional;
 
 	public function __construct(
 		private UploadRepository $repository,
@@ -30,6 +28,8 @@ final class UploadService {
 		private CapabilityPolicyService $capabilities,
 		private MediaTypePolicy $mediaTypes,
 		private UploadLockService $locks,
+		private PrivateGuestInboxService $privateInbox,
+		private \OCP\IDBConnection $db,
 	) {
 	}
 
@@ -69,11 +69,15 @@ final class UploadService {
 			'size' => (int)$row['size'],
 			'status' => $row['status'],
 			'chunkSize' => self::CHUNK_SIZE,
-			'uploadedChunks' => $this->uploadedChunks($uploadId),
+			'uploadedChunks' => $row['status'] === 'pending' ? $this->uploadedChunks($uploadId) : [],
 		];
 	}
 
 	public function putChunk(Gallery $gallery, Guest $guest, string $uploadId, int $index, string $content): void {
+		$this->locks->wait('proofing-gallery/guest-upload/' . $uploadId, 'Proofing Gallery guest upload chunk', fn () => $this->putChunkLocked($gallery, $guest, $uploadId, $index, $content));
+	}
+
+	private function putChunkLocked(Gallery $gallery, Guest $guest, string $uploadId, int $index, string $content): void {
 		$row = $this->upload($gallery, $guest, $uploadId);
 		if ($row['status'] !== 'pending' || $index < 0 || strlen($content) > self::CHUNK_SIZE) {
 			throw new InvalidArgumentException('Invalid upload chunk');
@@ -108,71 +112,41 @@ final class UploadService {
 	/** @return array<string, mixed> */
 	private function finalizeLocked(Gallery $gallery, Guest $guest, string $uploadId): array {
 		$row = $this->upload($gallery, $guest, $uploadId);
-		if ($row['status'] !== 'pending') {
-			throw new InvalidArgumentException('Upload is not pending');
-		}
-		$expectedChunks = (int)ceil((int)$row['size'] / self::CHUNK_SIZE);
-		$chunks = $this->uploadedChunks($uploadId);
-		if ($chunks !== range(0, $expectedChunks - 1)) {
-			throw new InvalidArgumentException('Upload is incomplete');
-		}
+		if ($row['status'] !== 'pending') return $this->receipt($row);
+		$expected = (int)ceil((int)$row['size'] / self::CHUNK_SIZE);
+		if ($this->uploadedChunks($uploadId) !== range(0, $expected - 1)) throw new InvalidArgumentException('Upload is incomplete');
 		$stream = tmpfile();
-		if ($stream === false) {
-			throw new \RuntimeException('Temporary upload stream unavailable');
-		}
-		foreach ($chunks as $index) {
-			$chunkStream = $this->uploadFolder($uploadId)->getFile(sprintf('%08d.chunk', $index))->read();
-			if (!is_resource($chunkStream)) {
-				throw new \RuntimeException('Upload chunk cannot be read');
+		if ($stream === false) throw new \RuntimeException('Temporary upload stream unavailable');
+		try {
+			foreach (range(0, $expected - 1) as $index) {
+				$chunk = $this->uploadFolder($uploadId)->getFile(sprintf('%08d.chunk', $index))->read();
+				if (!is_resource($chunk)) throw new \RuntimeException('Upload chunk cannot be read');
+				try { stream_copy_to_stream($chunk, $stream); } finally { fclose($chunk); }
 			}
-			stream_copy_to_stream($chunkStream, $stream);
-			fclose($chunkStream);
-		}
-		if (ftell($stream) !== (int)$row['size']) {
-			fclose($stream);
-			throw new InvalidArgumentException('Uploaded byte count does not match');
-		}
-		rewind($stream);
-		$extension = pathinfo((string)$row['filename'], PATHINFO_EXTENSION);
-		$temporaryName = '.upload-' . $uploadId . ($extension === '' ? '' : '.' . $extension);
-		try {
-			[$file, $filename] = $this->locks->wait(
-				'proofing-gallery/guest-upload-inbox/' . $gallery->getId(),
-				'Proofing Gallery guest upload inbox',
-				function () use ($gallery, $stream, $temporaryName, $row): array {
-					$inbox = $this->inbox($gallery);
-					$file = $inbox->newFile($temporaryName, $stream);
-					try {
-						if (!$file instanceof File || !$this->mediaTypes->matches((string)$row['mime_type'], $file)) {
-							throw new InvalidArgumentException('Uploaded content does not match the declared media type');
-						}
-						$filename = $this->conflictFreeName($inbox, (string)$row['filename']);
-						$file->move($inbox->getPath() . '/' . $filename);
-					} catch (\Throwable $exception) {
-						try { if ($file->getName() === $temporaryName) $file->delete(); } catch (\Throwable) {}
-						throw $exception;
-					}
-					return [$file, $filename];
-				},
-			);
-		} finally {
-			if (is_resource($stream)) fclose($stream);
-		}
-		try {
-			$this->repository->finalize($uploadId, $file->getId(), $filename, $file->getMimeType(), $this->clock->getTime());
-		} catch (\Throwable $exception) {
-			$file->delete();
-			throw $exception;
-		}
-		$this->uploadFolder($uploadId)->delete();
-		$this->activity->record($gallery, $guest, 'upload.received', [
-			'uploadId' => $uploadId,
-			'filename' => $filename,
-			'size' => (int)$row['size'],
-		]);
-		$this->markResponseReceived($gallery);
-		return ['id' => $uploadId, 'filename' => $filename, 'status' => 'awaiting_review'];
+			if (ftell($stream) !== (int)$row['size']) throw new InvalidArgumentException('Uploaded byte count does not match');
+			$mime = (new \finfo(FILEINFO_MIME_TYPE))->file(stream_get_meta_data($stream)['uri']);
+			if (!is_string($mime) || !$this->mediaTypes->matches((string)$row['mime_type'], $mime)) throw new InvalidArgumentException('Uploaded content does not match the declared media type');
+			$stored = $this->privateInbox->store($uploadId, $stream);
+			if ((int)$stored->getSize() !== (int)$row['size']) throw new \RuntimeException('Private upload byte count does not match');
+			$this->locks->wait('proofing-gallery/guest-upload-inbox/' . $gallery->getId(), 'Proofing Gallery guest upload inbox', function () use ($gallery, $guest, $row, $uploadId, $mime): void {
+				$name = $this->inboxFilename($gallery, (string)$row['filename'], $uploadId);
+				$this->atomic(function () use ($gallery, $guest, $row, $uploadId, $mime, $name): void {
+					$this->repository->finalizePrivate($uploadId, $name, $mime, $this->clock->getTime());
+					$this->activity->record($gallery, $guest, 'upload.received', ['uploadId' => $uploadId, 'filename' => $name, 'size' => (int)$row['size']]);
+					$this->markResponseReceived($gallery);
+				}, $this->db);
+			});
+		} finally { if (get_resource_type($stream) !== 'Unknown') fclose($stream); }
+		$this->privateInbox->cleanupChunks($uploadId);
+		return $this->receipt($this->upload($gallery, $guest, $uploadId));
 	}
+
+	/** @param array<string, mixed> $row
+	 * @return array{id: string, filename: string, status: string} */
+	private function receipt(array $row): array {
+		return ['id' => (string)$row['upload_id'], 'filename' => (string)$row['filename'], 'status' => (string)$row['status']];
+	}
+
 
 	private function markResponseReceived(Gallery $gallery): void {
 		$this->repository->markResponseReceived($gallery->getId(), $this->clock->getTime());
@@ -180,7 +154,7 @@ final class UploadService {
 
 	/** @return list<array<string, mixed>> */
 	public function listForGallery(Gallery $gallery): array {
-		return $this->repository->list($gallery->getId());
+		return array_map($this->presentInboxRow(...), $this->repository->list($gallery->getId()));
 	}
 
 	/** @return array{items:list<array<string,mixed>>,total:int,nextCursor:?string} */
@@ -192,44 +166,45 @@ final class UploadService {
 		$hasMore = count($rows) > $limit;
 		if ($hasMore) array_pop($rows);
 		$last = $rows === [] ? null : $rows[array_key_last($rows)];
-		return ['items' => $rows, 'total' => $this->repository->countGallery($gallery->getId(), $status), 'nextCursor' => $hasMore && $last !== null ? $cursors->encode($scope, (int)$last['id']) : null];
+		return ['items' => array_map($this->presentInboxRow(...), $rows), 'total' => $this->repository->countGallery($gallery->getId(), $status), 'nextCursor' => $hasMore && $last !== null ? $cursors->encode($scope, (int)$last['id']) : null];
 	}
 
 	public function moderate(Gallery $gallery, string $uploadId, bool $accept): void {
+		$this->locks->wait('proofing-gallery/guest-upload/' . $uploadId, 'Proofing Gallery guest upload moderation', fn () => $this->moderateLocked($gallery, $uploadId, $accept));
+	}
+
+	private function moderateLocked(Gallery $gallery, string $uploadId, bool $accept): void {
 		$row = $this->uploadForGallery($gallery, $uploadId);
-		if ($row['status'] !== 'awaiting_review' || $row['file_id'] === null) {
-			throw new InvalidArgumentException('Upload is not awaiting review');
-		}
-		$file = $this->inbox($gallery)->getById((int)$row['file_id'])[0] ?? null;
-		if (!$file instanceof File) {
-			throw new InvalidArgumentException('Inbox file no longer exists');
-		}
-		if ($accept) {
-			$target = $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId());
-			$name = $this->conflictFreeName($target, $file->getName());
-			$originalPath = $file->getPath();
-			$file->move($target->getPath() . '/' . $name);
-			$status = 'accepted';
-			try {
-				if (!$this->repository->moderate($uploadId, $status, $this->clock->getTime())) throw new \RuntimeException('Upload moderation state changed concurrently');
-			} catch (\Throwable $exception) {
-				try { $file->move($originalPath); } catch (\Throwable) {}
-				throw $exception;
-			}
+		$status = $accept ? 'accepted' : 'rejected';
+		if ($row['status'] === $status) { $this->privateInbox->cleanup(); return; }
+		if ($row['status'] !== 'awaiting_review' || !is_string($row['private_key'] ?? null)) throw new InvalidArgumentException('Upload is not awaiting review');
+		if (!$accept) {
+			if ((int)($row['staging_file_id'] ?? 0) !== 0) throw new InvalidArgumentException('Resume the interrupted acceptance before changing its decision');
+			$this->atomic(function () use ($gallery, $uploadId): void {
+				if (!$this->repository->moderate($uploadId, 'rejected', $this->clock->getTime())) throw new \RuntimeException('Upload moderation state changed concurrently');
+				$this->activity->record($gallery, null, 'upload.rejected', ['uploadId' => $uploadId]);
+			}, $this->db);
 		} else {
-			$status = 'rejected';
-			$originalPath = $file->getPath();
-			$quarantinePath = $file->getParent()->getPath() . '/.rejected-' . $uploadId;
-			$file->move($quarantinePath);
-			try {
-				if (!$this->repository->moderate($uploadId, $status, $this->clock->getTime())) throw new \RuntimeException('Upload moderation state changed concurrently');
-			} catch (\Throwable $exception) {
-				try { $file->move($originalPath); } catch (\Throwable) {}
-				throw $exception;
+			$stagingId = (int)($row['staging_file_id'] ?? 0);
+			$name = (string)$row['filename'];
+			$stagingName = $this->folders->stagingName($name, $uploadId);
+			if ($stagingId === 0) {
+				$stream = $this->privateInbox->read((string)$row['private_key'])->read();
+				if (!is_resource($stream)) throw new \RuntimeException('Private inbox payload cannot be read');
+				try { $staged = $this->folders->stageMedia($gallery->getOwnerUid(), $gallery->getFolderId(), '', $name, $stream, (string)$row['mime_type'], $uploadId); }
+				finally { if (get_resource_type($stream) !== 'Unknown') fclose($stream); }
+				$stagingId = (int)$staged->getId();
+				$this->repository->stageAcceptance($uploadId, $stagingId);
 			}
-			$file->delete();
+			$this->folders->commitStagedMedia($gallery->getOwnerUid(), $gallery->getFolderId(), '', $name, $stagingId, $stagingName, 'rename', acknowledge: function (?\OCA\ProofingGallery\Dto\MediaItem $item) use ($gallery, $uploadId): void {
+				if ($item === null) throw new \RuntimeException('Inbox acceptance cannot skip its file');
+				$this->atomic(function () use ($gallery, $uploadId, $item): void {
+					$this->repository->accept($uploadId, $item->id, $item->name, $this->clock->getTime());
+					$this->activity->record($gallery, null, 'upload.accepted', ['uploadId' => $uploadId]);
+				}, $this->db);
+			});
 		}
-		$this->activity->record($gallery, null, 'upload.' . $status, ['uploadId' => $uploadId]);
+		$this->privateInbox->cleanup();
 	}
 
 	private function assertEnabled(Gallery $gallery): void {
@@ -247,7 +222,7 @@ final class UploadService {
 	private function upload(Gallery $gallery, Guest $guest, string $uploadId): array {
 		$row = $this->repository->find($gallery->getId(), $uploadId, $guest->getId());
 		if ($row === null) {
-			throw new InvalidArgumentException('Upload not found');
+			throw new \OCP\AppFramework\Db\DoesNotExistException('Upload not found');
 		}
 		return $row;
 	}
@@ -256,7 +231,7 @@ final class UploadService {
 	private function uploadForGallery(Gallery $gallery, string $uploadId): array {
 		$row = $this->repository->find($gallery->getId(), $uploadId);
 		if ($row === null) {
-			throw new InvalidArgumentException('Upload not found');
+			throw new \OCP\AppFramework\Db\DoesNotExistException('Upload not found');
 		}
 		return $row;
 	}
@@ -289,32 +264,22 @@ final class UploadService {
 		return $this->uploadRoot()->getFolder($uploadId);
 	}
 
-	private function inbox(Gallery $gallery): Folder {
-		$root = $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId());
-		try {
-			$folder = $root->get(self::INBOX_NAME);
-			if (!$folder instanceof Folder) {
-				throw new \RuntimeException('Reserved inbox path is not a folder');
-			}
-			return $folder;
-		} catch (\OCP\Files\NotFoundException) {
-			return $root->newFolder(self::INBOX_NAME);
-		}
-	}
-
-	private function conflictFreeName(Folder $folder, string $filename): string {
-		if (!$folder->nodeExists($filename)) {
-			return $filename;
-		}
+	private function inboxFilename(Gallery $gallery, string $filename, string $uploadId): string {
 		$extension = pathinfo($filename, PATHINFO_EXTENSION);
 		$stem = pathinfo($filename, PATHINFO_FILENAME);
+		$name = $filename;
 		for ($copy = 2; $copy < 10000; $copy++) {
-			$candidate = sprintf('%s (%d)%s', $stem, $copy, $extension === '' ? '' : '.' . $extension);
-			if (!$folder->nodeExists($candidate)) {
-				return $candidate;
-			}
+			if (!$this->repository->nameTaken((int)$gallery->getId(), $name, $uploadId)) return $name;
+			$name = sprintf('%s (%d)%s', $stem, $copy, $extension === '' ? '' : '.' . $extension);
 		}
 		throw new InvalidArgumentException('Could not allocate a conflict-free filename');
+	}
+
+	/** @param array<string, mixed> $row
+	 * @return array<string, mixed> */
+	private function presentInboxRow(array $row): array {
+		unset($row['private_key'], $row['legacy_file_id'], $row['staging_file_id'], $row['chunks_cleaned']);
+		return $row;
 	}
 
 	private function safeFilename(string $filename): string {

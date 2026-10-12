@@ -98,6 +98,7 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/media/{fileId}/stream')]
 	public function mediaStream(int $fileId): Response {
 		$file = $this->fileInShare($fileId);
+		if (str_starts_with($file->getMimeType(), 'image/')) return $this->previewResponse($file, 2400, 2400, true, 'fit');
 		if (str_starts_with($file->getMimeType(), 'video/')) {
 			$state = $this->videoTranscodes->request($this->resolvedGallery()->getOwnerUid(), $file);
 			$derivative = $this->videoTranscodes->derivative($this->resolvedGallery()->getOwnerUid(), $file);

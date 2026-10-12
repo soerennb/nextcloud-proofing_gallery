@@ -20,6 +20,7 @@ final class MigrationStatusService {
 		'proofing_link_roots',
 		'proofing_event_waves',
 		'proofing_pin_handoffs',
+		'proofing_sem_candidates',
 		'proofing_event_roots',
 		'proofing_event_audit',
 		'proofing_kiosk_events',

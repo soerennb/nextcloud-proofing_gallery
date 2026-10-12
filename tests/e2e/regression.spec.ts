@@ -263,7 +263,7 @@ test('scheduled privacy purge removes app data but preserves original files', as
 	await execFileAsync('docker', ['compose', 'exec', '-T', '--user', 'www-data', 'nextcloud', 'php', '-r', php, String(requestId)], { cwd: process.cwd() })
 
 	for (let iteration = 0; iteration < 50; iteration++) {
-		const list = await execFileAsync('docker', ['compose', 'exec', '-T', '--user', 'www-data', 'nextcloud', 'php', 'occ', 'background-job:list', '--output=json'], { cwd: process.cwd() })
+		const list = await execFileAsync('docker', ['compose', 'exec', '-T', '--user', 'www-data', 'nextcloud', 'php', 'occ', 'background-job:list', '--class', `OCA\\ProofingGallery\\BackgroundJob\\${iteration === 0 ? 'ProcessPurgeRequestsJob' : 'ContinuePurgeRequestsJob'}`, '--output=json'], { cwd: process.cwd() })
 		const jobs = JSON.parse(list.stdout) as Array<{ id: number; class: string }>
 		const job = jobs.find(item => item.class.endsWith(iteration === 0 ? 'ProcessPurgeRequestsJob' : 'ContinuePurgeRequestsJob'))
 		if (!job) {

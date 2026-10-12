@@ -18,6 +18,7 @@ export interface OwnerUploadQueueItem {
 }
 
 interface QueueOptions { gallery(): OwnerUploadTarget; path(): string; changed(): void; reload(): Promise<void> }
+export interface OwnerUploadEntry { file: File; path: string; resolution?: UploadResolution }
 
 class OwnerUploadQueue {
 	readonly items = ref<OwnerUploadQueueItem[]>([])
@@ -29,17 +30,34 @@ class OwnerUploadQueue {
 	dispose() { this.disposed = true; this.controller.abort() }
 
 	async upload(files: File[]) {
-		if (!files.length || this.uploading.value || this.disposed) return
+		const path = this.options.path()
+		return this.uploadEntries(files.map(file => ({ file, path })))
+	}
+
+	async uploadEntries(entries: OwnerUploadEntry[]) {
+		if (!entries.length || this.uploading.value || this.disposed) return
 		const gallery = this.options.gallery()
-		const target = { gallery: { id: gallery.id, ownerUid: gallery.ownerUid, title: gallery.title }, path: this.options.path() }
+		const capturedGallery = Object.freeze({ id: gallery.id, ownerUid: gallery.ownerUid, title: gallery.title })
+		const targets = entries.map(entry => Object.freeze({ gallery: capturedGallery, path: entry.path }))
 		this.uploading.value = true
 		try {
-			const resolutions = await this.resolveSelection(target.gallery, target.path, files)
-			if (resolutions === null || this.disposed) return
-			this.items.value = files.map((file, index) => ({ id: `${file.name}-${file.size}-${file.lastModified}-${index}`, file, progress: 0, state: resolutions.get(file)?.conflict === 'skip' ? 'skipped' : 'waiting', attempts: 0, resolution: resolutions.get(file) ?? { conflict: 'rename' }, target }))
+			const resolutions = new Map<File, UploadResolution>()
+			for (const path of new Set(entries.filter(entry => !entry.resolution).map(entry => entry.path))) {
+				const selected = await this.resolveSelection(capturedGallery, path, entries.filter(entry => entry.path === path && !entry.resolution).map(entry => entry.file))
+				if (selected === null || this.disposed) return
+				for (const [file, resolution] of selected) resolutions.set(file, resolution)
+			}
+			this.items.value = entries.map(({ file, resolution }, index) => {
+				const decision = resolution ?? resolutions.get(file) ?? { conflict: 'rename' }
+				return { id: `${file.name}-${file.size}-${file.lastModified}-${index}`, file, progress: 0, state: decision.conflict === 'skip' ? 'skipped' : 'waiting', attempts: 0, resolution: decision, target: targets[index] }
+			})
 			const pending = this.items.value.filter(item => item.state === 'waiting')
-			const sessions = pending.length ? await prepareOwnerUploadSessions(target.gallery.id, pending.map(item => ({ file: item.file, path: target.path, resolution: item.resolution })), this.controller.signal) : []
-			pending.forEach((item, index) => { item.session = sessions[index] })
+			for (let index = 0; index < pending.length; index += 500) {
+				const batch = pending.slice(index, index + 500)
+				const sessions = await prepareOwnerUploadSessions(capturedGallery.id, batch.map(item => ({ file: item.file, path: item.target.path, resolution: item.resolution })), this.controller.signal)
+				if (this.disposed) return
+				batch.forEach((item, sessionIndex) => { item.session = sessions[sessionIndex] })
+			}
 			let cursor = 0
 			const worker = async () => { while (!this.disposed && cursor < pending.length) await this.run(pending[cursor++]) }
 			await Promise.all(Array.from({ length: Math.min(ownerUploadConcurrency(), pending.length) }, worker))
@@ -62,6 +80,7 @@ class OwnerUploadQueue {
 	}
 
 	private async run(item: OwnerUploadQueueItem) {
+		if (this.disposed) return
 		item.state = 'uploading'
 		while (!this.disposed && item.attempts < 3) {
 			item.attempts++
@@ -110,5 +129,5 @@ class OwnerUploadQueue {
 export function useOwnerUploadQueue(options: QueueOptions) {
 	const queue = new OwnerUploadQueue(options)
 	onBeforeUnmount(() => queue.dispose())
-	return { uploadQueue: queue.items, uploading: queue.uploading, uploadFiles: (files: File[]) => queue.upload(files), retryUpload: (item: OwnerUploadQueueItem) => queue.retry(item) }
+	return { uploadQueue: queue.items, uploading: queue.uploading, uploadFiles: (files: File[]) => queue.upload(files), uploadEntries: (entries: OwnerUploadEntry[]) => queue.uploadEntries(entries), retryUpload: (item: OwnerUploadQueueItem) => queue.retry(item) }
 }

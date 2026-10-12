@@ -49,7 +49,7 @@ final class FolderService {
 	public function resolveMedia(string $userId, int $folderId, int $fileId): File {
 		$folder = $this->resolveFolder($userId, $folderId);
 		foreach ($folder->getById($fileId) as $node) {
-			if ($node instanceof File && $folder->isSubNode($node) && $node->isReadable() && $this->isSupported($node)) {
+			if ($node instanceof File && $this->mediaTypes->visibleFile($folder, $node)) {
 				return $node;
 			}
 		}

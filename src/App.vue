@@ -16,6 +16,7 @@ import GalleryList from './components/GalleryList.vue'
 import StudioThemeSwitch from './components/StudioThemeSwitch.vue'
 import { useStudioTheme } from './composables/useStudioTheme.ts'
 import { useGalleryMediaCounts } from './composables/useGalleryMediaCounts.ts'
+import { requestLifetime } from './services/requestLifetime.ts'
 import { toGalleryListItem } from './domain/galleryListItem.ts'
 import { galleryWorkspacePath, normalizeGalleryWorkspace } from './domain/gallerySettingsOptions.ts'
 import { archiveGallery, fetchGallery, fetchGalleryPage, restoreGallery } from './services/galleryOverviewApi.ts'
@@ -52,6 +53,7 @@ const shareGallery = ref<Gallery | null>(null)
 const coverGallery = ref<Gallery | null>(null)
 const immersiveWorkspace = ref(false)
 const galleryEditor = ref<{ flushSave: () => Promise<boolean>; currentRoute: () => string } | null>(null)
+const galleryRequests = requestLifetime()
 let routeRequest = 0
 let pendingRoute: string | null = null
 let searchTimer: ReturnType<typeof setTimeout> | undefined
@@ -72,13 +74,9 @@ function resetFilters() {
 }
 
 function showArchive(value: boolean) {
-	helpOpen.value = false
-	selectedGallery.value = null
-	archived.value = value
-	history.replaceState(null, '', window.location.pathname)
-	if (mobileViewport.value) {
-		emit('toggle-navigation', { open: false })
-	}
+	window.location.hash = value ? 'archive' : ''
+	void syncRouteFromHash()
+	if (mobileViewport.value) emit('toggle-navigation', { open: false })
 }
 
 async function notify(kind: 'error' | 'success', message: string) {
@@ -88,6 +86,8 @@ async function notify(kind: 'error' | 'success', message: string) {
 }
 
 async function load(reset = true) {
+	const request = galleryRequests.begin()
+	loadingMore.value = false
 	if (reset) loading.value = true
 	else loadingMore.value = true
 	try {
@@ -99,16 +99,20 @@ async function load(reset = true) {
 			sourceType: sourceFilter.value === 'all' ? undefined : sourceFilter.value,
 			status: archived.value || statusFilter.value === 'all' ? undefined : statusFilter.value,
 			sort: gallerySort.value,
-		})
+		}, request.signal)
+		if (!request.current()) return
 		galleries.value = reset ? page.items : [...galleries.value, ...page.items]
 		galleryTotal.value = page.total
 		nextCursor.value = page.nextCursor
 		await syncRouteFromHash()
 	} catch {
+		if (!request.current()) return
 		notify('error', t('proofing_gallery', 'Galleries could not be loaded.')).catch(() => {})
 	} finally {
-		if (reset) loading.value = false
-		else loadingMore.value = false
+		if (request.current()) {
+			if (reset) loading.value = false
+			else loadingMore.value = false
+		}
 	}
 }
 
@@ -163,6 +167,7 @@ async function syncRouteFromHash() {
 		if (galleryId === null) {
 			selectedGallery.value = null
 			helpOpen.value = route === '#help'
+			archived.value = route === '#archive'
 			immersiveWorkspace.value = false
 			return
 		}
@@ -189,9 +194,8 @@ async function openShare(gallery: GalleryListItem, cover = false) {
 }
 
 function showHelp() {
-	helpOpen.value = true
-	selectedGallery.value = null
 	window.location.hash = 'help'
+	void syncRouteFromHash()
 	if (mobileViewport.value) emit('toggle-navigation', { open: false })
 }
 
@@ -207,9 +211,8 @@ function updateSelected(gallery: Gallery) {
 }
 
 function closeSettings() {
-	immersiveWorkspace.value = false
-	selectedGallery.value = null
-	history.replaceState(null, '', window.location.pathname)
+	window.location.hash = archived.value ? 'archive' : ''
+	void syncRouteFromHash()
 }
 
 async function archive(gallery: GalleryListItem) {
@@ -248,6 +251,9 @@ onMounted(() => {
 	mobileViewportQuery.addEventListener('change', onMobileViewportChange)
 })
 onBeforeUnmount(() => {
+	clearTimeout(searchTimer)
+	galleryRequests.dispose()
+	routeRequest++
 	window.removeEventListener('hashchange', syncRouteFromHistory)
 	window.removeEventListener('popstate', syncRouteFromHistory)
 	mobileViewportQuery.removeEventListener('change', onMobileViewportChange)

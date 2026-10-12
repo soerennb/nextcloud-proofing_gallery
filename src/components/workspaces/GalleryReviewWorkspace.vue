@@ -34,7 +34,7 @@ function updateSelectionDueDate(event: Event) {
 			:gallery-id="gallery.id"
 			:editable="true"
 			:ratings-available="gallery.availableCapabilities.guestRatings?.allowed === true" />
-		<GalleryActivity :gallery-id="gallery.id" mode="inbox" />
+		<GalleryActivity :gallery-id="gallery.id" mode="inbox" :editable="gallery.permissions.canEdit" />
 
 		<details v-if="gallery.permissions.canEdit" class="review-config">
 			<summary><strong>{{ t('proofing_gallery', 'Configure review') }}</strong><span>{{ t('proofing_gallery', 'Choose what clients can contribute.') }}</span></summary>

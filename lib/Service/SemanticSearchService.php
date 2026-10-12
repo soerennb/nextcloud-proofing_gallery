@@ -12,8 +12,6 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\IConfig;
 use OCP\Files\File;
-use OCP\Files\Folder;
-use OCP\Files\Node;
 use OCP\Lock\ILockingProvider;
 
 final class SemanticSearchService {
@@ -28,6 +26,9 @@ final class SemanticSearchService {
 		private IJobList $jobs,
 		private IConfig $config,
 		private ILockingProvider $locks,
+		private \OCA\ProofingGallery\Db\MediaIndexMapper $mediaIndex,
+		private \OCA\ProofingGallery\Db\CollectionRepository $collectionRows,
+		private MediaIndexService $indexedMedia,
 	) {
 	}
 
@@ -58,20 +59,30 @@ final class SemanticSearchService {
 			$this->markFailed($galleryId, $generation, 'provider_configuration_changed');
 			return ['indexed' => 0, 'failed' => 1, 'total' => 0, 'complete' => false];
 		}
+		// Continuations queued by the previous traversal restart against the new snapshot.
+		if ($this->config->getAppValue(Application::APP_ID, 'semantic.snapshot.' . $galleryId, '') !== $generation) $offset = 0;
 		try {
-			$files = $this->media($gallery);
-		} catch (\Throwable $exception) {
-			$this->retry($galleryId, $generation, $provider, $model, $offset, $attempt, $exception);
+			if (!$this->ensureSnapshot($gallery, $generation)) {
+				$this->queue($galleryId, $generation, $provider, $model, 0, 0, $this->clock->getTime() + 30);
+				return ['indexed' => 0, 'failed' => 0, 'total' => 0, 'complete' => false];
+			}
+		} catch (\Throwable $error) {
+			$this->retry($galleryId, $generation, $provider, $model, 0, $attempt, $error);
 			return ['indexed' => 0, 'failed' => 1, 'total' => 0, 'complete' => false];
 		}
-		$total = count($files);
-		$batch = array_slice($files, $offset, $this->policies->get('semanticBatchSize'));
+		$total = $this->repository->candidateCount($galleryId, $generation);
+		$batch = $this->repository->candidates($galleryId, $generation, $offset, $this->policies->get('semanticBatchSize'));
 		$indexed = 0;
-		foreach ($batch as $file) {
+		foreach ($batch as $fileId) {
 			try {
+				$file = $gallery->getSourceType() === 'collection' ? $this->collections->resolveMedia($gallery, $fileId) : $this->folders->resolveMedia($gallery->getOwnerUid(), $gallery->getFolderId(), $fileId);
+				if (!$this->inScope($file)) continue;
 				$embedding = $this->provider->media($file);
+				if (!$this->isPending($galleryId, $generation)) return ['indexed' => $indexed, 'failed' => 0, 'total' => $total, 'complete' => true];
 				$this->repository->upsert($galleryId, (int)$file->getId(), $file->getEtag(), $embedding['provider'], $embedding['model'], $generation, $embedding['vector'], $embedding['concepts'], $this->clock->getTime());
 				$indexed++;
+			} catch (\OCP\Files\NotFoundException|\OCA\ProofingGallery\Exception\FolderAccessException|\OCP\AppFramework\Db\DoesNotExistException) {
+				// Removed or unreadable members cannot become search results.
 			} catch (\Throwable $exception) {
 				$this->retry($galleryId, $generation, $provider, $model, $offset, $attempt, $exception);
 				return ['indexed' => $indexed, 'failed' => 1, 'total' => $total, 'complete' => false];
@@ -111,7 +122,7 @@ final class SemanticSearchService {
 
 	public function delete(Gallery $gallery): int {
 		$galleryId = (int)$gallery->getId();
-		foreach ([$this->activeKey($galleryId), $this->pendingKey($galleryId), $this->errorKey($galleryId)] as $key) {
+		foreach ([$this->activeKey($galleryId), $this->pendingKey($galleryId), $this->errorKey($galleryId), 'semantic.snapshot.' . $galleryId] as $key) {
 			$this->config->deleteAppValue(Application::APP_ID, $key);
 		}
 		return $this->repository->deleteGallery($galleryId);
@@ -170,6 +181,7 @@ final class SemanticSearchService {
 		else $this->jobs->scheduleAfter(IndexSemanticGalleryJob::class, $runAfter, $argument);
 	}
 
+	/** @phpstan-impure Configuration may change while an embedding request is in flight. */
 	private function isPending(int $galleryId, string $generation): bool {
 		return $generation !== '' && hash_equals($generation, $this->config->getAppValue(Application::APP_ID, $this->pendingKey($galleryId), ''));
 	}
@@ -183,35 +195,41 @@ final class SemanticSearchService {
 		return strtolower(trim(preg_replace('/[^a-z0-9_]+/i', '_', $exception->getMessage()) ?: 'index_failed', '_'));
 	}
 
-	/** @return list<File> */
-	private function media(Gallery $gallery): array {
-		$limit = $this->policies->get('maxSemanticMedia');
-		if ($gallery->getSourceType() === 'collection') {
-			$files = [];
-			foreach ($this->collections->availableItems($gallery) as $item) {
-				try {
-					$files[] = $this->collections->resolveMedia($gallery, (int)$item['id']);
-				} catch (\Throwable) {
+	private function ensureSnapshot(Gallery $gallery, string $generation): bool {
+		$id = (int)$gallery->getId();
+		$lock = $this->lockPath($id);
+		$this->locks->acquireLock($lock, ILockingProvider::LOCK_EXCLUSIVE, 'Proofing Gallery search candidates');
+		try {
+			if (!$this->isPending($id, $generation)) return false;
+			if ($this->config->getAppValue(Application::APP_ID, 'semantic.snapshot.' . $id, '') === $generation) return true;
+			if ($gallery->getSourceType() !== 'collection') {
+				$summary = $this->indexedMedia->summary($gallery, '', '', 'none', 1);
+				if (!$summary['complete'] && $summary['state'] !== 'limit_reached') {
+					if ($summary['state'] !== 'running') $this->indexedMedia->rebuild($gallery);
+					return false;
 				}
-				if (count($files) >= $limit) break;
 			}
-			return array_values(array_filter($files, fn (File $file): bool => $this->inScope($file)));
+			$this->repository->snapshot($id, $generation, $this->candidateIds($gallery), $this->policies->get('maxSemanticMedia'));
+			$this->config->setAppValue(Application::APP_ID, 'semantic.snapshot.' . $id, $generation);
+			return true;
+		} finally { $this->locks->releaseLock($lock, ILockingProvider::LOCK_EXCLUSIVE); }
+	}
+
+	/** @return \Generator<int, int> */
+	private function candidateIds(Gallery $gallery): \Generator {
+		$after = 0;
+		if ($gallery->getSourceType() === 'collection') {
+			do {
+				$rows = $this->collectionRows->page((int)$gallery->getId(), $after, 1000);
+				foreach ($rows as $row) { $after = (int)$row['id']; yield (int)$row['file_id']; }
+			} while (count($rows) === 1000);
+			return;
 		}
-		$root = $this->folders->resolveFolder($gallery->getOwnerUid(), $gallery->getFolderId());
-		$storage = $root->getStorage()->getId();
-		$files = [];
-		$pending = [$root];
-		while ($pending !== [] && count($files) < $limit) {
-			$folder = array_pop($pending);
-			foreach ($folder->getDirectoryListing() as $node) {
-				if (!$node->isReadable() || $node->getStorage()->getId() !== $storage || str_starts_with($node->getName(), '.')) continue;
-				if ($node instanceof Folder) $pending[] = $node;
-				elseif ($node instanceof File && $this->inScope($node)) $files[] = $node;
-				if (count($files) >= $limit) break;
-			}
-		}
-		usort($files, static fn (File $left, File $right): int => $left->getId() <=> $right->getId());
-		return $files;
+		$query = \OCA\ProofingGallery\Dto\MediaIndexQuery::fromInput((int)$gallery->getId(), $gallery->getOwnerUid(), 1, '', '', 'name', 'asc', 0);
+		do {
+			$rows = $this->mediaIndex->groupingRows($query, $after, 1000);
+			foreach ($rows as $row) { $after = $row['file_id']; yield $after; }
+		} while (count($rows) === 1000);
 	}
 
 	private function inScope(File $file): bool {

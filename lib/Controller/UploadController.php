@@ -115,6 +115,8 @@ final class UploadController extends ResolvedPublicShareController {
 		}
 		try {
 			return new JSONResponse($callback($guest), $status);
+		} catch (DoesNotExistException) {
+			return new JSONResponse(['code' => 'upload_not_found', 'message' => 'Upload not found'], Http::STATUS_NOT_FOUND);
 		} catch (PolicyViolationException $exception) {
 			return new JSONResponse(['code' => $exception->policyCode, 'message' => $exception->getMessage()], Http::STATUS_FORBIDDEN);
 		} catch (UploadBusyException|LockedException $exception) {

@@ -40,6 +40,8 @@ final class UploadLockService {
 	 * @return T
 	 */
 	private function withLock(string $path, string $readablePath, callable $callback, bool $wait): mixed {
+		// Nextcloud's database lock key is limited to 64 bytes.
+		$path = hash('sha256', $path);
 		$deadline = hrtime(true) + self::WAIT_TIMEOUT_MICROSECONDS * 1000;
 		$delay = self::INITIAL_DELAY_MICROSECONDS;
 		while (true) {

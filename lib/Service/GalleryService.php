@@ -103,6 +103,10 @@ final class GalleryService {
 		return $this->access->view($userId, $id);
 	}
 
+	public function edit(string $userId, int $id): Gallery {
+		return $this->access->edit($userId, $id);
+	}
+
 	/** @return array<string, mixed> */
 	public function present(string $userId, Gallery $gallery): array {
 		return $this->read->present($userId, $gallery);

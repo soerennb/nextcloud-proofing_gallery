@@ -177,8 +177,9 @@ final class MediaIndexService {
 		string $sortDirection = 'asc',
 		int $minOwnerRating = 0,
 		int $offset = 0,
+		\OCA\ProofingGallery\Dto\CullingFilter $culling = new \OCA\ProofingGallery\Dto\CullingFilter(),
 	): array {
-		$query = MediaIndexQuery::fromInput($gallery->getId(), $gallery->getOwnerUid(), $limit, $pathPrefix, $search, $sortBy, $sortDirection, $minOwnerRating, $this->sorts->revision((int)$gallery->getId()));
+		$query = MediaIndexQuery::fromInput($gallery->getId(), $gallery->getOwnerUid(), $limit, $pathPrefix, $search, $sortBy, $sortDirection, $minOwnerRating, $this->sorts->revision((int)$gallery->getId()), $culling);
 		$pageQuery = $query->withLimit($query->limit + 1);
 		[$afterValue, $afterFileId, $cursorDirection] = $this->cursors->decode($cursor, $query);
 		$before = $cursorDirection === 'previous';
@@ -212,23 +213,21 @@ final class MediaIndexService {
 		];
 	}
 
-	/** @return ?list<array{file_id: int, relative_path: string, mime_type: string}> */
-	public function downloadableRows(Gallery $gallery, string $pathPrefix, int $minOwnerRating): ?array {
+	/** @return ?iterable<array{file_id: int, relative_path: string, mime_type: string}> */
+	public function downloadableRows(Gallery $gallery, string $pathPrefix, int $minOwnerRating): ?iterable {
 		$summary = $this->summary($gallery, $pathPrefix, '', 'none', 1, $minOwnerRating);
 		if (!$summary['complete']) return null;
-		$query = MediaIndexQuery::fromInput(
-			$gallery->getId(), $gallery->getOwnerUid(), 1, $pathPrefix, '', 'name', 'asc', $minOwnerRating,
-		);
-		$rows = [];
-		$afterFileId = 0;
+		$query = MediaIndexQuery::fromInput((int)$gallery->getId(), $gallery->getOwnerUid(), 1, $pathPrefix, '', 'name', 'asc', $minOwnerRating);
+		return $this->downloadBatches($query);
+	}
+
+	/** @return \Generator<int, array{file_id: int, relative_path: string, mime_type: string}> */
+	private function downloadBatches(MediaIndexQuery $query): \Generator {
+		$after = 0;
 		do {
-			$batch = $this->index->groupingRows($query, $afterFileId, 1000);
-			foreach ($batch as $row) {
-				$rows[] = $row;
-				$afterFileId = $row['file_id'];
-			}
+			$batch = $this->index->groupingRows($query, $after, 1000);
+			foreach ($batch as $row) { $after = $row['file_id']; yield $row; }
 		} while (count($batch) === 1000);
-		return $rows;
 	}
 
 	public function positionOf(

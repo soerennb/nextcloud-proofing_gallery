@@ -19,7 +19,7 @@ final class FolderMediaReader {
 
 	/** @return array{items: list<Node>, after: int, examined: int, done: bool} */
 	public function page(Folder $root, string $path, int $after, int $limit): array {
-		if (preg_match('~(^|/)\.~', $path)) return ['items' => [], 'after' => $after, 'examined' => 0, 'done' => true];
+		if (!MediaTypePolicy::visiblePath($path)) return ['items' => [], 'after' => $after, 'examined' => 0, 'done' => true];
 		$node = $path === '' ? $root : $root->get($path);
 		if (!$node->isReadable() || ($node !== $root && !$root->isSubNode($node))) return ['items' => [], 'after' => $after, 'examined' => 0, 'done' => true];
 		if ($node instanceof File) return ['items' => $this->types->supports($node) && $after === 0 ? [$node] : [], 'after' => (int)$node->getId(), 'examined' => 1, 'done' => true];
@@ -55,8 +55,7 @@ final class FolderMediaReader {
 	}
 
 	public function isVisibleMedia(Folder $root, File $file): bool {
-		return $file->isReadable() && $root->isSubNode($file) && $this->types->supports($file)
-			&& !preg_match('~(^|/)\.~', $this->relativePath($root, $file));
+		return $this->types->visibleFile($root, $file);
 	}
 
 	/** Readiness checks stop at the first file and never enumerate an entire directory. */

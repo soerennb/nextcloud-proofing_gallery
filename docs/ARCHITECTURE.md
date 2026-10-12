@@ -78,8 +78,12 @@ browser session. Missing or moved source files remain in the owner document as
 unavailable references, but are omitted from all guest delivery paths.
 
 Original media is never copied into app tables. Derived watermarked previews and
-resumable upload chunks live in Nextcloud appdata. Accepted uploads move into
-the source folder through the Files API.
+resumable upload chunks and unapproved guest payloads live in private Nextcloud
+appdata. A guest upload keeps a durable completion receipt; retries return that
+receipt even after its chunks are removed. Acceptance stages a file with a stable
+ID and records the decision and activity atomically. Interrupted acceptance
+reconciles the same file before removing its private payload. The upgrade repair
+moves legacy inbox files out of native share roots before public delivery resumes.
 
 Optional Live Push credentials are random, stored only as SHA-256 hashes, and
 scoped to one folder gallery plus destination path. The app exposes one bounded,
@@ -120,6 +124,13 @@ progress. A failed write cannot skip a file on retry. `FolderMediaReader`
 resolves each directory through the owner's file tree and its current storage,
 including nested mounts. The 500-entry budget includes examined cache rows and
 folder traversal, and duplicate mounted file identities count only once.
+
+Public pages use separate collection, indexed and folder readers, a typed page
+result and one wire presenter. Each request resolves public roots once into an
+immutable scope shared by media and feedback projections. Owner culling filters
+are part of the database query and cursor scope, before counting and pagination.
+Semantic indexing freezes candidate IDs once per generation and reads bounded
+position batches; membership cannot shift between continuation jobs.
 
 Public-link policies and download scopes are typed value objects in PHP while
 their persisted and HTTP representations remain the existing JSON strings. A

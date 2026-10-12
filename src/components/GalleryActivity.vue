@@ -16,7 +16,8 @@ import type {GalleryActivity, InboxUpload} from '../services/galleryApi.ts'
 const props = withDefaults(defineProps<{
 	galleryId: number
 	mode?: 'inbox' | 'activity' | 'both'
-}>(), { mode: 'both' })
+	editable?: boolean
+}>(), { mode: 'both', editable: false })
 const uploads = ref<InboxUpload[]>([])
 const events = ref<GalleryActivity[]>([])
 const loading = ref(true)
@@ -164,13 +165,13 @@ onMounted(load)
 							· {{ formatBytes(upload.size) }}
 						</span>
 					</div>
-					<NcButton
+					<NcButton v-if="editable"
 						variant="error"
 						:disabled="busyUpload === upload.upload_id"
 						@click="reject(upload)">
 						{{ t('proofing_gallery', 'Delete') }}
 					</NcButton>
-					<NcButton
+					<NcButton v-if="editable"
 						variant="primary"
 						:disabled="busyUpload === upload.upload_id"
 						@click="accept(upload)">

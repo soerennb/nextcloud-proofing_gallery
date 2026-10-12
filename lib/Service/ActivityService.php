@@ -12,26 +12,36 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IUserManager;
 
 final class ActivityService {
+	use \OCP\AppFramework\Db\TTransactional;
 	public function __construct(
 		private ActivityRepository $repository,
 		private ITimeFactory $clock,
 		private NotificationService $notifications,
 		private IUserManager $users,
+		private IntegrationEventService $integrations,
+		private \OCP\IDBConnection $db,
 	) {
 	}
 
 	/** @param array<string, mixed> $payload */
 	public function recordActor(Gallery $gallery, CollaborationActor $actor, string $type, array $payload): void {
-		$now = $this->clock->getTime();
-		$eventId = $this->repository->insert($gallery->getId(), $actor->guestId(), $type, $payload, $now, $actor->userUid());
-		$this->notifications->queue($gallery, $eventId, $type, $now);
+		$this->stage($gallery, $actor->guestId(), $actor->userUid(), $type, $payload);
 	}
 
 	/** @param array<string, mixed> $payload */
 	public function record(Gallery $gallery, ?Guest $guest, string $type, array $payload): void {
-		$now = $this->clock->getTime();
-		$eventId = $this->repository->insert($gallery->getId(), $guest?->getId(), $type, $payload, $now);
-		$this->notifications->queue($gallery, $eventId, $type, $now);
+		$this->stage($gallery, $guest?->getId(), null, $type, $payload);
+	}
+
+	/** Activity, notification rows and the publication receipt share the caller's transaction.
+	 * @param array<string, mixed> $payload */
+	private function stage(Gallery $gallery, ?int $guestId, ?string $userUid, string $type, array $payload): void {
+		$this->atomic(function () use ($gallery, $guestId, $userUid, $type, $payload): void {
+			$now = $this->clock->getTime();
+			$eventId = $this->repository->insert($gallery->getId(), $guestId, $type, $payload, $now, $userUid);
+			$staged = $this->notifications->stage($gallery, $eventId, $type, $now);
+			$this->integrations->emit('activity.staged', (int)$gallery->getId(), ['type' => $type, 'createdAt' => $now, ...$staged]);
+		}, $this->db);
 	}
 
 	/** @param array<string, mixed> $payload */

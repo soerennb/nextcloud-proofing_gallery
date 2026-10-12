@@ -6,12 +6,14 @@ import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwit
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
+import { requestLifetime } from '../services/requestLifetime.ts'
 import { downloadEventBlob, eventWaveLabel as waveLabel } from '../domain/eventDeliveryPresentation.ts'
 import { createDefaultGallerySettings } from '../domain/gallerySettings.ts'
 import type { GallerySettings } from '../domain/gallerySettings.ts'
 import { applyEventDownloadPolicy, cancelEventWave, deliverEventSetup, downloadEventPins, downloadEventStatus, fetchEventOperations, fetchEventSetup, previewEventImport, reconcileEventRecipients, releaseEventWave, retryEventWave, saveEventSetup } from '../services/eventApi.ts'
 import type { EventFolderPreview, EventFolderRole, EventImportPreview, EventOperations, EventSetup, EventSetupRecipient, EventSetupStep, EventWave } from '../services/eventApi.ts'
-import { ensureGalleryFolders, prepareOwnerUploadSessions, uploadGalleryMedia } from '../services/galleryApi.ts'
+import { useOwnerUploadQueue } from '../composables/useOwnerUploadQueue.ts'
+import { ensureGalleryFolders } from '../services/galleryApi.ts'
 import type { Gallery } from '../types.ts'
 import DownloadPolicyFields from './DownloadPolicyFields.vue'
 import EventRecipientLedger from './EventRecipientLedger.vue'
@@ -28,8 +30,8 @@ const activeStep = ref<EventSetupStep>('photos')
 const loading = ref(true)
 const saving = ref(false)
 const delivering = ref(false)
-const uploading = ref(false)
-const uploadProgress = ref({ completed: 0, total: 0, current: '' })
+const { uploading, uploadQueue, uploadEntries } = useOwnerUploadQueue({ gallery: () => props.gallery, path: () => '', changed: () => {}, reload: async () => { if (!disposed) await refreshFolders() } })
+const uploadProgress = computed(() => ({ completed: uploadQueue.value.filter(item => ['done', 'skipped'].includes(item.state)).length, total: uploadQueue.value.length, current: uploadQueue.value.find(item => item.state === 'uploading')?.file.name ?? '' }))
 const draggingDirectory = ref(false)
 const importPreview = ref<EventImportPreview | null>(null)
 const importMatchMode = ref<'exact' | 'prefix'>('exact')
@@ -38,6 +40,8 @@ const selectedFolderIds = ref<number[]>([]); const bulkRole = ref<EventFolderRol
 const pinPage = ref(0)
 const operations = ref<EventOperations | null>(null)
 const operationBusy = ref(false)
+const operationRequests = requestLifetime()
+let disposed = false
 let pollTimer: ReturnType<typeof setTimeout> | undefined
 
 const steps: Array<{ id: EventSetupStep; label: string; shortLabel: string; description: string }> = [
@@ -70,7 +74,9 @@ const readinessLabels: Record<string, string> = {
 async function load() {
 	loading.value = true
 	try {
-		setup.value = await fetchEventSetup(props.gallery.id)
+		const loaded = await fetchEventSetup(props.gallery.id)
+		if (disposed) return
+		setup.value = loaded
 		emit('setup-updated', setup.value)
 		activeStep.value = setup.value.currentStep
 		if (setup.value.revision === 0) applySuggestions()
@@ -79,8 +85,12 @@ async function load() {
 }
 
 async function loadOperations() {
+	if (disposed) return
+	const request = operationRequests.begin()
 	try {
-		operations.value = await fetchEventOperations(props.gallery.id)
+		const result = await fetchEventOperations(props.gallery.id, request.signal)
+		if (!request.current()) return
+		operations.value = result
 		schedulePolling()
 	} catch {
 		// Setup remains usable when operational history cannot be loaded.
@@ -194,6 +204,7 @@ async function repairLinks() {
 }
 
 function schedulePolling() {
+	if (disposed) return
 	if (pollTimer) clearTimeout(pollTimer)
 	if (!operations.value?.waves.some(wave => ['scheduled', 'releasing'].includes(wave.status))) return
 	pollTimer = setTimeout(() => { loadOperations().catch(() => {}) }, 2000)
@@ -209,8 +220,7 @@ async function uploadDirectory(event: Event) {
 async function uploadFiles(sourceFiles: File[]) {
 	const files = sourceFiles.filter(file => file.type.startsWith('image/') || file.type.startsWith('video/'))
 	if (!files.length) return
-	uploading.value = true
-	uploadProgress.value = { completed: 0, total: files.length, current: '' }
+
 	try {
 		if (setup.value?.revision !== undefined) await persist('photos')
 		const entries = files.map(file => {
@@ -219,20 +229,10 @@ async function uploadFiles(sourceFiles: File[]) {
 			return { file, path }
 		})
 		const folders = [...new Set(entries.map(entry => entry.path).filter(Boolean))]
-		for (let index = 0; index < folders.length; index += 1000) await ensureGalleryFolders(props.gallery.id, folders.slice(index, index + 1000))
-		for (let index = 0; index < entries.length; index += 500) {
-			const batch = entries.slice(index, index + 500)
-			const sessions = await prepareOwnerUploadSessions(props.gallery.id, batch.map(entry => ({ ...entry, resolution: { conflict: 'rename' as const } })))
-			for (let item = 0; item < batch.length; item++) {
-				uploadProgress.value.current = batch[item].file.name
-				await uploadGalleryMedia(props.gallery.id, batch[item].file, batch[item].path, undefined, { conflict: 'rename' }, undefined, sessions[item])
-				uploadProgress.value.completed++
-			}
-		}
-		setup.value = await fetchEventSetup(props.gallery.id)
-		applyNewSuggestions()
-		showSuccess(t('proofing_gallery', '{count} event photos uploaded with their folder structure.', { count: files.length }))
-	} catch { showError(t('proofing_gallery', 'The event folder upload stopped. Selecting the folder again resumes completed upload sessions.')) } finally { uploading.value = false }
+		for (let index = 0; index < folders.length && !disposed; index += 1000) await ensureGalleryFolders(props.gallery.id, folders.slice(index, index + 1000))
+		if (disposed) return
+		await uploadEntries(entries.map(entry => ({ ...entry, resolution: { conflict: 'rename' } })))
+	} catch { showError(t('proofing_gallery', 'The event folder upload stopped. Selecting the folder again resumes completed upload sessions.')) }
 }
 
 interface DroppedFileEntry { isFile: boolean; isDirectory: boolean; name: string; file: (success: (file: File) => void, error?: (error: DOMException) => void) => void }
@@ -348,7 +348,7 @@ function stepState(step: EventSetupStep): 'current' | 'complete' | 'open' {
 watch([visibilityQuery, visibilityRole], () => { visibilityPage.value = 0; selectedFolderIds.value = [] })
 watch(() => filteredVisibilityFolders.value.length, total => { visibilityPage.value = Math.min(visibilityPage.value, pageCount(total) - 1) })
 onMounted(load)
-onBeforeUnmount(() => { if (pollTimer) clearTimeout(pollTimer) })
+onBeforeUnmount(() => { disposed = true; operationRequests.dispose(); clearTimeout(pollTimer) })
 </script>
 
 <template>

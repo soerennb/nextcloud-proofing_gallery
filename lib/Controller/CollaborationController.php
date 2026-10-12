@@ -37,6 +37,7 @@ final class CollaborationController extends ResolvedPublicShareController {
 		private \OCA\ProofingGallery\Service\PublicMediaResolver $publicMedia,
 		private GuestService $guests,
 		private CollaborationService $collaboration,
+		private \OCA\ProofingGallery\Service\PublicCollaborationProjection $publicState,
 		private \OCA\ProofingGallery\Service\GuestRatingService $guestRatings,
 		private \OCA\ProofingGallery\Service\FeedbackPolicyService $feedback,
 		private \OCA\ProofingGallery\Service\ShareAuditService $shareAudit,
@@ -51,64 +52,11 @@ final class CollaborationController extends ResolvedPublicShareController {
 	public function state(int $cursor = 0, string $fileIds = ''): JSONResponse {
 		try {
 			$visibleFileIds = $this->parseVisibleFileIds($cursor, $fileIds);
-			$state = $this->collaboration->publicState($this->resolvedGallery(), $this->optionalActor(), $cursor, $visibleFileIds);
+			$state = $this->publicState->state($this->publicContext(), $this->optionalActor(), $cursor, $visibleFileIds);
 		} catch (InvalidArgumentException $exception) {
 			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);
 		}
-		if (($state['unchanged'] ?? false) === true) return new JSONResponse($state);
-		$features = $this->feedback->effective($this->publicContext()->settings, $this->publicContext()->policy);
-		$ratingEnabled = $this->ratingEnabled();
-		$state['policy']['features'] = $features;
-		$state['policy']['enabled'] = in_array(true, $features, true);
-		$state['likes'] = $features['likes']
-			? array_filter($state['likes'], fn (mixed $_, int $fileId): bool => $this->allowsFile($fileId), ARRAY_FILTER_USE_BOTH)
-			: [];
-		$state['colors'] = $features['colors']
-			? array_filter($state['colors'], fn (mixed $_, int $fileId): bool => $this->allowsFile($fileId), ARRAY_FILTER_USE_BOTH)
-			: [];
-		$state['colorStates'] = $features['colors']
-			? array_filter($state['colorStates'], fn (mixed $_, int $fileId): bool => $this->allowsFile($fileId), ARRAY_FILTER_USE_BOTH)
-			: [];
-		$state['comments'] = $features['comments']
-			? array_values(array_filter($state['comments'], fn (array $comment): bool => $this->allowsFile((int)$comment['fileId'])))
-			: [];
-		if (!$features['annotations']) {
-			foreach ($state['comments'] as &$comment) $comment['annotations'] = [];
-			unset($comment);
-		}
-		$state['selections'] = $features['selections'] ? array_values(array_filter(array_map(function (array $selection): array {
-			$selection['fileIds'] = array_values(array_filter($selection['fileIds'], fn (int $fileId): bool => $this->allowsFile($fileId)));
-			return $selection;
-		}, $state['selections']), static fn (array $selection): bool => $selection['fileIds'] !== [])) : [];
-		$visibleSelectionIds = array_fill_keys(array_column($state['selections'], 'id'), true);
-		$state['events'] = array_values(array_filter($state['events'], function (array $event) use ($features, $ratingEnabled, $visibleSelectionIds): bool {
-			$type = (string)($event['type'] ?? '');
-			$family = strtok($type, '.');
-			$feature = match ($family) {
-				'like' => 'likes', 'color' => 'colors', 'comment' => 'comments', 'selection' => 'selections',
-				default => null,
-			};
-			if ($family === 'rating' && !$ratingEnabled) return false;
-			if ($feature !== null && !$features[$feature]) return false;
-			if (isset($event['payload']['fileId']) && !$this->allowsFile((int)$event['payload']['fileId'])) return false;
-			if ($feature === 'selections' && isset($event['payload']['selectionId'])) {
-				if ($type === 'selection.deleted') return true;
-				return isset($visibleSelectionIds[(string)$event['payload']['selectionId']]);
-			}
-			return true;
-		}));
-		$actor = $this->optionalActor();
-		$state['ratings'] = $actor === null || !$ratingEnabled
-			? []
-			: array_values(array_map(
-				static fn ($rating): array => $rating->jsonSerialize(),
-				array_filter(
-					$visibleFileIds === []
-						? $this->guestRatings->forActor($this->resolvedGallery()->getId(), $actor)
-						: $this->guestRatings->forActorFiles($this->resolvedGallery()->getId(), $actor, $visibleFileIds),
-					fn ($rating): bool => $this->allowsFile($rating->getFileId()),
-				),
-			));
+
 		return new JSONResponse($state);
 	}
 
