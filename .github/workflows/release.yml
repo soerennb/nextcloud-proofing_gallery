@@ -210,7 +210,7 @@ jobs:
           cp ../../../release-inputs/RELEASE_NOTES.md RELEASE_NOTES.md
           sha256sum proofing_gallery.tar.gz > SHA256SUMS
       - name: Generate SPDX SBOM
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           file: build/artifacts/appstore/proofing_gallery.tar.gz
           format: spdx-json
