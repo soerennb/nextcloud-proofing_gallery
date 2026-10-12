@@ -145,6 +145,20 @@ final class MediaIndexMapper extends QBMapper {
 		return (int)$qb->executeQuery()->fetchOne();
 	}
 
+	/**
+	 * @param list<int> $fileIds
+	 * @return list<int>
+	 */
+	public function indexedFileIds(int $galleryId, string $generation, array $fileIds): array {
+		if ($fileIds === []) return [];
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('file_id')->from($this->tableName)
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('scan_generation', $qb->createNamedParameter($generation)))
+			->andWhere($qb->expr()->in('file_id', $qb->createNamedParameter($fileIds, IQueryBuilder::PARAM_INT_ARRAY)));
+		return array_map('intval', QueryResult::column($qb->executeQuery()));
+	}
+
 	public function lastSeenAt(int $galleryId): ?int {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select($qb->func()->max('seen_at'))->from($this->tableName)

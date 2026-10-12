@@ -22,14 +22,15 @@ function storedPreference(): PublicAppearancePreference | null {
 	}
 }
 
-export function usePublicAppearance(configuredTheme: Ref<'auto' | 'light' | 'dark'>, accentColor: Ref<string>) {
-	const visitorPreference = ref<PublicAppearancePreference | null>(storedPreference())
+export function usePublicAppearance(configuredTheme: Ref<'auto' | 'light' | 'dark'>, accentColor: Ref<string>, persistent = true) {
+	const visitorPreference = ref<PublicAppearancePreference | null>(persistent ? storedPreference() : null)
 	const systemDark = ref(false)
 	const media = window.matchMedia('(prefers-color-scheme: dark)')
 	const effectiveTheme = computed<PublicEffectiveTheme>(() => resolvePublicTheme(visitorPreference.value, configuredTheme.value, systemDark.value))
 
 	function setVisitorPreference(preference: PublicAppearancePreference | null) {
 		visitorPreference.value = preference
+		if (!persistent) return
 		try {
 			if (preference === null) localStorage.removeItem(PUBLIC_APPEARANCE_STORAGE_KEY)
 			else localStorage.setItem(PUBLIC_APPEARANCE_STORAGE_KEY, preference)

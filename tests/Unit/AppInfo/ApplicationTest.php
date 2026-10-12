@@ -40,7 +40,7 @@ final class ApplicationTest extends TestCase {
 		/** @var array<class-string, callable(ContainerInterface): object> $factories */
 		$factories = [];
 		$context = $this->createMock(IRegistrationContext::class);
-		$context->expects(self::exactly(2))
+		$context->expects(self::exactly(3))
 			->method('registerService')
 			->willReturnCallback(static function (string $name, callable $factory) use (&$factories): void {
 				$factories[$name] = $factory;

@@ -46,9 +46,14 @@ final class MediaSummaryService {
 	}
 
 	public function invalidate(int $galleryId): void {
+		$this->invalidateMany([$galleryId]);
+	}
+
+	/** @param list<int> $galleryIds */
+	public function invalidateMany(array $galleryIds): void {
 		try {
-			$this->repository->delete($galleryId);
-			$this->counts->invalidate($galleryId);
+			foreach (array_chunk($galleryIds, 500) as $batch) $this->repository->deleteMany($batch);
+			$this->counts->invalidateMany($galleryIds);
 		} catch (Throwable $exception) {
 			// A stale row is harmless because folder ID and ETag are revalidated.
 			$this->logger->warning('Gallery summary cache could not be invalidated', ['exception' => $exception]);

@@ -21,6 +21,10 @@ final class RebuildGalleryMediaCountsJob extends QueuedJob {
 
 	/** @param mixed $argument */
 	protected function run($argument): void {
+		if (isset($argument['galleryIds'])) {
+			foreach ($argument['galleryIds'] as $id) $this->jobs->add(self::class, ['galleryId' => (int)$id]);
+			return;
+		}
 		$id = (int)($argument['galleryId'] ?? 0);
 		if ($id < 1) return;
 		try {

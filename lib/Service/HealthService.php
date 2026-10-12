@@ -36,6 +36,7 @@ final class HealthService {
 		private BackgroundMaintenanceHealthService $maintenance,
 		private \OCA\ProofingGallery\Db\MediaSortRepository $mediaSorts,
 		private \OCA\ProofingGallery\Db\GalleryMediaCountRepository $mediaCounts,
+		private \OCA\ProofingGallery\Db\AgentRequestRepository $agentRequests,
 	) {
 	}
 
@@ -61,6 +62,7 @@ final class HealthService {
 			'integrations' => [
 				'apps' => $this->integrationApps(),
 				'outbox' => $this->integrationOutbox->health(),
+				'agentRequests' => $this->agentRequests->health(),
 			],
 		];
 	}
@@ -104,7 +106,7 @@ final class HealthService {
 			'video' => $this->videoDerivatives->health(),
 			'semantic' => $this->semanticIndex->health(),
 			'livePush' => $this->livePush->health(),
-			'integrations' => ['outbox' => $this->integrationOutbox->health()],
+			'integrations' => ['outbox' => $this->integrationOutbox->health(), 'agentRequests' => $this->agentRequests->health()],
 			'reviews' => $this->reviewRounds->health(gmdate('Y-m-d')),
 			'mediaIndex' => $this->mediaIndexHealth(),
 			'mediaCounts' => $this->mediaCounts->health(time()),

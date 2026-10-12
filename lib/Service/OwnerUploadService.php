@@ -267,17 +267,19 @@ final class OwnerUploadService {
 		$stagingFileId = (int)($manifest['stagingFileId'] ?? 0);
 		$stagingName = (string)($manifest['stagingName'] ?? '');
 		if ($stagingFileId < 1 || $stagingName === '') throw new InvalidArgumentException('Staged upload is unavailable');
-		$item = $this->folders->commitStagedMedia(
+		$this->folders->commitStagedMedia(
 			(string)$manifest['ownerUid'], (int)$manifest['folderId'], (string)$manifest['path'], (string)$manifest['filename'],
 			$stagingFileId, $stagingName, (string)$manifest['conflict'],
 			isset($manifest['expectedFileId']) ? (int)$manifest['expectedFileId'] : null,
 			isset($manifest['expectedEtag']) && is_string($manifest['expectedEtag']) ? $manifest['expectedEtag'] : null,
+			function (?MediaItem $item) use ($folder, &$manifest): void {
+				$manifest['state'] = 'completed';
+				$manifest['result'] = $item === null ? ['status' => 'skipped'] : ['status' => 'completed', 'item' => $item->jsonSerialize()];
+				$manifest['updatedAt'] = $this->clock->getTime();
+				$this->writeManifest($folder, $manifest);
+			},
 		);
-		$result = $item === null ? ['status' => 'skipped'] : ['status' => 'completed', 'item' => $item->jsonSerialize()];
-		$manifest['state'] = 'completed';
-		$manifest['result'] = $result;
-		$manifest['updatedAt'] = $this->clock->getTime();
-		$this->writeManifest($folder, $manifest);
+		$result = $this->completedResult($manifest);
 		$this->deleteChunks($folder);
 		return $result;
 	}

@@ -52,12 +52,10 @@ final class WebJpegDerivativeService {
 		imagefill($jpeg, 0, 0, $white);
 		imagealphablending($jpeg, true);
 		imagecopy($jpeg, $image, 0, 0, 0, 0, imagesx($image), imagesy($image));
-		imagedestroy($image);
 		imageinterlace($jpeg, true);
 		ob_start();
 		$encoded = imagejpeg($jpeg, null, $config['quality']);
 		$output = (string)ob_get_clean();
-		imagedestroy($jpeg);
 		if (!$encoded || $output === '') throw new \RuntimeException('Web JPEG generation failed');
 		try {
 			return $folder->newFile($name, $output);
@@ -79,10 +77,8 @@ final class WebJpegDerivativeService {
 		if ($scale >= 1) return $source;
 		$target = imagescale($source, max(1, (int)round($width * $scale)), max(1, (int)round($height * $scale)), IMG_BICUBIC_FIXED);
 		if (!$target instanceof \GdImage) {
-			imagedestroy($source);
 			throw new \RuntimeException('Web JPEG resize failed');
 		}
-		imagedestroy($source);
 		return $target;
 	}
 

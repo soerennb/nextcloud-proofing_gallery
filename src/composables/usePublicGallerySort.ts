@@ -37,13 +37,13 @@ export function matchesInitialGalleryPage(page: PublicGalleryPage | undefined, l
 		&& location.groupBy === (page.view?.groupBy ?? settings.navigation.groupBy)
 }
 
-export function usePublicGallerySort(token: string, settings: Ref<GallerySettings>, initial: ReturnType<typeof initialPublicGalleryLocation>, apply: () => void, clearContinuation: () => void) {
+export function usePublicGallerySort(token: string, settings: Ref<GallerySettings>, initial: ReturnType<typeof initialPublicGalleryLocation>, apply: () => void, clearContinuation: () => void, persistent = true) {
 	const sortBy = ref(initial.location.sortBy)
 	const sortDirection = ref(initial.location.sortDirection)
 	const sortOverride = ref(initial.override)
 	function clear() {
 		clearContinuation()
-		safelyStore(() => localStorage.removeItem(continuationStorageKey(token)))
+		if (persistent) safelyStore(() => localStorage.removeItem(continuationStorageKey(token)))
 	}
 	function changeSort() { sortOverride.value = true; clear(); apply() }
 	function resetSort() {

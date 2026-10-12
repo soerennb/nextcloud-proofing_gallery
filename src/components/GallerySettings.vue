@@ -3,7 +3,7 @@ import { FilePickerType, getFilePickerBuilder, showError, showSuccess } from '@n
 import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import { AnimatePresence, motion, useReducedMotion } from 'motion-v'
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import AlertCircleIcon from 'vue-material-design-icons/AlertCircle.vue'
 import CheckAllIcon from 'vue-material-design-icons/CheckAll.vue'
 import CheckIcon from 'vue-material-design-icons/Check.vue'
@@ -21,20 +21,20 @@ import type { DesignAsset } from '../services/galleryApi.ts'
 import { fetchEventDesignMedia, fetchEventSetup } from '../services/eventApi.ts'
 import type { EventDesignScope, EventSetup } from '../services/eventApi.ts'
 import type { Gallery, GalleryReadiness, MediaItem, SourceRebindReport } from '../types.ts'
-import CollectionContent from './CollectionContent.vue'
-import CullingWorkspace from './CullingWorkspace.vue'
-import FolderContent from './FolderContent.vue'
+const CollectionContent = defineAsyncComponent(() => import('./CollectionContent.vue'))
+const CullingWorkspace = defineAsyncComponent(() => import('./CullingWorkspace.vue'))
+const FolderContent = defineAsyncComponent(() => import('./FolderContent.vue'))
 import GalleryWorkspaceNavigation from './GalleryWorkspaceNavigation.vue'
-import SharingModal from './SharingModal.vue'
+const SharingModal = defineAsyncComponent(() => import('./SharingModal.vue'))
 import SourceRebindNotice from './SourceRebindNotice.vue'
-import GalleryAutomationWorkspace from './workspaces/GalleryAutomationWorkspace.vue'
-import GalleryDesignWorkspace from './workspaces/GalleryDesignWorkspace.vue'
-import GalleryHistoryWorkspace from './workspaces/GalleryHistoryWorkspace.vue'
-import GalleryOverviewWorkspace from './workspaces/GalleryOverviewWorkspace.vue'
-import GalleryPrivacyWorkspace from './workspaces/GalleryPrivacyWorkspace.vue'
-import GalleryReviewWorkspace from './workspaces/GalleryReviewWorkspace.vue'
-import GalleryShareWorkspace from './workspaces/GalleryShareWorkspace.vue'
-import GalleryTeamWorkspace from './workspaces/GalleryTeamWorkspace.vue'
+const GalleryAutomationWorkspace = defineAsyncComponent(() => import('./workspaces/GalleryAutomationWorkspace.vue'))
+const GalleryDesignWorkspace = defineAsyncComponent(() => import('./workspaces/GalleryDesignWorkspace.vue'))
+const GalleryHistoryWorkspace = defineAsyncComponent(() => import('./workspaces/GalleryHistoryWorkspace.vue'))
+const GalleryOverviewWorkspace = defineAsyncComponent(() => import('./workspaces/GalleryOverviewWorkspace.vue'))
+const GalleryPrivacyWorkspace = defineAsyncComponent(() => import('./workspaces/GalleryPrivacyWorkspace.vue'))
+const GalleryReviewWorkspace = defineAsyncComponent(() => import('./workspaces/GalleryReviewWorkspace.vue'))
+const GalleryShareWorkspace = defineAsyncComponent(() => import('./workspaces/GalleryShareWorkspace.vue'))
+const GalleryTeamWorkspace = defineAsyncComponent(() => import('./workspaces/GalleryTeamWorkspace.vue'))
 
 type SaveState = 'saved' | 'pending' | 'saving' | 'offline' | 'error' | 'conflict' | 'invalid'
 

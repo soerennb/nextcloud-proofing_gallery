@@ -4,16 +4,16 @@ import { ref } from 'vue'
 
 import type { CollaborationState, GuestIdentity } from '../publicTypes.ts'
 
-export function usePublicCollaborationIdentity(token: string) {
+export function usePublicCollaborationIdentity(token: string, persistent = true) {
 	const storageKey = `proofing-gallery-nonce:${token}`
 	const guest = ref<GuestIdentity | null>(null)
 	const collaboration = ref<CollaborationState | null>(null)
 	const hydratedIds = new Set<number>()
-	const nonce = ref(readBrowserStorage('session', storageKey) ?? '')
+	const nonce = ref(persistent ? readBrowserStorage('session', storageKey) ?? '' : '')
 
 	function saveNonce(value: string) {
 		nonce.value = value
-		safelyStore(() => sessionStorage.setItem(storageKey, value))
+		if (persistent) safelyStore(() => sessionStorage.setItem(storageKey, value))
 	}
 
 	function restoreIdentity(value: GuestIdentity, restoredNonce: string) {
@@ -24,7 +24,7 @@ export function usePublicCollaborationIdentity(token: string) {
 	function clearIdentity() {
 		guest.value = null
 		nonce.value = ''
-		safelyStore(() => sessionStorage.removeItem(storageKey))
+		if (persistent) safelyStore(() => sessionStorage.removeItem(storageKey))
 		collaboration.value = null
 		hydratedIds.clear()
 	}

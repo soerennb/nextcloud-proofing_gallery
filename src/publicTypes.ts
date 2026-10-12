@@ -1,6 +1,8 @@
 import type { GallerySettings } from './domain/gallerySettings.ts'
-import type { MediaItem } from './types.ts'
-export type { MediaItem } from './types.ts'
+import type { MediaMetadata, MediaItem as OwnerMediaItem } from './types.ts'
+
+export type PublicMediaMetadata = Pick<MediaMetadata, 'state' | 'capturedAt' | 'camera' | 'lens' | 'focalLength' | 'aperture' | 'exposureTime' | 'iso' | 'width' | 'height' | 'title' | 'description' | 'creator' | 'copyright'>
+export type MediaItem = Omit<OwnerMediaItem, 'metadata'> & { metadata?: PublicMediaMetadata }
 
 export interface PublicGalleryPage {
 	view?: { sortBy: GallerySettings['navigation']['sortBy']; sortDirection: 'asc' | 'desc'; groupBy: 'none' | 'type' | 'folder'; search: string }

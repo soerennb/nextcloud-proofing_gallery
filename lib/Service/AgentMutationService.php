@@ -144,7 +144,12 @@ final class AgentMutationService {
 	 * @return array{data: array<string, mixed>, replayed: bool}
 	 */
 	private function mutate(string $userUid, string $operation, string $requestId, array $payload, callable $callback): array {
-		return $this->idempotency->run($userUid, $operation, $requestId, $payload, $callback);
+		// Native share and filesystem operations may outlive a database rollback.
+		$transactional = str_starts_with($operation, 'gallery.manager.')
+			|| str_starts_with($operation, 'gallery.complete.')
+			|| str_starts_with($operation, 'review.')
+			|| ($operation === 'gallery.create' && ($payload['sourceType'] ?? 'folder') === 'folder');
+		return $this->idempotency->run($userUid, $operation, $requestId, $payload, $callback, $transactional);
 	}
 
 	/**

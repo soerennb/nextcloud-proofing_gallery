@@ -16,6 +16,7 @@ final class IntegrationEventService {
 		private IEventDispatcher $events,
 		private ITimeFactory $clock,
 		private LoggerInterface $logger,
+		private \OCP\IDBConnection $db,
 	) {
 	}
 
@@ -28,6 +29,8 @@ final class IntegrationEventService {
 		$safePayload['eventId'] ??= bin2hex(random_bytes(16));
 		$now = $this->clock->getTime();
 		$id = $this->outbox->enqueue($galleryId, $type, $safePayload, $now);
+		// The periodic dispatcher only observes committed rows.
+		if ($this->db->inTransaction()) return;
 		try {
 			$this->events->dispatchTyped(new GalleryIntegrationEvent($type, $galleryId, $safePayload));
 			$this->outbox->delete($id);

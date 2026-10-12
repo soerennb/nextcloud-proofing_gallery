@@ -30,6 +30,7 @@ final class QueuedJobConstructionTest extends TestCase {
 			[IndexMediaMetadataJob::class],
 			[IndexSemanticGalleryJob::class],
 			[RebuildMediaIndexJob::class],
+			[\OCA\ProofingGallery\BackgroundJob\CleanupMediaReplacementJob::class],
 			[\OCA\ProofingGallery\BackgroundJob\RebuildGalleryMediaCountsJob::class],
 			[\OCA\ProofingGallery\BackgroundJob\BackfillGalleryMediaCountsJob::class],
 			[TranscodeVideoJob::class],

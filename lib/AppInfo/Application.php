@@ -58,6 +58,7 @@ final class Application extends App implements IBootstrap {
 	}
 
 	public function register(IRegistrationContext $context): void {
+		$context->registerService(\OCA\ProofingGallery\Db\AgentRequestStore::class, static fn (ContainerInterface $container): \OCA\ProofingGallery\Db\AgentRequestStore => $container->get(\OCA\ProofingGallery\Db\AgentRequestRepository::class));
 		$context->registerEventListener(\OCP\AppFramework\Http\Events\BeforeTemplateRenderedEvent::class, \OCA\ProofingGallery\Listener\GalleryFaviconListener::class);
 		$context->registerService(CleanupGalleryDataJob::class, static function (ContainerInterface $container): CleanupGalleryDataJob {
 			return new CleanupGalleryDataJob(

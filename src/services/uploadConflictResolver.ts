@@ -7,8 +7,10 @@ import { fetchOwnerUploadConflicts } from './ownerUploadApi.ts'
 import type { UploadResolution } from './ownerUploadApi.ts'
 import { ownerPreviewUrl } from './galleryApi.ts'
 
+export type OwnerUploadTarget = Pick<Gallery, 'id' | 'ownerUid' | 'title'>
+
 export async function resolveOwnerUploadSelection(
-	gallery: Gallery,
+	gallery: OwnerUploadTarget,
 	path: string,
 	files: File[],
 ): Promise<Map<File, UploadResolution> | null> {

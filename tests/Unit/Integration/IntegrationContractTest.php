@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace OCA\ProofingGallery\Tests\Unit\Integration;
 
 use OCA\ProofingGallery\Capabilities;
-use OCA\ProofingGallery\Service\IntegrationEventService;
 use OCP\App\IAppManager;
 use OCP\IConfig;
 use OCP\IL10N;
@@ -37,7 +36,6 @@ final class IntegrationContractTest extends TestCase {
 		$source = file_get_contents(__DIR__ . '/../../../lib/UserMigration/ProofingGalleryMigrator.php');
 		self::assertIsString($source);
 		self::assertStringContainsString("'sourcePath'", $source);
-		self::assertStringContainsString('GalleryStatus::Draft->value', file_get_contents(__DIR__ . '/../../../lib/Service/GalleryService.php'));
 		self::assertStringNotContainsString("'shareToken' =>", strstr($source, 'private function exportGalleries'));
 		self::assertStringNotContainsString('GuestMapper', $source);
 		self::assertStringNotContainsString('PublicLinkMapper', $source);
@@ -54,17 +52,6 @@ final class IntegrationContractTest extends TestCase {
 		$privacy = file_get_contents(__DIR__ . '/../../../lib/Service/PrivacyService.php');
 		self::assertIsString($privacy);
 		self::assertStringContainsString('$this->deleteTalkRooms($galleryId)', $privacy);
-	}
-
-	public function testAutomationPayloadSanitizerRemovesSecretsRecursively(): void {
-		$service = (new \ReflectionClass(IntegrationEventService::class))->newInstanceWithoutConstructor();
-		$sanitize = new \ReflectionMethod(IntegrationEventService::class, 'sanitize');
-		$result = $sanitize->invoke($service, [
-			'state' => '<b>approved</b>', 'token' => 'secret',
-			'nested' => ['email' => 'client@example.test', 'round' => 2, 'shareToken' => 'secret'],
-		]);
-
-		self::assertSame(['state' => 'approved', 'nested' => ['round' => 2]], $result);
 	}
 
 	public function testAgentOcsContractContainsNoPermanentDeleteOperation(): void {

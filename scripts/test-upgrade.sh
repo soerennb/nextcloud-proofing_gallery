@@ -265,6 +265,8 @@ compose exec -T -e PG_BASELINE_HAS_LEGACY_REPAIR="${baseline_has_legacy_repair}"
 
 compose exec -T --user www-data "${service}" php /dev/stdin seed < "${repo_dir}/tests/smoke/UpgradeCollaboration.php"
 compose exec -T -e PG_FEEDBACK_ADMIN_CHOICE="${UPGRADE_FEEDBACK_ADMIN_CHOICE:-absent}" --user www-data "${service}" php /dev/stdin seed < "${repo_dir}/tests/smoke/UpgradeFeedbackPermissions.php"
+compose cp "${repo_dir}/tests/smoke/UpgradeAgentRequests.php" "${service}:/tmp/proofing-upgrade-agent-requests.php"
+compose exec -T --user www-data "${service}" php /tmp/proofing-upgrade-agent-requests.php seed
 compose exec -T --user www-data "${service}" php /dev/stdin seed < "${repo_dir}/tests/smoke/UpgradeLinkInheritance.php"
 compose exec -T --user www-data "${service}" php /dev/stdin seed < "${repo_dir}/tests/smoke/UpgradeGalleryArtwork.php"
 compose exec -T --user www-data "${service}" php /dev/stdin seed < "${repo_dir}/tests/smoke/UpgradeGalleryMediaCounts.php"
@@ -340,6 +342,7 @@ compose exec -T -e PG_FEEDBACK_ADMIN_CHOICE="${UPGRADE_FEEDBACK_ADMIN_CHOICE:-ab
 compose exec -T --user www-data "${service}" php /dev/stdin verify < "${repo_dir}/tests/smoke/UpgradeLinkInheritance.php"
 compose exec -T --user www-data "${service}" php /dev/stdin verify < "${repo_dir}/tests/smoke/UpgradeGalleryArtwork.php"
 compose exec -T --user www-data "${service}" php /dev/stdin verify < "${repo_dir}/tests/smoke/UpgradeGalleryMediaCounts.php"
+compose exec -T --user www-data "${service}" php /tmp/proofing-upgrade-agent-requests.php verify
 compose exec -T --user www-data "${service}" php /dev/stdin < "${repo_dir}/tests/smoke/UpgradeKiosk.php"
 compose cp "${repo_dir}/tests/smoke/UpgradeMediaSorting.php" "${service}:/tmp/proofing-upgrade-media-sorting.php"
 compose exec -T --user www-data "${service}" php /tmp/proofing-upgrade-media-sorting.php

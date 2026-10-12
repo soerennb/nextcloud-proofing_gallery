@@ -235,8 +235,8 @@ export async function fetchStoryMedia(id: number, fileIds: number[]): Promise<{ 
 	return data
 }
 
-export async function fetchMediaMetadata(id: number, fileId: number, refresh = true): Promise<MediaMetadata> {
-	const { data } = await axios.get<MediaMetadata>(`${galleriesUrl}/${id}/media/${fileId}/metadata`, { params: { refresh } })
+export async function fetchMediaMetadata(id: number, fileId: number, refresh = true, signal?: AbortSignal): Promise<MediaMetadata> {
+	const { data } = await axios.get<MediaMetadata>(`${galleriesUrl}/${id}/media/${fileId}/metadata`, { params: { refresh }, signal })
 	return data
 }
 
@@ -428,8 +428,8 @@ export async function exportOwnerSelectionXmp(galleryId: number, selectionId: st
 	return data
 }
 
-export async function fetchMediaVersions(id: number, fileId: number): Promise<MediaVersion[]> {
-	const { data } = await axios.get<{ items: MediaVersion[] }>(`${galleriesUrl}/${id}/media/${fileId}/versions`)
+export async function fetchMediaVersions(id: number, fileId: number, signal?: AbortSignal): Promise<MediaVersion[]> {
+	const { data } = await axios.get<{ items: MediaVersion[] }>(`${galleriesUrl}/${id}/media/${fileId}/versions`, { signal })
 	return data.items
 }
 
@@ -445,8 +445,8 @@ export async function restoreMediaVersion(id: number, fileId: number, versionId:
 	return data.items
 }
 
-export async function fetchCollection(id: number): Promise<CollectionDocument> {
-	const { data } = await axios.get<CollectionDocument>(`${galleriesUrl}/${id}/collection`)
+export async function fetchCollection(id: number, signal?: AbortSignal): Promise<CollectionDocument> {
+	const { data } = await axios.get<CollectionDocument>(`${galleriesUrl}/${id}/collection`, { signal })
 	return data
 }
 

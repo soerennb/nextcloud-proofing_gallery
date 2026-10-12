@@ -16,6 +16,17 @@ final class PublicLinkMapper extends QBMapper {
 		parent::__construct($db, 'proofing_public_links', PublicLink::class);
 	}
 
+	/** @param list<int> $ids
+	 * @return list<PublicLink> */
+	public function findForGalleryIds(int $galleryId, array $ids): array {
+		if ($ids === []) return [];
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')->from($this->tableName)
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->in('id', $qb->createNamedParameter($ids, IQueryBuilder::PARAM_INT_ARRAY)));
+		return $this->findEntities($qb);
+	}
+
 	/** @throws DoesNotExistException|MultipleObjectsReturnedException */
 	public function find(int $id): PublicLink {
 		$qb = $this->db->getQueryBuilder();

@@ -24,7 +24,6 @@ final class DesignAssetServiceTest extends TestCase {
 		ob_start();
 		imagejpeg($source, null, 90);
 		$content = (string)ob_get_clean();
-		imagedestroy($source);
 
 		$service = (new \ReflectionClass(DesignAssetService::class))->newInstanceWithoutConstructor();
 		$method = new \ReflectionMethod(DesignAssetService::class, 'normalize');

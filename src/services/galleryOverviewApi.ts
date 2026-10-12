@@ -18,9 +18,10 @@ export interface GalleryCursorQuery {
 	sort?: 'updated' | 'created' | 'title'
 }
 
-export async function fetchGalleryPage(query: GalleryCursorQuery = {}): Promise<GalleryCursorPage> {
+export async function fetchGalleryPage(query: GalleryCursorQuery = {}, signal?: AbortSignal): Promise<GalleryCursorPage> {
 	const { data } = await axios.get<GalleryCursorPage>(galleriesV2Url, {
 		params: { ...query, archived: query.archived ?? false, limit: query.limit ?? 50, format: 'json' },
+		signal,
 	})
 	return data
 }

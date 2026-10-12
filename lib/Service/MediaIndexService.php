@@ -16,7 +16,6 @@ use OCP\Lock\ILockingProvider;
 
 final class MediaIndexService {
 	private const SCAN_BATCH_SIZE = 500;
-	private const DIRECTORY_MIME = 'httpd/unix-directory';
 
 	public function __construct(
 		private MediaIndexMapper $index,
@@ -24,12 +23,13 @@ final class MediaIndexService {
 		private PolicyService $policies,
 		private ITimeFactory $clock,
 		private MediaCursorCodec $cursors,
-		private MediaTypePolicy $mediaTypes,
 		private MediaIndexScanRepository $scans,
 		private IJobList $jobs,
 		private ILockingProvider $locks,
 		private MediaMetadataService $metadata,
 		private \OCA\ProofingGallery\Db\MediaSortRepository $sorts,
+		private FolderMediaReader $reader,
+		private \OCP\IDBConnection $db,
 	) {
 	}
 
@@ -53,7 +53,15 @@ final class MediaIndexService {
 		$lockPath = 'proofing-gallery/media-index/' . $gallery->getId();
 		$this->locks->acquireLock($lockPath, ILockingProvider::LOCK_EXCLUSIVE, 'Proofing Gallery media index');
 		try {
-			return $this->scanBatchLocked($gallery, $requestRebuild);
+			$this->db->beginTransaction();
+			try {
+				$result = $this->scanBatchLocked($gallery, $requestRebuild);
+				$this->db->commit();
+				return $result;
+			} catch (\Throwable $error) {
+				$this->db->rollBack();
+				throw $error;
+			}
 		} finally {
 			$this->locks->releaseLock($lockPath, ILockingProvider::LOCK_EXCLUSIVE);
 		}
@@ -78,31 +86,33 @@ final class MediaIndexService {
 		$limit = $this->policies->get('maxIndexedMedia');
 		$truncated = (bool)$scan['truncated'];
 		$remainingRows = self::SCAN_BATCH_SIZE;
-		while ($remainingRows > 0 && !$truncated) {
+		while ($remainingRows > 1 && !$truncated) {
 			$folder = $this->scans->nextFolder((int)$gallery->getId(), $generation);
 			if ($folder === null) break;
-			$queryLimit = $remainingRows;
-			$rows = $this->scans->children(
-				(int)$scan['root_storage_id'],
-				(int)$folder['parent_file_id'],
-				(int)$folder['after_file_id'],
-				$queryLimit,
-			);
-			if ($rows === []) {
+			$queryLimit = --$remainingRows;
+			try {
+				$page = $this->reader->page($root, (string)$folder['relative_path'], (int)$folder['after_file_id'], $queryLimit);
+			} catch (\OCP\Files\NotFoundException|\OCP\Files\NotPermittedException) {
 				$this->scans->completeFolder((int)$folder['id']);
 				continue;
 			}
+			$remainingRows -= $page['examined'];
+			$rows = $page['items'];
+			if ($rows === []) {
+				$this->scans->advanceFolder((int)$folder['id'], $page['after']);
+				if ($page['done']) $this->scans->completeFolder((int)$folder['id']);
+				continue;
+			}
 
-			foreach ($rows as $row) {
-				$remainingRows--;
-				$this->scans->advanceFolder((int)$folder['id'], $row['file_id']);
-				if (str_starts_with($row['name'], '.')) continue;
-				$relativePath = ltrim((string)$folder['relative_path'] . '/' . $row['name'], '/');
-				if ($row['mime_type'] === self::DIRECTORY_MIME) {
-					$this->scans->enqueue((int)$gallery->getId(), $generation, $row['file_id'], $relativePath, (int)$folder['depth'] + 1);
+			$seen = array_fill_keys($this->index->indexedFileIds((int)$gallery->getId(), $generation, array_map(static fn (\OCP\Files\Node $node): int => (int)$node->getId(), $rows)), true);
+			foreach ($rows as $node) {
+				$relativePath = $this->reader->relativePath($root, $node);
+				if ($node instanceof \OCP\Files\Folder) {
+					$this->scans->enqueue((int)$gallery->getId(), $generation, (int)$node->getId(), $relativePath, (int)$folder['depth'] + 1);
 					continue;
 				}
-				if (!$this->mediaTypes->supports($row['mime_type'])) continue;
+				if (isset($seen[$node->getId()])) continue;
+				$row = ['file_id' => (int)$node->getId(), 'parent' => (int)$node->getParent()->getId(), 'name' => $node->getName(), 'mime_type' => $node->getMimeType(), 'size' => (int)$node->getSize(), 'mtime' => $node->getMTime(), 'etag' => $node->getEtag()];
 				if ($indexed >= $limit) {
 					$truncated = true;
 					break;
@@ -113,8 +123,10 @@ final class MediaIndexService {
 					'capturedAt' => $summary['capturedAt'] ?? null, 'captureState' => ($summary['state'] ?? '') === 'ready' ? 'ready' : 'pending',
 				]);
 				$indexed++;
+				$seen[$node->getId()] = true;
 			}
-			if (count($rows) < $queryLimit) $this->scans->completeFolder((int)$folder['id']);
+			$this->scans->advanceFolder((int)$folder['id'], $page['after']);
+			if ($page['done']) $this->scans->completeFolder((int)$folder['id']);
 		}
 		$this->sorts->touch((int)$gallery->getId());
 		$this->scans->progress((int)$gallery->getId(), $indexed, $truncated, $now);
@@ -134,13 +146,20 @@ final class MediaIndexService {
 	}
 
 	private function startScan(Gallery $gallery, \OCP\Files\Folder $root, int $now): void {
+		$generation = bin2hex(random_bytes(16));
 		$this->scans->start(
 			(int)$gallery->getId(),
-			bin2hex(random_bytes(16)),
+			$generation,
 			(int)$root->getStorage()->getCache()->getNumericStorageId(),
 			(int)$root->getId(),
 			$now,
 		);
+		foreach ($this->reader->mountPaths($root) as $path) {
+			try { $node = $root->get($path); }
+			catch (\OCP\Files\NotFoundException|\OCP\Files\NotPermittedException) { continue; }
+			if ($node->isReadable()) $this->scans->enqueue((int)$gallery->getId(), $generation, (int)$node->getId(), $path, substr_count($path, '/') + 1);
+		}
+
 	}
 
 	private function queueContinuation(Gallery $gallery): void {

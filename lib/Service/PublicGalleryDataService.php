@@ -68,26 +68,29 @@ final class PublicGalleryDataService {
 				static fn (array $item): bool => $search === '' || mb_stripos((string)$item['name'], $search) !== false,
 			));
 			$captureById = [];
-			$nodes = array_map(function (array $item) use ($gallery, $settings, $sortBy, &$captureById): array {
-				try {
-					$file = $this->collections->resolveMedia($gallery, (int)$item['id']);
-					if ($sortBy === 'capturedAt') $captureById[$item['id']] = $this->metadata->summary($file)['capturedAt'] ?? null;
-					$item['metadata'] = $this->metadata->publicSummary($file, $settings->metadata->publicFields);
-					$item = [...$item, ...$this->publicGeometry($file)];
-				} catch (\Throwable) {
-					$item['metadata'] = ['state' => 'unavailable'];
-				}
-				return $item;
-			}, $nodes);
+			if ($sortBy === 'capturedAt') foreach ($nodes as $item) {
+				try { $captureById[$item['id']] = $this->metadata->summary($this->collections->resolveMedia($gallery, (int)$item['id']))['capturedAt'] ?? null; }
+				catch (\OCP\Files\NotFoundException|\OCA\ProofingGallery\Exception\FolderAccessException|\OCP\AppFramework\Db\DoesNotExistException) { $captureById[$item['id']] = null; }
+			}
 			if ($sortBy !== 'collection') usort($nodes, static fn (array $left, array $right): int => MediaSort::compare(
 				[...$left, 'capturedAt' => $captureById[$left['id']] ?? null], [...$right, 'capturedAt' => $captureById[$right['id']] ?? null], $sortBy, $sortDirection,
 			));
 			$focusIndex = $focusId === null ? null : $this->arrayItemPosition($nodes, $focusId);
 			if ($focusId !== null && $focusIndex === null) throw new \OCP\Files\NotFoundException('Gallery media not found');
 			$offset = $this->pageOffset(count($nodes), $limit, $offset, $focusIndex);
+			$pageItems = array_map(function (array $item) use ($gallery, $settings): array {
+				try {
+					$file = $this->collections->resolveMedia($gallery, (int)$item['id']);
+					$item['metadata'] = $this->metadata->publicSummary($file, $settings->metadata->publicFields);
+					return [...$item, ...$this->publicGeometry($file)];
+				} catch (\OCP\Files\NotFoundException|\OCA\ProofingGallery\Exception\FolderAccessException|\OCP\AppFramework\Db\DoesNotExistException) {
+					$item['metadata'] = ['state' => 'unavailable'];
+					return $item;
+				}
+			}, array_slice($nodes, $offset, $limit));
 			return $this->response(
 				$context,
-				array_slice($nodes, $offset, $limit),
+				$pageItems,
 				count($nodes),
 				$limit,
 				$offset,

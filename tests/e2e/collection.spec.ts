@@ -160,6 +160,7 @@ test('collection membership protects originals and rejects stale revisions', asy
 })
 
 test('owner creates and fills a collection through the content workspace', async ({ page, request, baseURL }) => {
+	const seededSource = await state()
 	const title = `UI collection ${Date.now()}`
 	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
 	let collectionId: number | null = null
@@ -184,8 +185,10 @@ test('owner creates and fills a collection through the content workspace', async
 		const sourceSearch = page.getByRole('searchbox', { name: 'Search source galleries' })
 		await sourceSearch.fill('E2E Gallery')
 		const source = page.getByRole('combobox', { name: 'Source gallery' })
-		await expect(source.locator('option')).toHaveCount(1)
-		await source.selectOption({ label: 'E2E Gallery' })
+		await expect.poll(async () => (await source.locator('option').allTextContents())
+			.every(title => title.includes('E2E Gallery'))).toBe(true)
+		await expect(source.locator(`option[value="${seededSource.galleryId}"]`)).toHaveText('E2E Gallery')
+		await source.selectOption(String(seededSource.galleryId))
 		const mediaSearch = page.getByRole('searchbox', { name: 'Search this folder' })
 		await mediaSearch.fill('proof')
 		const proofCheckbox = page.getByRole('checkbox', { name: 'proof.png' })

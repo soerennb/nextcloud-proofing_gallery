@@ -87,6 +87,7 @@ describe('ownerUploadApi', () => {
 		expect(mockedAxios.put).toHaveBeenLastCalledWith(
 			'/ocs/apps/proofing_gallery/api/v1/galleries/7/owner-uploads/session/resolution',
 			{ conflict: 'overwrite', expectedFileId: 4, expectedEtag: 'new' },
+			{ signal: undefined },
 		)
 	})
 
@@ -137,6 +138,7 @@ describe('owner upload fast path', () => {
 		expect(mockedAxios.post).toHaveBeenCalledWith(
 			'/ocs/apps/proofing_gallery/api/v1/galleries/7/owner-uploads/batch',
 			expect.objectContaining({ uploads: expect.arrayContaining([expect.objectContaining({ filename: 'one.png', path: 'finals' })]) }),
+			{ signal: undefined },
 		)
 		expect(Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.key(index)))
 			.toHaveLength(2)

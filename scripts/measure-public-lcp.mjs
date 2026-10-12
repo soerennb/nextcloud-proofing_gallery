@@ -21,85 +21,97 @@ const browser = await chromium.launch({
 })
 const results = []
 const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
-await context.addInitScript(() => {
-	window.__proofingPerformance = { lcp: [], paints: [] }
-	new PerformanceObserver(list => {
-		window.__proofingPerformance.lcp.push(...list.getEntries().map(entry => ({
-			startTime: entry.startTime,
-			loadTime: entry.loadTime,
-			renderTime: entry.renderTime,
-			size: entry.size,
-			element: entry.element?.tagName ?? null,
-			url: entry.url,
-		})))
-	}).observe({ type: 'largest-contentful-paint', buffered: true })
-	new PerformanceObserver(list => {
-		window.__proofingPerformance.paints.push(...list.getEntries().map(entry => ({
-			name: entry.name,
-			startTime: entry.startTime,
-		})))
-	}).observe({ type: 'paint', buffered: true })
-})
-
-for (let round = 1; round <= rounds; round++) {
-	const page = await context.newPage()
-	const client = await context.newCDPSession(page)
-	await client.send('Network.enable')
-	await client.send('Network.setCacheDisabled', { cacheDisabled: round === 1 })
-	await client.send('Network.emulateNetworkConditions', {
-		offline: false,
-		latency: 150,
-		downloadThroughput: 1_600_000 / 8,
-		uploadThroughput: 750_000 / 8,
-		connectionType: 'cellular4g',
-	})
-	await client.send('Emulation.setCPUThrottlingRate', { rate: 4 })
-
-	const traceEvents = []
-	client.on('Tracing.dataCollected', event => traceEvents.push(...event.value))
-	const tracingComplete = new Promise(resolve => client.once('Tracing.tracingComplete', resolve))
-	await client.send('Tracing.start', {
-		categories: 'devtools.timeline,loading,blink.user_timing,v8.execute',
-		options: 'sampling-frequency=10000',
-		transferMode: 'ReportEvents',
+try {
+	await context.addInitScript(() => {
+		window.__proofingPerformance = { lcp: [], paints: [] }
+		new PerformanceObserver(list => {
+			window.__proofingPerformance.lcp.push(...list.getEntries().map(entry => ({
+				startTime: entry.startTime,
+				loadTime: entry.loadTime,
+				renderTime: entry.renderTime,
+				size: entry.size,
+				element: entry.element?.tagName ?? null,
+				url: entry.url,
+			})))
+		}).observe({ type: 'largest-contentful-paint', buffered: true })
+		new PerformanceObserver(list => {
+			window.__proofingPerformance.paints.push(...list.getEntries().map(entry => ({
+				name: entry.name,
+				startTime: entry.startTime,
+			})))
+		}).observe({ type: 'paint', buffered: true })
 	})
 
-	await page.goto(target, { waitUntil: 'domcontentloaded' })
-	await page.locator('.media-tile__open img').first().waitFor({ state: 'visible' })
-	await page.locator('.media-tile__open img').first().evaluate(image => image.decode())
-	await page.waitForTimeout(2000)
-	const metrics = await page.evaluate(() => ({
-		...window.__proofingPerformance,
-		navigation: performance.getEntriesByType('navigation')[0]?.toJSON(),
-		resources: performance.getEntriesByType('resource')
-			.filter(entry => entry.name.includes('proofing_gallery-public') || entry.name.includes('/collaboration'))
-			.map(entry => entry.toJSON()),
-	}))
-	await client.send('Tracing.end')
-	await tracingComplete
+	for (let round = 1; round <= rounds; round++) {
+		const page = await context.newPage()
+		const client = await context.newCDPSession(page)
+		await client.send('Network.enable')
+		await client.send('Network.setCacheDisabled', { cacheDisabled: round === 1 })
+		await client.send('Network.emulateNetworkConditions', {
+			offline: false,
+			latency: 150,
+			downloadThroughput: 1_600_000 / 8,
+			uploadThroughput: 750_000 / 8,
+			connectionType: 'cellular4g',
+		})
+		await client.send('Emulation.setCPUThrottlingRate', { rate: 4 })
 
-	const lcp = metrics.lcp.at(-1)
-	results.push({
-		round,
-		phase: round === 1 ? 'cold-client' : 'warm-client',
-		lcpMs: lcp?.startTime ?? null,
-		resourceLoadMs: lcp?.loadTime || null,
-		renderDelayMs: lcp?.loadTime ? lcp.startTime - lcp.loadTime : null,
-		firstContentfulPaintMs: metrics.paints.find(entry => entry.name === 'first-contentful-paint')?.startTime ?? null,
-		lcpElement: lcp?.element ?? null,
-		lcpUrl: lcp?.url ?? null,
-		lcpSize: lcp?.size ?? null,
-		collaborationStartMs: metrics.resources.find(entry => entry.name.includes('/collaboration'))?.startTime ?? null,
-	})
-	await writeFile(
-		path.join(outputDirectory, `public-lcp-trace-${round}.json`),
-		JSON.stringify({ traceEvents }, null, 2),
-	)
-	await page.close()
+		const traceEvents = []
+		client.on('Tracing.dataCollected', event => traceEvents.push(...event.value))
+		const tracingComplete = new Promise(resolve => client.once('Tracing.tracingComplete', resolve))
+		await client.send('Tracing.start', {
+			categories: 'devtools.timeline,loading,blink.user_timing,v8.execute',
+			options: 'sampling-frequency=10000',
+			transferMode: 'ReportEvents',
+		})
+
+		await page.goto(target, { waitUntil: 'domcontentloaded' })
+		await page.locator('.media-tile__open img').first().waitFor({ state: 'visible' })
+		await page.locator('.media-tile__open img').first().evaluate(image => image.decode())
+		const firstUsableMs = await page.evaluate(() => performance.now())
+		await page.waitForTimeout(2000)
+		const metrics = await page.evaluate(() => ({
+			...window.__proofingPerformance,
+			navigation: performance.getEntriesByType('navigation')[0]?.toJSON(),
+			resources: performance.getEntriesByType('resource')
+				.filter(entry => entry.name.includes('/proofing_gallery/') || entry.name.includes('/collaboration'))
+				.map(entry => entry.toJSON()),
+		}))
+		await client.send('Tracing.end')
+		await tracingComplete
+
+		const startup = metrics.resources.filter(entry => entry.startTime <= firstUsableMs && /\.(?:mjs|js|css)(?:$|\?)/.test(entry.name))
+		const lcp = metrics.lcp.at(-1)
+		results.push({
+			round,
+			phase: round === 1 ? 'cold-client' : 'warm-client',
+			lcpMs: lcp?.startTime ?? null,
+			firstUsableMs,
+			documentTtfbMs: metrics.navigation.responseStart - metrics.navigation.requestStart,
+			documentLoadedMs: metrics.navigation.responseEnd,
+			startupAssetBytes: startup.reduce((sum, entry) => sum + entry.encodedBodySize, 0),
+			startupTransferBytes: startup.reduce((sum, entry) => sum + entry.transferSize, 0),
+			startupAssets: startup.map(entry => ({ url: entry.name, bytes: entry.encodedBodySize, transferredBytes: entry.transferSize, startMs: entry.startTime })),
+			resourceLoadMs: lcp?.loadTime || null,
+			renderDelayMs: lcp?.loadTime ? lcp.startTime - lcp.loadTime : null,
+			firstContentfulPaintMs: metrics.paints.find(entry => entry.name === 'first-contentful-paint')?.startTime ?? null,
+			lcpElement: lcp?.element ?? null,
+			lcpUrl: lcp?.url ?? null,
+			lcpSize: lcp?.size ?? null,
+			collaborationStartMs: metrics.resources.find(entry => entry.name.includes('/collaboration'))?.startTime ?? null,
+		})
+		await writeFile(
+			path.join(outputDirectory, `public-lcp-trace-${round}.json`),
+			JSON.stringify({ traceEvents }, null, 2),
+		)
+		await page.close()
+	}
+
+} finally {
+	await context.close()
+	await browser.close()
 }
 
-await context.close()
-await browser.close()
 const lcpValues = results.map(result => result.lcpMs).filter(value => value !== null).sort((left, right) => left - right)
 const medianLcpMs = lcpValues[Math.floor(lcpValues.length / 2)] ?? null
 const coldLcpMs = results[0]?.lcpMs ?? null

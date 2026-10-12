@@ -24,6 +24,7 @@ final class PublicShareTemplateProvider implements IPublicShareTemplateProvider 
 		private \OCA\ProofingGallery\Service\PublicShareContextResolver $contexts,
 		private \OCA\ProofingGallery\Service\ReviewWorkflowService $reviews,
 		private IUserSession $userSession,
+		private \OCA\ProofingGallery\Service\PublicStartupAssets $startupAssets,
 	) {
 	}
 
@@ -82,6 +83,7 @@ final class PublicShareTemplateProvider implements IPublicShareTemplateProvider 
 		]);
 		Util::addScript(Application::APP_ID, 'proofing_gallery-public');
 		Util::addStyle(Application::APP_ID, 'proofing_gallery-public');
+		foreach ($this->startupAssets->links() as $attributes) Util::addHeader('link', $attributes);
 
 		$response = new PublicTemplateResponse(Application::APP_ID, 'public');
 		$response->addHeader('Cache-Control', 'private, no-store');

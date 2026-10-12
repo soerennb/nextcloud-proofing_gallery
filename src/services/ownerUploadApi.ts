@@ -41,6 +41,7 @@ function storageKey(galleryId: number, path: string, file: File, resolution: Upl
 export async function prepareOwnerUploadSessions(
 	galleryId: number,
 	uploads: Array<{ file: File; path?: string; resolution: UploadResolution }>,
+	signal?: AbortSignal,
 ): Promise<OwnerUploadSession[]> {
 	const payload = uploads.map(({ file, path = '', resolution }) => ({
 		filename: file.name,
@@ -50,7 +51,7 @@ export async function prepareOwnerUploadSessions(
 		...resolution,
 		uploadId: window.localStorage.getItem(storageKey(galleryId, path, file, resolution)) ?? undefined,
 	}))
-	const { data } = await axios.post<{ uploads: OwnerUploadSession[] }>(`${galleriesUrl}/${galleryId}/owner-uploads/batch`, { uploads: payload })
+	const { data } = await axios.post<{ uploads: OwnerUploadSession[] }>(`${galleriesUrl}/${galleryId}/owner-uploads/batch`, { uploads: payload }, { signal })
 	if (data.uploads.length !== uploads.length) throw new Error('Upload session response is incomplete')
 	data.uploads.forEach((session, index) => {
 		const entry = uploads[index]
@@ -73,20 +74,21 @@ export async function uploadGalleryMedia(
 	resolution: UploadResolution = { conflict: 'rename' },
 	resolveStaleConflict?: () => Promise<UploadResolution | null>,
 	preparedSession?: OwnerUploadSession,
+	signal?: AbortSignal,
 ): Promise<MediaItem | null> {
 	const key = storageKey(galleryId, path, file, resolution)
-	const session = preparedSession ?? await getOrCreateSession(galleryId, key, file, path, resolution)
+	const session = preparedSession ?? await getOrCreateSession(galleryId, key, file, path, resolution, signal)
 	if (session.state === 'completed') {
 		window.localStorage.removeItem(key)
 		return session.item ?? null
 	}
 	if (preparedSession !== undefined && shouldStreamDirectly(file)) {
-		const data = await uploadContentResolved(galleryId, session, file, onProgress, resolveStaleConflict)
+		const data = await uploadContentResolved(galleryId, session, file, onProgress, resolveStaleConflict, signal)
 		window.localStorage.removeItem(key)
 		return data.item ?? null
 	}
-	await uploadChunks(galleryId, session, file, onProgress)
-	const data = await finalizeResolvedUpload(galleryId, session.id, resolveStaleConflict)
+	await uploadChunks(galleryId, session, file, onProgress, signal)
+	const data = await finalizeResolvedUpload(galleryId, session.id, resolveStaleConflict, signal)
 	window.localStorage.removeItem(key)
 	return data.item ?? null
 }
@@ -107,6 +109,7 @@ async function uploadContentResolved(
 	file: File,
 	onProgress?: (loaded: number, total: number) => void,
 	resolveStaleConflict?: () => Promise<UploadResolution | null>,
+	signal?: AbortSignal,
 ): Promise<{ status: 'completed' | 'skipped'; item?: MediaItem }> {
 	const url = `${galleriesUrl}/${galleryId}/owner-uploads/${session.id}/content`
 	let body: Blob | null = session.state === 'staged' ? null : file
@@ -114,6 +117,7 @@ async function uploadContentResolved(
 	for (;;) {
 		try {
 			const result = (await axios.put<{ status: 'completed' | 'skipped'; item?: MediaItem }>(url, body, {
+				signal,
 				headers: { 'Content-Type': 'application/octet-stream' },
 				onUploadProgress: event => {
 					if (body !== null) onProgress?.(event.loaded, file.size)
@@ -124,16 +128,17 @@ async function uploadContentResolved(
 			session.item = result.item
 			return result
 		} catch (error) {
+			if (signal?.aborted) throw error
 			const response = (error as { response?: UploadBusyResponse }).response
 			if (isStaleUploadConflict(response) && resolveStaleConflict) {
 				const updated = await resolveStaleConflict()
 				if (updated === null) throw error
-				await axios.put(`${galleriesUrl}/${galleryId}/owner-uploads/${session.id}/resolution`, updated)
+				await axios.put(`${galleriesUrl}/${galleryId}/owner-uploads/${session.id}/resolution`, updated, { signal })
 				session.state = 'staged'
 				body = null
 				continue
 			}
-			const current = await statusAfterUncertainContent(galleryId, session.id)
+			const current = await statusAfterUncertainContent(galleryId, session.id, signal)
 			if (current?.state === 'completed') {
 				Object.assign(session, current)
 				return { status: current.status ?? 'completed', item: current.item }
@@ -159,15 +164,15 @@ function shouldRetryStagedUpload(response: UploadBusyResponse | undefined, attem
 	return response?.status === 423 && attempts < 3
 }
 
-async function statusAfterUncertainContent(galleryId: number, uploadId: string): Promise<OwnerUploadSession | null> {
+async function statusAfterUncertainContent(galleryId: number, uploadId: string, signal?: AbortSignal): Promise<OwnerUploadSession | null> {
 	try {
-		return (await axios.get<OwnerUploadSession>(`${galleriesUrl}/${galleryId}/owner-uploads/${uploadId}`)).data
+		return (await axios.get<OwnerUploadSession>(`${galleriesUrl}/${galleryId}/owner-uploads/${uploadId}`, { signal })).data
 	} catch {
 		return null
 	}
 }
 
-async function uploadChunks(galleryId: number, session: OwnerUploadSession, file: File, onProgress?: (loaded: number, total: number) => void): Promise<void> {
+async function uploadChunks(galleryId: number, session: OwnerUploadSession, file: File, onProgress?: (loaded: number, total: number) => void, signal?: AbortSignal): Promise<void> {
 	const uploaded = new Set(session.uploadedChunks)
 	let completedBytes = 0
 	for (let index = 0; index < session.chunks; index++) {
@@ -180,6 +185,7 @@ async function uploadChunks(galleryId: number, session: OwnerUploadSession, file
 		}
 		const chunk = file.slice(start, end)
 		await axios.put(`${galleriesUrl}/${galleryId}/owner-uploads/${session.id}/chunks/${index}`, chunk, {
+			signal,
 			headers: { 'Content-Type': 'application/octet-stream' },
 			onUploadProgress: event => onProgress?.(completedBytes + event.loaded, file.size),
 		})
@@ -189,16 +195,17 @@ async function uploadChunks(galleryId: number, session: OwnerUploadSession, file
 
 }
 
-async function finalizeResolvedUpload(galleryId: number, uploadId: string, resolveStaleConflict?: () => Promise<UploadResolution | null>): Promise<{ status: 'completed' | 'skipped'; item?: MediaItem }> {
+async function finalizeResolvedUpload(galleryId: number, uploadId: string, resolveStaleConflict?: () => Promise<UploadResolution | null>, signal?: AbortSignal): Promise<{ status: 'completed' | 'skipped'; item?: MediaItem }> {
 	for (;;) {
 		try {
-			return await finalizeUpload(galleryId, uploadId)
+			return await finalizeUpload(galleryId, uploadId, signal)
 		} catch (error) {
+			if (signal?.aborted) throw error
 			const response = (error as { response?: UploadBusyResponse }).response
 			if (response?.status !== 409 || response.data?.code !== 'upload_conflict' || !resolveStaleConflict) throw error
 			const updated = await resolveStaleConflict()
 			if (updated === null) throw error
-			await axios.put(`${galleriesUrl}/${galleryId}/owner-uploads/${uploadId}/resolution`, updated)
+			await axios.put(`${galleriesUrl}/${galleryId}/owner-uploads/${uploadId}/resolution`, updated, { signal })
 		}
 	}
 }
@@ -208,12 +215,13 @@ export async function fetchOwnerUploadConflicts(galleryId: number, filenames: st
 	return data.conflicts
 }
 
-async function finalizeUpload(galleryId: number, uploadId: string): Promise<{ status: 'completed' | 'skipped'; item?: MediaItem }> {
+async function finalizeUpload(galleryId: number, uploadId: string, signal?: AbortSignal): Promise<{ status: 'completed' | 'skipped'; item?: MediaItem }> {
 	const url = `${galleriesUrl}/${galleryId}/owner-uploads/${uploadId}/finalize`
 	for (let attempt = 0; attempt < 3; attempt++) {
 		try {
-			return (await axios.post<{ status: 'completed' | 'skipped'; item?: MediaItem }>(url)).data
+			return (await axios.post<{ status: 'completed' | 'skipped'; item?: MediaItem }>(url, undefined, { signal })).data
 		} catch (error) {
+			if (signal?.aborted) throw error
 			const response = (error as { response?: UploadBusyResponse }).response
 			if (response?.status !== 423 || response.data?.code !== 'upload_busy' || attempt === 2) throw error
 			const retryAfter = Number(response.headers?.['retry-after'])
@@ -224,19 +232,20 @@ async function finalizeUpload(galleryId: number, uploadId: string): Promise<{ st
 	throw new Error('Upload finalization failed')
 }
 
-async function resumeSession(galleryId: number, storageKey: string): Promise<OwnerUploadSession | null> {
+async function resumeSession(galleryId: number, storageKey: string, signal?: AbortSignal): Promise<OwnerUploadSession | null> {
 	const uploadId = window.localStorage.getItem(storageKey)
 	if (!uploadId) return null
 	try {
-		return (await axios.get<OwnerUploadSession>(`${galleriesUrl}/${galleryId}/owner-uploads/${uploadId}`)).data
-	} catch {
+		return (await axios.get<OwnerUploadSession>(`${galleriesUrl}/${galleryId}/owner-uploads/${uploadId}`, { signal })).data
+	} catch (error) {
+		if (signal?.aborted) throw error
 		window.localStorage.removeItem(storageKey)
 		return null
 	}
 }
 
-async function getOrCreateSession(galleryId: number, storageKey: string, file: File, path: string, resolution: UploadResolution): Promise<OwnerUploadSession> {
-	const resumed = await resumeSession(galleryId, storageKey)
+async function getOrCreateSession(galleryId: number, storageKey: string, file: File, path: string, resolution: UploadResolution, signal?: AbortSignal): Promise<OwnerUploadSession> {
+	const resumed = await resumeSession(galleryId, storageKey, signal)
 	if (resumed !== null) return resumed
 	const session = (await axios.post<OwnerUploadSession>(`${galleriesUrl}/${galleryId}/owner-uploads`, {
 		filename: file.name,
@@ -244,7 +253,7 @@ async function getOrCreateSession(galleryId: number, storageKey: string, file: F
 		size: file.size,
 		path,
 		...resolution,
-	})).data
+	}, { signal })).data
 	window.localStorage.setItem(storageKey, session.id)
 	return session
 }
