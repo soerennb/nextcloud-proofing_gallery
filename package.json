@@ -32,6 +32,9 @@
     "extends @nextcloud/browserslist-config"
   ],
   "overrides": {
+    "@nextcloud/vite-config": {
+      "vite-plugin-dts": "5.1.2"
+    },
     "webdav": {
       "minimatch": "10.2.6"
     }
