@@ -35,7 +35,7 @@ test('limits unrelated workflow changes to workflow validation', () => {
 })
 
 test('runs browser suites when their workflow or runtime preparation changes', () => {
-	for (const path of ['.github/workflows/ci.yml', '.github/actions/setup-browsers/action.yml', 'scripts/check-browser-runtimes.mjs']) {
+	for (const path of ['.github/workflows/ci.yml', '.github/actions/setup-browsers/action.yml', 'scripts/check-browser-runtimes.mjs', 'scripts/lib/browser-install.test.mjs']) {
 		const selected = classifyCiChanges([path])
 		assert.equal(selected.integration, true)
 		assert.equal(selected.web, true)

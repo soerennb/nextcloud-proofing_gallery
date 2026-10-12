@@ -3,7 +3,7 @@ description: Install and verify all required Playwright engines before starting 
 runs:
   using: composite
   steps:
-    - name: Install browsers and system dependencies
+    - name: Install system dependencies
       shell: bash
       run: |
         set -euo pipefail
@@ -11,16 +11,37 @@ runs:
         if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
           sudo sed -i 's@azure.archive.ubuntu.com@archive.ubuntu.com@g' /etc/apt/sources.list.d/ubuntu.sources
         fi
+        node_binary="$(command -v node)"
+        playwright_cli="${PWD}/node_modules/playwright/cli.js"
+        dependencies_ready=false
+        for attempt in 1 2; do
+          # Run timeout as root so it can kill APT too. KILL reaches the entire
+          # process group even if the CLI exits before a TERM grace period ends.
+          if sudo -n timeout --signal=KILL 5m "${node_binary}" "${playwright_cli}" install-deps chromium firefox webkit; then
+            dependencies_ready=true
+            break
+          fi
+          echo "::warning::Browser system dependency installation attempt ${attempt} failed."
+        done
+        if [ "${dependencies_ready}" != true ]; then
+          echo "::error::Browser system dependency installation failed after two bounded attempts."
+          exit 1
+        fi
+    - name: Install browsers
+      shell: bash
+      run: |
+        set -euo pipefail
         browser_install_ready=false
         for attempt in 1 2; do
-          if timeout --kill-after=30s 5m npx playwright install --with-deps chromium firefox webkit; then
+          # Downloads stay under the runner user and use its Playwright cache.
+          if timeout --signal=KILL 5m node node_modules/playwright/cli.js install chromium firefox webkit; then
             browser_install_ready=true
             break
           fi
           echo "::warning::Browser dependency installation attempt ${attempt} failed."
         done
         if [ "${browser_install_ready}" != true ]; then
-          echo "::error::Browser and system dependency installation failed after two bounded attempts."
+          echo "::error::Browser installation failed after two bounded attempts."
           exit 1
         fi
     - name: Verify browser runtimes
