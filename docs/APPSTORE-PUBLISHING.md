@@ -116,6 +116,13 @@ on expiry, production exposure, unrelated high advisories, or invalid audit
 reports. Reassess and remove this exception when an upstream fix is available;
 do not broaden it or renew it automatically.
 
+The scoped `@nextcloud/vite-config` override pins `vite-plugin-dts` to 5.1.2.
+Version 5 makes API Extractor optional, removing its vulnerable `sprintf-js`
+dependency ([GHSA-hp3w-g68c-fv3c](https://github.com/advisories/GHSA-hp3w-g68c-fv3c)).
+This app uses `createAppConfig`, without declaration generation or type bundling.
+Reassess the override when the upstream Vite configuration adopts version 5;
+library builds would require reviewing its declaration-plugin migration.
+
 The normal target remains unsigned and requires no credentials:
 
 ```bash
