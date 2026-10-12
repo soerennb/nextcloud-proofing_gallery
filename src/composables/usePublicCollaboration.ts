@@ -31,7 +31,7 @@ export function usePublicCollaboration(options: {
 		startCollaborationPolling()
 	}
 
-	const resumeGuestIdentity = () => resumeGuestSession<GuestIdentity>(options.endpoint('session'), (value, secret) => { if (!disposed) restoreIdentity(value, secret) })
+	const resumeGuestIdentity = () => resumeGuestSession<GuestIdentity>(options.endpoint('session'), (identity, restoredNonce) => { if (!disposed) restoreIdentity(identity, restoredNonce) })
 
 	const requestAsGuest = useGuestRequest({
 		endpoint: options.endpoint,
