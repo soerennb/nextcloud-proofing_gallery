@@ -5,7 +5,7 @@
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {
-    "preflight": "node scripts/check-node-version.mjs",
+    "preflight": "node scripts/check-node-version.mjs && npm run test:dependencies",
     "audit:dependencies": "node scripts/audit-npm.mjs",
     "prebuild": "npm run preflight && node scripts/clean-build.mjs",
     "build": "vite build",
@@ -26,7 +26,8 @@
     "test:e2e:update": "playwright test --update-snapshots",
     "test:watch": "vitest",
     "typecheck": "vue-tsc --noEmit",
-    "watch": "vite --mode development build --watch"
+    "watch": "vite --mode development build --watch",
+    "test:dependencies": "node scripts/check-guarded-braces.mjs"
   },
   "browserslist": [
     "extends @nextcloud/browserslist-config"
@@ -37,7 +38,8 @@
     },
     "webdav": {
       "minimatch": "10.2.6"
-    }
+    },
+    "braces": "$braces"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
@@ -86,10 +88,12 @@
     "vite": "^7.3.2",
     "vitest": "^5.0.0",
     "vue-tsc": "^3.3.12",
-    "yaml": "^2.9.1"
+    "yaml": "^2.9.1",
+    "@dieub/braces-depth-guard": "file:tooling/vendor/braces-depth-guard-3.0.3-pn.3.tgz",
+    "braces": "file:tooling/braces-compat"
   },
   "engines": {
-    "node": "^24.11.0",
+    "node": "^24.21.0",
     "npm": "^11.3.0"
   }
 }

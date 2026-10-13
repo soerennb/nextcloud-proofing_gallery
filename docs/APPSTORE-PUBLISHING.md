@@ -109,12 +109,11 @@ do not rewrite the description of an already published release.
 
 Run `npm run audit:dependencies` for the full npm dependency audit. It retains
 the high-severity release threshold and reports lower-severity findings. The
-unpatched [braces nesting-depth advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
-has a temporary exception only when every affected dependency path is marked
-development-only in the lockfile, through October 18, 2026 UTC. It fails closed
-on expiry, production exposure, unrelated high advisories, or invalid audit
-reports. Reassess and remove this exception when an upstream fix is available;
-do not broaden it or renew it automatically.
+audit has no advisory exemptions. The development-only Braces implementation is
+replaced by a reviewed, vendored depth-guard implementation; `npm run preflight`
+checks its artifact integrity, actual consumer resolution and regression cases.
+See [the dependency maintenance record](DEPENDENCY-MAINTENANCE.md) for provenance,
+remaining limitations and the criteria for returning to the official package.
 
 The scoped `@nextcloud/vite-config` override pins `vite-plugin-dts` to 5.1.2.
 Version 5 makes API Extractor optional, removing its vulnerable `sprintf-js`
