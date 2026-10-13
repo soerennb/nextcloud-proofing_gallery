@@ -310,3 +310,38 @@ Run `UPGRADE_DATABASE=sqlite|mariadb|postgres make test-upgrade` for an explicit
 schema-and-sentinel-data upgrade on each database family.
 Run `make verify-package` to build the release archive and install it on a fresh
 Nextcloud 34 SQLite instance.
+
+## Bounded orphan file-metadata maintenance
+
+The standalone CLI in `scripts/cleanup-orphan-metadata.php` requires the current
+checked-out app code in the Nextcloud installation and PHP CLI access. It only
+handles an explicit JSON list of positive file IDs and a known numeric storage
+ID; it never discovers and deletes records automatically. Use a maintenance
+window and a reviewed list of already orphaned IDs. The default is dry-run:
+
+```bash
+NEXTCLOUD_ROOT=/var/www/html php scripts/cleanup-orphan-metadata.php \
+  --ids=/absolute/reviewed-orphan-ids.json --storage=1
+```
+
+The JSON result reports requested/unique IDs, existing files, eligible metadata
+and cleaned or missing records. Add `--execute` only for the reviewed orphan
+scope. Before each call it rechecks live file-cache entries and sends at most
+500 IDs to Nextcloud's public metadata API. Nextcloud 31 uses its single-file
+API. File contents are never deleted. Database failures logged internally by
+Nextcloud are detected by checking the remaining metadata/index records; rerun
+with the same list to resume an interrupted cleanup. Each batch commits
+atomically: a failed batch rolls back while earlier completed batches remain
+committed. The CLI refuses HTTP use.
+
+Nextcloud's metadata and index services currently split large ID lists but pass
+the original list to each query. A minimal, unapplied upstream patch is retained
+at `tooling/upstream/nextcloud-metadata-batches.patch`. This repository does not
+patch the installed Nextcloud server. Compatibility acceptance uses 8,500
+synthetic orphan IDs, a live file, duplicates, dry-run, interruption and resume.
+
+For repeated transaction diagnostics, run the compatibility script with
+`NEXTCLOUD_VERSIONS=33 DATABASES=sqlite AUDIT_SMOKE_REPETITIONS=20`. Every iteration
+must pass; this is repetition, not a retry policy. Materialized query helpers
+close their owned cursors; the legacy streaming row helper still leaves cursor
+ownership with its caller. The original sporadic CI lock remains unconfirmed.

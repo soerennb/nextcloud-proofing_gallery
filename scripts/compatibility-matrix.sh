@@ -61,6 +61,10 @@ for version in ${versions}; do
 			COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION="${version}" \
 				"${compose[@]}" exec -T --user www-data "${service}" php /dev/stdin < "${repo_dir}/tests/smoke/AuditRemediation.php"
 		done
+		COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION="${version}" \
+			"${compose[@]}" cp "${repo_dir}/scripts/cleanup-orphan-metadata.php" "${service}:/tmp/proofing-cleanup-orphan-metadata.php"
+		COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION="${version}" \
+			"${compose[@]}" exec -T --user www-data "${service}" php /dev/stdin < "${repo_dir}/tests/smoke/OrphanMetadataCleanup.php"
 		if [[ -f "${app_source}/appinfo/signature.json" ]]; then
 			COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION="${version}" \
 				"${compose[@]}" exec -T --user www-data "${service}" php occ integrity:check-app proofing_gallery

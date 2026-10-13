@@ -197,3 +197,18 @@ metadata must refer to the same filenames.
 Rerunning a release is safe only when the existing GitHub archive and checksum
 match the newly built files. A mismatch aborts publication; never overwrite an
 already published stable artifact.
+
+## Immutable screenshot URLs
+
+Run `node scripts/version-screenshot-urls.mjs` after reviewing the six listing
+image/thumbnail pairs. It copies the exact bytes to filenames prefixed by the
+first 12 hexadecimal SHA-256 digits of the full image followed by its thumbnail,
+then updates source `info.xml`. Existing asset URLs remain available. Repeating
+it is idempotent, and documentation checks reject changed bytes under an
+existing content hash. Publish the copied files through the documentation site
+and verify their downloaded bytes before a release.
+
+The current App Store proxy caches successful source URLs. New source URLs only
+reach the listing after metadata from a separately authorized new release is
+submitted. Updating main or GitHub Pages does not refresh the existing listing;
+never amend the published 0.12.0 archive or tag to change its images.
