@@ -68,16 +68,12 @@ const chromeVisible = ref(true)
 const secondaryToolsOpen = ref(false)
 const browserFullscreen = ref(false)
 const viewportWidth = ref(typeof window === 'undefined' ? 1280 : window.innerWidth)
+let disposed = false
 let controller: AbortController | undefined
 
 const stateFor = (fileId: number) => states.value[fileId] ?? defaultCullState(fileId)
-const filteredItems = computed(() => items.value.filter(item => {
-	const state = stateFor(item.id)
-	return (ratingFilter.value < 0 || state.rating === ratingFilter.value)
-		&& (pickFilter.value === 'all' || state.pick === pickFilter.value)
-		&& (colorFilter.value === 'all' || state.color === colorFilter.value)
-		&& (semanticMatches.value === null || semanticMatches.value.includes(item.id))
-}))
+const filters = computed(() => ({ ownerRating: ratingFilter.value < 0 ? undefined : ratingFilter.value, ownerPick: pickFilter.value === 'all' ? undefined : pickFilter.value, ownerColor: colorFilter.value === 'all' ? undefined : colorFilter.value, fileIds: semanticMatches.value ?? undefined }))
+const filteredItems = computed(() => items.value)
 const activeIndex = computed(() => filteredItems.value.findIndex(item => item.id === activeId.value))
 const activeItem = computed(() => activeIndex.value < 0 ? null : filteredItems.value[activeIndex.value])
 const effectiveFilmstripPlacement = computed(() => effectiveCullingFilmstripPlacement(filmstripPlacement.value, viewportWidth.value))
@@ -90,6 +86,8 @@ const progress = computed(() => {
 	return { reviewed, percent: items.value.length ? Math.round(reviewed / items.value.length * 100) : 0 }
 })
 
+watch(filters, () => { void loadPage(true) })
+
 watch(filteredItems, visibleItems => {
 	if (!visibleItems.length) {
 		activeId.value = null
@@ -100,9 +98,14 @@ watch(filteredItems, visibleItems => {
 
 function finishLoading() { loading.value = false; loadingMore.value = false; indexing.value = false }
 
+function hasFilters() { return Object.values(filters.value).some(value => value !== undefined) }
+
+function needsIndex(reset: boolean, count: number) { return reset && count === 0 && !hasFilters() }
+
 function cullingStates(reset: boolean) { return reset ? {} : states.value }
 
 async function loadPage(reset = false) {
+	if (disposed) return
 	if (!reset && loadingMore.value) return
 	if (reset) {
 		controller?.abort()
@@ -111,29 +114,31 @@ async function loadPage(reset = false) {
 	} else loadingMore.value = true
 	const request = new AbortController()
 	controller = request
+	const current = () => !disposed && controller === request && !request.signal.aborted
 	try {
-		const loaded = await fetchCullingPage(props.gallery.id, cursor.value, request.signal, sortBy.value, sortDirection.value)
+		const loaded = await fetchCullingPage(props.gallery.id, cursor.value, request.signal, sortBy.value, sortDirection.value, filters.value)
 		reset ||= loaded.reset
 		let page = loaded.page
-		if (reset && page.total === 0) {
+		if (needsIndex(reset, page.total)) {
 			indexing.value = true
 			await rebuildGalleryMediaIndex(props.gallery.id)
-			page = await fetchIndexedMedia(props.gallery.id, 200, null, '', request.signal, sortBy.value, sortDirection.value)
+			page = await fetchIndexedMedia(props.gallery.id, 200, null, '', request.signal, sortBy.value, sortDirection.value, filters.value)
 		}
 		const culls = await fetchMediaCulling(props.gallery.id, page.items.map(item => item.id))
-		if (controller !== request) return
+		if (!current()) return
 		items.value = reset ? page.items : [...items.value, ...page.items]
 		states.value = { ...cullingStates(reset), ...Object.fromEntries(culls.map(state => [state.fileId, state])) }
+		selectedIds.value = selectedIds.value.filter(id => items.value.some(item => item.id === id))
 		total.value = page.total
 		cursor.value = page.nextCursor
 		failure.value = false
 	} catch (error) {
-		if (controller === request && !cancelledRequest(error)) {
+		if (current() && !cancelledRequest(error)) {
 			failure.value = true
 			showError(t('proofing_gallery', 'The culling workspace could not be loaded.'))
 		}
 	} finally {
-		if (controller === request) finishLoading()
+		if (current()) finishLoading()
 	}
 }
 
@@ -258,6 +263,7 @@ async function mutate(changes: Partial<Pick<MediaCull, 'rating' | 'color' | 'pic
 		}))
 		states.value = { ...states.value, ...Object.fromEntries(updated.map(state => [state.fileId, state])) }
 		failure.value = false
+		if (hasFilters()) await loadPage(true)
 	} catch {
 		states.value = { ...states.value, ...before }
 		undoStack.value = undoStack.value.slice(0, -1)
@@ -290,6 +296,7 @@ async function undo() {
 			expectedRevision: current[state.fileId].revision,
 		})))
 		states.value = { ...states.value, ...Object.fromEntries(updated.map(state => [state.fileId, state])) }
+		if (hasFilters()) await loadPage(true)
 		showSuccess(t('proofing_gallery', 'Last culling change undone.'))
 	} catch {
 		states.value = { ...states.value, ...current }
@@ -433,6 +440,7 @@ onMounted(() => {
 	loadPage(true)
 })
 onBeforeUnmount(() => {
+	disposed = true
 	controller?.abort()
 	window.removeEventListener('keydown', onKeydown)
 	window.removeEventListener('resize', updateViewportWidth)

@@ -279,7 +279,7 @@ Bei Event-Auslieferungen gilt die Regel für die gesamte Welle. Jeder Empfänger
 bleibt trotzdem auf seinen Ordnerumfang beschränkt; eine spätere großzügigere
 Welle erweitert bereits veröffentlichte Links nicht.
 
-Gast-Uploads sind fortsetzbar und landen zunächst in einem versteckten
+Gast-Uploads sind fortsetzbar und landen zunächst in einem privaten
 Prüfeingang. Eigentümer oder berechtigte Manager nehmen sie unter konfliktfreien
 Dateinamen an oder lehnen sie ab. Vor Annahme erscheinen sie nicht öffentlich.
 

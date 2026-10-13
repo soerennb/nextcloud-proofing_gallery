@@ -139,40 +139,82 @@ final class EventWaveRepository {
 		return $summary;
 	}
 
+	/** @return list<int> */
+	public function stalledWaveIds(int $now, int $limit = 100): array {
+		$qb = $this->db->getQueryBuilder();
+		return array_map('intval', QueryResult::column($qb->select('w.id')->from('proofing_event_waves', 'w')
+			->innerJoin('w', 'proofing_galleries', 'g', $qb->expr()->eq('g.id', 'w.gallery_id'))
+			->where($qb->expr()->orX(
+				$qb->expr()->andX($qb->expr()->eq('w.status', $qb->createNamedParameter('scheduled')), $qb->expr()->lte('w.release_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT))),
+				$qb->expr()->andX($qb->expr()->eq('w.status', $qb->createNamedParameter('releasing')), $qb->expr()->lte('w.updated_at', $qb->createNamedParameter($now - 300, IQueryBuilder::PARAM_INT))),
+			))->orderBy('w.updated_at', 'ASC')->setMaxResults($limit)->executeQuery()));
+	}
+
+	/** Reconcile a durable link receipt before recovering an expired worker. */
+	private function recoverClaims(int $waveId, int $now): void {
+		$qb = $this->db->getQueryBuilder();
+		$rows = QueryResult::rows($qb->select('id', 'claim_token', 'public_link_id', 'attempts')->from('proofing_event_recipients')
+			->where($qb->expr()->eq('wave_id', $qb->createNamedParameter($waveId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('publication_status', $qb->createNamedParameter('publishing')))
+			->andWhere($qb->expr()->orX($qb->expr()->isNull('claim_until'), $qb->expr()->lte('claim_until', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT))))
+			->setMaxResults(100)->executeQuery());
+		foreach ($rows as $row) {
+			$status = $row['public_link_id'] !== null ? 'published' : ((int)$row['attempts'] >= 5 ? 'failed' : 'draft');
+			$update = $this->db->getQueryBuilder();
+			$update->update('proofing_event_recipients')->set('publication_status', $update->createNamedParameter($status))
+				->set('delivery_status', $update->createNamedParameter($status))
+				->set('claim_token', $update->createNamedParameter(null))->set('claim_until', $update->createNamedParameter(null))
+				->set('error_code', $update->createNamedParameter($status === 'failed' ? 'claim_recovery_exhausted' : null))
+				->set('updated_at', $update->createNamedParameter($now, IQueryBuilder::PARAM_INT))
+				->where($update->expr()->eq('id', $update->createNamedParameter((int)$row['id'], IQueryBuilder::PARAM_INT)))
+				->andWhere($row['claim_token'] === null ? $update->expr()->isNull('claim_token') : $update->expr()->eq('claim_token', $update->createNamedParameter($row['claim_token'])))
+				->andWhere($update->expr()->eq('publication_status', $update->createNamedParameter('publishing')))->executeStatement();
+		}
+	}
+
 	/** @return list<array<string, mixed>> */
 	public function claim(int $waveId, int $limit, int $now): array {
+		$this->recoverClaims($waveId, $now);
 		$qb = $this->db->getQueryBuilder();
 		$rows = QueryResult::rows($qb->select('*')->from('proofing_event_recipients')
 			->where($qb->expr()->eq('wave_id', $qb->createNamedParameter($waveId, IQueryBuilder::PARAM_INT)))
-			->andWhere($qb->expr()->in('publication_status', $qb->createNamedParameter(['draft', 'failed'], IQueryBuilder::PARAM_STR_ARRAY)))
+			->andWhere($qb->expr()->eq('publication_status', $qb->createNamedParameter('draft')))
 			->orderBy('id', 'ASC')->setMaxResults($limit)->executeQuery());
 		$claimed = [];
 		foreach ($rows as $row) {
+			$token = bin2hex(random_bytes(16));
 			$qb = $this->db->getQueryBuilder();
 			$updated = $qb->update('proofing_event_recipients')->set('publication_status', $qb->createNamedParameter('publishing'))
+				->set('claim_token', $qb->createNamedParameter($token))->set('claim_until', $qb->createNamedParameter($now + 300, IQueryBuilder::PARAM_INT))
 				->set('attempts', $qb->createFunction('attempts + 1'))->set('updated_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT))
 				->where($qb->expr()->eq('id', $qb->createNamedParameter((int)$row['id'], IQueryBuilder::PARAM_INT)))
-				->andWhere($qb->expr()->in('publication_status', $qb->createNamedParameter(['draft', 'failed'], IQueryBuilder::PARAM_STR_ARRAY)))->executeStatement();
-			if ($updated === 1) $claimed[] = $row;
+				->andWhere($qb->expr()->eq('publication_status', $qb->createNamedParameter('draft')))->executeStatement();
+			if ($updated === 1) $claimed[] = [...$row, 'claim_token' => $token];
 		}
 		return $claimed;
 	}
 
-	public function published(int $recipientId, int $linkId, string $invitationStatus, ?int $invitedAt, int $now): void {
+	public function published(int $recipientId, int $linkId, string $invitationStatus, ?int $invitedAt, int $now, ?string $claimToken = null): void {
 		$qb = $this->db->getQueryBuilder();
 		$qb->update('proofing_event_recipients')->set('public_link_id', $qb->createNamedParameter($linkId, IQueryBuilder::PARAM_INT))
 			->set('publication_status', $qb->createNamedParameter('published'))->set('delivery_status', $qb->createNamedParameter($invitedAt === null ? 'published' : 'invited'))
 			->set('invitation_status', $qb->createNamedParameter($invitationStatus))->set('invited_at', $qb->createNamedParameter($invitedAt, IQueryBuilder::PARAM_INT))
 			->set('error_code', $qb->createNamedParameter(null))->set('updated_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT))
-			->where($qb->expr()->eq('id', $qb->createNamedParameter($recipientId, IQueryBuilder::PARAM_INT)))->executeStatement();
+			->set('claim_token', $qb->createNamedParameter(null))->set('claim_until', $qb->createNamedParameter(null))
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($recipientId, IQueryBuilder::PARAM_INT)));
+		if ($claimToken !== null) $qb->andWhere($qb->expr()->eq('claim_token', $qb->createNamedParameter($claimToken)));
+		if ($qb->executeStatement() !== 1) throw new \RuntimeException('Event publication claim was superseded');
 	}
 
-	public function failed(int $recipientId, string $code, int $now): void {
+	public function failed(int $recipientId, string $code, int $now, ?string $claimToken = null): void {
 		$qb = $this->db->getQueryBuilder();
 		$qb->update('proofing_event_recipients')->set('publication_status', $qb->createNamedParameter('failed'))
 			->set('delivery_status', $qb->createNamedParameter('failed'))->set('error_code', $qb->createNamedParameter($code))
 			->set('updated_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT))
-			->where($qb->expr()->eq('id', $qb->createNamedParameter($recipientId, IQueryBuilder::PARAM_INT)))->executeStatement();
+			->set('claim_token', $qb->createNamedParameter(null))->set('claim_until', $qb->createNamedParameter(null))
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($recipientId, IQueryBuilder::PARAM_INT)));
+		if ($claimToken !== null) $qb->andWhere($qb->expr()->eq('claim_token', $qb->createNamedParameter($claimToken)));
+		$qb->executeStatement();
 	}
 
 	/** @return array{processed: int, failed: int, pending: int} */
@@ -199,6 +241,7 @@ final class EventWaveRepository {
 	public function retryFailed(int $waveId, int $now): int {
 		$qb = $this->db->getQueryBuilder();
 		return $qb->update('proofing_event_recipients')->set('publication_status', $qb->createNamedParameter('draft'))
+			->set('attempts', $qb->createNamedParameter(0, IQueryBuilder::PARAM_INT))->set('claim_token', $qb->createNamedParameter(null))->set('claim_until', $qb->createNamedParameter(null))
 			->set('delivery_status', $qb->createNamedParameter('draft'))->set('error_code', $qb->createNamedParameter(null))
 			->set('updated_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT))
 			->where($qb->expr()->eq('wave_id', $qb->createNamedParameter($waveId, IQueryBuilder::PARAM_INT)))

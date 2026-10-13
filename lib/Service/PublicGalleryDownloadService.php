@@ -14,8 +14,8 @@ final class PublicGalleryDownloadService {
 		private MediaIndexService $mediaIndex,
 		private MediaTypePolicy $mediaTypes,
 		private PolicyService $policies,
-		private PublicLinkScopeService $linkScopes,
 		private PublicMediaResolver $publicMedia,
+		private FolderMediaReader $reader,
 	) {
 	}
 
@@ -31,67 +31,69 @@ final class PublicGalleryDownloadService {
 	 * }
 	 */
 	public function inspect(PublicShareContext $context): array {
-		$entries = $this->entries($context);
-		if ($entries === null) return $this->result([], 'index_incomplete');
-		$totalBytes = array_sum(array_map(static fn (array $entry): int => (int)$entry['file']->getSize(), $entries));
-		$reason = $entries === [] ? 'empty'
-			: (count($entries) > $this->policies->get('maxGalleryDownloadFiles') ? 'too_many_files'
-				: ($totalBytes > $this->policies->get('maxSelectionBytes') ? 'too_large' : null));
-		return $this->result($entries, $reason, $totalBytes);
+		$stream = $this->entries($context);
+		if ($stream === null) return $this->result([], 'index_incomplete');
+		$entries = []; $totalBytes = 0; $reason = null;
+		try {
+			foreach ($stream as $entry) {
+				$entries[] = $entry;
+				$totalBytes += (int)$entry['file']->getSize();
+				if (count($entries) > $this->policies->get('maxGalleryDownloadFiles')) { $reason = 'too_many_files'; break; }
+				if ($totalBytes > $this->policies->get('maxSelectionBytes')) { $reason = 'too_large'; break; }
+			}
+		} catch (\OCA\ProofingGallery\Exception\DownloadScanLimitException) { $reason = 'index_incomplete'; }
+		return $this->result($this->uniquePaths($entries), $reason ?? ($entries === [] ? 'empty' : null), $totalBytes);
 	}
 
-	/** @return ?list<array{file: File, path: string}> */
-	private function entries(PublicShareContext $context): ?array {
-		if ($context->gallery->getSourceType() === 'collection') {
-			$entries = [];
-			foreach ($this->collections->availableItems($context->gallery) as $item) {
-				$file = $this->publicMedia->resolve($context, (int)$item['id']);
-				$entries[] = ['file' => $file, 'path' => $this->collections->downloadPath($context->gallery, $file)];
-			}
-			return $this->uniquePaths($entries);
-		}
+	/** @return ?iterable<array{file: File, path: string}> */
+	private function entries(PublicShareContext $context): ?iterable {
+		if ($context->gallery->getSourceType() === 'collection') return $this->collectionEntries($context);
 		if ($context->link->getViewMode() === 'recursive') {
-			$prefix = $this->linkScopes->indexPath($context->link, '');
+			$prefix = $context->scope->indexPath('');
 			$rows = $this->mediaIndex->downloadableRows($context->gallery, $prefix, $context->link->getMinOwnerRating());
-			if ($rows === null) return null;
-			$entries = [];
-			foreach ($rows as $row) {
-				try {
-					$file = $this->publicMedia->resolve($context, $row['file_id']);
-					$path = $prefix !== '' ? substr($row['relative_path'], strlen($prefix) + 1) : $row['relative_path'];
-					$entries[] = ['file' => $file, 'path' => $path];
-				} catch (\Throwable) {
-					// Stale index entries are never exported.
-				}
-			}
-			return $this->uniquePaths($entries);
+			return $rows === null ? null : $this->indexedEntries($context, $prefix, $rows);
 		}
-		$recursive = $context->settings->navigation->folders;
-		if ($this->linkScopes->isMultiRoot($context->link)) {
-			$entries = [];
-			foreach ($this->linkScopes->roots($context->link) as $rootPath) {
-				$node = $context->root->get($rootPath);
-				if (!$node instanceof Folder || !$context->root->isSubNode($node)) continue;
-				array_push($entries, ...$this->folderEntries($node, $rootPath, true));
-			}
-			return $this->uniquePaths($entries);
-		}
-		return $this->uniquePaths($this->folderEntries($context->root, '', $recursive));
+		return $this->folderEntries($context);
 	}
 
-	/** @return list<array{file: File, path: string}> */
-	private function folderEntries(Folder $folder, string $prefix, bool $recursive): array {
-		$entries = [];
-		foreach ($folder->getDirectoryListing() as $node) {
-			if (str_starts_with($node->getName(), '.')) continue;
-			$path = ltrim($prefix . '/' . $node->getName(), '/');
-			if ($node instanceof File && $this->mediaTypes->supports($node)) {
-				$entries[] = ['file' => $node, 'path' => $path];
-			} elseif ($recursive && $node instanceof Folder) {
-				array_push($entries, ...$this->folderEntries($node, $path, true));
-			}
+	/** @return \Generator<int, array{file: File, path: string}> */
+	private function collectionEntries(PublicShareContext $context): \Generator {
+		foreach ($this->collections->availableItemStream($context->gallery) as $item) {
+			$file = $this->publicMedia->resolve($context, (int)$item['id']);
+			yield ['file' => $file, 'path' => $this->collections->downloadPath($context->gallery, $file)];
 		}
-		return $entries;
+	}
+
+	/** @param iterable<array{file_id: int, relative_path: string, mime_type: string}> $rows
+	 * @return \Generator<int, array{file: File, path: string}> */
+	private function indexedEntries(PublicShareContext $context, string $prefix, iterable $rows): \Generator {
+		foreach ($rows as $row) {
+			try { $file = $this->publicMedia->resolve($context, $row['file_id']); }
+			catch (\OCP\Files\NotFoundException) { continue; }
+			yield ['file' => $file, 'path' => $prefix !== '' ? substr($row['relative_path'], strlen($prefix) + 1) : $row['relative_path']];
+		}
+	}
+
+	/** Native traversal has a work budget as well as the export's byte/file limits.
+	 * @return \Generator<int, array{file: File, path: string}> */
+	private function folderEntries(PublicShareContext $context): \Generator {
+		$multiRoot = $context->scope->multiRoot;
+		$pending = $multiRoot ? $context->scope->roots : [''];
+		$recursive = $multiRoot || $context->settings->navigation->folders;
+		$budget = max(1000, $this->policies->get('maxGalleryDownloadFiles') * 10);
+		while ($pending !== []) {
+			$path = array_pop($pending); $after = 0;
+			do {
+				if ($budget <= 0) throw new \OCA\ProofingGallery\Exception\DownloadScanLimitException();
+				$page = $this->reader->page($context->root, $path, $after, min(500, $budget));
+				$budget -= max(1, $page['examined']); $after = $page['after'];
+				foreach ($page['items'] as $node) {
+					$relative = ltrim($path . '/' . $node->getName(), '/');
+					if ($node instanceof Folder && $recursive) $pending[] = $relative;
+					elseif ($node instanceof File && $this->mediaTypes->visibleFile($context->root, $node)) yield ['file' => $node, 'path' => $relative];
+				}
+			} while (!$page['done']);
+		}
 	}
 
 	/** @param list<array{file: File, path: string}> $entries

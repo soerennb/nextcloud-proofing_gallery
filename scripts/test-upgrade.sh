@@ -263,6 +263,7 @@ compose exec -T -e PG_BASELINE_HAS_LEGACY_REPAIR="${baseline_has_legacy_repair}"
 	}
 '
 
+compose exec -T --user www-data "${service}" php /dev/stdin seed < "${repo_dir}/tests/smoke/UpgradePrivateInbox.php"
 compose exec -T --user www-data "${service}" php /dev/stdin seed < "${repo_dir}/tests/smoke/UpgradeCollaboration.php"
 compose exec -T -e PG_FEEDBACK_ADMIN_CHOICE="${UPGRADE_FEEDBACK_ADMIN_CHOICE:-absent}" --user www-data "${service}" php /dev/stdin seed < "${repo_dir}/tests/smoke/UpgradeFeedbackPermissions.php"
 compose cp "${repo_dir}/tests/smoke/UpgradeAgentRequests.php" "${service}:/tmp/proofing-upgrade-agent-requests.php"
@@ -337,6 +338,7 @@ else
 fi
 run_upgrade
 status_json="$(compose exec -T --user www-data "${service}" php occ status --output=json)"
+compose exec -T --user www-data "${service}" php /dev/stdin verify < "${repo_dir}/tests/smoke/UpgradePrivateInbox.php"
 compose exec -T --user www-data "${service}" php /dev/stdin verify < "${repo_dir}/tests/smoke/UpgradeCollaboration.php"
 compose exec -T -e PG_FEEDBACK_ADMIN_CHOICE="${UPGRADE_FEEDBACK_ADMIN_CHOICE:-absent}" --user www-data "${service}" php /dev/stdin verify < "${repo_dir}/tests/smoke/UpgradeFeedbackPermissions.php"
 compose exec -T --user www-data "${service}" php /dev/stdin verify < "${repo_dir}/tests/smoke/UpgradeLinkInheritance.php"

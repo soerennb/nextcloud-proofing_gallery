@@ -12,7 +12,6 @@ final class PublicMediaResolver {
 	public function __construct(
 		private CollectionService $collections,
 		private MediaTypePolicy $mediaTypes,
-		private PublicLinkScopeService $scopes,
 	) {
 	}
 
@@ -28,11 +27,12 @@ final class PublicMediaResolver {
 			return $file;
 		}
 		foreach ($context->root->getById($fileId) as $node) {
-			if (!$node instanceof File || !$context->root->isSubNode($node) || !$this->mediaTypes->supports($node)) continue;
-			if (!$this->scopes->isMultiRoot($context->link)) return $node;
+			if (!$node instanceof File || !$this->mediaTypes->visibleFile($context->root, $node)) continue;
+			// A single-root native share defines containment; folder navigation is a view option.
+			if (!$context->scope->multiRoot) return $node;
 			$prefix = rtrim($context->root->getPath(), '/') . '/';
 			$relativePath = str_starts_with($node->getPath(), $prefix) ? substr($node->getPath(), strlen($prefix)) : '';
-			if ($this->scopes->contains($context->link, $context->settings, $relativePath)) return $node;
+			if ($context->scope->contains($relativePath, $context->link->getViewMode() === 'recursive' || $context->settings->navigation->folders)) return $node;
 		}
 		throw new NotFoundException('Media file not found');
 	}

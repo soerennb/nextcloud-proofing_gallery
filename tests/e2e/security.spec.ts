@@ -16,6 +16,9 @@ test('public routes reject traversal, invalid tokens, and forged mutation nonces
 
 	const traversal = await request.get(endpoint('gallery?path=..'))
 	expect(traversal.status()).toBe(404)
+	for (const hidden of ['.proofing-gallery-inbox', 'album/.private']) {
+		expect((await request.get(endpoint('gallery?path=' + encodeURIComponent(hidden)))).status()).toBe(404)
+	}
 
 	const invalidToken = await request.get(
 		'/index.php/apps/proofing_gallery/public/not-a-real-token/gallery',

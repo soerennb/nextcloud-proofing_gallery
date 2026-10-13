@@ -1,5 +1,5 @@
 import { flushPromises, shallowMount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const eventApi = vi.hoisted(() => ({ fetchEventOperations: vi.fn(), fetchEventSetup: vi.fn() }))
 vi.mock('@nextcloud/dialogs', () => ({ showError: vi.fn(), showSuccess: vi.fn() }))
@@ -53,6 +53,19 @@ function setup(currentStep: EventSetupStep): EventSetup {
 }
 
 describe('EventDeliveryWorkspace scaling', () => {
+	afterEach(() => vi.useRealTimers())
+	it('does not restart polling after a late unmounted response', async () => {
+		vi.useFakeTimers()
+		eventApi.fetchEventSetup.mockResolvedValueOnce(setup('delivery'))
+		let finish!: (value: object) => void
+		eventApi.fetchEventOperations.mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+		const wrapper = shallowMount(EventDeliveryWorkspace, { props: { gallery: gallery() } })
+		await flushPromises()
+		wrapper.unmount()
+		finish({ summary: {}, waves: [{ status: 'releasing' }] })
+		await flushPromises()
+		expect(vi.getTimerCount()).toBe(0)
+	})
 	it('renders at most one 50-item visibility page', async () => {
 		eventApi.fetchEventSetup.mockResolvedValueOnce(setup('visibility'))
 		eventApi.fetchEventOperations.mockResolvedValueOnce({ summary: {}, waves: [] })

@@ -61,7 +61,7 @@ final class PublicShareContextResolver {
 			$shareRoot = $this->anchors->resolve($gallery->getOwnerUid(), $link->getScopeAnchorId());
 		}
 		if (!$expected instanceof Folder || $share->getNodeId() !== $shareRoot->getId()) throw new \InvalidArgumentException('Public link scope does not match its share');
-		return new PublicShareContext($share, $gallery, $settings, $link, $policy, $expected);
+		return new PublicShareContext($share, $gallery, $settings, $link, $policy, $expected, $this->scopes->resolve($link));
 	}
 
 	public function tryResolve(string $token, PublicLinkCapability $permission = PublicLinkCapability::View): ?PublicShareContext {

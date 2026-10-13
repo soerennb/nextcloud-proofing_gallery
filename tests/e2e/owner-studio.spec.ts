@@ -344,3 +344,30 @@ test('cross-gallery navigation ignores delayed loads and retains unsaved changes
 		for (const gallery of galleries) await request.delete(`${routeApi}/${gallery.id}?format=json`, { headers: routeHeaders })
 	}
 })
+
+for (const destination of ['#help', '#archive']) {
+	test(`leaving a pending draft for ${destination} saves it and retains failures`, async ({ page, request }) => {
+		const { folderId } = JSON.parse(await readFile('test-results-e2e-state.json', 'utf8')) as { folderId: number }
+		const response = await request.post(`${routeApi}?format=json`, { headers: routeHeaders, data: { folderId, title: `Exit draft ${Date.now()}` } })
+		expect(response.status()).toBe(201)
+		const gallery = await response.json() as { id: number; title: string }
+		try {
+			await login(page)
+			await page.goto(`/apps/proofing_gallery/#gallery/${gallery.id}/overview`)
+			await page.getByRole('textbox', { name: 'Gallery title', exact: true }).fill(`${gallery.title} saved`)
+			await page.evaluate(hash => { location.hash = hash }, destination)
+			await expect(page.locator('.settings-page')).toHaveCount(0)
+			expect((await request.get(`${routeApi}/${gallery.id}?format=json`, { headers: routeHeaders }).then(result => result.json())).title).toBe(`${gallery.title} saved`)
+			await page.evaluate(id => { location.hash = `gallery/${id}/overview` }, gallery.id)
+			await page.getByRole('textbox', { name: 'Gallery title', exact: true }).fill(`${gallery.title} unsaved`)
+			await page.route(`**/api/v1/galleries/${gallery.id}`, async route => {
+				if (route.request().method() === 'PUT') await route.fulfill({ status: 503, json: { message: 'Injected save failure' } })
+				else await route.continue()
+			})
+			await page.evaluate(hash => { location.hash = hash }, destination)
+			await expect(page).toHaveURL(new RegExp(`#gallery/${gallery.id}/overview$`))
+			await expect(page.getByRole('textbox', { name: 'Gallery title', exact: true })).toHaveValue(`${gallery.title} unsaved`)
+			await page.unroute(`**/api/v1/galleries/${gallery.id}`)
+		} finally { await request.delete(`${routeApi}/${gallery.id}?format=json`, { headers: routeHeaders }) }
+	})
+}

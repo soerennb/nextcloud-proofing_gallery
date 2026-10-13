@@ -202,8 +202,8 @@ export async function fetchEventOverview(id: number): Promise<EventOverview> {
 	return (await axios.get<EventOverview>(`${galleriesUrl}/${id}/event`)).data
 }
 
-export async function fetchEventOperations(id: number): Promise<EventOperations> {
-	return (await axios.get<EventOperations>(`${galleriesV2Url}/${id}/event/operations`)).data
+export async function fetchEventOperations(id: number, signal?: AbortSignal): Promise<EventOperations> {
+	return (await axios.get<EventOperations>(`${galleriesV2Url}/${id}/event/operations`, { signal })).data
 }
 
 export async function fetchEventSetup(id: number): Promise<EventSetup> {

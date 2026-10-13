@@ -13,8 +13,8 @@ use PHPUnit\Framework\TestCase;
 final class UploadLockServiceTest extends TestCase {
 	public function testRunsCallbackAndAlwaysReleasesLock(): void {
 		$provider = $this->createMock(ILockingProvider::class);
-		$provider->expects(self::once())->method('acquireLock')->with('upload/one', ILockingProvider::LOCK_EXCLUSIVE, 'Upload one');
-		$provider->expects(self::once())->method('releaseLock')->with('upload/one', ILockingProvider::LOCK_EXCLUSIVE);
+		$provider->expects(self::once())->method('acquireLock')->with(hash('sha256', 'upload/one'), ILockingProvider::LOCK_EXCLUSIVE, 'Upload one');
+		$provider->expects(self::once())->method('releaseLock')->with(hash('sha256', 'upload/one'), ILockingProvider::LOCK_EXCLUSIVE);
 		$service = new UploadLockService($provider);
 
 		self::assertSame('completed', $service->immediately('upload/one', 'Upload one', static fn (): string => 'completed'));
@@ -22,7 +22,7 @@ final class UploadLockServiceTest extends TestCase {
 
 	public function testReleasesLockWhenCallbackFails(): void {
 		$provider = $this->createMock(ILockingProvider::class);
-		$provider->expects(self::once())->method('releaseLock')->with('upload/two', ILockingProvider::LOCK_EXCLUSIVE);
+		$provider->expects(self::once())->method('releaseLock')->with(hash('sha256', 'upload/two'), ILockingProvider::LOCK_EXCLUSIVE);
 		$service = new UploadLockService($provider);
 
 		$this->expectException(\RuntimeException::class);

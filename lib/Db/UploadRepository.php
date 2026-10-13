@@ -44,15 +44,96 @@ final class UploadRepository {
 			->where($qb->expr()->eq('upload_id', $qb->createNamedParameter($uploadId)))->executeStatement();
 	}
 
-	public function finalize(string $uploadId, int $fileId, string $filename, string $mimeType, int $now): void {
+
+	public function finalizePrivate(string $uploadId, string $filename, string $mimeType, int $now): void {
 		$qb = $this->db->getQueryBuilder();
-		$qb->update('proofing_uploads')
-			->set('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT))
-			->set('filename', $qb->createNamedParameter($filename))
-			->set('mime_type', $qb->createNamedParameter($mimeType))
-			->set('status', $qb->createNamedParameter('awaiting_review'))
+		$changed = $qb->update('proofing_uploads')->set('private_key', $qb->createNamedParameter($uploadId))
+			->set('file_id', $qb->createNamedParameter(null))->set('filename', $qb->createNamedParameter($filename))
+			->set('mime_type', $qb->createNamedParameter($mimeType))->set('status', $qb->createNamedParameter('awaiting_review'))
 			->set('updated_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT))
-			->where($qb->expr()->eq('upload_id', $qb->createNamedParameter($uploadId)))->executeStatement();
+			->where($qb->expr()->eq('upload_id', $qb->createNamedParameter($uploadId)))
+			->andWhere($qb->expr()->eq('status', $qb->createNamedParameter('pending')))->executeStatement();
+		if ($changed !== 1) throw new \RuntimeException('Upload state changed concurrently');
+	}
+
+	public function nameTaken(int $galleryId, string $name, string $excluding): bool {
+		$qb = $this->db->getQueryBuilder();
+		return $qb->select('id')->from('proofing_uploads')
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('filename', $qb->createNamedParameter($name)))
+			->andWhere($qb->expr()->neq('upload_id', $qb->createNamedParameter($excluding)))
+			->andWhere($qb->expr()->in('status', $qb->createNamedParameter(['awaiting_review', 'accepted'], IQueryBuilder::PARAM_STR_ARRAY)))
+			->setMaxResults(1)->executeQuery()->fetchOne() !== false;
+	}
+
+	public function stageAcceptance(string $uploadId, int $fileId): void {
+		$this->setUploadField($uploadId, 'staging_file_id', $fileId);
+	}
+
+	public function accept(string $uploadId, int $fileId, string $name, int $now): void {
+		$qb = $this->db->getQueryBuilder();
+		$changed = $qb->update('proofing_uploads')->set('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT))
+			->set('filename', $qb->createNamedParameter($name))->set('status', $qb->createNamedParameter('accepted'))
+			->set('updated_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT))
+			->where($qb->expr()->eq('upload_id', $qb->createNamedParameter($uploadId)))
+			->andWhere($qb->expr()->eq('status', $qb->createNamedParameter('awaiting_review')))->executeStatement();
+		if ($changed !== 1) throw new \RuntimeException('Upload moderation state changed concurrently');
+	}
+
+	/** @return list<string> */
+	public function chunkCleanupIds(int $limit): array {
+		$qb = $this->db->getQueryBuilder();
+		return array_map('strval', QueryResult::column($qb->select('upload_id')->from('proofing_uploads')
+			->where($qb->expr()->neq('status', $qb->createNamedParameter('pending')))
+			->andWhere($qb->expr()->eq('chunks_cleaned', $qb->createNamedParameter(false, IQueryBuilder::PARAM_BOOL)))
+			->orderBy('id')->setMaxResults($limit)->executeQuery()));
+	}
+
+	public function markChunksCleaned(string $id): void {
+		$qb = $this->db->getQueryBuilder();
+		$qb->update('proofing_uploads')->set('chunks_cleaned', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL))
+			->where($qb->expr()->eq('upload_id', $qb->createNamedParameter($id)))->executeStatement();
+	}
+
+	/** @return list<array<string, mixed>> */
+	public function privateCleanupRows(int $limit): array {
+		$qb = $this->db->getQueryBuilder();
+		return QueryResult::rows($qb->select('*')->from('proofing_uploads')->where($qb->expr()->isNotNull('private_key'))
+			->andWhere($qb->expr()->in('status', $qb->createNamedParameter(['accepted', 'rejected'], IQueryBuilder::PARAM_STR_ARRAY)))
+			->orderBy('id')->setMaxResults($limit)->executeQuery());
+	}
+
+	/** @return list<array<string, mixed>> */
+	public function legacyInboxRows(int $limit): array {
+		$qb = $this->db->getQueryBuilder();
+		return QueryResult::rows($qb->select('u.*', 'g.owner_uid')->from('proofing_uploads', 'u')
+			->innerJoin('u', 'proofing_galleries', 'g', $qb->expr()->eq('g.id', 'u.gallery_id'))
+			->where($qb->expr()->in('u.status', $qb->createNamedParameter(['awaiting_review', 'rejected'], IQueryBuilder::PARAM_STR_ARRAY)))
+			->andWhere($qb->expr()->orX($qb->expr()->andX($qb->expr()->isNull('u.private_key'), $qb->expr()->isNotNull('u.file_id')), $qb->expr()->isNotNull('u.legacy_file_id')))
+			->orderBy('u.id')->setMaxResults($limit)->executeQuery());
+	}
+
+	public function privatizeLegacy(string $id, int $fileId): void {
+		$qb = $this->db->getQueryBuilder();
+		$qb->update('proofing_uploads')->set('legacy_file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT))
+			->set('private_key', $qb->createNamedParameter($id))->set('file_id', $qb->createNamedParameter(null))
+			->where($qb->expr()->eq('upload_id', $qb->createNamedParameter($id)))->executeStatement();
+	}
+
+	public function retireLegacy(string $id): void {
+		$qb = $this->db->getQueryBuilder();
+		$qb->update('proofing_uploads')->set('file_id', $qb->createNamedParameter(null))->set('legacy_file_id', $qb->createNamedParameter(null))
+			->set('status', $qb->createNamedParameter('rejected'))
+			->where($qb->expr()->eq('upload_id', $qb->createNamedParameter($id)))->executeStatement();
+	}
+
+	public function clearLegacyFile(string $id): void { $this->setUploadField($id, 'legacy_file_id', null); }
+	public function clearPrivateKey(string $id): void { $this->setUploadField($id, 'private_key', null); }
+
+	private function setUploadField(string $id, string $column, int|string|null $value): void {
+		$qb = $this->db->getQueryBuilder();
+		$qb->update('proofing_uploads')->set($column, $qb->createNamedParameter($value, is_int($value) ? IQueryBuilder::PARAM_INT : ($value === null ? IQueryBuilder::PARAM_NULL : IQueryBuilder::PARAM_STR)))
+			->where($qb->expr()->eq('upload_id', $qb->createNamedParameter($id)))->executeStatement();
 	}
 
 	public function markResponseReceived(int $galleryId, int $now): void {

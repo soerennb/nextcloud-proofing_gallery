@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { requestLifetime } from '../services/requestLifetime.ts'
+import { useGalleryDraft } from '../composables/useGalleryDraft.ts'
 import { FilePickerType, getFilePickerBuilder, showError, showSuccess } from '@nextcloud/dialogs'
 import { t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import { AnimatePresence, motion, useReducedMotion } from 'motion-v'
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import AlertCircleIcon from 'vue-material-design-icons/AlertCircle.vue'
 import CheckAllIcon from 'vue-material-design-icons/CheckAll.vue'
 import CheckIcon from 'vue-material-design-icons/Check.vue'
@@ -11,12 +13,11 @@ import CheckboxBlankCircleOutlineIcon from 'vue-material-design-icons/CheckboxBl
 import DotsHorizontalIcon from 'vue-material-design-icons/DotsHorizontal.vue'
 import RefreshIcon from 'vue-material-design-icons/Refresh.vue'
 
-import { canonicalGallerySettings } from '../domain/gallerySettings.ts'
 import { availableGalleryWorkspaces, galleryWorkspaceFromReadinessAction, galleryWorkspacePath, normalizeGalleryWorkspace, galleryPurposeLabels as purposeLabels } from '../domain/gallerySettingsOptions.ts'
 import type { GalleryWorkspace } from '../domain/gallerySettingsOptions.ts'
 import { useGalleryMediaCounts } from '../composables/useGalleryMediaCounts.ts'
 import { useGalleryPresets } from '../composables/useGalleryPresets.ts'
-import { completeGallery, fetchCollection, fetchDesignAssets, fetchGalleryMedia, fetchGalleryReadiness, fetchStoryMedia, updateGallery, updateGallerySource, uploadDesignAsset } from '../services/galleryApi.ts'
+import { completeGallery, fetchCollection, fetchDesignAssets, fetchGalleryMedia, fetchGalleryReadiness, fetchStoryMedia, updateGallerySource, uploadDesignAsset } from '../services/galleryApi.ts'
 import type { DesignAsset } from '../services/galleryApi.ts'
 import { fetchEventDesignMedia, fetchEventSetup } from '../services/eventApi.ts'
 import type { EventDesignScope, EventSetup } from '../services/eventApi.ts'
@@ -36,8 +37,6 @@ const GalleryReviewWorkspace = defineAsyncComponent(() => import('./workspaces/G
 const GalleryShareWorkspace = defineAsyncComponent(() => import('./workspaces/GalleryShareWorkspace.vue'))
 const GalleryTeamWorkspace = defineAsyncComponent(() => import('./workspaces/GalleryTeamWorkspace.vue'))
 
-type SaveState = 'saved' | 'pending' | 'saving' | 'offline' | 'error' | 'conflict' | 'invalid'
-
 const props = defineProps<{ gallery: Gallery }>()
 const emit = defineEmits<{
 	back: []
@@ -47,11 +46,7 @@ const emit = defineEmits<{
 const reduceMotion = useReducedMotion()
 
 const availableTabs = computed(() => availableGalleryWorkspaces(props.gallery))
-const [activeTab, saving, saveState] = [ref<GalleryWorkspace>(tabFromHash()), ref(false), ref<SaveState>('saved')]
-const saveTimer = ref<ReturnType<typeof setTimeout> | null>(null)
-const serverRevision = ref(props.gallery.revision)
-const conflictGallery = ref<Gallery | null>(null)
-let savePromise: Promise<boolean> | null = null
+const activeTab = ref<GalleryWorkspace>(tabFromHash())
 const rebinding = ref(false)
 const sourceRebind = ref<SourceRebindReport | null>(null)
 const showSharing = ref(false)
@@ -68,13 +63,7 @@ watch(() => props.gallery.mediaSummary, () => { void loadReadiness() })
 const eventSetup = ref<EventSetup | null>(null)
 const eventDesignScopes = ref<EventDesignScope[]>([])
 const eventDesignScope = ref('shared')
-const baseline = ref('')
-const draft = reactive({
-	title: props.gallery.title,
-	settings: structuredClone(props.gallery.settings),
-})
-const serializedDraft = computed(() => JSON.stringify({ title: draft.title, settings: draft.settings }))
-const dirty = computed(() => serializedDraft.value !== baseline.value)
+const { draft, dirty, saving, saveState, serverRevision, conflictGallery, resetDraft, scheduleSave, save, flushSave, clearSaveTimer } = useGalleryDraft({ gallery: () => props.gallery, updated: gallery => emit('updated', gallery), saved: () => { void loadReadiness() } })
 const saveStateLabel = computed(() => ({
 	saved: t('proofing_gallery', 'Saved'),
 	pending: t('proofing_gallery', 'Changes pending'),
@@ -151,22 +140,16 @@ const {
 
 watch(() => props.gallery, gallery => {
 	if (gallery.revision < serverRevision.value) return
-	if (gallery.revision === serverRevision.value && dirty.value) return
+	if (dirty.value) {
+		if (gallery.revision > serverRevision.value) { conflictGallery.value = gallery; saveState.value = 'conflict' }
+		return
+	}
 	resetDraft(gallery)
 	loadMedia()
 })
 
 watch(availableTabs, tabs => {
 	if (!tabs.some(tab => tab.id === activeTab.value)) setTab('overview', 'replace')
-})
-
-watch(serializedDraft, () => {
-	if (!props.gallery.permissions.canEdit) return
-	if (!dirty.value) {
-		if (!saving.value) saveState.value = 'saved'
-		return
-	}
-	scheduleSave()
 })
 
 function tabFromHash(): GalleryWorkspace {
@@ -188,15 +171,6 @@ function syncTabFromHistory() {
 	queueMicrotask(() => setTab(tabFromHash(), 'replace'))
 }
 
-function resetDraft(gallery = props.gallery) {
-	draft.title = gallery.title
-	draft.settings = structuredClone(gallery.settings)
-	baseline.value = JSON.stringify({ title: draft.title, settings: draft.settings })
-	serverRevision.value = gallery.revision
-	conflictGallery.value = null
-	saveState.value = 'saved'
-}
-
 async function leave() {
 	const saved = await flushSave()
 	if (!saved && dirty.value && !window.confirm(t('proofing_gallery', 'Leave with changes that could not be saved?'))) return
@@ -209,11 +183,15 @@ function beforeUnload(event: BeforeUnloadEvent) {
 	event.returnValue = ''
 }
 
+const mediaRequests = requestLifetime()
+const designRequests = requestLifetime()
 async function loadMedia() {
+	const request = mediaRequests.begin()
 	mediaLoading.value = true
 	try {
 		if (props.gallery.deliveryMode === 'event') {
 			const page = await fetchEventDesignMedia(props.gallery.id, eventDesignScope.value)
+			if (!request.current()) return
 			eventDesignScopes.value = page.scopes
 			eventDesignScope.value = page.activeScope ?? 'shared'
 			media.value = page.items
@@ -224,59 +202,66 @@ async function loadMedia() {
 		}
 		if (props.gallery.sourceType === 'collection') {
 			const collection = await fetchCollection(props.gallery.id)
+			if (!request.current()) return
 			media.value = collection.items.filter(item => item.state === 'available').map(item => ({
 				id: item.fileId,
-				name: item.name!,
-				mimeType: item.mimeType!,
-				size: item.size!,
-				modifiedAt: item.modifiedAt!,
-				etag: item.etag!,
+				name: item.name,
+				mimeType: item.mimeType,
+				size: item.size,
+				modifiedAt: item.modifiedAt,
+				etag: item.etag,
 				folder: false,
 				sourceGalleryId: item.sourceGalleryId,
 				sourceGalleryTitle: item.sourceGalleryTitle ?? undefined,
 			}))
 			mediaTotal.value = collection.items.length
-			await loadStoryReferences()
+			await loadStoryReferences(request.current)
 			return
 		}
 		const page = await fetchGalleryMedia(props.gallery.id, 60)
+		if (!request.current()) return
 		media.value = page.items
 		mediaTotal.value = page.total
-		await loadStoryReferences()
+		await loadStoryReferences(request.current)
 	} catch {
+		if (!request.current()) return
 		media.value = []
 		mediaTotal.value = 0
 	} finally {
-		mediaLoading.value = false
+		if (request.current()) mediaLoading.value = false
 	}
 }
 
-async function loadStoryReferences() {
+async function loadStoryReferences(current: () => boolean) {
 	const referenced = [...new Set(draft.settings.presentation.story.sections.flatMap(section => section.mediaIds))]
 	const loaded = new Set(media.value.map(item => item.id))
 	const missing = referenced.filter(id => !loaded.has(id))
 	if (missing.length === 0) { missingStoryMediaIds.value = []; return }
 	try {
 		const resolved = await fetchStoryMedia(props.gallery.id, missing)
+		if (!current()) return
 		const byId = new Map(media.value.map(item => [item.id, item]))
 		for (const item of resolved.items) byId.set(item.id, item)
 		media.value = [...byId.values()]
 		missingStoryMediaIds.value = resolved.missingIds
 	} catch {
-		missingStoryMediaIds.value = missing
+		if (current()) missingStoryMediaIds.value = missing
 	}
 }
 
 async function searchDesignMedia(query: string): Promise<MediaItem[]> {
+	const request = designRequests.begin()
 	const normalized = query.trim().toLocaleLowerCase()
 	if (props.gallery.deliveryMode === 'event') {
 		const page = await fetchEventDesignMedia(props.gallery.id, eventDesignScope.value, query)
+		if (!request.current()) return []
 		eventDesignScopes.value = page.scopes
 		mediaTotal.value = page.total
 		return page.items
 	}
 	if (props.gallery.sourceType === 'collection') return storyMedia.value.filter(item => item.name.toLocaleLowerCase().includes(normalized)).slice(0, 60)
 	const page = await fetchGalleryMedia(props.gallery.id, 60, 0, '', query)
+	if (!request.current()) return []
 	const byId = new Map(media.value.map(item => [item.id, item]))
 	for (const item of page.items) byId.set(item.id, item)
 	media.value = [...byId.values()]
@@ -288,6 +273,7 @@ async function selectEventDesignScope(scope: string) {
 	await loadMedia()
 }
 
+let disposed = false
 let readinessRequest = 0
 async function loadReadiness() {
 	const request = ++readinessRequest
@@ -297,11 +283,11 @@ async function loadReadiness() {
 			fetchGalleryReadiness(id),
 			props.gallery.deliveryMode === 'event' ? fetchEventSetup(id) : Promise.resolve(null),
 		])
-		if (request !== readinessRequest || props.gallery.id !== id) return
+		if (disposed || request !== readinessRequest || props.gallery.id !== id) return
 		serverReadiness.value = galleryReadiness
 		eventSetup.value = setup
 	} catch {
-		if (request !== readinessRequest || props.gallery.id !== id) return
+		if (disposed || request !== readinessRequest || props.gallery.id !== id) return
 		serverReadiness.value = null
 		eventSetup.value = null
 	}
@@ -373,93 +359,6 @@ async function chooseSource() {
 	}
 }
 
-function clearSaveTimer() {
-	if (saveTimer.value !== null) {
-		clearTimeout(saveTimer.value)
-		saveTimer.value = null
-	}
-}
-
-function scheduleSave(delay = 650) {
-	clearSaveTimer()
-	if (!draft.title.trim()) {
-		saveState.value = 'invalid'
-		return
-	}
-	if (!navigator.onLine) {
-		saveState.value = 'offline'
-		return
-	}
-	saveState.value = 'pending'
-	saveTimer.value = setTimeout(() => { save().catch(() => {}) }, delay)
-}
-
-function revisionConflict(error: unknown): Gallery | null {
-	if (typeof error !== 'object' || error === null || !('response' in error)) return null
-	const response = (error as { response?: { status?: number; data?: { code?: string; gallery?: Gallery } } }).response
-	return response?.status === 409 && response.data?.code === 'revision_conflict'
-		? response.data.gallery ?? null
-		: null
-}
-
-function save(showConfirmation = false): Promise<boolean> {
-	if (savePromise !== null) {
-		return savePromise.then(saved => dirty.value ? save(showConfirmation) : saved)
-	}
-	savePromise = persistSave(showConfirmation).finally(() => { savePromise = null })
-	return savePromise
-}
-
-async function persistSave(showConfirmation = false): Promise<boolean> {
-	if (!props.gallery.permissions.canEdit || !dirty.value) return true
-	if (!draft.title.trim()) {
-		saveState.value = 'invalid'
-		return false
-	}
-	clearSaveTimer()
-	const snapshot = serializedDraft.value
-	const title = draft.title.trim()
-	const settings = canonicalGallerySettings(draft.settings)
-	saving.value = true
-	saveState.value = 'saving'
-	try {
-		const gallery = await updateGallery(props.gallery.id, {
-			title,
-			settings,
-			expectedRevision: serverRevision.value,
-		})
-		serverRevision.value = gallery.revision
-		baseline.value = snapshot
-		emit('updated', gallery)
-		if (serializedDraft.value === snapshot) {
-			saveState.value = 'saved'
-		} else {
-			scheduleSave(0)
-		}
-		if (showConfirmation) showSuccess(t('proofing_gallery', 'Gallery settings saved.'))
-		loadReadiness()
-		return true
-	} catch (error) {
-		const current = revisionConflict(error)
-		if (current) {
-			conflictGallery.value = current
-			saveState.value = 'conflict'
-		} else if (!navigator.onLine) {
-			saveState.value = 'offline'
-		} else {
-			saveState.value = 'error'
-		}
-		return false
-	} finally {
-		saving.value = false
-	}
-}
-
-async function flushSave(): Promise<boolean> {
-	clearSaveTimer()
-	return dirty.value ? save() : true
-}
-
 defineExpose({ flushSave, currentRoute: () => galleryWorkspacePath(props.gallery.id, activeTab.value) })
 
 async function openSharing() {
@@ -506,6 +405,10 @@ onMounted(() => {
 	window.addEventListener('popstate', syncTabFromHistory)
 })
 onBeforeUnmount(() => {
+	disposed = true
+	readinessRequest++
+	mediaRequests.dispose()
+	designRequests.dispose()
 	emit('workspace-mode', false)
 	clearSaveTimer(); window.removeEventListener('beforeunload', beforeUnload)
 	window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline)

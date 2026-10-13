@@ -11,6 +11,7 @@ use OCP\Files\Folder;
 use OCP\Share\IShare;
 
 final class PublicShareContext {
+	public readonly PublicLinkScope $scope;
 	public function __construct(
 		public readonly IShare $share,
 		public readonly Gallery $gallery,
@@ -18,6 +19,8 @@ final class PublicShareContext {
 		public readonly PublicLink $link,
 		public readonly PublicLinkPolicy $policy,
 		public readonly Folder $root,
+		?PublicLinkScope $scope = null,
 	) {
+		$this->scope = $scope ?? PublicLinkScope::legacy($link);
 	}
 }

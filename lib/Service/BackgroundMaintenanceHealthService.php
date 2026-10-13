@@ -15,6 +15,7 @@ use OCP\BackgroundJob\IJobList;
 final class BackgroundMaintenanceHealthService {
 	/** @var list<class-string> */
 	public const PERIODIC_JOBS = [
+		\OCA\ProofingGallery\BackgroundJob\RecoverEventWavesJob::class,
 		\OCA\ProofingGallery\BackgroundJob\ReconcileGalleryMediaCountsJob::class,
 		PurgeGuestsJob::class,
 		CleanupGalleryDataJob::class,

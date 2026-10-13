@@ -76,6 +76,7 @@ final class Application extends App implements IBootstrap {
 				$container->get(IJobList::class),
 			);
 		});
+		$context->registerEventListener(GalleryIntegrationEvent::class, \OCA\ProofingGallery\Listener\ActivityPublicationListener::class);
 		$context->registerCapability(Capabilities::class);
 		$context->registerSearchProvider(GallerySearchProvider::class);
 		$context->registerReferenceProvider(GalleryReferenceProvider::class);

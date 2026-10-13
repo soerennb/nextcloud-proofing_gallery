@@ -263,7 +263,7 @@ Event delivery applies this policy to the whole release wave. It still keeps
 each recipient inside their assigned folder scope, and a later wave with a more
 generous policy does not change already released links.
 
-Guest uploads are resumable and enter a hidden moderation inbox. Owners or
+Guest uploads are resumable and enter a private moderation inbox. Owners or
 authorized managers accept an upload with a conflict-free filename or reject
 it. An upload does not appear publicly before acceptance.
 

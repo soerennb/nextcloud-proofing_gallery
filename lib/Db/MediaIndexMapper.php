@@ -120,13 +120,21 @@ final class MediaIndexMapper extends QBMapper {
 		$qb = $this->db->getQueryBuilder();
 		$qb->from($this->tableName, 'm')
 			->where($qb->expr()->eq('m.gallery_id', $qb->createNamedParameter($query->galleryId, IQueryBuilder::PARAM_INT)));
-		if ($query->minOwnerRating > 0) {
-			$qb->innerJoin('m', 'proofing_media_cull', 'c', $qb->expr()->andX(
+		if ($query->minOwnerRating > 0 || $query->culling->active()) {
+			$qb->leftJoin('m', 'proofing_media_cull', 'c', $qb->expr()->andX(
 				$qb->expr()->eq('c.file_id', 'm.file_id'),
 				$qb->expr()->eq('c.owner_uid', $qb->createNamedParameter($query->ownerUid)),
-				$qb->expr()->gte('c.rating', $qb->createNamedParameter($query->minOwnerRating, IQueryBuilder::PARAM_INT)),
 			));
+			if ($query->minOwnerRating > 0) $qb->andWhere($qb->expr()->gte('c.rating', $qb->createNamedParameter($query->minOwnerRating, IQueryBuilder::PARAM_INT)));
+			foreach (['rating' => 0, 'pick' => 'none', 'color' => 'none'] as $field => $default) {
+				$value = $query->culling->$field;
+				if ($value === null) continue;
+				$column = match ($field) { 'pick' => 'pick_state', 'color' => 'color', default => 'rating' };
+				$equals = $qb->expr()->eq('c.' . $column, $qb->createNamedParameter($value, is_int($value) ? IQueryBuilder::PARAM_INT : IQueryBuilder::PARAM_STR));
+				$qb->andWhere($value === $default ? $qb->expr()->orX($equals, $qb->expr()->isNull('c.' . $column)) : $equals);
+			}
 		}
+		if ($query->culling->fileIds !== null) $qb->andWhere($query->culling->fileIds === [] ? $qb->expr()->eq('m.file_id', $qb->createNamedParameter(-1, IQueryBuilder::PARAM_INT)) : $qb->expr()->in('m.file_id', $qb->createNamedParameter($query->culling->fileIds, IQueryBuilder::PARAM_INT_ARRAY)));
 		if ($query->pathPrefix !== '') {
 			$escaped = $this->db->escapeLikeParameter($query->pathPrefix);
 			$qb->andWhere($qb->expr()->like('m.relative_path', $qb->createNamedParameter($escaped . '/%')));

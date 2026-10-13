@@ -133,6 +133,12 @@ final class EventWaveService {
 		return $this->show($gallery, $waveId);
 	}
 
+	public function recoverJobs(): int {
+		$ids = $this->repository->stalledWaveIds($this->clock->getTime());
+		foreach ($ids as $id) $this->queue($id);
+		return count($ids);
+	}
+
 	public function process(int $waveId): void {
 		$row = $this->repository->find($waveId);
 		if ($row === false || !in_array($row['status'], ['scheduled', 'releasing'], true)) return;
@@ -140,10 +146,12 @@ final class EventWaveService {
 		if ($row['status'] === 'scheduled' && (int)$row['release_at'] > $now) { $this->queue($waveId, (int)$row['release_at']); return; }
 		if ($row['status'] === 'scheduled') $this->repository->updateWave($waveId, 'releasing', null, 0, 0, $now);
 		try { $gallery = $this->galleries->find((int)$row['gallery_id']); } catch (\Throwable) { return; }
-		$sharedRoots = $this->resolvedRoots($gallery, (int)$row['id'], null, 'shared');
 		$policy = $this->decodeMap((string)$row['policy']);
-		try { $this->links->configureEventPrimary($gallery, $sharedRoots); } catch (\Throwable) {
-			foreach ($this->repository->claim($waveId, self::BATCH_SIZE, $now) as $recipient) $this->repository->failed((int)$recipient['id'], 'master_scope_unavailable', $now);
+		try {
+			$sharedRoots = $this->resolvedRoots($gallery, (int)$row['id'], null, 'shared');
+			$this->links->configureEventPrimary($gallery, $sharedRoots);
+		} catch (\Throwable) {
+			foreach ($this->repository->claim($waveId, self::BATCH_SIZE, $now) as $recipient) $this->repository->failed((int)$recipient['id'], 'master_scope_unavailable', $now, (string)$recipient['claim_token']);
 			$this->finishOrContinue($gallery, $row);
 			return;
 		}
@@ -175,14 +183,14 @@ final class EventWaveService {
 				'allowedRoots' => [...$sharedRoots, ...$groupRoots, $privateRoot], 'viewMode' => 'folder', 'groupDepth' => 1,
 				'publicLocale' => $recipient['locale'], 'password' => $pin, 'expiresAt' => $wave['expires_at'],
 				'reviewEnabled' => in_array($gallery->getPurpose(), ['selection', 'proofing'], true),
-			]), true, $privateRoot, $groupRoots, fn (int $linkId) => $this->repository->published((int)$recipient['id'], $linkId, (bool)$wave['send_invitations'] ? 'pending' : 'not_requested', null, $now));
+			]), true, $privateRoot, $groupRoots, fn (int $linkId) => $this->repository->published((int)$recipient['id'], $linkId, (bool)$wave['send_invitations'] ? 'pending' : 'not_requested', null, $now, (string)$recipient['claim_token']));
 		} catch (\Throwable $exception) {
 			$current = $this->repository->recipient((int)$gallery->getId(), (int)$recipient['id']);
-			if ($current !== false && $current['public_link_id'] !== null) {
+			if ($current !== false && $current['publication_status'] === 'published' && $current['public_link_id'] !== null) {
 				$this->repository->published((int)$recipient['id'], (int)$current['public_link_id'], (bool)$wave['send_invitations'] ? 'failed' : 'not_requested', null, $now);
 				return;
 			}
-			$this->repository->failed((int)$recipient['id'], $this->failureCode($exception), $now);
+			$this->repository->failed((int)$recipient['id'], $this->failureCode($exception), $now, (string)$recipient['claim_token']);
 			return;
 		}
 		// Invitations are delivery side effects, never part of publication rollback.
@@ -201,7 +209,7 @@ final class EventWaveService {
 		$waveId = (int)$wave['id']; $now = $this->clock->getTime(); $progress = $this->repository->progress($waveId);
 		if ($progress['pending'] > 0) {
 			$this->repository->updateWave($waveId, 'releasing', null, $progress['processed'], $progress['failed'], $now);
-			$this->queue($waveId); return;
+			$this->queue($waveId, $now + 60); return;
 		}
 		$status = $progress['failed'] > 0 ? 'partial_failed' : 'released';
 		$this->repository->updateWave($waveId, $status, null, $progress['processed'], $progress['failed'], $now);

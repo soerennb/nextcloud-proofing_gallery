@@ -17,7 +17,7 @@ final class PurgeRepository {
 		'proofing_domains', 'proofing_link_roots', 'proofing_public_links', 'proofing_notify_queue', 'proofing_native_notify',
 		'proofing_notify_subs', 'proofing_int_outbox', 'proofing_events', 'proofing_uploads',
 		'proofing_live_push', 'proofing_retention_log', 'proofing_media_scan_queue', 'proofing_media_scans', 'proofing_media_index',
-		'proofing_semantic_idx', 'proofing_versions', 'proofing_ext_resources',
+		'proofing_semantic_idx', 'proofing_sem_candidates', 'proofing_versions', 'proofing_ext_resources',
 		'proofing_collection_items', 'proofing_collections', 'proofing_pin_handoffs', 'proofing_event_audit', 'proofing_event_roots', 'proofing_event_recipients', 'proofing_event_waves', 'proofing_event_setups', 'proofing_summaries', 'proofing_guests',
 		'proofing_kiosk_photos', 'proofing_kiosk_events', 'proofing_managers',
 		'proofing_count_queue', 'proofing_media_counts', 'proofing_galleries',

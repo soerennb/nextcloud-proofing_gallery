@@ -108,7 +108,11 @@ disable required file hooks merely to suppress these diagnostics.
 Event releases are queued in bounded batches and can be immediate or scheduled.
 Each recipient is processed independently: successful links remain valid when
 another recipient fails, and a partial-failure wave exposes only the failed
-rows for retry. Link rotation and invitation resend are also recipient-scoped.
+rows for retry. Publication claims expire after five minutes and carry fencing
+tokens so superseded workers cannot commit a link. A periodic recovery job
+requeues stalled waves, including jobs lost after process termination. Automatic
+claim recovery stops after five attempts; explicit retry starts a new attempt
+budget. Link rotation and invitation resend are also recipient-scoped.
 The event policy is captured with the wave and is intersected with the global,
 gallery, and public-link policies. It controls no-download, individual,
 selection, or complete-gallery delivery without ever crossing the recipient's

@@ -32,3 +32,17 @@ describe('fixed upload destinations', () => {
 		wrapper.unmount()
 	})
 })
+
+it('keeps each directory upload path while preparing and running bounded workers', async () => {
+	const first = new File(['first'], 'first.jpg')
+	const second = new File(['second'], 'second.jpg')
+	vi.mocked(prepareOwnerUploadSessions).mockResolvedValue([{ id: 'first', state: 'pending', chunkSize: 5, chunks: 1, uploadedChunks: [] }, { id: 'second', state: 'pending', chunkSize: 5, chunks: 1, uploadedChunks: [] }])
+	vi.mocked(uploadGalleryMedia).mockResolvedValue(null)
+	let queue!: ReturnType<typeof useOwnerUploadQueue>
+	const wrapper = mount(defineComponent({ setup() { queue = useOwnerUploadQueue({ gallery: () => ({ id: 19, ownerUid: 'owner', title: 'Event' }), path: () => '', changed: vi.fn(), reload: async () => {} }); return () => null } }))
+	await queue.uploadEntries([{ file: first, path: 'Client A', resolution: { conflict: 'rename' } }, { file: second, path: 'Client B', resolution: { conflict: 'rename' } }])
+	expect(queue.uploadQueue.value.map(item => item.target.path)).toEqual(['Client A', 'Client B'])
+	expect(vi.mocked(prepareOwnerUploadSessions).mock.lastCall?.[1].map(entry => entry.path)).toEqual(['Client A', 'Client B'])
+	expect(vi.mocked(uploadGalleryMedia).mock.calls.slice(-2).map(call => call[2])).toEqual(['Client A', 'Client B'])
+	wrapper.unmount()
+})

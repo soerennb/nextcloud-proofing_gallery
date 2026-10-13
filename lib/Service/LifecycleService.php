@@ -31,6 +31,7 @@ final class LifecycleService {
 		private LifecycleScheduleService $lifecycleSchedule,
 		private RetentionHandoffService $retention,
 		private FolderService $folders,
+		private PrivateGuestInboxService $privateInbox,
 	) {
 	}
 
@@ -59,7 +60,7 @@ final class LifecycleService {
 			'proofing_agent_requests', 'expires_at', $now, self::BATCH_SIZE,
 		);
 		$pinHandoffs = $this->repository->deleteOldRows('proofing_pin_handoffs', 'expires_at', $now, self::BATCH_SIZE);
-		$uploads = $this->cleanupUploads($now) + $this->cleanupOwnerUploads(
+		$uploads = $this->privateInbox->cleanup(self::BATCH_SIZE) + $this->cleanupUploads($now) + $this->cleanupOwnerUploads(
 			$now - $this->policies->get('pendingUploadRetentionHours') * 3600,
 		);
 		$previewBefore = $now - $this->policies->get('previewRetentionDays') * 86400;
@@ -149,11 +150,10 @@ final class LifecycleService {
 			return 0;
 		}
 		foreach ($rows as $row) {
-			if ($row['status'] === 'pending') {
-				try {
-					$this->appData->getFolder('guest-uploads')->getFolder($row['upload_id'])->delete();
-				} catch (\OCP\Files\NotFoundException) {
-				}
+			$this->privateInbox->delete((string)$row['upload_id']);
+			try {
+				$this->appData->getFolder('guest-uploads')->getFolder($row['upload_id'])->delete();
+			} catch (\OCP\Files\NotFoundException) {
 			}
 		}
 		$ids = array_map(static fn (array $row): int => (int)$row['id'], $rows);
