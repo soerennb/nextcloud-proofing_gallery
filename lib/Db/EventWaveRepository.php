@@ -74,7 +74,7 @@ final class EventWaveRepository {
 	/** @return array<string, mixed>|false */
 	public function findByRequestKey(int $galleryId, string $requestKey): array|false {
 		$qb = $this->db->getQueryBuilder();
-		return QueryResult::row($qb->select('*')->from('proofing_event_waves')
+		return QueryResult::firstRow($qb->select('*')->from('proofing_event_waves')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('request_key', $qb->createNamedParameter($requestKey)))->executeQuery());
 	}
@@ -102,7 +102,7 @@ final class EventWaveRepository {
 	/** @return array<string, mixed>|false */
 	public function find(int $waveId): array|false {
 		$qb = $this->db->getQueryBuilder();
-		return QueryResult::row($qb->select('*')->from('proofing_event_waves')
+		return QueryResult::firstRow($qb->select('*')->from('proofing_event_waves')
 			->where($qb->expr()->eq('id', $qb->createNamedParameter($waveId, IQueryBuilder::PARAM_INT)))->executeQuery());
 	}
 
@@ -116,11 +116,11 @@ final class EventWaveRepository {
 
 	public function reserved(int $galleryId): int {
 		$qb = $this->db->getQueryBuilder();
-		return (int)$qb->select($qb->func()->count())->from('proofing_event_recipients', 'r')
+		return (int)QueryResult::value($qb->select($qb->func()->count())->from('proofing_event_recipients', 'r')
 			->innerJoin('r', 'proofing_event_waves', 'w', $qb->expr()->eq('w.id', 'r.wave_id'))
 			->where($qb->expr()->eq('r.gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->in('w.status', $qb->createNamedParameter(['draft', 'scheduled', 'releasing'], IQueryBuilder::PARAM_STR_ARRAY)))
-			->andWhere($qb->expr()->neq('r.publication_status', $qb->createNamedParameter('published')))->executeQuery()->fetchOne();
+			->andWhere($qb->expr()->neq('r.publication_status', $qb->createNamedParameter('published')))->executeQuery());
 	}
 
 	/** @return array{total: int, draft: int, published: int, invited: int, failed: int, revoked: int} */
@@ -259,7 +259,7 @@ final class EventWaveRepository {
 	/** @return array<string, mixed>|false */
 	public function recipient(int $galleryId, int $recipientId): array|false {
 		$qb = $this->db->getQueryBuilder();
-		return QueryResult::row($qb->select('*')->from('proofing_event_recipients')
+		return QueryResult::firstRow($qb->select('*')->from('proofing_event_recipients')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('id', $qb->createNamedParameter($recipientId, IQueryBuilder::PARAM_INT)))->executeQuery());
 	}
@@ -311,7 +311,7 @@ final class EventWaveRepository {
 			$like = '%' . $this->db->escapeLikeParameter(mb_strtolower($query)) . '%';
 			$count->andWhere($count->expr()->orX($count->expr()->iLike('display_name', $count->createNamedParameter($like)), $count->expr()->iLike('folder_path', $count->createNamedParameter($like))));
 		}
-		$total = (int)$count->executeQuery()->fetchOne();
+		$total = (int)QueryResult::value($count->executeQuery());
 		$last = $rows === [] ? null : $rows[array_key_last($rows)];
 		return ['items' => $rows, 'total' => $total, 'nextId' => $hasMore && $last !== null ? (int)$last['id'] : null];
 	}
@@ -354,7 +354,7 @@ final class EventWaveRepository {
 
 	public function deleteRecipient(int $recipientId): void {
 		$lookup = $this->db->getQueryBuilder();
-		$waveId = $lookup->select('wave_id')->from('proofing_event_recipients')->where($lookup->expr()->eq('id', $lookup->createNamedParameter($recipientId, IQueryBuilder::PARAM_INT)))->executeQuery()->fetchOne();
+		$waveId = QueryResult::value($lookup->select('wave_id')->from('proofing_event_recipients')->where($lookup->expr()->eq('id', $lookup->createNamedParameter($recipientId, IQueryBuilder::PARAM_INT)))->executeQuery());
 		$roots = $this->db->getQueryBuilder();
 		$roots->delete('proofing_event_roots')->where($roots->expr()->eq('recipient_id', $roots->createNamedParameter($recipientId, IQueryBuilder::PARAM_INT)))->executeStatement();
 		$qb = $this->db->getQueryBuilder();
@@ -362,7 +362,7 @@ final class EventWaveRepository {
 		if ($waveId !== false && $waveId !== null) {
 			$progress = $this->progress((int)$waveId);
 			$count = $this->db->getQueryBuilder();
-			$total = (int)$count->select($count->func()->count())->from('proofing_event_recipients')->where($count->expr()->eq('wave_id', $count->createNamedParameter((int)$waveId, IQueryBuilder::PARAM_INT)))->executeQuery()->fetchOne();
+			$total = (int)QueryResult::value($count->select($count->func()->count())->from('proofing_event_recipients')->where($count->expr()->eq('wave_id', $count->createNamedParameter((int)$waveId, IQueryBuilder::PARAM_INT)))->executeQuery());
 			$wave = $this->db->getQueryBuilder();
 			$wave->update('proofing_event_waves')->set('total_count', $wave->createNamedParameter($total, IQueryBuilder::PARAM_INT))
 				->set('processed_count', $wave->createNamedParameter($progress['processed'], IQueryBuilder::PARAM_INT))->set('failed_count', $wave->createNamedParameter($progress['failed'], IQueryBuilder::PARAM_INT))
@@ -384,23 +384,23 @@ final class EventWaveRepository {
 
 	public function handoffAvailable(int $waveId, int $now): bool {
 		$qb = $this->db->getQueryBuilder();
-		return $qb->select('id')->from('proofing_pin_handoffs')->where($qb->expr()->eq('wave_id', $qb->createNamedParameter($waveId, IQueryBuilder::PARAM_INT)))
+		return QueryResult::value($qb->select('id')->from('proofing_pin_handoffs')->where($qb->expr()->eq('wave_id', $qb->createNamedParameter($waveId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->isNull('consumed_at'))->andWhere($qb->expr()->gt('expires_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT)))
-			->executeQuery()->fetchOne() !== false;
+			->executeQuery()) !== false;
 	}
 
 	public function handoffExists(int $waveId): bool {
 		$qb = $this->db->getQueryBuilder();
-		return $qb->select('id')->from('proofing_pin_handoffs')
+		return QueryResult::value($qb->select('id')->from('proofing_pin_handoffs')
 			->where($qb->expr()->eq('wave_id', $qb->createNamedParameter($waveId, IQueryBuilder::PARAM_INT)))
-			->executeQuery()->fetchOne() !== false;
+			->executeQuery()) !== false;
 	}
 
 	public function consumeHandoff(int $waveId, int $now): ?string {
 		$this->db->beginTransaction();
 		try {
 			$qb = $this->db->getQueryBuilder();
-			$row = QueryResult::row($qb->select('id', 'content_cipher')->from('proofing_pin_handoffs')
+			$row = QueryResult::firstRow($qb->select('id', 'content_cipher')->from('proofing_pin_handoffs')
 				->where($qb->expr()->eq('wave_id', $qb->createNamedParameter($waveId, IQueryBuilder::PARAM_INT)))
 				->andWhere($qb->expr()->isNull('consumed_at'))->andWhere($qb->expr()->gt('expires_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT)))->executeQuery());
 			if ($row === false) { $this->db->commit(); return null; }

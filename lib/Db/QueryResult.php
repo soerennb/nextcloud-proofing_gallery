@@ -11,14 +11,30 @@ use UnexpectedValueException;
 final class QueryResult {
 	/** @return list<array<string, mixed>> */
 	public static function rows(IResult $result): array {
-		$rows = [];
-		foreach ($result->fetchAll(PDO::FETCH_ASSOC) as $row) {
-			$rows[] = self::associativeRow($row);
+		try {
+			$rows = [];
+			foreach ($result->fetchAll(PDO::FETCH_ASSOC) as $row) {
+				$rows[] = self::associativeRow($row);
+			}
+			return $rows;
+		} finally {
+			$result->closeCursor();
 		}
-		return $rows;
 	}
 
 	/** @return array<string, mixed>|false */
+	public static function firstRow(IResult $result): array|false {
+		try {
+			return self::row($result);
+		} finally {
+			$result->closeCursor();
+		}
+	}
+
+	/**
+	 * Read one streaming row; the caller owns cursor cleanup.
+	 * @return array<string, mixed>|false
+	 */
 	public static function row(IResult $result): array|false {
 		$row = $result->fetch(PDO::FETCH_ASSOC);
 		return $row === false ? false : self::associativeRow($row);
@@ -26,9 +42,21 @@ final class QueryResult {
 
 	/** @return list<mixed> */
 	public static function column(IResult $result): array {
-		$values = [];
-		foreach ($result->fetchAll(PDO::FETCH_COLUMN) as $value) $values[] = $value;
-		return $values;
+		try {
+			$values = [];
+			foreach ($result->fetchAll(PDO::FETCH_COLUMN) as $value) $values[] = $value;
+			return $values;
+		} finally {
+			$result->closeCursor();
+		}
+	}
+
+	public static function value(IResult $result): mixed {
+		try {
+			return $result->fetchOne();
+		} finally {
+			$result->closeCursor();
+		}
 	}
 
 	/** @return array<string, mixed> */

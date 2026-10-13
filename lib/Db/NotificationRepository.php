@@ -23,7 +23,7 @@ final class NotificationRepository {
 	/** @return array<string, mixed>|null */
 	public function subscription(int $galleryId, string $userUid): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$row = QueryResult::row($qb->select('*')->from('proofing_notify_subs')
+		$row = QueryResult::firstRow($qb->select('*')->from('proofing_notify_subs')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('user_uid', $qb->createNamedParameter($userUid)))
 			->executeQuery());
@@ -85,10 +85,10 @@ final class NotificationRepository {
 
 	public function deleteSubscription(int $galleryId, int $id): ?string {
 		$qb = $this->db->getQueryBuilder();
-		$userUid = $qb->select('user_uid')->from('proofing_notify_subs')
+		$userUid = QueryResult::value($qb->select('user_uid')->from('proofing_notify_subs')
 			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
-			->executeQuery()->fetchOne();
+			->executeQuery());
 		if ($userUid === false) return null;
 		$this->db->beginTransaction();
 		try {
@@ -183,7 +183,7 @@ final class NotificationRepository {
 	/** @return array<string, mixed>|null */
 	public function activeEmailSubscription(int $id): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$row = QueryResult::row($qb->select('*')->from('proofing_notify_subs')
+		$row = QueryResult::firstRow($qb->select('*')->from('proofing_notify_subs')
 			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('active', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL)))
 			->andWhere($qb->expr()->eq('email_enabled', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL)))

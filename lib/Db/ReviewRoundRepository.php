@@ -15,7 +15,7 @@ final class ReviewRoundRepository {
 	/** @return array<string, mixed>|null */
 	public function current(int $publicLinkId): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$row = QueryResult::row($qb->select('r.*', 'g.display_name AS submitted_by_guest')
+		$row = QueryResult::firstRow($qb->select('r.*', 'g.display_name AS submitted_by_guest')
 			->from('proofing_review_rounds', 'r')
 			->leftJoin('r', 'proofing_guests', 'g', $qb->expr()->eq('g.id', 'r.submitted_by_guest_id'))
 			->where($qb->expr()->eq('r.public_link_id', $qb->createNamedParameter($publicLinkId, IQueryBuilder::PARAM_INT)))
@@ -143,7 +143,7 @@ final class ReviewRoundRepository {
 			->andWhere($overdue->expr()->lt('r.due_date', $overdue->createNamedParameter($today)))
 			->andWhere($overdue->expr()->isNull('newer.id'))
 			->andWhere($overdue->expr()->eq('l.status', $overdue->createNamedParameter('active')));
-		$counts['overdue'] = (int)$overdue->executeQuery()->fetchOne();
+		$counts['overdue'] = (int)QueryResult::value($overdue->executeQuery());
 		return $counts;
 	}
 }

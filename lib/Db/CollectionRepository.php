@@ -103,18 +103,18 @@ final class CollectionRepository {
 
 	public function sourceGalleryId(int $collectionId, int $fileId): ?int {
 		$qb = $this->db->getQueryBuilder();
-		$value = $qb->select('source_gallery_id')->from('proofing_collection_items')
+		$value = QueryResult::value($qb->select('source_gallery_id')->from('proofing_collection_items')
 			->where($qb->expr()->eq('collection_id', $qb->createNamedParameter($collectionId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
-			->executeQuery()->fetchOne();
+			->executeQuery());
 		return $value === false ? null : (int)$value;
 	}
 
 	public function revision(int $galleryId): ?int {
 		$qb = $this->db->getQueryBuilder();
-		$value = $qb->select('revision')->from('proofing_collections')
+		$value = QueryResult::value($qb->select('revision')->from('proofing_collections')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
-			->executeQuery()->fetchOne();
+			->executeQuery());
 		return $value === false ? null : (int)$value;
 	}
 }

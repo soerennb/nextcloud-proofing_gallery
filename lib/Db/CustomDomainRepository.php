@@ -41,13 +41,13 @@ final class CustomDomainRepository {
 			->innerJoin('d', 'proofing_galleries', 'g', $qb->expr()->eq('d.gallery_id', 'g.id'))
 			->innerJoin('d', 'proofing_public_links', 'l', $qb->expr()->eq('d.public_link_id', 'l.id'));
 		$this->applyAdminFilters($qb, $status, $search);
-		return (int)$qb->executeQuery()->fetchOne();
+		return (int)QueryResult::value($qb->executeQuery());
 	}
 
 	/** @return array<string, mixed>|null */
 	public function find(int $id): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$row = QueryResult::row($qb->select('*')->from(self::TABLE)
+		$row = QueryResult::firstRow($qb->select('*')->from(self::TABLE)
 			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))->executeQuery());
 		return $row === false ? null : $row;
 	}
@@ -55,7 +55,7 @@ final class CustomDomainRepository {
 	/** @return array<string, mixed>|null */
 	public function verifiedDomain(string $domain, int $checkedAfter): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$row = QueryResult::row($qb->select('d.*', 'l.token')->from(self::TABLE, 'd')
+		$row = QueryResult::firstRow($qb->select('d.*', 'l.token')->from(self::TABLE, 'd')
 			->innerJoin('d', 'proofing_public_links', 'l', $qb->expr()->eq('d.public_link_id', 'l.id'))
 			->where($qb->expr()->eq('d.domain', $qb->createNamedParameter($domain)))
 			->andWhere($qb->expr()->eq('d.status', $qb->createNamedParameter('verified')))
@@ -80,7 +80,7 @@ final class CustomDomainRepository {
 	/** @return array<string, mixed>|null */
 	public function activeLink(int $linkId): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$row = QueryResult::row($qb->select('*')->from(self::TABLE)
+		$row = QueryResult::firstRow($qb->select('*')->from(self::TABLE)
 			->where($qb->expr()->eq('public_link_id', $qb->createNamedParameter($linkId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->neq('status', $qb->createNamedParameter('revoked')))->executeQuery());
 		return $row === false ? null : $row;

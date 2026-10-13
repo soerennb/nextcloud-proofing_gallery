@@ -54,11 +54,11 @@ final class VersionRepository {
 
 	public function exists(int $galleryId, int $fileId, string $versionId): bool {
 		$qb = $this->db->getQueryBuilder();
-		return $qb->select('id')->from('proofing_versions')
+		return QueryResult::value($qb->select('id')->from('proofing_versions')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('version_id', $qb->createNamedParameter($versionId)))
-			->executeQuery()->fetchOne() !== false;
+			->executeQuery()) !== false;
 	}
 
 	/** @param list<int> $ids */

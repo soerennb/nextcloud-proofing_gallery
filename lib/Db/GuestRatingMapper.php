@@ -91,7 +91,7 @@ final class GuestRatingMapper extends QBMapper {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select($qb->createFunction('COUNT(DISTINCT file_id)'))->from($this->tableName)
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
-		return (int)$qb->executeQuery()->fetchOne();
+		return (int)QueryResult::value($qb->executeQuery());
 	}
 
 	/**

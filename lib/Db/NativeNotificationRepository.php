@@ -15,7 +15,7 @@ final class NativeNotificationRepository {
 	/** @return array<string, mixed>|null */
 	public function find(int $galleryId, string $userUid, string $category): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$row = QueryResult::row($qb->select('*')->from('proofing_native_notify')
+		$row = QueryResult::firstRow($qb->select('*')->from('proofing_native_notify')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('user_uid', $qb->createNamedParameter($userUid)))
 			->andWhere($qb->expr()->eq('category', $qb->createNamedParameter($category)))
@@ -85,7 +85,7 @@ final class NativeNotificationRepository {
 	/** @return array<string, mixed>|null */
 	public function activeState(int $id, string $userUid): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$row = QueryResult::row($qb->select('*')->from('proofing_native_notify')
+		$row = QueryResult::firstRow($qb->select('*')->from('proofing_native_notify')
 			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('user_uid', $qb->createNamedParameter($userUid)))
 			->andWhere($qb->expr()->eq('active', $qb->createNamedParameter(true, IQueryBuilder::PARAM_BOOL)))
@@ -135,7 +135,7 @@ final class NativeNotificationRepository {
 			->executeStatement();
 		if ($count !== 1) return null;
 		$qb = $this->db->getQueryBuilder();
-		$row = QueryResult::row($qb->select('*')->from('proofing_native_notify')
+		$row = QueryResult::firstRow($qb->select('*')->from('proofing_native_notify')
 			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
 			->executeQuery());
 		return $row === false ? null : $row;

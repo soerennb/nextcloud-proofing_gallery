@@ -27,11 +27,11 @@ final class ActivityRepository {
 
 	public function existsWithDedupeKey(int $galleryId, string $type, string $dedupeKey): bool {
 		$qb = $this->db->getQueryBuilder();
-		$value = $qb->select('id')->from('proofing_events')
+		$value = QueryResult::value($qb->select('id')->from('proofing_events')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('event_type', $qb->createNamedParameter($type)))
 			->andWhere($qb->expr()->like('payload', $qb->createNamedParameter('%' . $this->db->escapeLikeParameter('"dedupeKey":"' . $dedupeKey . '"') . '%')))
-			->setMaxResults(1)->executeQuery()->fetchOne();
+			->setMaxResults(1)->executeQuery());
 		return $value !== false;
 	}
 
@@ -66,6 +66,6 @@ final class ActivityRepository {
 		$qb->select($qb->func()->count())->from('proofing_events')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
 		if ($type !== '') $qb->andWhere($qb->expr()->like('event_type', $qb->createNamedParameter($this->db->escapeLikeParameter($type) . '%')));
-		return (int)$qb->executeQuery()->fetchOne();
+		return (int)QueryResult::value($qb->executeQuery());
 	}
 }

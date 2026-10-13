@@ -89,7 +89,7 @@ final class MediaIndexMapper extends QBMapper {
 	public function countFiltered(MediaIndexQuery $query): int {
 		$qb = $this->filteredQuery($query);
 		$qb->select($qb->func()->count('m.id'));
-		return (int)$qb->executeQuery()->fetchOne();
+		return (int)QueryResult::value($qb->executeQuery());
 	}
 
 	/** @return list<array{file_id: int, relative_path: string, mime_type: string}> */
@@ -150,7 +150,7 @@ final class MediaIndexMapper extends QBMapper {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select($qb->func()->count())->from($this->tableName)
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
-		return (int)$qb->executeQuery()->fetchOne();
+		return (int)QueryResult::value($qb->executeQuery());
 	}
 
 	/**
@@ -171,7 +171,7 @@ final class MediaIndexMapper extends QBMapper {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select($qb->func()->max('seen_at'))->from($this->tableName)
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
-		$value = $qb->executeQuery()->fetchOne();
+		$value = QueryResult::value($qb->executeQuery());
 		return $value === false || $value === null ? null : (int)$value;
 	}
 

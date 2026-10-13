@@ -54,7 +54,7 @@ final class PurgeRepository {
 	/** @return array<string, mixed>|null */
 	public function active(int $galleryId): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$row = QueryResult::row($qb->select('*')->from('proofing_purge_requests')
+		$row = QueryResult::firstRow($qb->select('*')->from('proofing_purge_requests')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->in('status', $qb->createNamedParameter(['scheduled', 'running'], IQueryBuilder::PARAM_STR_ARRAY)))
 			->orderBy('id', 'DESC')->setMaxResults(1)->executeQuery());
@@ -357,7 +357,7 @@ final class PurgeRepository {
 			$qb->select($qb->func()->count())->from($table, 'parent');
 		}
 		$qb->where($qb->expr()->eq('parent.gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
-		return (int)$qb->executeQuery()->fetchOne();
+		return (int)QueryResult::value($qb->executeQuery());
 	}
 
 	private function deleteJoinedBatch(string $table, int $galleryId, int $limit): int {

@@ -114,7 +114,7 @@ final class CollaborationRepository {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select($qb->func()->count())->from('proofing_selections')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
-		return (int)$qb->executeQuery()->fetchOne();
+		return (int)QueryResult::value($qb->executeQuery());
 	}
 
 	/** @param list<array<string, mixed>> $selections */
@@ -165,7 +165,7 @@ final class CollaborationRepository {
 			->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('kind', $qb->createNamedParameter($kind)));
 		$this->actorCondition($qb, $guestId, $actorUid);
-		$value = $qb->executeQuery()->fetchOne();
+		$value = QueryResult::value($qb->executeQuery());
 		return $value === false ? null : (int)$value;
 	}
 
@@ -198,7 +198,7 @@ final class CollaborationRepository {
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
 		$this->actorCondition($qb, $guestId, $actorUid);
 		$qb->orderBy('id', 'ASC')->setFirstResult($threshold - 1)->setMaxResults(1);
-		return $qb->executeQuery()->fetchOne() !== false;
+		return QueryResult::value($qb->executeQuery()) !== false;
 	}
 
 	public function updateFeedback(int $id, string $value, int $now): void {
@@ -246,7 +246,7 @@ final class CollaborationRepository {
 			->andWhere($qb->expr()->eq('id', $qb->createNamedParameter($rootId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->isNull('parent_id'));
 		$this->actorCondition($qb, $scope->guestId(), $scope->actorUid());
-		$root = QueryResult::row($qb->executeQuery());
+		$root = QueryResult::firstRow($qb->executeQuery());
 		$annotation = $root === false || $scope->isEmpty() ? null : ($this->annotations([$rootId])[$rootId][0] ?? null);
 		if ($annotation === null) throw new InvalidArgumentException('Point conversation not found');
 		return $annotation;
@@ -270,7 +270,7 @@ final class CollaborationRepository {
 			->andWhere($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->isNull('deleted_at'));
 		$this->actorCondition($qb, $guestId, $actorUid);
-		$value = $qb->executeQuery()->fetchOne();
+		$value = QueryResult::value($qb->executeQuery());
 		return $value === false ? null : (int)$value;
 	}
 
@@ -334,14 +334,14 @@ final class CollaborationRepository {
 			))
 			->groupBy('s.id')->orderBy('s.updated_at', 'DESC')->addOrderBy('s.id', 'DESC')->setMaxResults(1);
 		$this->actorCondition($qb, $guestId, $actorUid, 's.');
-		$row = QueryResult::row($qb->executeQuery());
+		$row = QueryResult::firstRow($qb->executeQuery());
 		return $row === false ? null : $row;
 	}
 
 	/** @return array<string, mixed>|null */
 	public function latestSubmittedSelectionForLink(int $galleryId, int $publicLinkId): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$row = QueryResult::row($qb->select('s.*', $qb->func()->count('i.id', 'item_count'))
+		$row = QueryResult::firstRow($qb->select('s.*', $qb->func()->count('i.id', 'item_count'))
 			->from('proofing_selections', 's')
 			->leftJoin('s', 'proofing_selection_items', 'i', $qb->expr()->eq('i.selection_id', 's.id'))
 			->where($qb->expr()->eq('s.gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
@@ -354,7 +354,7 @@ final class CollaborationRepository {
 	/** @return array<string, mixed>|null */
 	public function latestSelectionForLinkOwner(int $galleryId, int $publicLinkId): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$row = QueryResult::row($qb->select('s.*', $qb->func()->count('i.id', 'item_count'))
+		$row = QueryResult::firstRow($qb->select('s.*', $qb->func()->count('i.id', 'item_count'))
 			->from('proofing_selections', 's')
 			->leftJoin('s', 'proofing_selection_items', 'i', $qb->expr()->eq('i.selection_id', 's.id'))
 			->where($qb->expr()->eq('s.gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
@@ -394,7 +394,7 @@ final class CollaborationRepository {
 	/** @return array<string, mixed>|null */
 	public function selection(int $galleryId, string $publicId): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$row = QueryResult::row($qb->select('*')->from('proofing_selections')
+		$row = QueryResult::firstRow($qb->select('*')->from('proofing_selections')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('public_id', $qb->createNamedParameter($publicId)))->executeQuery());
 		return $row === false ? null : $row;

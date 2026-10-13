@@ -32,7 +32,7 @@ final class ExternalResourceRepository {
 	/** @return array<string, mixed>|null */
 	public function find(int $galleryId, int $linkId, string $userUid, string $provider): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$row = QueryResult::row($qb->select('*')->from('proofing_ext_resources')
+		$row = QueryResult::firstRow($qb->select('*')->from('proofing_ext_resources')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('public_link_id', $qb->createNamedParameter($linkId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('user_uid', $qb->createNamedParameter($userUid)))

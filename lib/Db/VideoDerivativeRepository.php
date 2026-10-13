@@ -21,7 +21,7 @@ final class VideoDerivativeRepository {
 			->where($qb->expr()->eq('owner_uid', $qb->createNamedParameter($ownerUid)))
 			->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('profile', $qb->createNamedParameter($profile)));
-		$row = QueryResult::row($qb->executeQuery());
+		$row = QueryResult::firstRow($qb->executeQuery());
 		return $row === false ? null : $row;
 	}
 
@@ -68,7 +68,7 @@ final class VideoDerivativeRepository {
 		$active->select($active->func()->count())->from(self::TABLE)
 			->where($active->expr()->eq('status', $active->createNamedParameter('processing')))
 			->andWhere($active->expr()->gt('updated_at', $active->createNamedParameter($leaseExpiredAt, IQueryBuilder::PARAM_INT)));
-		if ((int)$active->executeQuery()->fetchOne() >= $limit) return false;
+		if ((int)QueryResult::value($active->executeQuery()) >= $limit) return false;
 		$qb = $this->db->getQueryBuilder();
 		$qb->update(self::TABLE)->set('status', $qb->createNamedParameter('processing'))
 			->set('attempts', $qb->createFunction('attempts + 1'))
@@ -116,7 +116,7 @@ final class VideoDerivativeRepository {
 		}
 		$size = $this->db->getQueryBuilder();
 		$size->select($size->func()->sum('size'))->from(self::TABLE)->where($size->expr()->eq('status', $size->createNamedParameter('ready')));
-		$counts['bytes'] = (int)$size->executeQuery()->fetchOne();
+		$counts['bytes'] = (int)QueryResult::value($size->executeQuery());
 		return $counts;
 	}
 

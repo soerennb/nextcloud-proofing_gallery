@@ -39,7 +39,7 @@ final class RetentionRepository {
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->orderBy('id', 'DESC')->setMaxResults(1);
 		if ($outcome !== null) $qb->andWhere($qb->expr()->eq('outcome', $qb->createNamedParameter($outcome)));
-		$row = QueryResult::row($qb->executeQuery());
+		$row = QueryResult::firstRow($qb->executeQuery());
 		return $row === false ? null : $row;
 	}
 
@@ -57,6 +57,6 @@ final class RetentionRepository {
 			->where($qb->expr()->in('id', $qb->createFunction($sub->getSQL())))
 			->andWhere($qb->expr()->eq('outcome', $qb->createNamedParameter($outcome)));
 		if ($action !== '') $qb->andWhere($qb->expr()->eq('action', $qb->createNamedParameter($action)));
-		return (int)$qb->executeQuery()->fetchOne();
+		return (int)QueryResult::value($qb->executeQuery());
 	}
 }

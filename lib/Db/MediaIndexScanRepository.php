@@ -17,7 +17,7 @@ final class MediaIndexScanRepository {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')->from('proofing_media_scans')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
-		$row = QueryResult::row($qb->executeQuery());
+		$row = QueryResult::firstRow($qb->executeQuery());
 		return $row === false ? null : $row;
 	}
 
@@ -70,7 +70,7 @@ final class MediaIndexScanRepository {
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('generation', $qb->createNamedParameter($generation)))
 			->orderBy('id', 'ASC')->setMaxResults(1);
-		$row = QueryResult::row($qb->executeQuery());
+		$row = QueryResult::firstRow($qb->executeQuery());
 		return $row === false ? null : $row;
 	}
 
@@ -98,7 +98,7 @@ final class MediaIndexScanRepository {
 
 	public function enqueue(int $galleryId, string $generation, int $parentFileId, string $path, int $depth): void {
 		$existing = $this->db->getQueryBuilder();
-		$found = QueryResult::row($existing->select('id')->from('proofing_media_scan_queue')
+		$found = QueryResult::firstRow($existing->select('id')->from('proofing_media_scan_queue')
 			->where($existing->expr()->eq('gallery_id', $existing->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($existing->expr()->eq('generation', $existing->createNamedParameter($generation)))
 			->andWhere($existing->expr()->eq('parent_file_id', $existing->createNamedParameter($parentFileId, IQueryBuilder::PARAM_INT)))->executeQuery());
