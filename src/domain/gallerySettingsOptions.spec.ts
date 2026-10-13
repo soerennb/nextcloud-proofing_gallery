@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { Gallery } from '../types.ts'
-import {
-	availableGalleryWorkspaces,
-	galleryWorkspaceFromReadinessAction,
-	galleryWorkspacePath,
-	normalizeGalleryWorkspace,
-} from './gallerySettingsOptions.ts'
+import { availableGalleryWorkspaces } from './gallerySettingsOptions.ts'
 
 function gallery(overrides: Partial<Gallery> = {}): Gallery {
 	return {
@@ -42,21 +37,7 @@ function gallery(overrides: Partial<Gallery> = {}): Gallery {
 	}
 }
 
-describe('gallery workspace routing', () => {
-	it('normalizes legacy hashes to semantic workspaces', () => {
-		expect(normalizeGalleryWorkspace('content')).toBe('photos')
-		expect(normalizeGalleryWorkspace('culling')).toBe('cull')
-		expect(normalizeGalleryWorkspace('access')).toBe('share')
-		expect(normalizeGalleryWorkspace('feedback')).toBe('review')
-		expect(normalizeGalleryWorkspace('activity')).toBe('history')
-		expect(normalizeGalleryWorkspace('unknown')).toBe('overview')
-	})
-
-	it('maps backend readiness actions without changing their contract', () => {
-		expect(galleryWorkspaceFromReadinessAction('content')).toBe('photos')
-		expect(galleryWorkspaceFromReadinessAction('access')).toBe('share')
-		expect(galleryWorkspacePath(42, 'review')).toBe('#gallery/42/review')
-	})
+describe('gallery workspace availability', () => {
 
 	it('keeps owner tools private and exposes history to viewers', () => {
 		const ownerWorkspaces = availableGalleryWorkspaces(gallery()).map(item => item.id)

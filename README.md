@@ -164,8 +164,9 @@ changes. Suspected vulnerabilities must be reported privately as described in
 
 The automated container matrix covers Nextcloud 31–34 with SQLite, MariaDB, and
 PostgreSQL. PHP 8.1–8.6 is declared; CI runs the supported baseline and current
-PHP versions. Browser E2E coverage uses Chromium and includes Axe accessibility
-and desktop/mobile visual regression checks.
+PHP versions. Routine browser E2E coverage uses Chromium with Axe accessibility
+and desktop/mobile interaction and reachability checks. Weekly and explicit
+comprehensive runs also check the review viewer in Firefox and WebKit.
 
 ## License
 

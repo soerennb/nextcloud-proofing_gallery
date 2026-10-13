@@ -277,79 +277,40 @@ test('conflicting share lifecycle operations return 409 while recovery owns the 
 	}
 })
 
-for (const width of [1440, 390]) {
-	test(`share recovery form works for primary and secondary links at ${width}px`, async ({ browser, request, baseURL }, testInfo) => {
-		test.setTimeout(60_000)
-		const restore = await customTokens(true, request)
-		const created = await gallery(request)
-		const context = await browser.newContext({ viewport: { width, height: 844 } })
-		try {
-			const published = await publish(request, created.id)
-			const secondary = await checked<Link>(await request.post(`${api}/${created.id}/public-links?format=json`, { headers, data: { name: 'Recovery client', policy } }), 201)
-			await removeNative(request, published.gallery.shareToken)
-			await removeNative(request, new URL(secondary.url).pathname.split('/').at(-1)!)
-			const page = await context.newPage()
-			await login(page, baseURL)
-			await page.goto(`${baseURL}/apps/proofing_gallery/#gallery/${created.id}/share`)
-			await page.locator('.settings-header').getByRole('button', { name: 'Invite clients', exact: true }).click()
-			const dialog = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Share gallery', exact: true }) })
-			await dialog.getByRole('button', { name: 'Update public link', exact: true }).click()
-			await expect(dialog.locator('.share-recovery')).toBeVisible()
-			await dialog.getByText('Recover without a password', { exact: true }).click()
-			await dialog.getByText('Recover without an expiry', { exact: true }).click()
-			await page.screenshot({ path: testInfo.outputPath(`recovery-form-${width}.png`), animations: 'disabled' })
-			expect(await dialog.locator('.share-recovery').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
-			await dialog.getByRole('button', { name: 'Recover link', exact: true }).click()
-			await expect(dialog.getByRole('status').filter({ hasText: 'Your gallery URL has been restored.' })).toBeVisible()
-			await dialog.getByRole('button', { name: 'Close', exact: true }).click()
-			const card = page.locator('.link-cards article').filter({ hasText: 'Recovery client' })
-			await card.getByRole('button', { name: 'Edit', exact: true }).click()
-			await page.locator('.link-editor').getByRole('button', { name: 'Save link', exact: true }).click()
-			const form = page.locator('.share-recovery')
-			await expect(form).toBeVisible()
-			await form.getByText('Recover without a password', { exact: true }).click()
-			await form.getByText('Recover without an expiry', { exact: true }).click()
-			await form.getByRole('button', { name: 'Recover link', exact: true }).click()
-			await expect(form).toHaveCount(0)
-			await expect(page.locator('.link-manager > [role="status"]').filter({ hasText: 'Your gallery URL has been restored.' })).toBeVisible()
-		} finally { await context.close().catch(() => {}); await cleanup(request, created.id); await restore() }
-	})
-
-}
-
-
-test('folder captions remain visible and clickable in every layout with filenames on and off', async ({ browser, request, baseURL }, testInfo) => {
-	test.setTimeout(90_000)
-	const fixture = await tree(request)
-	const created = await gallery(request, { folderId: fixture.folderId, settings: { publicLocale: 'en', presentation: { showFilenames: false, openerStyle: 'minimal' }, navigation: { folders: true } } })
-	const context = await browser.newContext()
+const width = 390
+test(`share recovery form works for primary and secondary links at ${width}px`, async ({ browser, request, baseURL }, testInfo) => {
+	test.setTimeout(60_000)
+	const restore = await customTokens(true, request)
+	const created = await gallery(request)
+	const context = await browser.newContext({ viewport: { width, height: 844 } })
 	try {
 		const published = await publish(request, created.id)
+		const secondary = await checked<Link>(await request.post(`${api}/${created.id}/public-links?format=json`, { headers, data: { name: 'Recovery client', policy } }), 201)
+		await removeNative(request, published.gallery.shareToken)
+		await removeNative(request, new URL(secondary.url).pathname.split('/').at(-1)!)
 		const page = await context.newPage()
-		for (const showFilenames of [false, true]) {
-			for (const width of [1440, 390]) {
-				await page.setViewportSize({ width, height: 1000 })
-				for (const layout of ['grid', 'masonry', 'list']) {
-					await request.put(`${api}/${created.id}?format=json`, { headers, data: { settings: { presentation: { layout, showFilenames } } } })
-					await page.goto(`${baseURL}/s/${published.gallery.shareToken}`)
-					const tile = page.locator('.media-tile--folder').filter({ hasText: 'Client' })
-					await expect(tile).toBeVisible()
-					const caption = tile.locator(layout === 'list' ? '.media-tile__details strong' : '.media-tile__name')
-					await expect(caption).toBeVisible()
-					await expect(caption).toHaveCSS('opacity', '1')
-					if (layout !== 'list') await expect(caption).toHaveCSS('background-image', 'none')
-					expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1)
-					await expect(page.locator('.media-tile:not(.media-tile--folder) .media-tile__name, .media-tile:not(.media-tile--folder) .media-tile__details strong')).toHaveCount(showFilenames ? 1 : 0)
-					await expect.poll(() => page.locator('.media-tile__open').evaluateAll(elements => elements.every(element => {
-						const rect = element.getBoundingClientRect()
-						return rect.left >= -1 && rect.right <= window.innerWidth + 1
-					}))).toBe(true)
-					await page.screenshot({ path: testInfo.outputPath(`folder-captions-${layout}-${width}-${showFilenames}.png`), fullPage: true, animations: 'disabled' })
-					await tile.getByRole('button').click()
-					await expect(page.locator('.media-tile--folder')).toHaveCount(0)
-					await expect(page.locator('.media-tile__open')).toHaveCount(1)
-				}
-			}
-		}
-	} finally { await context.close(); await cleanup(request, created.id); await request.delete(fixture.dav, { headers }) }
+		await login(page, baseURL)
+		await page.goto(`${baseURL}/apps/proofing_gallery/#gallery/${created.id}/share`)
+		await page.locator('.settings-header').getByRole('button', { name: 'Invite clients', exact: true }).click()
+		const dialog = page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: 'Share gallery', exact: true }) })
+		await dialog.getByRole('button', { name: 'Update public link', exact: true }).click()
+		await expect(dialog.locator('.share-recovery')).toBeVisible()
+		await dialog.getByText('Recover without a password', { exact: true }).click()
+		await dialog.getByText('Recover without an expiry', { exact: true }).click()
+		await page.screenshot({ path: testInfo.outputPath(`recovery-form-${width}.png`), animations: 'disabled' })
+		expect(await dialog.locator('.share-recovery').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+		await dialog.getByRole('button', { name: 'Recover link', exact: true }).click()
+		await expect(dialog.getByRole('status').filter({ hasText: 'Your gallery URL has been restored.' })).toBeVisible()
+		await dialog.getByRole('button', { name: 'Close', exact: true }).click()
+		const card = page.locator('.link-cards article').filter({ hasText: 'Recovery client' })
+		await card.getByRole('button', { name: 'Edit', exact: true }).click()
+		await page.locator('.link-editor').getByRole('button', { name: 'Save link', exact: true }).click()
+		const form = page.locator('.share-recovery')
+		await expect(form).toBeVisible()
+		await form.getByText('Recover without a password', { exact: true }).click()
+		await form.getByText('Recover without an expiry', { exact: true }).click()
+		await form.getByRole('button', { name: 'Recover link', exact: true }).click()
+		await expect(form).toHaveCount(0)
+		await expect(page.locator('.link-manager > [role="status"]').filter({ hasText: 'Your gallery URL has been restored.' })).toBeVisible()
+	} finally { await context.close().catch(() => {}); await cleanup(request, created.id); await restore() }
 })

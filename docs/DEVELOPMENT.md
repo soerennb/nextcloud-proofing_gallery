@@ -140,11 +140,42 @@ npm run test:e2e
 make test-compat
 ```
 
+Keep automated tests focused on access and privacy boundaries, data integrity,
+core gallery workflows, and failure cases that are difficult to verify manually.
+Do not add standalone tests for fixed labels, CSS classes, presentation defaults,
+trivial mappings, or behavior already adequately covered by another test.
+Use the smallest useful layer: domain tests for algorithms and policy rules,
+component tests for asynchronous state and draft preservation, and Docker-backed
+tests for Nextcloud, storage, database and browser integration. A security test
+must exercise behavior or actual output; searching source code for a string does
+not establish a privacy or authorization guarantee.
+
 `npm run test:e2e` prepares only the repository's running loopback Compose
 instance: it resets local brute-force state and disables Nextcloud request
 throttling in that disposable development container before Playwright starts.
 Remote `NEXTCLOUD_URL` targets and production installations are never changed.
 Use `npm run test:e2e:raw` when the target manages its own isolation.
+
+Ordinary E2E runs use Chromium. To run the review viewer in Firefox and WebKit
+as well, install their runtimes and opt in explicitly:
+
+```bash
+npx playwright install --with-deps chromium firefox webkit
+E2E_CROSS_BROWSER=1 npm run test:e2e -- tests/e2e/review-viewer.spec.ts
+```
+
+The two `@protected` cases run separately with Nextcloud brute-force and rate
+limit protection enabled, and are excluded from ordinary runs:
+
+```bash
+E2E_SECURITY_PROTECTIONS=1 npm run test:e2e
+```
+
+CI uses Chromium for pull requests and runs the additional review engines in
+the weekly and manually dispatched workflows. Ordinary compatibility checks
+cover Nextcloud 31 and 34 with SQLite; the weekly/manual checks cover 31–34.
+Release installation coverage remains 31–34 on SQLite, MariaDB and PostgreSQL,
+and upgrade checks retain all three database families.
 
 ### Browser diagnosis
 
@@ -172,14 +203,10 @@ an image annotation may keep its marker visible for context, but the comment
 workflow must remain usable without relying on the marker staying on screen.
 
 Playwright global setup creates and later supersedes its own E2E gallery.
-Snapshots are intentionally versioned. Update them only after reviewing the
-rendered images, preferably through the isolation-preserving wrapper:
-
-```bash
-npm run test:e2e -- <spec> --update-snapshots
-```
-
-Use `npm run test:e2e:update` only when the target manages its own isolation.
+Browser acceptance checks use behavior, geometry, hit testing and accessibility
+rather than pixel snapshots. Failure screenshots and traces remain available
+in the Playwright report. App Store and documentation screenshots continue to
+use the separately reviewed screenshot-studio workflow.
 
 `npm run perf:public` enforces the documented Slow-4G/4× CPU public-gallery
 budgets: at most 12 seconds for the first cacheless browser visit and 4 seconds

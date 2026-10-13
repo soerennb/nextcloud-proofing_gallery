@@ -1,6 +1,8 @@
 import { chromium, firefox, webkit } from '@playwright/test'
 
-for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
+const engines = process.env.E2E_CROSS_BROWSER === '1' ? { chromium, firefox, webkit } : { chromium }
+
+for (const [name, engine] of Object.entries(engines)) {
 	let browser
 	try {
 		browser = await engine.launch({ timeout: 30_000 })

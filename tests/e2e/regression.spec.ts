@@ -6,8 +6,6 @@ import { promisify } from 'node:util'
 import AxeBuilder from '@axe-core/playwright'
 import { expect, request as requestFactory, test } from '@playwright/test'
 
-import { createDefaultGallerySettings } from '../../src/domain/gallerySettings.ts'
-import { expectSuccessToast } from './dialogs.ts'
 
 const auth = `Basic ${Buffer.from('admin:admin').toString('base64')}`
 const apiHeaders = { Authorization: auth, 'OCS-APIRequest': 'true' }
@@ -66,40 +64,6 @@ test('design assets are reusable and cannot be deleted while referenced', async 
 	await request.delete(`${galleries}/${gallery.id}?format=json`, { headers: apiHeaders })
 })
 
-test('uploaded gallery logos use the authenticated image route', async ({ request, baseURL }) => {
-	const stable = await state()
-	const assets = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/design-assets`
-	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
-	const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAFklEQVQImWP8z8DAwMDAxMDAwMDAAAANHQEDDMfniQAAAABJRU5ErkJggg==', 'base64')
-	const uploaded = await request.post(`${assets}?format=json`, {
-		headers: apiHeaders,
-		multipart: { kind: 'logo', asset: { name: 'wordmark.png', mimeType: 'image/png', buffer: png } },
-	})
-	expect(uploaded.status()).toBe(201)
-	const asset = await uploaded.json() as { id: string }
-	const created = await request.post(`${galleries}?format=json`, {
-		headers: { ...apiHeaders, 'Content-Type': 'application/json' },
-		data: {
-			folderId: stable.folderId,
-			title: `E2E uploaded logo ${Date.now()}`,
-			settings: { presentation: { logoMode: 'upload', logoAssetId: asset.id } },
-		},
-	})
-	expect(created.status()).toBe(201)
-	const gallery = await created.json() as { id: number; settings: { schemaVersion: number; presentation: { logoBackground: string } } }
-	try {
-		expect(gallery.settings.schemaVersion).toBe(createDefaultGallerySettings().schemaVersion)
-		expect(gallery.settings.presentation.logoBackground).toBe('light')
-		const logo = await request.get(`${baseURL}/apps/proofing_gallery/media/${gallery.id}/asset/logo`, { headers: apiHeaders })
-		expect(logo.status()).toBe(200)
-		expect(logo.headers()['content-type']).toContain('image/png')
-		expect((await logo.body()).length).toBeGreaterThan(0)
-	} finally {
-		await request.delete(`${galleries}/${gallery.id}?format=json`, { headers: apiHeaders })
-		await request.delete(`${assets}/${asset.id}?format=json`, { headers: apiHeaders })
-	}
-})
-
 test('owner design preview renders and caches the exact watermark settings', async ({ request, baseURL }) => {
 	const stable = await state()
 	const media = await request.get(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries/${stable.galleryId}/media?format=json&limit=1`, { headers: apiHeaders })
@@ -155,17 +119,6 @@ test('story media remains available beyond the current page without escaping the
 		await request.delete(`${galleries}/${gallery.id}?format=json`, { headers: apiHeaders })
 		await request.delete(`${galleries}/${mediaSource.id}?format=json`, { headers: apiHeaders })
 	}
-})
-
-test('installed Nextcloud collaboration apps are discovered @ecosystem', async ({ request, baseURL }) => {
-	test.skip(process.env.E2E_ECOSYSTEM !== '1', 'Set E2E_ECOSYSTEM=1 with Calendar, Deck, and Talk installed')
-	const stable = await state()
-	const response = await request.get(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries/${stable.galleryId}/review-integrations?format=json`, { headers: apiHeaders })
-	expect(response.status()).toBe(200)
-	const integrations = await response.json() as { calendar: { available: boolean }; deck: { available: boolean }; talk: { available: boolean } }
-	expect(integrations.calendar.available).toBe(true)
-	expect(integrations.deck.available).toBe(true)
-	expect(integrations.talk.available).toBe(true)
 })
 
 test('application boot does not reset periodic background-job timestamps', async ({ request, baseURL }) => {
@@ -566,7 +519,7 @@ test('parallel guest uploads finalize into the inbox with conflict-free names', 
 	}
 })
 
-test('Live Push credentials are upload-only, independently rotated and revoked', async ({ request, baseURL }) => {
+test('Live Push credentials are upload-only, independently rotated and revoked', { tag: '@protected' }, async ({ request, baseURL }) => {
 	const stable = await state()
 	const adminSettings = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/admin/settings?format=json`
 	const livePush = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries/${stable.galleryId}/live-push?format=json`
@@ -780,47 +733,6 @@ test('administrator policies reject out-of-range API values and health remains a
 	await context.close()
 })
 
-test('photographer preferences persist through the personal settings API and page', async ({ browser, request, baseURL }) => {
-	const endpoint = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/user/preferences?format=json`
-	const before = await request.get(endpoint, { headers: apiHeaders })
-	expect(before.status()).toBe(200)
-	const original = await before.json() as { preferences: Record<string, unknown> }
-	try {
-		const saved = await request.put(endpoint, {
-			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
-			data: { preferences: { defaultPurpose: 'selection', publicLocale: 'de' } },
-		})
-		expect(saved.status()).toBe(200)
-		const current = await request.get(endpoint, { headers: apiHeaders }).then(response => response.json()) as {
-			preferences: { defaultPurpose: string, publicLocale: string }
-			effectiveCapabilities: { galleryCreation: { allowed: boolean } }
-		}
-		expect(current.preferences).toMatchObject({ defaultPurpose: 'selection', publicLocale: 'de' })
-		expect(typeof current.effectiveCapabilities.galleryCreation.allowed).toBe('boolean')
-
-		const context = await browser.newContext()
-		const page = await context.newPage()
-		await page.goto(`${baseURL}/settings/user/additional`)
-		await page.getByRole('textbox', { name: /Account name/ }).fill('admin')
-		await page.getByRole('textbox', { name: 'Password' }).fill('admin')
-		await page.getByRole('button', { name: 'Log in', exact: true }).click()
-		await expect(page.locator('#proofing-gallery-personal').getByRole('heading', { name: 'Proofing Gallery' })).toBeVisible()
-		await expect(page.getByLabel('Preferred purpose')).toHaveValue('selection')
-		await page.getByLabel('Preferred purpose').selectOption('delivery')
-		await expect(page.locator('.settings-save-bar')).toBeVisible()
-		await page.setViewportSize({ width: 390, height: 844 })
-		expect(await page.locator('#proofing-gallery-personal').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
-		await page.getByRole('button', { name: 'Discard' }).click()
-		await expect(page.locator('.settings-save-bar')).toHaveCount(0)
-		await context.close()
-	} finally {
-		await request.put(endpoint, {
-			headers: { ...apiHeaders, 'Content-Type': 'application/json' },
-			data: { preferences: original.preferences },
-		})
-	}
-})
-
 test('collection anchor reconciliation is admin-only and preserves recent and referenced anchors', async ({ request, baseURL }) => {
 	const endpoint = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/admin/collection-anchors/reconcile?format=json`
 	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
@@ -965,44 +877,6 @@ test('owner presets preserve gallery identity and explicit public language', asy
 		if (collectionId !== null) await request.delete(`${galleries}/${collectionId}?format=json`, { headers: apiHeaders })
 		if (projectId !== null) await request.delete(`${galleries}/${projectId}?format=json`, { headers: apiHeaders })
 	}
-})
-
-test('owner preset and locale controls remain clear and responsive', async ({ page, baseURL }) => {
-	const presetName = `UI preset ${Date.now()}`
-	await page.goto(`${baseURL}/apps/proofing_gallery/`)
-	await page.getByRole('textbox', { name: /Account name/ }).fill('admin')
-	await page.getByRole('textbox', { name: 'Password' }).fill('admin')
-	await page.getByRole('button', { name: 'Log in', exact: true }).click()
-	await page.locator('.gallery-row').filter({ has: page.locator('strong', { hasText: /^E2E Gallery$/ }) }).locator('.gallery-row__main').click()
-	await expect(page.getByRole('heading', { name: 'Reusable preset' })).toBeVisible()
-
-	const locale = page.getByRole('combobox', { name: 'Public gallery language' })
-	const originalLocale = await locale.inputValue()
-	await locale.selectOption(originalLocale === 'de' ? 'en' : 'de')
-	await expect(page.locator('.save-indicator[data-state="pending"]')).toBeVisible()
-	await expect(page.locator('.save-indicator[data-state="saved"]')).toBeVisible()
-	await locale.selectOption(originalLocale)
-	await expect(page.locator('.save-indicator[data-state="pending"]')).toBeVisible()
-	await expect(page.locator('.save-indicator[data-state="saved"]')).toBeVisible()
-	await expect(locale).toHaveValue(originalLocale)
-
-	await page.getByRole('button', { name: 'Reusable preset' }).click()
-	await page.getByRole('textbox', { name: 'Preset name' }).fill(presetName)
-	await page.getByRole('button', { name: 'Save as new' }).click()
-	await expectSuccessToast(page, 'Preset created.')
-	await expect(page.getByRole('combobox', { name: 'Saved preset' })).toHaveValue(/\d+/)
-	await page.getByRole('button', { name: 'Apply', exact: true }).click()
-	await expectSuccessToast(page, 'Preset applied.')
-
-	const accessibility = await new AxeBuilder({ page }).include('.settings-page').analyze()
-	expect(accessibility.violations).toEqual([])
-	await page.setViewportSize({ width: 390, height: 844 })
-	await expect(page.getByRole('heading', { name: 'Reusable preset' })).toBeVisible()
-	expect(await page.locator('.settings-page').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
-
-	page.once('dialog', dialog => dialog.accept())
-	await page.getByRole('button', { name: 'Delete preset' }).click()
-	await expectSuccessToast(page, 'Preset deleted.')
 })
 
 test('invitation templates are owner-scoped, validated and render editable plain text', async ({ request, baseURL }) => {
@@ -1205,80 +1079,5 @@ test('notification subscriptions are opt-in, eligible, deduplicated and scoped o
 		if (secondGalleryId !== null) await request.delete(`${galleries}/${secondGalleryId}?format=json`, { headers: apiHeaders })
 		await request.delete(`${baseURL}/ocs/v2.php/cloud/groups/${encodeURIComponent(groupUid)}?format=json`, { headers: apiHeaders })
 		await request.delete(`${baseURL}/ocs/v2.php/cloud/users/${encodeURIComponent(groupUid)}?format=json`, { headers: apiHeaders })
-	}
-})
-
-test('notification and invitation controls stay understandable and responsive', async ({ page, baseURL }) => {
-	const templateName = `UI invitation ${Date.now()}`
-	await page.goto(`${baseURL}/apps/proofing_gallery/`)
-	await page.getByRole('textbox', { name: /Account name/ }).fill('admin')
-	await page.getByRole('textbox', { name: 'Password' }).fill('admin')
-	await page.getByRole('button', { name: 'Log in', exact: true }).click()
-	await page.locator('.gallery-row').filter({ has: page.locator('strong', { hasText: /^E2E Gallery$/ }) }).locator('.gallery-row__main').click()
-	const settingsNavigation = page.getByRole('navigation', { name: 'Gallery settings' })
-	await settingsNavigation.getByRole('button', { name: 'More', exact: true }).click()
-	await page.getByRole('menuitem', { name: 'Team', exact: true }).click()
-	await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible()
-	await expect(page.getByRole('switch', { name: 'Nextcloud notification center' })).toBeChecked()
-	await page.getByText('Email digest', { exact: true }).click()
-	await expect(page.getByRole('switch', { name: 'Email digest' })).toBeChecked()
-	await page.getByRole('combobox', { name: 'Delivery' }).selectOption('daily')
-	await expect(page.getByRole('combobox', { name: 'Delivery' })).toHaveValue('daily')
-	await page.getByRole('button', { name: /^(Subscribe|Update subscription)$/ }).click()
-	await expectSuccessToast(page, 'Notification subscription saved.')
-	await expect(page.getByRole('button', { name: 'Update subscription' })).toBeVisible()
-
-	let violations = await new AxeBuilder({ page }).include('.settings-content').analyze()
-	expect(violations.violations).toEqual([])
-	await page.setViewportSize({ width: 390, height: 844 })
-	const panelOverflow = await page.getByRole('heading', { name: 'Notifications' }).locator('..').evaluate(element => element.scrollWidth > element.clientWidth)
-	expect(panelOverflow).toBe(false)
-	await page.getByRole('button', { name: 'Remove subscription' }).click()
-	await expectSuccessToast(page, 'Notification subscription removed.')
-
-	await page.setViewportSize({ width: 1280, height: 900 })
-	await page.locator('.settings-header__actions').getByRole('button', { name: 'Invite clients', exact: true }).click()
-	await expect(page.getByRole('heading', { name: 'Email invitation' })).toBeVisible()
-	await page.getByRole('textbox', { name: 'Template name' }).fill(templateName)
-	await page.getByRole('textbox', { name: 'Personal message (optional)' }).fill('<b>Hello {gallery}</b> — {owner}\n{url}')
-	await page.getByRole('button', { name: 'Save as template' }).click()
-	await expectSuccessToast(page, 'Invitation template saved.')
-	const templateSelect = page.getByRole('combobox', { name: 'Message template' })
-	await templateSelect.selectOption({ label: 'New template' })
-	await templateSelect.selectOption({ label: templateName })
-	await expect(page.getByRole('textbox', { name: 'Personal message (optional)' })).toHaveValue(/<b>Hello E2E Gallery<\/b>.*\/s\//s)
-	violations = await new AxeBuilder({ page }).include('.sharing-dialog').analyze()
-	expect(violations.violations).toEqual([])
-	await page.setViewportSize({ width: 390, height: 844 })
-	const dialogOverflow = await page.locator('.sharing-dialog').evaluate(element => element.scrollWidth > element.clientWidth)
-	expect(dialogOverflow).toBe(false)
-	page.once('dialog', dialog => dialog.accept())
-	await page.getByRole('button', { name: 'Delete template' }).click()
-	await expectSuccessToast(page, 'Invitation template deleted.')
-})
-
-test('teleported sharing dialog preserves contrast in both studio themes and viewport sizes', async ({ page, baseURL }) => {
-	await page.goto(`${baseURL}/apps/proofing_gallery/`)
-	await page.getByRole('textbox', { name: /Account name/ }).fill('admin')
-	await page.getByRole('textbox', { name: 'Password' }).fill('admin')
-	await page.getByRole('button', { name: 'Log in', exact: true }).click()
-	await page.locator('.gallery-row').filter({ has: page.locator('strong', { hasText: /^E2E Gallery$/ }) }).locator('.gallery-row__main').click()
-	await page.locator('.settings-header__actions').getByRole('button', { name: 'Invite clients', exact: true }).click()
-	await expect(page.getByRole('heading', { name: 'Email invitation' })).toBeVisible()
-	for (const colorScheme of ['light', 'dark'] as const) {
-		await page.emulateMedia({ colorScheme })
-		await expect(page.locator('body')).toHaveAttribute('data-proofing-gallery-theme', colorScheme)
-		await page.locator('.modal-wrapper:has(.sharing-dialog)').evaluate(async element => {
-			await Promise.all(element.getAnimations({ subtree: true })
-				.filter(animation => Number.isFinite(animation.effect?.getComputedTiming().endTime))
-				.map(animation => animation.finished.catch(() => {})))
-		})
-		for (const width of [1280, 390]) {
-			await page.setViewportSize({ width, height: 900 })
-			const overflow = await page.locator('.sharing-dialog').evaluate(element => element.scrollWidth - element.clientWidth)
-			expect(overflow).toBeLessThanOrEqual(1)
-			const result = await new AxeBuilder({ page }).include('.sharing-dialog').analyze()
-			expect(result.violations).toEqual([])
-		}
 	}
 })

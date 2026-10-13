@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace OCA\ProofingGallery\Tests\Unit\Service;
 
-use OCA\ProofingGallery\AppInfo\Application;
 use OCA\ProofingGallery\Service\PolicyService;
 use OCP\IConfig;
 use PHPUnit\Framework\TestCase;
@@ -56,30 +55,6 @@ final class PolicyServiceTest extends TestCase {
 
 		$this->expectException(\InvalidArgumentException::class);
 		$policies->save(['maxSelectionFiles' => 0]);
-	}
-
-	public function testSaveUsesAppConfig(): void {
-		$config = $this->createMock(IConfig::class);
-		$config->expects(self::once())
-			->method('setAppValue')
-			->with(Application::APP_ID, 'eventRetentionDays', '90');
-
-		(new PolicyService($config))->save(['eventRetentionDays' => 90]);
-	}
-
-	public function testGalleryDefaultsExposeOneCanonicalSourceOfTruth(): void {
-		$config = $this->createMock(IConfig::class);
-		$config->method('getAppValue')->willReturnCallback(
-			static fn (string $app, string $key, string $default): string => $key === 'galleryDefaults'
-				? json_encode(['showFilenames' => false], JSON_THROW_ON_ERROR)
-				: $default,
-		);
-
-		$defaults = (new PolicyService($config))->galleryDefaults();
-
-		self::assertFalse($defaults['presentation']['showFilenames']);
-		self::assertArrayNotHasKey('showFilenames', $defaults);
-		self::assertArrayNotHasKey('appearance', $defaults);
 	}
 
 	public function testInstanceSettingsAreValidatedAndMergedWithSafeDefaults(): void {

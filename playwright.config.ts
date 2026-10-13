@@ -9,6 +9,9 @@ export default defineConfig({
 	// Serial execution prevents revision conflicts between spec files.
 	workers: 1,
 	retries: 0,
+	// Protected-route checks run separately with Nextcloud throttling enabled.
+	grep: process.env.E2E_SECURITY_PROTECTIONS === '1' ? /@protected/ : undefined,
+	grepInvert: process.env.E2E_SECURITY_PROTECTIONS === '1' ? undefined : /@protected/,
 	reporter: process.env.CI
 		? [['github'], ['html', { open: 'never', outputFolder: 'playwright-report' }]]
 		: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],

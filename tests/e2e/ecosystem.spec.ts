@@ -1,9 +1,19 @@
 import { expect, test } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
 import path from 'node:path'
+import { promisify } from 'node:util'
 
 const auth = `Basic ${Buffer.from('admin:admin').toString('base64')}`
 const headers = { Authorization: auth, 'OCS-APIRequest': 'true' }
+const execFileAsync = promisify(execFile)
+
+for (const mode of ['flow', 'files', 'context', 'talk']) {
+	test(`${mode} integration enforces its runtime privacy boundary`, async () => {
+		const { stdout } = await execFileAsync('docker', ['compose', 'exec', '-T', '--user', 'www-data', 'nextcloud', 'php', '/var/www/html/custom_apps/proofing_gallery/tests/smoke/IntegrationPrivacy.php', mode])
+		expect(stdout).toContain(`Integration privacy verified: ${mode}.`)
+	})
+}
 
 async function state(): Promise<{ galleryId: number, folderId: number }> {
 	return JSON.parse(await readFile(path.join(process.cwd(), 'test-results-e2e-state.json'), 'utf8'))
