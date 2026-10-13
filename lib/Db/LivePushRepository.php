@@ -24,7 +24,7 @@ final class LivePushRepository {
 	/** @return array<string, mixed>|null */
 	public function activeByUsername(string $username): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$row = QueryResult::row($qb->select('*')->from(self::TABLE)
+		$row = QueryResult::firstRow($qb->select('*')->from(self::TABLE)
 			->where($qb->expr()->eq('username', $qb->createNamedParameter($username)))
 			->andWhere($qb->expr()->isNull('revoked_at'))->executeQuery());
 		return $row === false ? null : $row;
@@ -79,6 +79,6 @@ final class LivePushRepository {
 		$uploads->select($uploads->func()->sum('upload_count'))->from(self::TABLE);
 		$bytes = $this->db->getQueryBuilder();
 		$bytes->select($bytes->func()->sum('bytes_received'))->from(self::TABLE);
-		return ['active' => (int)$active->executeQuery()->fetchOne(), 'uploads' => (int)$uploads->executeQuery()->fetchOne(), 'bytes' => (int)$bytes->executeQuery()->fetchOne()];
+		return ['active' => (int)QueryResult::value($active->executeQuery()), 'uploads' => (int)QueryResult::value($uploads->executeQuery()), 'bytes' => (int)QueryResult::value($bytes->executeQuery())];
 	}
 }

@@ -85,7 +85,7 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 			->where($qb->expr()->eq('owner_uid', $qb->createNamedParameter($ownerUid)));
 		$this->applyFilters($qb, $archived, $search);
 
-		return (int)$qb->executeQuery()->fetchOne();
+		return (int)QueryResult::value($qb->executeQuery());
 	}
 
 	/**
@@ -131,7 +131,7 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 
 		$count = $this->accessibleQuery($userUid, $groupIds, $archived, $search, $sourceType, $status, $mode, $purpose, $ownedOnly);
 		$count->select($count->createFunction('COUNT(DISTINCT g.id)'));
-		return ['items' => $items, 'total' => (int)$count->executeQuery()->fetchOne()];
+		return ['items' => $items, 'total' => (int)QueryResult::value($count->executeQuery())];
 	}
 
 	/** @param list<string> $groupIds */
@@ -185,7 +185,7 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 			->where($qb->expr()->eq('owner_uid', $qb->createNamedParameter($ownerUid)))
 			->andWhere($qb->expr()->eq('slug', $qb->createNamedParameter($slug)));
 
-		return (int)$qb->executeQuery()->fetchOne() > 0;
+		return (int)QueryResult::value($qb->executeQuery()) > 0;
 	}
 
 	public function isReferenced(int $folderId): bool {
@@ -195,7 +195,7 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 			->where($qb->expr()->eq('folder_id', $qb->createNamedParameter($folderId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('source_type', $qb->createNamedParameter('collection')));
 
-		return (int)$qb->executeQuery()->fetchOne() > 0;
+		return (int)QueryResult::value($qb->executeQuery()) > 0;
 	}
 
 	/** @throws DoesNotExistException|MultipleObjectsReturnedException */
@@ -339,7 +339,7 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 		$count = $this->db->getQueryBuilder();
 		$count->select($count->func()->count())->from($this->tableName);
 		$filter($count);
-		return ['items' => $this->findEntities($qb), 'total' => (int)$count->executeQuery()->fetchOne()];
+		return ['items' => $this->findEntities($qb), 'total' => (int)QueryResult::value($count->executeQuery())];
 	}
 
 	private function applyFilters(IQueryBuilder $qb, bool $archived, string $search): void {

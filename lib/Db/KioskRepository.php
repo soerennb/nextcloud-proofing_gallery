@@ -62,10 +62,10 @@ final class KioskRepository {
 
 	public function recentUploads(int $galleryId, int $since): int {
 		$qb = $this->db->getQueryBuilder();
-		return (int)$qb->select($qb->func()->count())->from('proofing_kiosk_photos')
+		return (int)QueryResult::value($qb->select($qb->func()->count())->from('proofing_kiosk_photos')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->gt('stored_at', $qb->createNamedParameter($since, IQueryBuilder::PARAM_INT)))
-			->executeQuery()->fetchOne();
+			->executeQuery());
 	}
 
 	/** @template T
@@ -83,7 +83,7 @@ final class KioskRepository {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')->from($table);
 		$this->where($qb, $keys);
-		$row = QueryResult::row($qb->executeQuery());
+		$row = QueryResult::firstRow($qb->executeQuery());
 		return $row === false ? null : $row;
 	}
 

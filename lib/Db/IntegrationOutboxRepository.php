@@ -59,7 +59,7 @@ final class IntegrationOutboxRepository {
 	/** @return array{pending: int, retrying: int, dead: int, oldestCreatedAt: ?int, maxAttempts: int} */
 	public function health(): array {
 		$qb = $this->db->getQueryBuilder();
-		$row = QueryResult::row($qb
+		$row = QueryResult::firstRow($qb
 			->select($qb->func()->count('*', 'pending'))
 			->selectAlias($qb->func()->sum('attempts'), 'attempts_sum')
 			->selectAlias($qb->func()->min('created_at'), 'oldest_created_at')
@@ -71,7 +71,7 @@ final class IntegrationOutboxRepository {
 		$deadQb = $this->db->getQueryBuilder();
 		$deadQb->select($deadQb->func()->count())->from('proofing_int_outbox')
 			->where($deadQb->expr()->eq('status', $deadQb->createNamedParameter('dead')));
-		$dead = (int)$deadQb->executeQuery()->fetchOne();
+		$dead = (int)QueryResult::value($deadQb->executeQuery());
 		if ($pending === 0) {
 			return ['pending' => 0, 'retrying' => 0, 'dead' => $dead, 'oldestCreatedAt' => null, 'maxAttempts' => 0];
 		}
@@ -84,7 +84,7 @@ final class IntegrationOutboxRepository {
 
 		return [
 			'pending' => $pending,
-			'retrying' => (int)$retrying->executeQuery()->fetchOne(),
+			'retrying' => (int)QueryResult::value($retrying->executeQuery()),
 			'dead' => $dead,
 			'oldestCreatedAt' => isset($row['oldest_created_at']) ? (int)$row['oldest_created_at'] : null,
 			'maxAttempts' => (int)($row['max_attempts'] ?? 0),

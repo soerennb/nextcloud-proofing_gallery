@@ -176,7 +176,7 @@ final class HealthService {
 		$due->selectAlias($due->func()->count(), 'count')->selectAlias($due->func()->min('execute_after'), 'oldest')->from('proofing_purge_requests')
 			->where($due->expr()->in('status', $due->createNamedParameter(['scheduled', 'running'], IQueryBuilder::PARAM_STR_ARRAY)))
 			->andWhere($due->expr()->lte('execute_after', $due->createNamedParameter($now, IQueryBuilder::PARAM_INT)));
-		$dueRow = QueryResult::row($due->executeQuery());
+		$dueRow = QueryResult::firstRow($due->executeQuery());
 		$lifecycle = $this->db->getQueryBuilder();
 		$lifecycle->select($lifecycle->func()->count())->from('proofing_galleries')
 			->where($lifecycle->expr()->in('status', $lifecycle->createNamedParameter(['draft', 'published'], IQueryBuilder::PARAM_STR_ARRAY)))

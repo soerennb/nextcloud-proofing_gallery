@@ -134,7 +134,8 @@ try {
 		$folder->newFolder('.private')->newFile('hidden.png', $png);
 		$context = $get(\OCA\ProofingGallery\Service\PublicShareContextResolver::class)->resolve($gallery->getShareToken());
 		$inspection = $get(\OCA\ProofingGallery\Service\PublicGalleryDownloadService::class)->inspect($context);
-		$assert(!$inspection['available'] && $inspection['reason'] === 'too_many_files' && $inspection['fileCount'] === 2, 'Export limit was checked after enumerating every file');
+		$assert(!$inspection['available'] && $inspection['reason'] === 'too_many_files' && $inspection['fileCount'] === 2,
+			'Export limit was checked after enumerating every file: ' . json_encode(array_intersect_key($inspection, array_flip(['available', 'reason', 'fileCount', 'maxFiles', 'totalBytes'])), JSON_THROW_ON_ERROR));
 		foreach ($inspection['entries'] as $entry) $assert(!str_contains($entry['path'], '.private'), 'Export inspection included private payloads');
 	} finally {
 		if ($previousLimit === '') $config->deleteAppValue('proofing_gallery', 'maxGalleryDownloadFiles'); else $config->setAppValue('proofing_gallery', 'maxGalleryDownloadFiles', $previousLimit);

@@ -34,7 +34,7 @@ final class UploadRepository {
 			->where($qb->expr()->eq('upload_id', $qb->createNamedParameter($uploadId)))
 			->andWhere($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
 		if ($guestId !== null) $qb->andWhere($qb->expr()->eq('guest_id', $qb->createNamedParameter($guestId, IQueryBuilder::PARAM_INT)));
-		$row = QueryResult::row($qb->executeQuery());
+		$row = QueryResult::firstRow($qb->executeQuery());
 		return $row === false ? null : $row;
 	}
 
@@ -58,12 +58,12 @@ final class UploadRepository {
 
 	public function nameTaken(int $galleryId, string $name, string $excluding): bool {
 		$qb = $this->db->getQueryBuilder();
-		return $qb->select('id')->from('proofing_uploads')
+		return QueryResult::value($qb->select('id')->from('proofing_uploads')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('filename', $qb->createNamedParameter($name)))
 			->andWhere($qb->expr()->neq('upload_id', $qb->createNamedParameter($excluding)))
 			->andWhere($qb->expr()->in('status', $qb->createNamedParameter(['awaiting_review', 'accepted'], IQueryBuilder::PARAM_STR_ARRAY)))
-			->setMaxResults(1)->executeQuery()->fetchOne() !== false;
+			->setMaxResults(1)->executeQuery()) !== false;
 	}
 
 	public function stageAcceptance(string $uploadId, int $fileId): void {
@@ -171,7 +171,7 @@ final class UploadRepository {
 		$qb->select($qb->func()->count())->from('proofing_uploads')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
 		if ($status !== '') $qb->andWhere($qb->expr()->eq('status', $qb->createNamedParameter($status)));
-		return (int)$qb->executeQuery()->fetchOne();
+		return (int)QueryResult::value($qb->executeQuery());
 	}
 
 	public function moderate(string $uploadId, string $status, int $now): bool {

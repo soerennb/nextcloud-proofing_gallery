@@ -46,6 +46,6 @@ final class GuestMapper extends QBMapper {
 		$qb->select($qb->func()->count())->from($this->tableName)
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->gt('expires_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT)));
-		return (int)$qb->executeQuery()->fetchOne();
+		return (int)QueryResult::value($qb->executeQuery());
 	}
 }

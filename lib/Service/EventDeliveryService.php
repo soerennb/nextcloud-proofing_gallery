@@ -213,7 +213,7 @@ final class EventDeliveryService {
 	/** @return array<string, mixed> */
 	private function recipient(Gallery $gallery, int $recipientId): array {
 		$qb = $this->db->getQueryBuilder();
-		$row = QueryResult::row($qb->select('*')->from('proofing_event_recipients')
+		$row = QueryResult::firstRow($qb->select('*')->from('proofing_event_recipients')
 			->where($qb->expr()->eq('id', $qb->createNamedParameter($recipientId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('gallery_id', $qb->createNamedParameter($gallery->getId(), IQueryBuilder::PARAM_INT)))->executeQuery());
 		if ($row === false) throw new \InvalidArgumentException('Event recipient not found');

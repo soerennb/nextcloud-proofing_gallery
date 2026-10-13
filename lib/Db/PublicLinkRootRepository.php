@@ -46,9 +46,9 @@ final class PublicLinkRootRepository implements PublicLinkAnchorReferences {
 
 	public function isAnchorReferenced(int $folderId): bool {
 		$qb = $this->db->getQueryBuilder();
-		return (int)$qb->select($qb->func()->count())->from('proofing_public_links')
+		return (int)QueryResult::value($qb->select($qb->func()->count())->from('proofing_public_links')
 			->where($qb->expr()->eq('scope_anchor_id', $qb->createNamedParameter($folderId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->in('status', $qb->createNamedParameter(['active', 'suspended'], IQueryBuilder::PARAM_STR_ARRAY)))
-			->executeQuery()->fetchOne() > 0;
+			->executeQuery()) > 0;
 	}
 }

@@ -7,6 +7,11 @@ app_source="${APP_SOURCE:-${repo_dir}}"
 compose_file="${repo_dir}/tests/compat/compose.yaml"
 versions="${NEXTCLOUD_VERSIONS:-31 32 33 34}"
 databases="${DATABASES:-sqlite mariadb postgres}"
+audit_repetitions="${AUDIT_SMOKE_REPETITIONS:-1}"
+if [[ ! "${audit_repetitions}" =~ ^[1-9][0-9]?$|^100$ ]]; then
+	echo "AUDIT_SMOKE_REPETITIONS must be between 1 and 100." >&2
+	exit 2
+fi
 
 cleanup() {
 	if [[ -n "${project_name:-}" ]]; then
@@ -47,8 +52,15 @@ for version in ${versions}; do
 		COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION="${version}" \
 			"${compose[@]}" exec -T --user www-data "${service}" php occ app:list --enabled --output=json \
 			| php -r '$apps=json_decode(stream_get_contents(STDIN), true, 512, JSON_THROW_ON_ERROR); exit(isset($apps["enabled"]["proofing_gallery"]) ? 0 : 1);'
+		# Installation and app bootstrap have been checked. Repeated OCC health
+		# probes must not compete with transaction assertions on SQLite.
 		COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION="${version}" \
-			"${compose[@]}" exec -T --user www-data "${service}" php /dev/stdin < "${repo_dir}/tests/smoke/AuditRemediation.php"
+			"${compose[@]}" exec -T "${service}" touch /tmp/proofing-gallery-upgrade-healthcheck-ready
+		for ((audit_run = 1; audit_run <= audit_repetitions; audit_run++)); do
+			echo "Audit smoke ${audit_run}/${audit_repetitions}: Nextcloud ${version}, ${database}"
+			COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION="${version}" \
+				"${compose[@]}" exec -T --user www-data "${service}" php /dev/stdin < "${repo_dir}/tests/smoke/AuditRemediation.php"
+		done
 		if [[ -f "${app_source}/appinfo/signature.json" ]]; then
 			COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION="${version}" \
 				"${compose[@]}" exec -T --user www-data "${service}" php occ integrity:check-app proofing_gallery

@@ -29,7 +29,7 @@ final class PresetMapper extends QBMapper {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select($qb->func()->count())->from($this->tableName)
 			->where($qb->expr()->eq('owner_uid', $qb->createNamedParameter($ownerUid)));
-		return (int)$qb->executeQuery()->fetchOne();
+		return (int)QueryResult::value($qb->executeQuery());
 	}
 
 	/** @throws DoesNotExistException|MultipleObjectsReturnedException */
@@ -49,6 +49,6 @@ final class PresetMapper extends QBMapper {
 		if ($exceptId !== null) {
 			$qb->andWhere($qb->expr()->neq('id', $qb->createNamedParameter($exceptId, IQueryBuilder::PARAM_INT)));
 		}
-		return (int)$qb->executeQuery()->fetchOne() > 0;
+		return (int)QueryResult::value($qb->executeQuery()) > 0;
 	}
 }

@@ -43,7 +43,7 @@ final class SemanticIndexRepository {
 
 	public function candidateCount(int $galleryId, string $generation): int {
 		$qb = $this->candidateQuery($galleryId, $generation);
-		return (int)$qb->select($qb->func()->count())->executeQuery()->fetchOne();
+		return (int)QueryResult::value($qb->select($qb->func()->count())->executeQuery());
 	}
 
 	private function candidateQuery(int $galleryId, string $generation): IQueryBuilder {
@@ -86,7 +86,7 @@ final class SemanticIndexRepository {
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('generation', $qb->createNamedParameter($generation)));
-		$row = QueryResult::row($qb->executeQuery());
+		$row = QueryResult::firstRow($qb->executeQuery());
 		return $row === false ? null : $row;
 	}
 
@@ -127,6 +127,6 @@ final class SemanticIndexRepository {
 		$items->select($items->func()->count())->from(self::TABLE);
 		$galleries = $this->db->getQueryBuilder();
 		$galleries->selectDistinct('gallery_id')->from(self::TABLE);
-		return ['items' => (int)$items->executeQuery()->fetchOne(), 'galleries' => count(QueryResult::rows($galleries->executeQuery()))];
+		return ['items' => (int)QueryResult::value($items->executeQuery()), 'galleries' => count(QueryResult::rows($galleries->executeQuery()))];
 	}
 }

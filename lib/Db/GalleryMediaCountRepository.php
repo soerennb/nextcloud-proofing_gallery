@@ -84,11 +84,11 @@ final class GalleryMediaCountRepository {
 		// The gallery lock serializes writers. Check aliases before inserting so
 		// PostgreSQL does not abort the scan transaction on a duplicate key.
 		$existing = $this->db->getQueryBuilder();
-		if ($existing->select('id')->from('proofing_count_queue')
+		if (QueryResult::value($existing->select('id')->from('proofing_count_queue')
 			->where($existing->expr()->eq('gallery_id', $existing->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
 			->andWhere($existing->expr()->eq('generation', $existing->createNamedParameter($generation)))
 			->andWhere($existing->expr()->eq('file_id', $existing->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
-			->executeQuery()->fetchOne() !== false) return false;
+			->executeQuery()) !== false) return false;
 		$qb = $this->db->getQueryBuilder();
 		try {
 			$qb->insert('proofing_count_queue')->values([
@@ -104,7 +104,7 @@ final class GalleryMediaCountRepository {
 	/** @return array<string, mixed>|null */
 	public function next(int $id, string $generation): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$row = QueryResult::row($qb->select('*')->from('proofing_count_queue')
+		$row = QueryResult::firstRow($qb->select('*')->from('proofing_count_queue')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('generation', $qb->createNamedParameter($generation)))
 			->andWhere($qb->expr()->eq('done', $qb->createNamedParameter(false, IQueryBuilder::PARAM_BOOL)))
@@ -125,9 +125,9 @@ final class GalleryMediaCountRepository {
 		$result = [];
 		foreach ($rows as $row) $result[(string)$row['state']] = (int)$row['total'];
 		$stalled = $this->db->getQueryBuilder();
-		$result['stalled'] = (int)$stalled->select($stalled->func()->count('*'))->from('proofing_media_counts')
+		$result['stalled'] = (int)QueryResult::value($stalled->select($stalled->func()->count('*'))->from('proofing_media_counts')
 			->where($stalled->expr()->in('state', $stalled->createNamedParameter(['pending', 'updating', 'error'], IQueryBuilder::PARAM_STR_ARRAY)))
-			->andWhere($stalled->expr()->lt('updated_at', $stalled->createNamedParameter($now - 900, IQueryBuilder::PARAM_INT)))->executeQuery()->fetchOne();
+			->andWhere($stalled->expr()->lt('updated_at', $stalled->createNamedParameter($now - 900, IQueryBuilder::PARAM_INT)))->executeQuery());
 		return $result;
 	}
 

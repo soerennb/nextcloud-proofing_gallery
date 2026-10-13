@@ -15,7 +15,7 @@ final class EventSetupRepository {
 	/** @return array<string, mixed>|false */
 	public function find(int $galleryId): array|false {
 		$qb = $this->db->getQueryBuilder();
-		return QueryResult::row($qb->select('*')->from('proofing_event_setups')
+		return QueryResult::firstRow($qb->select('*')->from('proofing_event_setups')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))->executeQuery());
 	}
 

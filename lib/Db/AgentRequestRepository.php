@@ -16,7 +16,7 @@ final class AgentRequestRepository implements AgentRequestStore {
 	/** @return array<string, mixed>|null */
 	public function find(string $userUid, string $operation, string $requestKey): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$row = QueryResult::row($qb->select('*')->from('proofing_agent_requests')
+		$row = QueryResult::firstRow($qb->select('*')->from('proofing_agent_requests')
 			->where($qb->expr()->eq('user_uid', $qb->createNamedParameter($userUid)))
 			->andWhere($qb->expr()->eq('operation', $qb->createNamedParameter($operation)))
 			->andWhere($qb->expr()->eq('request_key', $qb->createNamedParameter($requestKey)))

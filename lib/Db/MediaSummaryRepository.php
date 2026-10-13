@@ -15,7 +15,7 @@ final class MediaSummaryRepository {
 	/** @return array<string, mixed>|null */
 	public function find(int $galleryId): ?array {
 		$qb = $this->db->getQueryBuilder();
-		$row = QueryResult::row($qb->select('*')->from('proofing_summaries')
+		$row = QueryResult::firstRow($qb->select('*')->from('proofing_summaries')
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->executeQuery());
 		return $row === false ? null : $row;

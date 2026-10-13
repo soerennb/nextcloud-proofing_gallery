@@ -76,7 +76,7 @@ final class PublicLinkMapper extends QBMapper {
 		$qb->select($qb->func()->count())->from($this->tableName)
 			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->in('status', $qb->createNamedParameter(['active', 'suspended'], IQueryBuilder::PARAM_STR_ARRAY)));
-		return (int)$qb->executeQuery()->fetchOne();
+		return (int)QueryResult::value($qb->executeQuery());
 	}
 
 	public function clearPrimary(int $galleryId): void {

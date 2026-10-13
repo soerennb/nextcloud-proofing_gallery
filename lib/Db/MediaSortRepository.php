@@ -15,7 +15,7 @@ final class MediaSortRepository {
 	public function revision(int $galleryId): string {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('sort_revision')->from('proofing_media_scans')->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)));
-		return (string)($qb->executeQuery()->fetchOne() ?: '');
+		return (string)(QueryResult::value($qb->executeQuery()) ?: '');
 	}
 
 	public function touch(int $galleryId): void {
