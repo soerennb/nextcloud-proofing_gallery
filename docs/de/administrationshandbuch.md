@@ -141,7 +141,9 @@ beliebige Dateizugriffe und Admin-Impersonation.
 
 Die OCS-Agenten-API ist ein stabiler App-Vertrag. Das Repository enthält unter
 `integrations/context_agent/proofing_gallery.py` zusätzlich ein experimentelles,
-für Upstream vorbereitetes Context-Agent-Modul. Es wird nicht automatisch
+lokal gepflegtes Context-Agent-Modul. Der Upstream-Beitrag wurde aus Gründen
+des Produktumfangs geschlossen; das Modul bleibt eine optionale lokale
+Integration. Es wird nicht automatisch
 von der PHP-App geladen, sondern über den für die jeweilige Context-Agent-
 Installation vorgesehenen Mechanismus installiert. Die erste Integration ist
 bewusst rein lesend: Sie kann Galerien auflisten, Details und

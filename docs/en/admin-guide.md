@@ -138,10 +138,12 @@ does not expose public-link passwords, raw guest personal data, permanent
 deletion, arbitrary file reads, or administrator impersonation.
 
 The stable OCS agent API is part of the app contract. The repository also
-includes an experimental, upstream-ready Context Agent tool module at
+includes an experimental, locally maintained Context Agent tool module at
 `integrations/context_agent/proofing_gallery.py`. Install it only through the
 Context Agent deployment mechanism appropriate to your Nextcloud environment;
-it is not loaded by the PHP app itself. The initial integration is deliberately
+it is not loaded by the PHP app itself. The upstream contribution was closed for
+product scope, so this module is optional local integration, not an upstream-shipped
+capability. The initial integration is deliberately
 read-only: it can list galleries, inspect one gallery, check publishing
 readiness, and search gallery filenames. It does not expose guest feedback or
 any create, publish, workflow, access, or review mutation. Treat returned

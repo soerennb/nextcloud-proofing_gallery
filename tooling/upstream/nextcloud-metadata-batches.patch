@@ -1,0 +1,24 @@
+diff --git a/lib/private/FilesMetadata/Service/MetadataRequestService.php b/lib/private/FilesMetadata/Service/MetadataRequestService.php
+--- a/lib/private/FilesMetadata/Service/MetadataRequestService.php
++++ b/lib/private/FilesMetadata/Service/MetadataRequestService.php
+@@ -159,7 +159,7 @@ public function dropMetadataForFiles(int $storage, array $fileIds): void {
+ 		foreach ($chunks as $chunk) {
+ 			$qb = $this->dbConnection->getQueryBuilder();
+ 			$qb->delete(self::TABLE_METADATA)
+-				->where($qb->expr()->in('file_id', $qb->createNamedParameter($fileIds, IQueryBuilder::PARAM_INT_ARRAY)))
++				->where($qb->expr()->in('file_id', $qb->createNamedParameter($chunk, IQueryBuilder::PARAM_INT_ARRAY)))
+ 				->hintShardKey('storage', $storage);
+ 			$qb->executeStatement();
+ 		}
+diff --git a/lib/private/FilesMetadata/Service/IndexRequestService.php b/lib/private/FilesMetadata/Service/IndexRequestService.php
+--- a/lib/private/FilesMetadata/Service/IndexRequestService.php
++++ b/lib/private/FilesMetadata/Service/IndexRequestService.php
+@@ -192,7 +192,7 @@ public function dropIndexForFiles(array $fileIds, string $key = ''): void {
+ 			$qb = $this->dbConnection->getQueryBuilder();
+ 			$expr = $qb->expr();
+ 			$qb->delete(self::TABLE_METADATA_INDEX)
+-				->where($expr->in('file_id', $qb->createNamedParameter($fileIds, IQueryBuilder::PARAM_INT_ARRAY)));
++				->where($expr->in('file_id', $qb->createNamedParameter($chunk, IQueryBuilder::PARAM_INT_ARRAY)));
+ 
+ 			if ($key !== '') {
+ 				$qb->andWhere($expr->eq('meta_key', $qb->createNamedParameter($key)));

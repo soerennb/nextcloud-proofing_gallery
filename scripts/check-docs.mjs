@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { dirname, extname, resolve, sep } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
@@ -170,6 +171,17 @@ for (const [, thumbnailUrl, imageUrl] of screenshotTags) {
 		console.error(`${appInfoRelative} screenshot pair must contain readable PNG files: ${imageFilename}`)
 		failed = true
 	} else {
+		const version = imageFilename.match(/^([a-f0-9]{12})-/)?.[1]
+		if (version) {
+			const digest = createHash('sha256')
+				.update(readFileSync(resolve(root, 'docs/public/screenshots', imageFilename)))
+				.update(readFileSync(resolve(root, 'docs/public/screenshots', thumbnailFilename)))
+				.digest('hex').slice(0, 12)
+			if (digest !== version || !thumbnailFilename.startsWith(`${version}-`)) {
+				console.error(`${appInfoRelative} has a changed immutable screenshot pair: ${imageFilename}`)
+				failed = true
+			}
+		}
 		const mobile = imageFilename.endsWith('-mobile.png')
 		const expectedImage = mobile ? { width: 430, height: 932 } : { width: 1600, height: 1000 }
 		const expectedThumbnail = mobile ? { width: 185, height: 400 } : { width: 640, height: 400 }
