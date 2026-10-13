@@ -2,6 +2,15 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { classifyCiChanges } from './ci-changes.mjs'
 
+test('cannot bypass dependency and consumer checks with vendored or audit tooling changes', () => {
+	for (const path of ['tooling/vendor/braces.tgz', 'tooling/braces-compat/index.cjs', 'scripts/check-guarded-braces.mjs', 'scripts/check-node-version.mjs', 'scripts/audit-npm.mjs', 'scripts/lib/npm-audit.mjs']) {
+		const result = classifyCiChanges([path])
+		assert.equal(result.web, true)
+		assert.equal(result.dependencies, true)
+		assert.equal(result.browser, true)
+	}
+})
+
 test('validates startup graph and budget tooling with the frontend baseline', () => {
 	for (const file of ['scripts/check-bundle-size.mjs', 'scripts/measure-public-lcp.mjs', 'scripts/lib/bundle-assets.mjs']) {
 		assert.equal(classifyCiChanges([file]).web, true)

@@ -1,14 +1,12 @@
 const severities = new Set(['info', 'low', 'moderate', 'high', 'critical'])
 const blocking = severity => severity === 'high' || severity === 'critical'
-const temporaryAdvisory = 'https://github.com/advisories/GHSA-vfj7-8cjw-p6xm'
-const exceptionEnd = Date.parse('2026-10-19T00:00:00Z')
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value)
 
-/** Evaluate the complete npm report; only the approved development advisory is excepted. */
-export function evaluateNpmAudit(report, lock, now = new Date()) {
+/** Evaluate the complete npm report without advisory exemptions. */
+export function evaluateNpmAudit(report) {
 	if (report?.auditReportVersion !== 2 || report.error || !record(report.vulnerabilities)
-		|| !record(report.metadata?.vulnerabilities) || !record(lock?.packages) || !Number.isFinite(now.getTime())) {
-		throw new Error('Invalid npm audit report, lockfile, or audit date')
+		|| !record(report.metadata?.vulnerabilities)) {
+		throw new Error('Invalid npm audit report')
 	}
 	const vulnerabilities = report.vulnerabilities
 	const counts = report.metadata.vulnerabilities
@@ -18,7 +16,6 @@ export function evaluateNpmAudit(report, lock, now = new Date()) {
 		throw new Error('Incomplete npm audit vulnerability counts')
 	}
 	const advisories = new Map()
-	const exceptions = new Set()
 	const failures = []
 	const walk = (name, seen = new Set()) => {
 		if (seen.has(name)) return { leaves: [], nodes: [] }
@@ -43,19 +40,13 @@ export function evaluateNpmAudit(report, lock, now = new Date()) {
 		return result
 	}
 	for (const [name, entry] of Object.entries(vulnerabilities)) {
-		const { leaves, nodes } = walk(name)
+		const { leaves } = walk(name)
 		const high = leaves.filter(advisory => blocking(advisory.severity))
 		if (!blocking(entry.severity) && high.length === 0) continue
-		const developmentOnly = nodes.length > 0 && nodes.every(node => lock.packages[node]?.dev === true)
 		if (high.length === 0) failures.push(`${name}: unresolved high-severity dependency`)
 		for (const advisory of high) {
-			if (advisory.severity === 'high' && advisory.name === 'braces' && advisory.dependency === 'braces' && advisory.url === temporaryAdvisory
-				&& developmentOnly && now.getTime() < exceptionEnd) {
-				exceptions.add(advisory.url)
-			} else {
-				failures.push(`${name}: ${advisory.url}`)
-			}
+			failures.push(`${name}: ${advisory.url}`)
 		}
 	}
-	return { failures: [...new Set(failures)], exceptions: [...exceptions], advisories: [...advisories.values()] }
+	return { failures: [...new Set(failures)], advisories: [...advisories.values()] }
 }
