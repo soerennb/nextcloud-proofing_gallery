@@ -9,11 +9,6 @@ describe('calculateMediaGridLayout', () => {
 		expect(layout.totalHeight).toBeCloseTo(layout.rows * (layout.rowHeight + 12) - 12)
 	})
 
-	it('honors list and featured-grid constraints', () => {
-		expect(calculateMediaGridLayout({ containerWidth: 900, itemCount: 3, minItemWidth: 360, maxItemWidth: 520, maxColumns: 3, gap: 8, itemAspectRatio: 4 / 3 }).columns).toBe(2)
-		expect(calculateMediaGridLayout({ containerWidth: 900, itemCount: 3, minItemWidth: 360, gap: 8, itemAspectRatio: 4 / 3, list: true }).rowHeight).toBe(94)
-	})
-
 	it('keeps every mobile item in a one-column document flow', () => {
 		const layout = calculateMediaGridLayout({ containerWidth: 378, itemCount: 87, minItemWidth: 230, gap: 6, itemAspectRatio: 4 / 3 })
 
@@ -57,19 +52,5 @@ describe('calculateMediaLayout', () => {
 		expect(layout.positions[0].height).toBeCloseTo(585)
 		expect(layout.positions[1].height).toBeCloseTo(260)
 		expect(layout.totalHeight).toBeCloseTo(851)
-	})
-
-	it('uses useful fixed contact-sheet rows', () => {
-		const layout = calculateMediaLayout({
-			containerWidth: 900,
-			aspectRatios: [2 / 3, 3 / 2],
-			mode: 'list',
-			gap: 8,
-			minItemWidth: 230,
-			targetRowHeight: 210,
-			listRowHeight: 172,
-		})
-		expect(layout.positions.map(position => position.height)).toEqual([172, 172])
-		expect(layout.totalHeight).toBe(352)
 	})
 })

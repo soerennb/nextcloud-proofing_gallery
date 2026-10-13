@@ -1,7 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import { chromium, firefox, webkit, expect, test } from '@playwright/test'
 
-for (const [name, engine] of Object.entries({ chromium, firefox, webkit })) {
+const engines = process.env.E2E_CROSS_BROWSER === '1' ? { chromium, firefox, webkit } : { chromium }
+
+for (const [name, engine] of Object.entries(engines)) {
 	test(`review viewer keeps pins, long threads and zoom reachable in ${name}`, async ({ baseURL }) => {
 		test.setTimeout(90_000)
 		const browser = await engine.launch()

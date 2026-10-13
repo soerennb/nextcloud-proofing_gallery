@@ -247,13 +247,15 @@ jobs:
       (needs.php.result == 'success' || needs.php.result == 'skipped')
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    env:
+      E2E_CROSS_BROWSER: ${{ matrix.suite == 'ui' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '1' || '0' }}
     strategy:
       fail-fast: false
       max-parallel: 2
       matrix:
         include:
           - suite: ui
-            specs: tests/e2e/collection.spec.ts tests/e2e/event.spec.ts tests/e2e/favicon.spec.ts tests/e2e/gallery-counts.spec.ts tests/e2e/gallery-cover.spec.ts tests/e2e/gallery.spec.ts tests/e2e/owner-studio.spec.ts tests/e2e/review-viewer.spec.ts tests/e2e/sorting.spec.ts
+            specs: tests/e2e/collection.spec.ts tests/e2e/event.spec.ts tests/e2e/gallery-counts.spec.ts tests/e2e/gallery-cover.spec.ts tests/e2e/gallery.spec.ts tests/e2e/owner-studio.spec.ts tests/e2e/review-viewer.spec.ts tests/e2e/sorting.spec.ts
           - suite: api
             specs: tests/e2e/ecosystem.spec.ts tests/e2e/regression.spec.ts tests/e2e/security.spec.ts tests/e2e/review-identity.spec.ts tests/e2e/share-recovery.spec.ts tests/e2e/source-rebinding.spec.ts tests/e2e/kiosk.spec.ts tests/e2e/feedback-permissions.spec.ts tests/e2e/link-inheritance.spec.ts tests/e2e/mutation-recovery.spec.ts
     steps:
@@ -287,7 +289,7 @@ jobs:
         if: matrix.suite == 'api'
         env:
           E2E_SECURITY_PROTECTIONS: "1"
-        run: npm run test:e2e -- --grep "public routes reject|Live Push credentials"
+        run: npm run test:e2e -- --grep @protected
       - if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -312,7 +314,7 @@ jobs:
       fail-fast: false
       max-parallel: 4
       matrix:
-        nextcloud: ["31", "32", "33", "34"]
+        nextcloud: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '["31","32","33","34"]' || '["31","34"]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

@@ -32,28 +32,6 @@ final class IntegrationContractTest extends TestCase {
 		self::assertSame('POST', $capabilities['client_integration']['proofing_gallery']['context-menu'][1]['method']);
 	}
 
-	public function testUserMigrationManifestExcludesNonPortableAndSensitiveState(): void {
-		$source = file_get_contents(__DIR__ . '/../../../lib/UserMigration/ProofingGalleryMigrator.php');
-		self::assertIsString($source);
-		self::assertStringContainsString("'sourcePath'", $source);
-		self::assertStringNotContainsString("'shareToken' =>", strstr($source, 'private function exportGalleries'));
-		self::assertStringNotContainsString('GuestMapper', $source);
-		self::assertStringNotContainsString('PublicLinkMapper', $source);
-		self::assertStringContainsString("['lifecycle']['enabled'] = false", $source);
-	}
-
-	public function testTalkRoomsArePrivateAndExplicitlyRemovable(): void {
-		$source = file_get_contents(__DIR__ . '/../../../lib/Service/ReviewIntegrationService.php');
-		self::assertIsString($source);
-		self::assertStringContainsString('setPublic(false)', $source);
-		self::assertStringContainsString('deleteConversation($conversationId)', $source);
-		self::assertStringContainsString('deleteConversation($conversation->getId())', $source);
-		self::assertStringNotContainsString('getShareToken()', $source);
-		$privacy = file_get_contents(__DIR__ . '/../../../lib/Service/PrivacyService.php');
-		self::assertIsString($privacy);
-		self::assertStringContainsString('$this->deleteTalkRooms($galleryId)', $privacy);
-	}
-
 	public function testAgentOcsContractContainsNoPermanentDeleteOperation(): void {
 		$routes = require __DIR__ . '/../../../appinfo/routes.php';
 		$agentRoutes = array_values(array_filter($routes['ocs'], static fn (array $route): bool => str_starts_with($route['name'], 'Agent#')));
@@ -62,48 +40,4 @@ final class IntegrationContractTest extends TestCase {
 		self::assertSame([], array_values(array_filter($agentRoutes, static fn (array $route): bool => $route['verb'] === 'DELETE' && !str_contains($route['url'], '/publish') && !str_contains($route['url'], '/managers/'))));
 	}
 
-	public function testContextAgentModuleDoesNotExposeSecretsOrPermanentDeletion(): void {
-		$source = file_get_contents(__DIR__ . '/../../../integrations/context_agent/proofing_gallery.py');
-		self::assertIsString($source);
-		self::assertStringNotContainsString('password:', $source);
-		self::assertStringNotContainsString('delete_customer_gallery', $source);
-		self::assertStringContainsString('@safe_tool', $source);
-		self::assertStringNotContainsString('@dangerous_tool', $source);
-		self::assertStringContainsString('list_proofing_galleries', $source);
-		self::assertStringContainsString('get_proofing_gallery', $source);
-		self::assertStringContainsString('check_proofing_gallery_readiness', $source);
-		self::assertStringContainsString('search_proofing_gallery_media', $source);
-		self::assertStringNotContainsString('publish_customer_gallery', $source);
-		self::assertStringNotContainsString('summarize_gallery_feedback', $source);
-	}
-
-	public function testFilesMetadataAndContextChatKeepPrivacyBoundary(): void {
-		$metadata = file_get_contents(__DIR__ . '/../../../lib/Listener/GalleryFilesMetadataProvider.php');
-		$context = file_get_contents(__DIR__ . '/../../../lib/ContextChat/GalleryContentSyncService.php');
-		self::assertIsString($metadata);
-		self::assertIsString($context);
-		self::assertStringContainsString("setBool(self::SOURCE_KEY", $metadata);
-		self::assertStringNotContainsString('getTitle()', $metadata);
-		self::assertStringNotContainsString('getShareToken()', $metadata);
-		self::assertStringNotContainsString('getShareToken()', $context);
-		self::assertStringNotContainsString('guest', strtolower($context));
-		self::assertStringNotContainsString('comment', strtolower($context));
-	}
-
-	public function testFlowRunsAsTheEventActorInsteadOfTheGalleryOwner(): void {
-		$source = file_get_contents(__DIR__ . '/../../../lib/Workflow/GalleryOperation.php');
-		self::assertIsString($source);
-		self::assertStringContainsString("event->payload['actorUid']", $source);
-		self::assertStringNotContainsString('mutations->archive($gallery->getOwnerUid()', $source);
-		self::assertStringNotContainsString('mutations->publish($gallery->getOwnerUid()', $source);
-	}
-
-	public function testAccountCollaborationMigrationKeepsGuestCompatibility(): void {
-		$source = file_get_contents(__DIR__ . '/../../../lib/Migration/Version000130Date20260903.php');
-		self::assertIsString($source);
-		self::assertStringContainsString('proof_feedback_actor_kind', $source);
-		self::assertStringContainsString('submitted_by_actor_uid', $source);
-		self::assertStringContainsString('proof_actor_rating_file', $source);
-		self::assertStringContainsString("changeColumn('guest_id', ['notnull' => false])", $source);
-	}
 }

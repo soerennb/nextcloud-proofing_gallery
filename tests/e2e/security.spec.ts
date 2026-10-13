@@ -10,7 +10,7 @@ async function token(): Promise<string> {
 	return state.token
 }
 
-test('public routes reject traversal, invalid tokens, and forged mutation nonces', async ({ request }) => {
+test('public routes reject traversal, invalid tokens, and forged mutation nonces', { tag: '@protected' }, async ({ request }) => {
 	const shareToken = await token()
 	const endpoint = (suffix: string) => `/index.php/apps/proofing_gallery/public/${shareToken}/${suffix}`
 

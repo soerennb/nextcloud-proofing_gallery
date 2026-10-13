@@ -58,7 +58,8 @@ final class GalleryOperation implements IOperation, ISpecificOperation {
 					|| ($operation === 'complete' && $gallery->getWorkflowState() === 'completed')
 					|| ($operation === 'publish' && $gallery->getStatus() === 'published')
 					|| ($operation === 'revoke' && $gallery->getStatus() !== 'published')) continue;
-				$requestId = 'flow-' . hash('sha256', (string)($event->payload['eventId'] ?? '') . ':' . (string)($flow['id'] ?? '') . ':' . $operation);
+				// The agent API limits keys to 64 characters, including the prefix.
+				$requestId = 'flow-' . substr(hash('sha256', (string)($event->payload['eventId'] ?? '') . ':' . (string)($flow['id'] ?? '') . ':' . $operation), 0, 59);
 				match ($operation) {
 					'archive' => $this->mutations->archive($actorUid, $event->galleryId, $gallery->getRevision(), $requestId),
 					'restore' => $this->mutations->restore($actorUid, $event->galleryId, $gallery->getRevision(), $requestId),

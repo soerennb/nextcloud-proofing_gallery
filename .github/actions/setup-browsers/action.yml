@@ -1,5 +1,5 @@
 name: Set up browser runtimes
-description: Install and verify all required Playwright engines before starting Nextcloud
+description: Install Chromium, or all engines when E2E_CROSS_BROWSER=1, before starting Nextcloud
 runs:
   using: composite
   steps:
@@ -13,11 +13,13 @@ runs:
         fi
         node_binary="$(command -v node)"
         playwright_cli="${PWD}/node_modules/playwright/cli.js"
+        browsers=(chromium)
+        if [ "${E2E_CROSS_BROWSER:-0}" = "1" ]; then browsers+=(firefox webkit); fi
         dependencies_ready=false
         for attempt in 1 2; do
           # Run timeout as root so it can kill APT too. KILL reaches the entire
           # process group even if the CLI exits before a TERM grace period ends.
-          if sudo -n timeout --signal=KILL 5m "${node_binary}" "${playwright_cli}" install-deps chromium firefox webkit; then
+          if sudo -n timeout --signal=KILL 5m "${node_binary}" "${playwright_cli}" install-deps "${browsers[@]}"; then
             dependencies_ready=true
             break
           fi
@@ -31,10 +33,12 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        browsers=(chromium)
+        if [ "${E2E_CROSS_BROWSER:-0}" = "1" ]; then browsers+=(firefox webkit); fi
         browser_install_ready=false
         for attempt in 1 2; do
           # Downloads stay under the runner user and use its Playwright cache.
-          if timeout --signal=KILL 5m node node_modules/playwright/cli.js install chromium firefox webkit; then
+          if timeout --signal=KILL 5m node node_modules/playwright/cli.js install "${browsers[@]}"; then
             browser_install_ready=true
             break
           fi

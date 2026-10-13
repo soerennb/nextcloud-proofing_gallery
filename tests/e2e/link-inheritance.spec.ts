@@ -151,29 +151,28 @@ test('failed restore compensates native permissions and download flags before le
 	} finally { try { await sql(`DROP TRIGGER IF EXISTS ${trigger}`) } finally { await cleanup(request, gallery.id) } }
 })
 
-for (const width of [1440, 390]) {
-	test(`owner can separate permissions and navigation independently at ${width}px`, async ({ browser, request, baseURL }, testInfo) => {
-		test.setTimeout(90_000)
-		const gallery = await setup(request)
-		const context = await browser.newContext({ baseURL, viewport: { width, height: 1000 } })
-		try {
-			const page = await context.newPage(); await login(page)
-			await page.goto(`/apps/proofing_gallery/#gallery/${gallery.id}/share`)
-			await page.locator('.link-cards article').first().getByRole('button', { name: 'Edit', exact: true }).click()
-			await expect(page.getByRole('combobox', { name: 'Link permissions', exact: true })).toHaveValue('inherit')
-			await expect(page.locator('.link-editor').getByRole('combobox', { name: 'Download access', exact: true })).toBeDisabled()
-			await page.getByRole('combobox', { name: 'Link permissions', exact: true }).selectOption('custom')
-			await page.locator('.link-editor').getByRole('combobox', { name: 'Download access', exact: true }).selectOption('none')
-			await expect(page.getByRole('combobox', { name: 'View mode', exact: true })).toBeDisabled()
-			await page.getByRole('combobox', { name: 'Navigation settings', exact: true }).selectOption('custom')
-			await page.getByRole('combobox', { name: 'View mode', exact: true }).selectOption('folder')
-			await page.getByRole('spinbutton', { name: 'Folder grouping depth', exact: true }).fill('2')
-			await page.locator('.link-access-fields').first().scrollIntoViewIfNeeded()
-			await page.screenshot({ path: testInfo.outputPath('link-inheritance.png'), fullPage: true })
-			expect(await page.locator('.settings-page').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
-			await page.getByRole('button', { name: 'Save link', exact: true }).click()
-			await expect(page.locator('.link-editor')).toBeHidden()
-			expect((await links(request, gallery.id)).find(link => link.primary)!).toMatchObject({ permissionsPolicyMode: 'custom', navigationPolicyMode: 'custom', policy: { downloadScope: 'none' }, groupDepth: 2 })
-		} finally { await context.close(); await cleanup(request, gallery.id) }
-	})
-}
+const width = 390
+test(`owner can separate permissions and navigation independently at ${width}px`, async ({ browser, request, baseURL }, testInfo) => {
+	test.setTimeout(90_000)
+	const gallery = await setup(request)
+	const context = await browser.newContext({ baseURL, viewport: { width, height: 1000 } })
+	try {
+		const page = await context.newPage(); await login(page)
+		await page.goto(`/apps/proofing_gallery/#gallery/${gallery.id}/share`)
+		await page.locator('.link-cards article').first().getByRole('button', { name: 'Edit', exact: true }).click()
+		await expect(page.getByRole('combobox', { name: 'Link permissions', exact: true })).toHaveValue('inherit')
+		await expect(page.locator('.link-editor').getByRole('combobox', { name: 'Download access', exact: true })).toBeDisabled()
+		await page.getByRole('combobox', { name: 'Link permissions', exact: true }).selectOption('custom')
+		await page.locator('.link-editor').getByRole('combobox', { name: 'Download access', exact: true }).selectOption('none')
+		await expect(page.getByRole('combobox', { name: 'View mode', exact: true })).toBeDisabled()
+		await page.getByRole('combobox', { name: 'Navigation settings', exact: true }).selectOption('custom')
+		await page.getByRole('combobox', { name: 'View mode', exact: true }).selectOption('folder')
+		await page.getByRole('spinbutton', { name: 'Folder grouping depth', exact: true }).fill('2')
+		await page.locator('.link-access-fields').first().scrollIntoViewIfNeeded()
+		await page.screenshot({ path: testInfo.outputPath('link-inheritance.png'), fullPage: true })
+		expect(await page.locator('.settings-page').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+		await page.getByRole('button', { name: 'Save link', exact: true }).click()
+		await expect(page.locator('.link-editor')).toBeHidden()
+		expect((await links(request, gallery.id)).find(link => link.primary)!).toMatchObject({ permissionsPolicyMode: 'custom', navigationPolicyMode: 'custom', policy: { downloadScope: 'none' }, groupDepth: 2 })
+	} finally { await context.close(); await cleanup(request, gallery.id) }
+})

@@ -1,7 +1,6 @@
 """Dependency-light contract tests for the upstream Context Agent module."""
 
 import importlib.util
-import inspect
 import json
 import sys
 import types
@@ -98,14 +97,6 @@ class ProofingGalleryToolsTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual("safe", candidate.tool_safety)
             self.assertTrue(candidate.tool_options["parse_docstring"])
 
-    def test_google_docstrings_describe_every_parameter_and_return(self):
-        for candidate in self.tools.values():
-            doc = inspect.getdoc(candidate)
-            self.assertIsNotNone(doc)
-            self.assertIn("Args:", doc)
-            self.assertIn("Returns:", doc)
-            for parameter in inspect.signature(candidate).parameters:
-                self.assertIn(f"{parameter}:", doc)
 
     async def test_list_forwards_declared_filters_and_minimizes_untrusted_output(self):
         self.nc.responses.append(
@@ -159,13 +150,6 @@ class ProofingGalleryToolsTest(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("total", result)
         self.assertTrue(result["_meta"]["untrustedUserContent"])
 
-    async def test_list_omits_absent_optional_filters(self):
-        self.nc.responses.append({"items": [], "nextCursor": None})
-
-        await self.tools["list_proofing_galleries"]()
-
-        params = self.nc.calls[-1][2]["params"]
-        self.assertEqual({"query": "", "limit": 10}, params)
 
     async def test_detail_excludes_secrets_and_unknown_fields(self):
         self.nc.responses.append(

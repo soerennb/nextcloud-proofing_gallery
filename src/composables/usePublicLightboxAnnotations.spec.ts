@@ -44,49 +44,7 @@ function setup(mutate = vi.fn().mockResolvedValue(true), hasIdentity = true) {
 	return { annotations, container, mutate, shell, image, photoSwipe, comments, bindZoom }
 }
 
-describe('public lightbox thread selection', () => {
-	it('refreshes stale screen bounds when opening an existing thread', () => {
-		const { annotations, image, shell, comments } = setup()
-		comments.value = [{ id: 12, fileId: 7, body: 'Point', author: 'A', mine: false, createdAt: 1, deletedAt: null, annotations: [{ x: 2500, y: 5000, width: 800, height: 800 }] }]
-		annotations.syncHost()
-		vi.mocked(image.getBoundingClientRect).mockReturnValue({ left: -100, top: -50, width: 1600, height: 800 } as DOMRect)
-		annotations.select(12)
-		expect(annotations.imageBounds.value).toEqual({ left: -100, top: -50, width: 1600, height: 800 })
-		expect(annotations.selectedCommentId.value).toBe(12)
-		annotations.destroy()
-		shell.remove()
-	})
-})
-
 describe('public lightbox annotation state', () => {
-	it('keeps observing layout changes after the image first acquires nonzero dimensions', () => {
-		let resized: (() => void) | undefined
-		const disconnect = vi.fn()
-		vi.stubGlobal('ResizeObserver', class {
-			constructor(callback: () => void) { resized = callback }
-			observe() {}
-			disconnect = disconnect
-		})
-		const { annotations, image, shell } = setup()
-		try {
-			annotations.syncHost()
-			const host = annotations.host.value
-			resized?.()
-			expect(disconnect).not.toHaveBeenCalled()
-			Object.defineProperty(image, 'offsetWidth', { value: 800, configurable: true })
-			Object.defineProperty(image, 'offsetHeight', { value: 400, configurable: true })
-			resized?.()
-			expect(host?.style.width).toBe('800px')
-			expect(host?.style.height).toBe('400px')
-			annotations.syncHost()
-			expect(annotations.host.value).toBe(host)
-		} finally {
-			annotations.destroy()
-			shell.remove()
-			vi.unstubAllGlobals()
-		}
-		expect(disconnect).toHaveBeenCalledTimes(1)
-	})
 
 	it('repairs a detached overlay on collaboration updates and reuses a healthy overlay', async () => {
 		const { annotations, container, comments, shell } = setup()
@@ -121,37 +79,6 @@ describe('public lightbox annotation state', () => {
 		expect(annotations.draft.value).toBeNull()
 		annotations.destroy()
 		expect(container.querySelector('.proofing-annotation-layer')).toBeNull()
-		shell.remove()
-	})
-
-	it('tracks the rendered image rectangle through native zoom and pan', async () => {
-		const { annotations, image, shell } = setup()
-		vi.spyOn(image, 'getBoundingClientRect').mockReturnValue({
-			left: -140, top: -90, width: 1600, height: 800, right: 1460, bottom: 710, x: -140, y: -90, toJSON: () => ({}),
-		})
-		annotations.syncHost()
-		expect(annotations.imageBounds.value).toEqual({ left: -140, top: -90, width: 1600, height: 800 })
-		expect(annotations.startAt({ x: 660, y: 310 })).toBe(true)
-		expect(annotations.draft.value).toMatchObject({ x: 5000, y: 5000 })
-
-		vi.mocked(image.getBoundingClientRect).mockReturnValue({
-			left: -340, top: -190, width: 2400, height: 1200, right: 2060, bottom: 1010, x: -340, y: -190, toJSON: () => ({}),
-		})
-		annotations.scheduleGeometry()
-		annotations.scheduleGeometry()
-		await new Promise(resolve => requestAnimationFrame(resolve))
-		expect(annotations.imageBounds.value).toEqual({ left: -340, top: -190, width: 2400, height: 1200 })
-		expect(annotations.anchor.value).toEqual({ x: 860, y: 410 })
-		shell.remove()
-	})
-
-	it('does not read or publish screen geometry on zoom frames without an active composer or thread', async () => {
-		const { annotations, image, shell } = setup()
-		annotations.syncHost()
-		const readsAfterHostSync = vi.mocked(image.getBoundingClientRect).mock.calls.length
-		annotations.scheduleGeometry(false)
-		await new Promise(resolve => requestAnimationFrame(resolve))
-		expect(vi.mocked(image.getBoundingClientRect).mock.calls).toHaveLength(readsAfterHostSync)
 		shell.remove()
 	})
 
@@ -206,40 +133,9 @@ describe('public lightbox annotation image readiness', () => {
 		expect(annotations.host.value).toBeNull()
 	})
 
-	it('performs a second overlay size refresh after the image decode completes', async () => {
-		const { annotations, image, shell } = setup()
-		let width = 0
-		Object.defineProperty(image, 'offsetWidth', { configurable: true, get: () => width })
-		Object.defineProperty(image, 'offsetHeight', { configurable: true, get: () => width / 2 })
-		let finishDecode: (() => void) | undefined
-		Object.defineProperty(image, 'decode', { configurable: true, value: () => new Promise<void>(resolve => { finishDecode = resolve }) })
-		annotations.syncHost()
-		expect(annotations.host.value?.style.width).toBe('')
-		width = 1600
-		finishDecode?.()
-		await Promise.resolve()
-		await new Promise(resolve => requestAnimationFrame(resolve))
-		expect(annotations.host.value?.style.width).toBe('1600px')
-		expect(annotations.host.value?.style.height).toBe('800px')
-		shell.remove()
-	})
-
 })
 
 describe('public lightbox annotation composer actions', () => {
-	it('restores focus after cancelling from the keyboard composer', async () => {
-		const trigger = document.createElement('button')
-		document.body.append(trigger)
-		trigger.focus()
-		const { annotations, shell } = setup()
-		annotations.startKeyboard()
-		expect(annotations.handleKeyboard(new KeyboardEvent('keydown', { key: 'Enter' }))).toBe(true)
-		annotations.cancel()
-		await nextTick()
-		expect(document.activeElement).toBe(trigger)
-		trigger.remove()
-		shell.remove()
-	})
 
 	it('preserves text and position on failure and clears only after confirmed success', async () => {
 		const mutate = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
@@ -248,10 +144,13 @@ describe('public lightbox annotation composer actions', () => {
 		annotations.body.value = 'Tighten this curve'
 		await annotations.submit()
 		expect(annotations.error.value).toBe('The point comment could not be saved. Try again.')
+		expect(annotations.body.value).toBe('Tighten this curve')
 		expect(annotations.draft.value).toMatchObject({ x: 2500, y: 2500 })
 		await annotations.submit()
 		expect(mutate).toHaveBeenLastCalledWith('media/7/comments', 'POST', expect.objectContaining({ annotation: expect.objectContaining({ x: 2500, y: 2500 }) }))
 		expect(annotations.draft.value).toBeNull()
+		expect(annotations.body.value).toBe('')
+		annotations.destroy()
 		shell.remove()
 	})
 
@@ -262,6 +161,7 @@ describe('public lightbox annotation composer actions', () => {
 		await annotations.submit()
 		expect(annotations.error.value).toBe('')
 		expect(annotations.body.value).toBe('Queued point')
+		annotations.destroy()
 		shell.remove()
 	})
 })

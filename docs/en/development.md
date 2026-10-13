@@ -11,6 +11,13 @@ and [contribution guide](https://github.com/soerennb/nextcloud-proofing_gallery/
 Public interfaces and security expectations must remain covered by unit,
 browser, package, and compatibility tests.
 
+Tests focus on access and privacy boundaries, data integrity, core workflows,
+and meaningful failure cases. Fixed labels, CSS classes and cosmetic defaults
+do not need standalone tests. Routine browser runs use Chromium; the weekly
+workflow and explicit comprehensive runs also check the review viewer in
+Firefox and WebKit. See the detailed development guide for the separate
+protected-route checks and compatibility matrix.
+
 Gallery favicons use the silhouette in `img/app.svg`, with a white symbol on a
 fixed blue background in `img/favicon.svg`. After changing the vector, update
 the Safari silhouette in `img/favicon-mask.svg` and rebuild the committed ICO

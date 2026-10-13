@@ -24,9 +24,7 @@ vi.mock('./EventRecipientLedger.vue', () => ({ default: { template: '<div class=
 import { createDefaultGallerySettings } from '../domain/gallerySettings.ts'
 import type { EventSetup, EventSetupStep } from '../services/eventApi.ts'
 import type { Gallery } from '../types.ts'
-import DownloadPolicyFields from './DownloadPolicyFields.vue'
 import EventDeliveryWorkspace from './EventDeliveryWorkspace.vue'
-import EventRecipientLedger from './EventRecipientLedger.vue'
 
 function gallery(): Gallery {
 	return {
@@ -73,25 +71,6 @@ describe('EventDeliveryWorkspace scaling', () => {
 		await flushPromises()
 		expect(wrapper.findAll('.folder-role-row')).toHaveLength(50)
 		expect(wrapper.text()).toContain('Page 1 of 20')
-		wrapper.unmount()
-	})
-
-	it('uses one recipient ledger for setup and released links', async () => {
-		eventApi.fetchEventSetup.mockResolvedValueOnce(setup('recipients'))
-		eventApi.fetchEventOperations.mockResolvedValueOnce({ summary: {}, waves: [] })
-		const wrapper = shallowMount(EventDeliveryWorkspace, { props: { gallery: gallery() } })
-		await flushPromises()
-		expect(wrapper.findComponent(EventRecipientLedger).exists()).toBe(true)
-		expect(wrapper.text()).toContain('Recipients & links')
-		wrapper.unmount()
-	})
-
-	it('shows the gallery download policy in the release step', async () => {
-		eventApi.fetchEventSetup.mockResolvedValueOnce(setup('delivery'))
-		eventApi.fetchEventOperations.mockResolvedValueOnce({ summary: {}, waves: [] })
-		const wrapper = shallowMount(EventDeliveryWorkspace, { props: { gallery: gallery(), settings: createDefaultGallerySettings() } })
-		await flushPromises()
-		expect(wrapper.findComponent(DownloadPolicyFields).exists()).toBe(true)
 		wrapper.unmount()
 	})
 })
