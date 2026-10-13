@@ -96,6 +96,30 @@ describe('PublicLightboxAnnotations markers', () => {
 })
 
 describe('PublicLightboxAnnotations composer', () => {
+	it('waits for modal dismissal and does not steal focus after an anchor change', async () => {
+		const elsewhere = document.createElement('button')
+		document.body.append(elsewhere)
+		elsewhere.focus()
+		const wrapper = mount(PublicLightboxAnnotations, {
+			props: props({ draft: { x: 5000, y: 5000, width: 800, height: 800 }, focusBlocked: true }),
+			attachTo: document.body,
+		})
+		try {
+			await wrapper.setProps({ composerOpen: true })
+			await new Promise(resolve => requestAnimationFrame(resolve))
+			expect(document.activeElement).toBe(elsewhere)
+			await wrapper.setProps({ focusBlocked: false })
+			await nextTick()
+			expect(document.activeElement).toBe(wrapper.find('textarea').element)
+			elsewhere.focus()
+			await wrapper.setProps({ anchor: { x: 20, y: 30 } })
+			await new Promise(resolve => requestAnimationFrame(resolve))
+			expect(document.activeElement).toBe(elsewhere)
+		} finally {
+			wrapper.unmount()
+			elsewhere.remove()
+		}
+	})
 	it('cancels the open composer with Escape without leaking the key to the lightbox', async () => {
 		const wrapper = mount(PublicLightboxAnnotations, {
 			props: props({

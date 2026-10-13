@@ -9,6 +9,7 @@ import type PhotoSwipe from 'photoswipe'
 import type { SlideData } from 'photoswipe'
 import 'photoswipe/style.css'
 import { usePublicLightboxComments } from '../composables/usePublicLightboxComments.ts'
+import { useLightboxFeedbackModal } from '../composables/useLightboxFeedbackModal.ts'
 import { publicLightboxSlide } from '../domain/publicLightboxSlide.ts'
 import { usePublicLightboxChrome } from '../composables/usePublicLightboxChrome.ts'
 import { usePublicLightboxPlayback } from '../composables/usePublicLightboxPlayback.ts'
@@ -146,6 +147,7 @@ const annotations = usePublicLightboxAnnotations({
 	metadataOpen,
 	shell,
 })
+const feedbackModal = useLightboxFeedbackModal({ open: feedbackOpen, keyboardPositioning: annotations.keyboardPositioning, selectedCommentId: annotations.selectedCommentId, shell })
 zoomSurface = usePublicLightboxZoomSurface(() => pswp, () => {
 	annotations.syncMarkerScale()
 	annotations.scheduleGeometry(false)
@@ -525,6 +527,7 @@ async function setGuestRating(rating: number, pick = activeGuestRating.value.pic
 			:body="annotationBody"
 			:anchor="annotationAnchor"
 			:composer-open="annotationComposerOpen"
+			:focus-blocked="!feedbackModal.focusReady.value"
 			:keyboard-positioning="annotationKeyboardPositioning"
 			:submitting="annotationSubmitting"
 			:error="annotationError"
@@ -562,11 +565,15 @@ async function setGuestRating(rating: number, pick = activeGuestRating.value.pic
 		</IonModal>
 		<PublicLightboxMetadata :open="metadataOpen" :item="activeItem" @close="metadataOpen = false" />
 		<IonModal :is-open="settings.mode === 'collaboration' && feedbackOpen"
+			:data-presented="feedbackModal.presented.value"
 			:animated="false"
 			:show-backdrop="false"
 			:css-class="feedbackPanelClass"
 			:style="feedbackPanelStyle"
-			@did-dismiss="feedbackOpen = false">
+			@will-present="feedbackModal.willPresent"
+			@did-present="feedbackModal.didPresent"
+			@will-dismiss="feedbackModal.willDismiss"
+			@did-dismiss="feedbackModal.didDismiss">
 			<IonHeader>
 				<IonToolbar>
 					<IonTitle>

@@ -325,9 +325,6 @@ export function usePublicLightboxAnnotations(options: Options) {
 		options.feedbackOpen.value = true
 		options.metadataOpen.value = false
 		overlay.syncGeometry(true)
-		window.setTimeout(() => options.shell.value
-			?.querySelector<HTMLElement>(`[data-comment-id="${commentId}"] button[data-point-link]`)
-			?.focus(), 250)
 	}
 
 	async function submit() {

@@ -1256,3 +1256,29 @@ test('notification and invitation controls stay understandable and responsive', 
 	await page.getByRole('button', { name: 'Delete template' }).click()
 	await expectSuccessToast(page, 'Invitation template deleted.')
 })
+
+test('teleported sharing dialog preserves contrast in both studio themes and viewport sizes', async ({ page, baseURL }) => {
+	await page.goto(`${baseURL}/apps/proofing_gallery/`)
+	await page.getByRole('textbox', { name: /Account name/ }).fill('admin')
+	await page.getByRole('textbox', { name: 'Password' }).fill('admin')
+	await page.getByRole('button', { name: 'Log in', exact: true }).click()
+	await page.locator('.gallery-row').filter({ has: page.locator('strong', { hasText: /^E2E Gallery$/ }) }).locator('.gallery-row__main').click()
+	await page.locator('.settings-header__actions').getByRole('button', { name: 'Invite clients', exact: true }).click()
+	await expect(page.getByRole('heading', { name: 'Email invitation' })).toBeVisible()
+	for (const colorScheme of ['light', 'dark'] as const) {
+		await page.emulateMedia({ colorScheme })
+		await expect(page.locator('body')).toHaveAttribute('data-proofing-gallery-theme', colorScheme)
+		await page.locator('.modal-wrapper:has(.sharing-dialog)').evaluate(async element => {
+			await Promise.all(element.getAnimations({ subtree: true })
+				.filter(animation => Number.isFinite(animation.effect?.getComputedTiming().endTime))
+				.map(animation => animation.finished.catch(() => {})))
+		})
+		for (const width of [1280, 390]) {
+			await page.setViewportSize({ width, height: 900 })
+			const overflow = await page.locator('.sharing-dialog').evaluate(element => element.scrollWidth - element.clientWidth)
+			expect(overflow).toBeLessThanOrEqual(1)
+			const result = await new AxeBuilder({ page }).include('.sharing-dialog').analyze()
+			expect(result.violations).toEqual([])
+		}
+	}
+})
