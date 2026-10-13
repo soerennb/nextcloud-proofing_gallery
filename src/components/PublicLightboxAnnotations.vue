@@ -15,6 +15,7 @@ const props = defineProps<{
 	body: string
 	anchor: ScreenPoint | null
 	composerOpen: boolean
+	focusBlocked?: boolean
 	keyboardPositioning: boolean
 	submitting: boolean
 	error: string
@@ -95,12 +96,16 @@ watch([
 		nextTick(() => {
 			requestAnimationFrame(() => {
 				if (composer.value) composerSize.value = { width: composer.value.offsetWidth, height: composer.value.offsetHeight }
-				textarea.value?.focus()
 			})
-			window.setTimeout(() => textarea.value?.focus(), 350)
 		})
 	}
 })
+
+watch([() => props.composerOpen, () => !props.focusBlocked], async ([open, ready]) => {
+	if (!open || !ready) return
+	await nextTick()
+	if (props.composerOpen && !props.focusBlocked) textarea.value?.focus()
+}, { flush: 'post', immediate: true })
 
 function onComposerKeydown(event: KeyboardEvent) {
 	event.stopPropagation()

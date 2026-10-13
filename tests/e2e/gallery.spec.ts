@@ -1024,6 +1024,7 @@ test('public gallery remains usable on a narrow viewport', async ({ page, reques
 	await dialog.getByRole('button', { name: 'Feedback', exact: true }).click()
 	const feedbackSheet = page.locator('ion-modal.lightbox-feedback-sheet')
 	await expect(feedbackSheet).toBeVisible()
+	await expect(feedbackSheet).toHaveAttribute('data-presented', 'true')
 	const closeFeedback = feedbackSheet.getByRole('button', { name: 'Close feedback' })
 	await expect(closeFeedback).toBeVisible()
 	await closeFeedback.click()
