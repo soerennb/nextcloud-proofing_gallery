@@ -10,15 +10,22 @@ const core = '/ocs/v2.php/apps/files_sharing/api/v1/shares'
 const exec = promisify(execFile)
 const policy = { view: true, selections: true, comments: true, downloadScope: 'all' }
 type Link = { id: number; name: string; url: string; primary: boolean; status: string; startPath: string; allowedRoots: string[]; scopeMode: string; policy: typeof policy; review: unknown }
-type Native = { id: number; file_source: number; token: string; permissions: number; expiration: string | null }
+type Native = { id: number | string; file_source: number; token: string | null; permissions: number; expiration: string | null }
 type Rebound = { folderId: number; sourceRebind: { missingScopes: Array<{ linkId: number; linkName: string; path: string }>; suspendedLinkIds: number[] } }
 async function checked<T>(response: Awaited<ReturnType<APIRequestContext['get']>>, status = 200): Promise<T> {
 	expect(response.status(), await response.text()).toBe(status)
 	return response.json() as Promise<T>
 }
 const token = (link: Link) => new URL(link.url).pathname.split('/').at(-1)!
+async function nativeShares(request: APIRequestContext): Promise<Native[]> {
+	return (await checked<{ ocs: { data: Native[] } }>(await request.get(`${core}?format=json`, { headers }))).ocs.data
+}
 async function native(request: APIRequestContext, link: Link): Promise<Native | undefined> {
-	return (await checked<{ ocs: { data: Native[] } }>(await request.get(`${core}?format=json`, { headers }))).ocs.data.find(share => share.token === token(link))
+	return (await nativeShares(request)).find(share => share.token === token(link))
+}
+async function nativeById(request: APIRequestContext, id: Native['id']): Promise<Native | undefined> {
+	// A hidden token is not evidence that a suspended share has been deleted.
+	return (await nativeShares(request)).find(share => String(share.id) === String(id))
 }
 async function links(request: APIRequestContext, id: number) {
 	return (await checked<{ items: Link[] }>(await request.get(`${api}/${id}/public-links?format=json`, { headers }))).items
@@ -115,12 +122,17 @@ test('zero matches disable access through archive/restore and policy updates unt
 		const single = await createLink(request, fixture.id, { name: 'Missing single', startPath: 'Client' })
 		const multi = await createLink(request, fixture.id, { name: 'Missing multi', allowedRoots: ['Shared', 'Client'] })
 		const stranded = await createLink(request, fixture.id, { name: 'Missing unassigned link', allowedRoots: ['Client'] })
+		const nativeIds = new Map<number, Native['id']>()
+		for (const link of [single, multi, stranded]) {
+			const share = await native(request, link)
+			expect(share).toBeDefined(); nativeIds.set(link.id, share!.id)
+		}
 		await checked(await request.post(`${api}/${fixture.id}/public-links/${multi.id}/primary?format=json`, { headers }))
 		const result = await rebind(request, fixture.id, fixture.replacement.folderId)
 		expect(result.sourceRebind.suspendedLinkIds).toEqual(expect.arrayContaining([single.id, multi.id]))
 		for (const link of [single, multi]) {
 			expect((await links(request, fixture.id)).find(item => item.id === link.id)).toMatchObject({ url: link.url, status: 'suspended', scopeMode: 'empty' })
-			expect(await native(request, link)).toMatchObject({ permissions: 0 })
+			expect(await nativeById(request, nativeIds.get(link.id)!)).toMatchObject({ permissions: 0 })
 			expect((await request.get(`/apps/proofing_gallery/public/${token(link)}/gallery`)).ok()).toBe(false)
 			expect((await request.put(`${api}/${fixture.id}/public-links/${link.id}?format=json`, { headers, data: { name: link.name, policy } })).status()).toBe(422)
 			for (const startPath of ['/', '///']) {
@@ -130,16 +142,17 @@ test('zero matches disable access through archive/restore and policy updates unt
 		expect((await request.post(`${api}/${fixture.id}/publish?format=json`, { headers })).status()).toBe(422)
 		await checked(await request.delete(`${api}/${fixture.id}?format=json`, { headers }))
 		await checked(await request.post(`${api}/${fixture.id}/restore?format=json`, { headers }))
-		for (const link of [single, multi]) expect(await native(request, link)).toMatchObject({ permissions: 0 })
+		for (const link of [single, multi]) expect(await nativeById(request, nativeIds.get(link.id)!)).toMatchObject({ permissions: 0 })
 		const repaired = await checked<Link>(await request.put(`${api}/${fixture.id}/public-links/${multi.id}?format=json`, { headers, data: { name: multi.name, policy, allowedRoots: ['Other'] } }))
 		expect(repaired).toMatchObject({ id: multi.id, url: multi.url, status: 'active', allowedRoots: ['Other'] })
+		expect(await nativeById(request, nativeIds.get(multi.id)!)).toMatchObject({ permissions: 1 })
 		expect((await request.get(`/apps/proofing_gallery/public/${token(multi)}/gallery?path=Other`)).ok()).toBe(true)
 		await checked(await request.delete(`${api}/${fixture.id}/public-links/${single.id}?format=json`, { headers }))
 		expect((await links(request, fixture.id)).find(item => item.id === single.id)).toMatchObject({ status: 'revoked' })
-		expect(await native(request, single)).toBeUndefined()
+		expect(await nativeById(request, nativeIds.get(single.id)!)).toBeUndefined()
 		await checked(await request.delete(`${api}/${fixture.id}/publish?format=json`, { headers }))
 		expect((await links(request, fixture.id)).find(item => item.id === stranded.id)).toMatchObject({ status: 'revoked' })
-		expect(await native(request, stranded)).toBeUndefined()
+		expect(await nativeById(request, nativeIds.get(stranded.id)!)).toBeUndefined()
 	} finally { await cleanup(request, fixture) }
 })
 
@@ -148,14 +161,17 @@ test('suspended links are mapped without activation and revoked links are left u
 	try {
 		const active = await createLink(request, fixture.id, { startPath: 'Client' })
 		const revoked = await createLink(request, fixture.id, { name: 'Revoked history', startPath: 'Other' })
+		const original = await native(request, active)
+		const revokedNative = await native(request, revoked)
 		await checked(await request.delete(`${api}/${fixture.id}/public-links/${revoked.id}?format=json`, { headers }))
 		const historical = (await links(request, fixture.id)).find(item => item.id === revoked.id)
 		await checked(await request.delete(`${api}/${fixture.id}?format=json`, { headers }))
 		await rebind(request, fixture.id, fixture.replacement.folderId)
-		expect(await native(request, active)).toMatchObject({ permissions: 0, file_source: await fileId(request, `${fixture.replacement.dav}/Client`) })
+		expect(await nativeById(request, original!.id)).toMatchObject({ permissions: 0, file_source: await fileId(request, `${fixture.replacement.dav}/Client`) })
 		expect((await links(request, fixture.id)).find(item => item.id === revoked.id)).toEqual(historical)
+		expect(await nativeById(request, revokedNative!.id)).toBeUndefined()
 		await checked(await request.post(`${api}/${fixture.id}/restore?format=json`, { headers }))
-		expect(await native(request, active)).toMatchObject({ permissions: 1 })
+		expect(await nativeById(request, original!.id)).toMatchObject({ permissions: 1 })
 		await assertRestricted(request, active)
 	} finally { await cleanup(request, fixture) }
 })
@@ -185,12 +201,12 @@ test('deleted old sources use saved relative paths without recreating missing na
 		const primaryNative = await native(request, primary)
 		await checked(await request.delete(`${core}/${primaryNative!.id}?format=json`, { headers }))
 		await request.delete(fixture.old.dav, { headers })
-		expect(await native(request, primary)).toBeUndefined()
+		expect(await nativeById(request, primaryNative!.id)).toBeUndefined()
 		await rebind(request, fixture.id, fixture.replacement.folderId)
 		expect(await native(request, link)).toMatchObject({ id: before!.id, file_source: before!.file_source })
 		await assertRestricted(request, link)
 		expect((await links(request, fixture.id)).find(item => item.primary)).toMatchObject({ id: primary.id, url: primary.url })
-		expect(await native(request, primary)).toBeUndefined()
+		expect(await nativeById(request, primaryNative!.id)).toBeUndefined()
 	} finally { await cleanup(request, fixture) }
 })
 
@@ -203,7 +219,7 @@ test('failed native compensation removes access and retains a disabled repairabl
 		await sql(`CREATE TRIGGER ${nativeTrigger} BEFORE UPDATE ON NATIVE_SHARES FOR EACH ROW BEGIN IF NEW.id = ${original!.id} AND NEW.file_source = ${original!.file_source} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'E2E native rollback failure'; END IF; END`)
 		expect((await request.put(`${api}/${fixture.id}/source?format=json`, { headers, data: { folderId: fixture.replacement.folderId } })).status()).toBe(500)
 		await sql(`DROP TRIGGER ${appTrigger}`); await sql(`DROP TRIGGER ${nativeTrigger}`)
-		expect(await native(request, link)).toBeUndefined()
+		expect(await nativeById(request, original!.id)).toBeUndefined()
 		expect((await links(request, fixture.id)).find(item => item.id === link.id)).toMatchObject({ id: link.id, url: link.url, status: 'suspended', scopeMode: 'empty', startPath: 'Client' })
 		expect((await request.get(`/apps/proofing_gallery/public/${token(link)}/gallery`)).ok()).toBe(false)
 		expect((await checked<{ folderId: number }>(await request.get(`${api}/${fixture.id}?format=json`, { headers }))).folderId).toBe(fixture.old.folderId)
