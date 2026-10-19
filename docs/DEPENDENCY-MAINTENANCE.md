@@ -1,5 +1,20 @@
 # Dependency maintenance
 
+## Routine update groups
+
+Weekly npm patch and minor version updates use two groups: `npm-runtime` for
+production dependencies and `npm-development` for development dependencies.
+Runtime updates, including Vue, require manual review. Development, Composer
+development and safe GitHub Actions groups remain eligible for squash
+auto-merge after the required checks pass. Major updates require manual review;
+Ionic packages and Vitest packages each retain a coordinated major-update group.
+The seven-day cooldown applies to version updates, not security updates.
+
+Review dependency updates in the internal tree as well as public GitHub history
+before preparing a sanitized export, so an export cannot undo a merged update.
+For frontend runtime updates, verify gallery and culling layouts on desktop and
+at 390 px, including image reachability, filmstrips and reduced motion.
+
 ## Guarded Braces development dependency
 
 The CSS tooling previously installed `braces` 3.0.3, affected by
