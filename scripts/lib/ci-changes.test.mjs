@@ -50,6 +50,17 @@ test('limits unrelated workflow changes to workflow validation', () => {
 	})
 })
 
+test('dependency group and auto-merge changes cannot bypass policy tests', () => {
+	for (const file of ['.github/dependabot.yml', '.github/workflows/dependabot-automerge.yml', 'scripts/lib/dependabot-policy.test.mjs']) {
+		const result = classifyCiChanges([file])
+		assert.equal(result.web, true)
+		assert.equal(result.workflow, true)
+		assert.equal(result.integration, false)
+		assert.equal(result.browser, false)
+		assert.equal(result.php, false)
+	}
+})
+
 test('runs browser suites when their workflow or runtime preparation changes', () => {
 	for (const path of ['.github/workflows/ci.yml', '.github/actions/setup-browsers/action.yml', 'scripts/check-browser-runtimes.mjs']) {
 		const selected = classifyCiChanges([path])

@@ -10,15 +10,17 @@ updates:
     cooldown:
       default-days: 7
     groups:
-      ionic:
-        patterns: ["@ionic/core", "@ionic/vue"]
-        update-types: [major, minor, patch]
+      npm-runtime:
+        applies-to: version-updates
+        dependency-type: production
+        update-types: [minor, patch]
       npm-development:
+        applies-to: version-updates
         dependency-type: development
         update-types: [minor, patch]
-      nextcloud-frontend:
-        patterns: ["@nextcloud/*"]
-        update-types: [minor, patch]
+      ionic-major:
+        patterns: ["@ionic/core", "@ionic/vue"]
+        update-types: [major]
       vitest-major:
         patterns: ["vitest", "@vitest/*"]
         update-types: [major]

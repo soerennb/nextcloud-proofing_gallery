@@ -19,6 +19,10 @@ export function classifyCiChanges(files) {
 	}
 
 	for (const file of files) {
+		if (match(file, [/^\.github\/dependabot\.yml$/, /^\.github\/workflows\/dependabot-automerge\.yml$/, /^scripts\/lib\/dependabot-policy\.test\.mjs$/])) {
+			selected.web = true
+			selected.workflow = true
+		}
 		if (match(file, [/^tooling\//, /^scripts\/(check-guarded-braces|check-node-version|audit-npm)\.mjs$/, /^scripts\/lib\/npm-audit/])) {
 			selected.web = true
 			selected.dependencies = true

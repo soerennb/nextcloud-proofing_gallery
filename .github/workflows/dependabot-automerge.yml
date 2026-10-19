@@ -41,12 +41,7 @@ jobs:
                   reason="approved Dependabot branch group"
                   ;;
                 *)
-                  if [ "${PACKAGE_ECOSYSTEM}" = "npm" ] && [ "${DEPENDENCY_NAMES}" = "vue" ]; then
-                    eligible=true
-                    reason="explicit Vue exception"
-                  else
-                    reason="dependency group is outside the auto-merge policy"
-                  fi
+                  reason="dependency group is outside the auto-merge policy"
                   ;;
               esac
               ;;
