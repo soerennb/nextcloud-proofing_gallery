@@ -41,10 +41,17 @@ async function save(request: APIRequestContext, id: number, link: GalleryPublicL
 	return checked<GalleryPublicLink>(await request.put(`${api}/${id}/public-links/${link.id}?format=json`, { headers, data }))
 }
 function token(link: GalleryPublicLink) { return new URL(link.url).pathname.split('/').at(-1)! }
+type Native = { id: number | string; token: string | null; hide_download: number; permissions: number }
+async function nativeShares(request: APIRequestContext): Promise<Native[]> {
+	return (await checked<{ ocs: { data: Native[] } }>(await request.get('/ocs/v2.php/apps/files_sharing/api/v1/shares?format=json', { headers }))).ocs.data
+}
 async function native(request: APIRequestContext, link: GalleryPublicLink) {
-	const response = await checked<{ ocs: { data: Array<{ id: number; token: string; hide_download: number; permissions: number }> } }>(await request.get('/ocs/v2.php/apps/files_sharing/api/v1/shares?format=json', { headers }))
-	const share = response.ocs.data.find(item => item.token === token(link))
+	const share = (await nativeShares(request)).find(item => item.token === token(link))
 	expect(share).toBeDefined(); return share!
+}
+async function nativeById(request: APIRequestContext, id: Native['id']) {
+	// Nextcloud hides tokens on suspended shares, but the owner can still list their IDs.
+	return (await nativeShares(request)).find(item => String(item.id) === String(id))
 }
 async function cleanup(request: APIRequestContext, id: number) {
 	await request.delete(`${api}/${id}/publish?format=json`, { headers })
@@ -139,6 +146,7 @@ for (const target of ['gallery', 'native'] as const) {
 test('failed restore compensates native permissions and download flags before leaving the gallery archived', async ({ request }) => {
 	const gallery = await setup(request)
 	const primary = (await links(request, gallery.id)).find(link => link.primary)!
+	const original = await native(request, primary)
 	const trigger = `pg_inheritance_restore_${Date.now()}`
 	try {
 		await checked(await request.delete(`${api}/${gallery.id}?format=json`, { headers }))
@@ -147,7 +155,7 @@ test('failed restore compensates native permissions and download flags before le
 		expect((await request.post(`${api}/${gallery.id}/restore?format=json`, { headers })).status()).toBe(500)
 		expect(await get(request, gallery.id)).toMatchObject({ status: 'archived', revision: archived.revision })
 		expect((await links(request, gallery.id)).find(link => link.primary)!).toMatchObject({ status: 'suspended' })
-		expect(await native(request, primary)).toMatchObject({ permissions: 0, hide_download: 0 })
+		expect(await nativeById(request, original.id)).toMatchObject({ permissions: 0, hide_download: 0 })
 	} finally { try { await sql(`DROP TRIGGER IF EXISTS ${trigger}`) } finally { await cleanup(request, gallery.id) } }
 })
 
