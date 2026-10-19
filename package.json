@@ -56,13 +56,13 @@
     "@nextcloud/l10n": "^3.3.0",
     "@nextcloud/router": "^3.2.0",
     "@nextcloud/vue": "^9.13.1",
-    "@tanstack/vue-virtual": "^3.13.41",
+    "@tanstack/vue-virtual": "^3.13.42",
     "ionicons": "^8.1.0",
     "motion-v": "^2.6.0",
     "photoswipe": "^5.4.4",
     "qrcode": "^1.5.4",
     "vue": "^3.5.43",
-    "vue-material-design-icons": "^5.3.1"
+    "vue-material-design-icons": "^5.4.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
