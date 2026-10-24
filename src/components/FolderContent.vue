@@ -14,17 +14,20 @@ import FolderIcon from 'vue-material-design-icons/Folder.vue'
 import PlayIcon from 'vue-material-design-icons/Play.vue'
 
 import { bulkGalleryMedia, createGalleryFolder, deleteGalleryMedia, fetchGalleryMedia, indexGalleryMetadata, ownerMediaDownloadUrl, ownerPreviewUrl, renameGalleryMedia } from '../services/galleryApi.ts'
+import { useOwnerMediaFeedback } from '../composables/useOwnerMediaFeedback.ts'
 import { useOwnerMediaMetadata } from '../composables/useOwnerMediaMetadata.ts'
 import { useOwnerMediaVersions } from '../composables/useOwnerMediaVersions.ts'
 import { useOwnerUploadQueue } from '../composables/useOwnerUploadQueue.ts'
 import type { Gallery, MediaItem } from '../types.ts'
 import ProgressiveImage from './ProgressiveImage.vue'
 import VirtualMediaGrid from './VirtualMediaGrid.vue'
+import { formatDateTime } from '../domain/dateFormat.ts'
 
 const props = defineProps<{ gallery: Gallery }>()
 const emit = defineEmits<{ changed: []; 'guest-order': [] }>()
 
 const items = ref<MediaItem[]>([])
+const { feedback, loadFeedback } = useOwnerMediaFeedback(() => props.gallery.id)
 const total = ref(0)
 const path = ref('')
 const search = ref('')
@@ -77,6 +80,7 @@ async function load(offset = 0) {
 		if (loadController !== controller) return
 		items.value = offset === 0 ? page.items : [...items.value, ...page.items]
 		total.value = page.total
+		void loadFeedback(page.items.filter(item => !item.folder).map(item => item.id), offset === 0)
 		selectedIds.value = selectedIds.value.filter(id => items.value.some(item => item.id === id))
 		if (offset === 0) await nextTick(restoreScroll)
 	} catch (error) {
@@ -126,7 +130,7 @@ function onMetadataKeywords(event: Event) {
 }
 
 function formatCapture(timestamp?: number): string {
-	return timestamp ? new Date(timestamp * 1000).toLocaleString() : ''
+	return formatDateTime(timestamp)
 }
 
 function clearMetadataFilters() {
@@ -363,7 +367,7 @@ onBeforeUnmount(() => {
 			:items="items"
 			contained
 			:min-item-width="190"
-			:item-extra-height="102"
+			:item-extra-height="126"
 			:has-more="hasMore"
 			:loading-more="loadingMore"
 			:aria-label="t('proofing_gallery', 'Gallery files')"
@@ -381,13 +385,18 @@ onBeforeUnmount(() => {
 					</button>
 					<ProgressiveImage v-else-if="item.mimeType.startsWith('image/')"
 						class="file-card__preview"
-						:src="ownerPreviewUrl(gallery.id, item.id, 440, 320)"
+						:src="ownerPreviewUrl(gallery.id, item.id, 400, 400, 'fit')"
 						:alt="item.name" />
 					<div v-else class="file-card__preview file-card__video">
 						<PlayIcon :size="28" /> <span>{{ t('proofing_gallery', 'Video') }}</span>
 					</div>
 					<div class="file-card__meta">
 						<strong :title="item.name">{{ item.name }}</strong><small>{{ item.folder ? t('proofing_gallery', 'Folder') : formatSize(item.size) }}</small>
+						<span v-if="feedback[item.id] && (feedback[item.id]!.likes || feedback[item.id]!.selections || feedback[item.id]!.comments)" class="file-card__feedback">
+							<span v-if="feedback[item.id]!.likes" :title="t('proofing_gallery', 'Likes')">♥ {{ feedback[item.id]!.likes }}</span>
+							<span v-if="feedback[item.id]!.selections" :title="t('proofing_gallery', 'In client selections')">✓ {{ feedback[item.id]!.selections }}</span>
+							<span v-if="feedback[item.id]!.comments" :title="t('proofing_gallery', 'Comments')">💬 {{ feedback[item.id]!.comments }}</span>
+						</span>
 						<span v-if="item.metadata?.state === 'ready' && (item.metadata.capturedAt || item.metadata.camera)" class="file-card__capture">
 							{{ [formatCapture(item.metadata.capturedAt), item.metadata.camera].filter(Boolean).join(' · ') }}
 						</span>
@@ -490,7 +499,7 @@ onBeforeUnmount(() => {
 			<ul v-else>
 				<li v-for="version in versions" :key="version.id">
 					<span>
-						<strong>{{ new Date(version.createdAt * 1000).toLocaleString() }}</strong>
+						<strong>{{ formatDateTime(version.createdAt) }}</strong>
 						<small>{{ formatSize(version.size) }} · {{ version.createdBy }}</small>
 					</span>
 					<NcButton variant="tertiary" :disabled="versionsLoading" @click="restoreVersion(version)">

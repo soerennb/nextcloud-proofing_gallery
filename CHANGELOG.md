@@ -10,6 +10,30 @@
 - require PHP 8.2.35 or newer and update the PHP test tooling to PHPUnit 11;
   upgrade PHP before updating the app on installations running an older version
 
+- let Fotobox kiosks show and print a photo's QR code before uploading it:
+  galleries return a `photoLink`, and the guest page waits for the photo and
+  opens it once it arrives
+
+- show each project's phase and the client work waiting for the photographer
+  (open selections, uploads to approve, submitted or overdue review rounds,
+  links expiring within a week) on gallery cards, in a new "Needs attention"
+  view and in an Overview status panel with the client link
+- show selections as cards with photo thumbnails, an open/completed filter and
+  one primary action; show client likes, selections and comments per photo and
+  keep portrait thumbnails uncropped in the Photos workspace
+- flag overdue review rounds, use one locale-aware date format, open Share with
+  the client links and keep the guest sort order in Design
+- show a separate error state with retry when galleries cannot be loaded
+- give proofing clients a visible "Select photos" bar with the selection count,
+  rules and due date, and a prefilled "Send selection" step
+- render shared galleries without Nextcloud page chrome: link previews for
+  messengers, a gallery-specific home-screen manifest and theme color, and no
+  Nextcloud app banner
+- show the cached grid image while the full lightbox image loads, use an opaque
+  lightbox backdrop and hide file names there unless the gallery shows them
+- fix invisible like badges and solid button labels, missing Ionic spacing,
+  clipped titles on phones and inconsistent selected-tile states
+
 ## 0.12.0 — 2026-10-09
 
 - preserve separately configured primary-link download, upload, export, metadata

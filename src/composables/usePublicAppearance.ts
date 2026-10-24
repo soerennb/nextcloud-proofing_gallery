@@ -54,6 +54,18 @@ export function usePublicAppearance(configuredTheme: Ref<'auto' | 'light' | 'dar
 		document.body.style.setProperty('--proofing-public-accent-contrast-rgb', contrastRgb(contrast))
 		document.body.style.setProperty('--proofing-public-accent-shade', mixHex(rgb, [0, 0, 0], 0.12))
 		document.body.style.setProperty('--proofing-public-accent-tint', mixHex(rgb, [255, 255, 255], 0.14))
+		syncThemeColor(effectiveTheme.value === 'dark' ? '#000000' : '#f2f2f7')
+	}
+
+	// Browser and installed-app chrome follow the gallery surface, not Nextcloud's brand color.
+	function syncThemeColor(color: string) {
+		let meta = document.head.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+		if (!meta) {
+			meta = document.createElement('meta')
+			meta.name = 'theme-color'
+			document.head.append(meta)
+		}
+		meta.content = color
 	}
 
 	onMounted(() => {

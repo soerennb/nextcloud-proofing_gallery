@@ -64,7 +64,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', revealActive))
 </template>
 
 <style scoped>
-.workspace-navigation { position: sticky; z-index: 12; top: 0; display: flex; min-width: 0; align-items: center; gap: 16px; margin-top: 20px; padding-block: 6px; border-bottom: 1px solid var(--studio-line); background: var(--studio-canvas); }
+.workspace-navigation { position: sticky; z-index: 12; top: 0; display: flex; min-width: 0; align-items: center; gap: 16px; margin-top: 0; padding-block: 4px; border-bottom: 1px solid var(--studio-line); background: var(--studio-canvas); }
 
 .workspace-navigation__tabs { display: flex; min-width: 0; flex: 1; gap: 4px; overflow-x: auto; scrollbar-width: thin; }
 

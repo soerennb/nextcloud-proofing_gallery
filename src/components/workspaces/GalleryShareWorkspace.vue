@@ -9,7 +9,6 @@ import type { EventSetup } from '../../services/eventApi.ts'
 import type { Gallery } from '../../types.ts'
 import DownloadPolicyFields from '../DownloadPolicyFields.vue'
 import PublicLinkManager from '../PublicLinkManager.vue'
-import GallerySortSettings from '../GallerySortSettings.vue'
 import EventDeliveryWorkspace from '../EventDeliveryWorkspace.vue'
 
 const props = defineProps<{ gallery: Gallery; saveGallerySettings?: () => Promise<boolean> }>()
@@ -18,9 +17,6 @@ const settings = defineModel<GallerySettings>('settings', { required: true })
 </script>
 
 <template>
-	<section class="settings-section guest-order-section">
-		<GallerySortSettings v-model="settings.navigation" :collection="gallery.sourceType === 'collection'" />
-	</section>
 	<EventDeliveryWorkspace v-if="gallery.deliveryMode === 'event'"
 		v-model:settings="settings"
 		:gallery="gallery"
@@ -29,11 +25,13 @@ const settings = defineModel<GallerySettings>('settings', { required: true })
 		@setup-updated="emit('event-setup-updated', $event)" />
 	<section v-else class="settings-section deliver-workspace">
 		<div class="section-heading">
-			<h2>{{ t('proofing_gallery', 'Client links') }}</h2>
+			<h2 id="client-links-title">
+				{{ t('proofing_gallery', 'Client links') }}
+			</h2>
 			<p>{{ gallery.shareToken ? t('proofing_gallery', 'Manage who can open this gallery and what each link allows.') : t('proofing_gallery', 'Publish the gallery when it is ready for clients.') }}</p>
 		</div>
-		<NcButton variant="primary" @click="emit('open-sharing')">
-			{{ gallery.shareToken ? t('proofing_gallery', 'Invite clients') : t('proofing_gallery', 'Publish gallery') }}
+		<NcButton v-if="!gallery.shareToken" variant="primary" @click="emit('open-sharing')">
+			{{ t('proofing_gallery', 'Publish gallery') }}
 		</NcButton>
 		<PublicLinkManager v-if="gallery.shareToken"
 			:gallery="gallery"

@@ -194,7 +194,7 @@ components:
         perMinute: { type: integer, enum: [60] }
     Connection:
       type: object
-      required: [schemaVersion, eventId, gallery, galleryUrl, upload, replayed]
+      required: [schemaVersion, eventId, gallery, galleryUrl, photoLink, upload, replayed]
       properties:
         schemaVersion: { type: integer, enum: [1] }
         eventId: { type: string }
@@ -208,6 +208,13 @@ components:
             title: { type: string }
             status: { type: string, enum: [published] }
         galleryUrl: { type: string, format: uri }
+        photoLink:
+          type: object
+          description: Photo page link known before the upload; the guest page waits until the photo with this ID arrives.
+          required: [urlTemplate, photoIdPlaceholder]
+          properties:
+            urlTemplate: { type: string, description: 'galleryUrl with ?kioskPhoto=PHOTO_ID' }
+            photoIdPlaceholder: { type: string, enum: [PHOTO_ID] }
         replayed: { type: boolean }
         upload:
           allOf:
@@ -233,7 +240,7 @@ components:
         replayed: { type: boolean }
     Setup:
       type: object
-      required: [schemaVersion, defaults, capabilities, sharingPolicy, upload]
+      required: [schemaVersion, defaults, capabilities, sharingPolicy, upload, photoLinks]
       properties:
         schemaVersion: { type: integer, enum: [1] }
         defaults:
@@ -264,6 +271,11 @@ components:
             publicUploadsAllowed: { type: boolean }
         upload:
           $ref: '#/components/schemas/Upload'
+        photoLinks:
+          type: object
+          required: [beforeUpload]
+          properties:
+            beforeUpload: { type: boolean, enum: [true], description: Galleries answer photoLink; older versions omit this object. }
     SetupEnvelope:
       type: object
       required: [ocs]

@@ -28,6 +28,7 @@ const FolderContent = defineAsyncComponent(() => import('./FolderContent.vue'))
 import GalleryWorkspaceNavigation from './GalleryWorkspaceNavigation.vue'
 const SharingModal = defineAsyncComponent(() => import('./SharingModal.vue'))
 import SourceRebindNotice from './SourceRebindNotice.vue'
+import { galleryPhase, galleryPhaseLabel } from '../domain/galleryPhase.ts'
 const GalleryAutomationWorkspace = defineAsyncComponent(() => import('./workspaces/GalleryAutomationWorkspace.vue'))
 const GalleryDesignWorkspace = defineAsyncComponent(() => import('./workspaces/GalleryDesignWorkspace.vue'))
 const GalleryHistoryWorkspace = defineAsyncComponent(() => import('./workspaces/GalleryHistoryWorkspace.vue'))
@@ -426,11 +427,7 @@ onBeforeUnmount(() => {
 				</button>
 				<h1>{{ gallery.title }}</h1>
 				<div class="project-meta">
-					<span class="project-status">{{ gallery.status === 'published'
-						? t('proofing_gallery', 'Published')
-						: gallery.status === 'archived'
-							? t('proofing_gallery', 'Archived')
-							: t('proofing_gallery', 'Draft') }}</span>
+					<span class="project-status" :data-phase="galleryPhase(gallery)">{{ galleryPhaseLabel(galleryPhase(gallery)) }}</span>
 					<span class="purpose-name">{{ purposeLabels[gallery.purpose] }}</span>
 					<details class="readiness-popover">
 						<summary :aria-label="t('proofing_gallery', 'Project readiness')">
@@ -504,6 +501,8 @@ onBeforeUnmount(() => {
 					:presets="presets"
 					:presets-loading="presetsLoading"
 					:preset-saving="presetSaving"
+					:next-step="nextStep"
+					@open-sharing="openSharing"
 					@choose-source="chooseSource"
 					@select-preset="selectPreset"
 					@apply-preset="applySelectedPreset"
@@ -514,12 +513,12 @@ onBeforeUnmount(() => {
 				<CollectionContent
 					v-else-if="activeTab === 'photos' && gallery.sourceType === 'collection'"
 					:gallery="gallery"
-					@guest-order="setTab('share')"
+					@guest-order="setTab('design')"
 					@changed="collectionChanged" />
 				<FolderContent
 					v-else-if="activeTab === 'photos' && gallery.sourceType === 'folder'"
 					:gallery="gallery"
-					@guest-order="setTab('share')"
+					@guest-order="setTab('design')"
 					@changed="collectionChanged" />
 				<CullingWorkspace
 					v-else-if="activeTab === 'cull'"

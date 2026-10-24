@@ -26,7 +26,7 @@ function updateSelectionDueDate(event: Event) {
 		<div class="workflow-completion">
 			<div><strong>{{ gallery.workflowState === 'completed' ? t('proofing_gallery', 'Project completed') : t('proofing_gallery', 'Client review') }}</strong><span>{{ gallery.workflowState === 'completed' ? t('proofing_gallery', 'Configured lifecycle rules now count from the completion date.') : t('proofing_gallery', 'Review client decisions, selections and incoming files before completing the project.') }}</span></div>
 			<NcButton v-if="gallery.workflowState !== 'completed'" variant="primary" @click="emit('complete')">
-				{{ t('proofing_gallery', 'Mark completed') }}
+				{{ t('proofing_gallery', 'Complete project') }}
 			</NcButton>
 		</div>
 		<ReviewWorkflowPanel v-if="gallery.permissions.role === 'owner'" :gallery-id="gallery.id" />

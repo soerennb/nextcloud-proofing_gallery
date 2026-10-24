@@ -57,6 +57,6 @@
 	.gallery-app-header__toolbar--branded { --min-height: 52px !important; }
 	.gallery-app-header__brand { max-width: 84px; height: 36px; margin-inline-start: 6px; padding: 2px 4px; }
 	.gallery-app-header__brand img { max-width: 74px; max-height: 30px; }
-	.gallery-app-header > ion-toolbar:not(.gallery-app-header__pager, .gallery-app-header__search) ion-title { max-width: 88px; padding-inline: 6px 2px; }
+	.gallery-app-header > ion-toolbar:not(.gallery-app-header__pager, .gallery-app-header__search, .gallery-app-header__selection) ion-title { max-width: 88px; padding-inline: 6px 2px; }
 	.gallery-app-header ion-buttons ion-button { --padding-start: 5px; --padding-end: 5px; width: 38px; }
 }

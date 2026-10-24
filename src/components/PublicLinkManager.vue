@@ -16,6 +16,7 @@ import type { GallerySettings } from '../domain/gallerySettings.ts'
 import type { GalleryWorkspace } from '../domain/gallerySettingsOptions.ts'
 import { fetchGallery, fetchPublicLinks, fetchShareAudit, makePublicLinkPrimary, requestCustomDomain, revokeCustomDomain, revokePublicLink, savePublicLink } from '../services/galleryApi.ts'
 import type { Gallery, GalleryPublicLink, PublicLinkPolicy, ShareAuditItem } from '../types.ts'
+import { formatDate, formatDateTime, isOverdue } from '../domain/dateFormat.ts'
 
 const recoveryNeeded = ref(false)
 const recoveryNotice = ref('')
@@ -204,25 +205,19 @@ async function removeDomain(link: GalleryPublicLink) {
 	} catch { showError(t('proofing_gallery', 'The custom domain could not be revoked.')) }
 }
 
-function formatDate(timestamp: number) { return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(timestamp * 1000) }
 onMounted(load)
 </script>
 
 <template>
-	<section class="link-manager" aria-labelledby="public-link-manager-title">
+	<section class="link-manager" aria-labelledby="client-links-title">
 		<header>
-			<div>
-				<span>{{ t('proofing_gallery', 'LINK PORTFOLIO') }}</span><h3 id="public-link-manager-title">
-					{{ t('proofing_gallery', 'Client links') }}
-				</h3>
-			</div>
+			<p class="link-manager__lead">
+				{{ t('proofing_gallery', 'Give every audience its own URL, permissions and folder scope. No password or token is written to the audit log.') }}
+			</p>
 			<NcButton variant="primary" :disabled="loading" @click="startNew">
 				{{ t('proofing_gallery', 'New client link') }}
 			</NcButton>
 		</header>
-		<p class="link-manager__lead">
-			{{ t('proofing_gallery', 'Give every audience its own URL, permissions and folder scope. No password or token is written to the audit log.') }}
-		</p>
 		<div v-if="loading" role="status">
 			{{ t('proofing_gallery', 'Loading…') }}
 		</div>
@@ -236,7 +231,7 @@ onMounted(load)
 				<p>{{ t('proofing_gallery', 'Permissions: {permissions} · Navigation: {navigation}', { permissions: link.permissionsPolicyMode === 'inherit' ? t('proofing_gallery', 'Gallery default') : t('proofing_gallery', 'Custom'), navigation: link.navigationPolicyMode === 'inherit' ? t('proofing_gallery', 'Gallery default') : t('proofing_gallery', 'Custom') }) }}</p>
 				<p v-if="link.reviewEnabled" class="link-card__review">
 					{{ t('proofing_gallery', 'Review round {round}: {status}', { round: link.review.current?.round ?? 1, status: reviewStatusLabels[link.review.current?.status ?? 'awaiting_feedback'] ?? link.review.current?.status ?? '' }) }}<template v-if="link.reviewDueDate">
-						· {{ link.reviewDueDate }}
+						· {{ t('proofing_gallery', 'Due {date}', { date: formatDate(link.reviewDueDate) }) }}<strong v-if="(link.review.current?.status ?? 'awaiting_feedback') === 'awaiting_feedback' && isOverdue(link.reviewDueDate)" class="link-card__overdue"> · {{ t('proofing_gallery', 'Overdue') }}</strong>
 					</template>
 				</p>
 				<div v-if="link.customDomain" class="link-domain" :data-status="link.customDomain.status">
@@ -363,7 +358,7 @@ onMounted(load)
 				{{ t('proofing_gallery', 'No audited link activity yet.') }}
 			</p><ol v-else>
 				<li v-for="(item, index) in audit" :key="`${item.createdAt}-${index}`">
-					<strong>{{ item.event }}</strong><span>{{ item.outcome }} · {{ formatDate(item.createdAt) }}</span><small>{{ t('proofing_gallery', 'Link #{id}', { id: item.publicLinkId }) }}<template v-if="item.fileId"> · {{ t('proofing_gallery', 'File #{id}', { id: item.fileId }) }}</template></small>
+					<strong>{{ item.event }}</strong><span>{{ item.outcome }} · {{ formatDateTime(item.createdAt) }}</span><small>{{ t('proofing_gallery', 'Link #{id}', { id: item.publicLinkId }) }}<template v-if="item.fileId"> · {{ t('proofing_gallery', 'File #{id}', { id: item.fileId }) }}</template></small>
 				</li>
 			</ol>
 			<NcButton v-if="auditCursor"
@@ -379,11 +374,7 @@ onMounted(load)
 <style scoped>
 .link-manager { display: grid; gap: 16px; padding: 24px 0; border-top: 1px solid var(--color-border); }
 
-.link-manager > header { display: flex; align-items: end; justify-content: space-between; gap: 16px; }
-
-.link-manager > header span { color: var(--color-primary-element); font-size: 11px; font-weight: 800; letter-spacing: .12em; }
-
-.link-manager h3 { margin: 2px 0 0; font-size: 24px; }
+.link-manager > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 
 .link-manager__lead { max-width: 68ch; margin: 0; color: var(--color-text-maxcontrast); }
 
@@ -392,6 +383,8 @@ onMounted(load)
 .link-cards article { display: grid; gap: 12px; min-width: 0; padding: 16px; border: 1px solid var(--color-border); border-top: 4px solid var(--color-primary-element); background: var(--color-main-background); }
 
 .link-cards article.is-revoked { opacity: .55; border-top-color: var(--color-text-maxcontrast); }
+
+.link-card__overdue { color: var(--color-warning-text); }
 
 .link-card__top, .link-card__top > div, .link-card__actions { display: flex; align-items: center; gap: 8px; }
 

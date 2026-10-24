@@ -47,3 +47,7 @@
 
 .review-panel > header > .button-vue { flex: none; }
 @media (max-width: 700px) { .review-panel > header { flex-wrap: wrap; } }
+
+.review-panel article[data-overdue="true"] { border-color: var(--color-warning); }
+
+.review-panel article[data-overdue="true"] .review-panel__state strong { color: var(--color-warning-text); }

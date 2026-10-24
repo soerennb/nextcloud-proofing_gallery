@@ -36,7 +36,7 @@ moderated upload inbox and do not support collections or event delivery.
 
 ## Image sorting
 
-New galleries copy the instance default sort. In **Share → Default sort**, choose
+New galleries copy the instance default sort. In **Design → Order for guests**, choose
 filename, capture date, last modified date or file size and the direction. **Use
 current instance default** copies the current administrator setting; later changes
 to that setting do not change existing galleries. Collections can also use their
@@ -93,7 +93,8 @@ recipients can be retried without recreating successful links.
 
 The gallery workspace separates the common tasks:
 
-- **Overview** shows source, status, purpose, and media summary.
+- **Overview** starts with the project phase, the client link, and the client
+  work waiting for you, followed by source, purpose, and media summary.
 - **Photos** manages folder content, uploads, metadata, and collections.
 - **Cull** provides ratings, picks, rejects, color labels, saved views, and
   explicit XMP synchronization.
@@ -103,6 +104,12 @@ The gallery workspace separates the common tasks:
 - **Share** creates independently configured public links.
 - **Review** contains feedback, client selections, exports, and upload moderation.
 - **History** records relevant gallery activity.
+
+Gallery cards show the project phase (Draft, Preparing, With client, Client
+responded, Completed) and what waits for you: open selections, uploads to
+approve, submitted or overdue review rounds, and links that expire within a
+week. **Needs attention** in the navigation lists exactly these projects; its
+badge counts them. Completed and archived projects never appear there.
 
 Gallery cards and **Overview → Gallery content** show separate image and video
 counts across all subfolders. Only supported, readable media counts; folders,
@@ -191,7 +198,10 @@ CSV exports offer only permitted rating fields. Filename exports continue to
 work when client ratings are disabled.
 
 Proofing mode lets guests identify themselves and, when enabled, like, rate,
-pick, reject, label, comment, annotate, and save named selections. Guests do
+pick, reject, label, comment, annotate, and save named selections. A bar at the
+bottom of the gallery offers **Select photos**; while selecting, it shows the
+count, the selection rules and the due date, and **Send selection** saves the
+chosen photos under a prefilled name. Guests do
 not need Nextcloud accounts. Their identity and mutation token are stored in a
 private browser session; clearing site data ends access to private feedback.
 

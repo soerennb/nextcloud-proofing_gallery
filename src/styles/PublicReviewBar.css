@@ -10,3 +10,5 @@
 
 .public-review-bar[data-state="approved"] { border-color: color-mix(in srgb, #36b37e 54%, transparent); }
 @media (max-width: 520px) { .public-review-bar { align-items: stretch; bottom: max(8px, env(safe-area-inset-bottom)); } .public-review-bar > div { grid-template-columns: 1fr; } .public-review-bar small { grid-column: 1; } }
+
+.public-review-bar small.public-review-bar__overdue { color: #c2410c; font-weight: 650; }

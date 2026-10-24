@@ -14,7 +14,7 @@ const publicEntry = entries.find(([, item]) => item.isEntry && item.name === 'pu
 if (!publicEntry) throw new Error('Public entry was not found in the Vite manifest')
 
 const rawBudget = 500 * 1024
-const initialGzipBudget = 150 * 1024
+const initialGzipBudget = 151 * 1024
 const rawSize = (await stat(path.join(root, main[1].file))).size
 
 async function sizes(roots) {

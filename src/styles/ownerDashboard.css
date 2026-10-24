@@ -292,3 +292,5 @@
 @media (prefers-reduced-motion: reduce) {
 	.gallery-toolbar__filters { transition: none; }
 }
+
+.gallery-nav__count { min-width: 22px; margin-inline-start: auto; padding: 1px 7px; border-radius: 999px; background: var(--studio-accent, var(--color-primary-element)); color: var(--studio-on-accent, #fff); font-size: 12px; font-weight: 700; line-height: 1.6; text-align: center; }

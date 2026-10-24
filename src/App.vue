@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AlertCircleOutlineIcon from 'vue-material-design-icons/AlertCircleOutline.vue'
 import ArchiveOutlineIcon from 'vue-material-design-icons/ArchiveOutline.vue'
 import HelpCircleOutlineIcon from 'vue-material-design-icons/HelpCircleOutline.vue'
 import ImageMultipleOutlineIcon from 'vue-material-design-icons/ImageMultipleOutline.vue'
@@ -32,6 +33,7 @@ const { preference: studioTheme } = useStudioTheme()
 
 const galleries = ref<GalleryListItem[]>([])
 const loading = ref(true)
+const loadFailed = ref(false)
 const loadingMore = ref(false)
 const galleryTotal = ref(0)
 const nextCursor = ref<string | null>(null)
@@ -40,7 +42,8 @@ const helpOpen = ref(window.location.hash === '#help')
 const search = ref('')
 const modeFilter = ref<'all' | 'presentation' | 'collaboration'>('all')
 const sourceFilter = ref<'all' | 'folder' | 'collection'>('all')
-const statusFilter = ref<'all' | 'draft' | 'published'>('all')
+const statusFilter = ref<'all' | 'draft' | 'published' | 'attention'>('all')
+const attentionTotal = ref(0)
 const gallerySort = ref<'updated' | 'title' | 'created'>('updated')
 const savedDashboardView = localStorage.getItem('proofing-gallery-dashboard-view')
 const dashboardView = ref<'list' | 'grid'>(savedDashboardView === 'list' ? 'list' : 'grid')
@@ -74,6 +77,7 @@ function resetFilters() {
 }
 
 function showArchive(value: boolean) {
+	if (!value && statusFilter.value === 'attention') statusFilter.value = 'all'
 	window.location.hash = value ? 'archive' : ''
 	void syncRouteFromHash()
 	if (mobileViewport.value) emit('toggle-navigation', { open: false })
@@ -101,19 +105,42 @@ async function load(reset = true) {
 			sort: gallerySort.value,
 		}, request.signal)
 		if (!request.current()) return
+		loadFailed.value = false
 		galleries.value = reset ? page.items : [...galleries.value, ...page.items]
 		galleryTotal.value = page.total
 		nextCursor.value = page.nextCursor
+		if (reset) refreshAttentionTotal()
 		await syncRouteFromHash()
 	} catch {
 		if (!request.current()) return
-		notify('error', t('proofing_gallery', 'Galleries could not be loaded.')).catch(() => {})
+		if (reset) {
+			galleries.value = []
+			galleryTotal.value = 0
+			nextCursor.value = null
+			loadFailed.value = true
+		} else {
+			notify('error', t('proofing_gallery', 'Galleries could not be loaded.')).catch(() => {})
+		}
 	} finally {
 		if (request.current()) {
 			if (reset) loading.value = false
 			else loadingMore.value = false
 		}
 	}
+}
+
+// The navigation badge counts every project that waits for the owner, independent of the active filters.
+function refreshAttentionTotal() {
+	fetchGalleryPage({ archived: false, status: 'attention', limit: 1 })
+		.then(page => { attentionTotal.value = page.total })
+		.catch(() => {})
+}
+
+function showAttention() {
+	window.location.hash = ''
+	statusFilter.value = 'attention'
+	void syncRouteFromHash()
+	if (mobileViewport.value) emit('toggle-navigation', { open: false })
 }
 
 function loadMore() {
@@ -276,10 +303,20 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 				<li class="gallery-nav__entry">
 					<button
 						class="gallery-nav__item"
-						:class="{ 'gallery-nav__item--active': !archived && !helpOpen }"
+						:class="{ 'gallery-nav__item--active': !archived && !helpOpen && statusFilter !== 'attention' }"
 						type="button"
 						@click="showArchive(false)">
 						<ImageMultipleOutlineIcon aria-hidden="true" :size="20" /><span>{{ t('proofing_gallery', 'Galleries') }}</span>
+					</button>
+				</li>
+				<li class="gallery-nav__entry">
+					<button
+						class="gallery-nav__item"
+						:class="{ 'gallery-nav__item--active': !archived && !helpOpen && statusFilter === 'attention' }"
+						type="button"
+						@click="showAttention">
+						<AlertCircleOutlineIcon aria-hidden="true" :size="20" /><span>{{ t('proofing_gallery', 'Needs attention') }}</span>
+						<span v-if="attentionTotal" class="gallery-nav__count" :aria-label="n('proofing_gallery', '%n project needs attention', '%n projects need attention', attentionTotal)">{{ attentionTotal }}</span>
 					</button>
 				</li>
 				<li class="gallery-nav__entry">
@@ -317,8 +354,8 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 				<header class="gallery-page__header">
 					<div class="gallery-page__title">
 						<h1 id="gallery-page-title">
-							{{ archived ? t('proofing_gallery', 'Archive') : t('proofing_gallery', 'Galleries') }}
-						</h1><p>{{ archived ? t('proofing_gallery', 'Completed work kept safely out of the active studio.') : t('proofing_gallery', 'Prepare, review and deliver every client project from one workspace.') }}</p>
+							{{ archived ? t('proofing_gallery', 'Archive') : statusFilter === 'attention' ? t('proofing_gallery', 'Needs attention') : t('proofing_gallery', 'Galleries') }}
+						</h1><p>{{ archived ? t('proofing_gallery', 'Completed work kept safely out of the active studio.') : statusFilter === 'attention' ? t('proofing_gallery', 'Client results to review, missed deadlines and links that expire this week.') : t('proofing_gallery', 'Prepare, review and deliver every client project from one workspace.') }}</p>
 					</div>
 					<div class="gallery-page__actions">
 						<div class="view-switch" :aria-label="t('proofing_gallery', 'Gallery view')">
@@ -386,6 +423,7 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 								<option value="all">{{ t('proofing_gallery', 'All') }}</option>
 								<option value="draft">{{ t('proofing_gallery', 'Draft') }}</option>
 								<option value="published">{{ t('proofing_gallery', 'Published') }}</option>
+								<option value="attention">{{ t('proofing_gallery', 'Needs attention') }}</option>
 							</select>
 						</label>
 
@@ -404,36 +442,59 @@ function onMobileViewportChange(event: MediaQueryListEvent) {
 					<span>{{ t('proofing_gallery', 'Loading galleries…') }}</span>
 				</div>
 
-				<GalleryList
-					v-else-if="visibleGalleries.length > 0"
-					:galleries="visibleGalleries"
-					:archived="archived"
-					:view="dashboardView"
-					@select="selectGallery"
-					@share="openShare"
-					@cover="openShare($event, true)"
-					@archive="archive"
-					@restore="restore" />
+				<NcEmptyContent
+					v-else-if="loadFailed"
+					class="gallery-page__load-error"
+					:name="t('proofing_gallery', 'Galleries could not be loaded')"
+					:description="t('proofing_gallery', 'Your galleries are safe. The server did not answer as expected; try again in a moment or ask your administrator to check the Nextcloud log.')">
+					<template #action>
+						<NcButton variant="primary" @click="load()">
+							{{ t('proofing_gallery', 'Try again') }}
+						</NcButton>
+					</template>
+				</NcEmptyContent>
 
-				<div v-if="!loading && visibleGalleries.length > 0" class="gallery-page__pagination" aria-live="polite">
-					<span>{{ t('proofing_gallery', '{shown} of {total} galleries', { shown: visibleGalleries.length, total: galleryTotal }) }}</span>
-					<NcButton v-if="nextCursor" :disabled="loadingMore" @click="loadMore">
-						<NcLoadingIcon v-if="loadingMore" :size="18" />
-						{{ loadingMore ? t('proofing_gallery', 'Loading…') : t('proofing_gallery', 'Load more galleries') }}
-					</NcButton>
-				</div>
+				<template v-else-if="visibleGalleries.length > 0">
+					<GalleryList
+						:galleries="visibleGalleries"
+						:archived="archived"
+						:view="dashboardView"
+						@select="selectGallery"
+						@share="openShare"
+						@cover="openShare($event, true)"
+						@archive="archive"
+						@restore="restore" />
+
+					<div class="gallery-page__pagination" aria-live="polite">
+						<span>{{ t('proofing_gallery', '{shown} of {total} galleries', { shown: visibleGalleries.length, total: galleryTotal }) }}</span>
+						<NcButton v-if="nextCursor" :disabled="loadingMore" @click="loadMore">
+							<NcLoadingIcon v-if="loadingMore" :size="18" />
+							{{ loadingMore ? t('proofing_gallery', 'Loading…') : t('proofing_gallery', 'Load more galleries') }}
+						</NcButton>
+					</div>
+				</template>
+
+				<NcEmptyContent
+					v-else-if="statusFilter === 'attention' && !search && activeFilterCount === 1"
+					:name="t('proofing_gallery', 'All caught up')"
+					:description="t('proofing_gallery', 'No client results, missed deadlines or expiring links are waiting for you.')" />
+
+				<NcEmptyContent
+					v-else-if="search || activeFilterCount"
+					:name="t('proofing_gallery', 'No matching galleries')"
+					:description="search ? t('proofing_gallery', 'Try another title.') : t('proofing_gallery', 'No gallery matches the selected filters.')">
+					<template v-if="activeFilterCount" #action>
+						<NcButton @click="resetFilters">
+							{{ t('proofing_gallery', 'Reset filters') }}
+						</NcButton>
+					</template>
+				</NcEmptyContent>
 
 				<NcEmptyContent
 					v-else
-					:name="search
-						? t('proofing_gallery', 'No matching galleries')
-						: archived
-							? t('proofing_gallery', 'The archive is empty')
-							: t('proofing_gallery', 'No galleries yet')"
-					:description="search
-						? t('proofing_gallery', 'Try another title.')
-						: t('proofing_gallery', 'Turn an existing Nextcloud folder into a polished client gallery.')">
-					<template v-if="!archived && !search" #action>
+					:name="archived ? t('proofing_gallery', 'The archive is empty') : t('proofing_gallery', 'No galleries yet')"
+					:description="archived ? t('proofing_gallery', 'Archived projects appear here.') : t('proofing_gallery', 'Turn an existing Nextcloud folder into a polished client gallery.')">
+					<template v-if="!archived" #action>
 						<NcButton variant="primary" @click="showCreate = true">
 							{{ t('proofing_gallery', 'Create your first gallery') }}
 						</NcButton>

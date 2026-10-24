@@ -2,12 +2,108 @@ import { expect, test, type APIRequestContext } from '@playwright/test'
 
 const headers = { Authorization: `Basic ${Buffer.from('admin:admin').toString('base64')}`, 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' }
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
-interface MediaPage { items: Array<{ id: number; name: string; metadata?: Record<string, unknown> }>; total: number; nextCursor: string | null; previousCursor: string | null; view: { sortBy: string; sortDirection: string } }
+interface MediaPage { items: Array<{ id: number; name: string; folder: boolean; size: number; modifiedAt: number; metadata?: Record<string, unknown> }>; total: number; nextCursor: string | null; previousCursor: string | null; view: { sortBy: string; sortDirection: string } }
 async function json(request: APIRequestContext, url: string): Promise<MediaPage> {
 	const response = await request.get(url, { headers })
 	expect(response.status(), await response.text()).toBe(200)
 	return response.json()
 }
+
+test('public folder views keep folders first across sorting, pagination and navigation', async ({ page, request, baseURL }, testInfo) => {
+	test.setTimeout(120_000)
+	const api = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
+	const folder = `FolderSorting-${Date.now()}`
+	const dav = `${baseURL}/remote.php/dav/files/admin/${folder}`
+	let galleryId: number | undefined
+	try {
+		expect((await request.fetch(dav, { method: 'MKCOL', headers })).status()).toBe(201)
+		for (const path of ['', 'album2']) {
+			for (const name of ['album2', 'album10']) expect((await request.fetch(`${dav}/${path ? `${path}/` : ''}${name}`, { method: 'MKCOL', headers })).status()).toBe(201)
+			for (const [index, name] of ['a', 'album3', 'z'].entries()) {
+				const prefix = `${dav}/${path ? `${path}/` : ''}${name}`
+				expect((await request.put(`${prefix}.png`, { headers: { ...headers, 'Content-Type': 'image/png', 'X-OC-Mtime': String(1704110400 + index * 86400) }, data: Buffer.concat([png, Buffer.alloc(index * 10)]) })).ok()).toBe(true)
+				if (name !== 'z') expect((await request.put(`${prefix}.xmp`, { headers: { ...headers, 'Content-Type': 'application/xml' }, data: `<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:exif="http://ns.adobe.com/exif/1.0/" exif:DateTimeOriginal="2024-01-0${3 - index}T12:00:00Z"/></rdf:RDF>` })).ok()).toBe(true)
+			}
+		}
+		const properties = await request.fetch(dav, { method: 'PROPFIND', headers: { ...headers, Depth: '0', 'Content-Type': 'application/xml' }, data: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/></d:prop></d:propfind>' }).then(response => response.text())
+		const folderId = Number(properties.match(/<(?:oc:)?fileid>(\d+)<\/(?:oc:)?fileid>/)?.[1])
+		expect(folderId).toBeGreaterThan(0)
+		const created = await request.post(`${api}?format=json`, { headers, data: { title: folder, folderId, settings: {
+			publicLocale: 'en', navigation: { recursive: false, folders: true, sortBy: 'name', sortDirection: 'asc', groupBy: 'none' }, metadata: { publicFields: ['capturedAt'] },
+			presentation: { lightboxFilmstripPlacement: 'auto', lightboxChromeBehavior: 'persistent' },
+		} } })
+		expect(created.status(), await created.text()).toBe(201)
+		galleryId = (await created.json()).id
+		for (const path of ['', 'album2']) expect((await request.post(`${api}/${galleryId}/metadata/index?format=json`, { headers, data: { path } })).status()).toBe(200)
+		const published = await request.post(`${api}/${galleryId}/publish?format=json`, { headers, data: { allowDownloads: true } })
+		expect(published.status(), await published.text()).toBe(200)
+		const token = (await published.json()).gallery.shareToken
+		const publicUrl = `${baseURL}/apps/proofing_gallery/public/${token}/gallery`
+		for (const path of ['', 'album2']) {
+			for (const sortBy of ['name', 'modified', 'size', 'capturedAt']) {
+				for (const sortDirection of ['asc', 'desc']) {
+					for (const groupBy of ['none', 'type']) {
+						const query = new URLSearchParams({ path, sortBy, sortDirection, groupBy, limit: '20' })
+						const all = await json(request, `${publicUrl}?${query}`)
+						expect(all.total).toBe(5)
+						expect(all.items.map(item => item.folder)).toEqual([true, true, false, false, false])
+						if (sortBy === 'name') {
+							const folders = ['album2', 'album10'], files = ['a.png', 'album3.png', 'z.png']
+							expect(all.items.map(item => item.name)).toEqual(sortDirection === 'asc' ? [...folders, ...files] : [...folders.reverse(), ...files.reverse()])
+						} else if (sortBy === 'capturedAt') {
+							expect(all.items.slice(2).map(item => item.name)).toEqual(sortDirection === 'asc' ? ['album3.png', 'a.png', 'z.png'] : ['a.png', 'album3.png', 'z.png'])
+						} else {
+							for (const folder of [true, false]) {
+								const values = all.items.filter(item => item.folder === folder).map(item => sortBy === 'size' ? item.size : item.modifiedAt)
+								expect(values).toEqual([...values].sort((a, b) => sortDirection === 'asc' ? a - b : b - a))
+							}
+						}
+						if (sortBy !== 'name' || groupBy !== 'none') continue
+						query.set('limit', '1')
+						const ids: number[] = []
+						for (let number = 1; number <= all.total; number++) {
+							query.set('page', String(number))
+							ids.push(...(await json(request, `${publicUrl}?${query}`)).items.map(item => item.id))
+						}
+						expect(ids).toEqual(all.items.map(item => item.id))
+						query.delete('page')
+						query.set('focusId', String(all.items[3].id))
+						expect((await json(request, `${publicUrl}?${query}`)).items.map(item => item.id)).toEqual([all.items[3].id])
+					}
+				}
+			}
+		}
+		for (const width of [1440, 390]) {
+			await page.setViewportSize({ width, height: 900 })
+			for (const direction of ['asc', 'desc']) {
+				await page.goto(`${baseURL}/s/${token}?sort=name&order=${direction}&group=none`)
+				await expect(page.locator('.media-tile__open').first()).toHaveAttribute('aria-label', `Open folder ${direction === 'asc' ? 'album2' : 'album10'}`)
+				await expect(page.locator('.media-grid .progressive-image--ready')).toHaveCount(3)
+				expect(await page.locator('ion-app').evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
+				await page.screenshot({ path: testInfo.outputPath(`folders-${width}-${direction}.png`), fullPage: true, animations: 'disabled' })
+				await page.getByRole('button', { name: 'Open folder album2', exact: true }).click()
+				await expect(page).toHaveURL(/path=album2/)
+				await expect(page.locator('.media-tile__open').first()).toHaveAttribute('aria-label', `Open folder ${direction === 'asc' ? 'album2' : 'album10'}`)
+				for (const name of ['a.png', 'album3.png', 'z.png']) {
+					await page.locator('.media-grid').getByRole('button', { name: `Open ${name}`, exact: true }).click()
+					await expect(page.getByRole('dialog', { name, exact: true })).toBeVisible()
+					const filmstrip = page.getByRole('navigation', { name: 'Photo filmstrip' })
+					await expect(filmstrip).toBeVisible()
+					const bounds = await filmstrip.boundingBox()
+					expect(bounds!.x).toBeGreaterThanOrEqual(0)
+					expect(bounds!.y).toBeGreaterThanOrEqual(0)
+					expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width)
+					expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(900)
+					await page.getByRole('button', { name: 'Close', exact: true }).click()
+				}
+			}
+		}
+	} finally {
+		await page.goto('about:blank')
+		if (galleryId !== undefined) await request.delete(`${api}/${galleryId}?format=json`, { headers })
+		await request.delete(dav, { headers })
+	}
+})
 
 test('gallery sorting defaults, capture dates, protected pagination and visitor reset', async ({ page, browser, request, baseURL }) => {
 	test.setTimeout(120_000)

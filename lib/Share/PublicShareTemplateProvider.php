@@ -25,6 +25,8 @@ final class PublicShareTemplateProvider implements IPublicShareTemplateProvider 
 		private \OCA\ProofingGallery\Service\ReviewWorkflowService $reviews,
 		private IUserSession $userSession,
 		private \OCA\ProofingGallery\Service\PublicStartupAssets $startupAssets,
+		private \OCA\ProofingGallery\Service\PublicShareMetadataService $metadata,
+		private \OCA\ProofingGallery\Service\GalleryArtworkService $artwork,
 	) {
 	}
 
@@ -84,17 +86,27 @@ final class PublicShareTemplateProvider implements IPublicShareTemplateProvider 
 		Util::addScript(Application::APP_ID, 'proofing_gallery-public');
 		Util::addStyle(Application::APP_ID, 'proofing_gallery-public');
 		foreach ($this->startupAssets->links() as $attributes) Util::addHeader('link', $attributes);
+		$presentation = $context->settings->presentation;
+		$tags = $this->metadata->headTags(
+			$token,
+			$gallery->getTitle(),
+			$presentation->welcomeMessage,
+			$presentation->instanceStudioName,
+			$this->artwork->publicHeroFileId($context) !== null,
+			$firstImage === null ? null : (int)$firstImage['id'],
+			$presentation->theme,
+		);
+		foreach ($tags as [$tag, $attributes]) Util::addHeader($tag, $attributes);
 
-		$response = new PublicTemplateResponse(Application::APP_ID, 'public');
+		// The base layout keeps Nextcloud's own manifest, app banner and page chrome
+		// out of the client's gallery; the app renders its complete interface itself.
+		$response = new TemplateResponse(Application::APP_ID, 'public', [
+			'lcpPreviewUrl' => $firstPaintImage,
+		], TemplateResponse::RENDER_AS_BASE);
 		$response->addHeader('Cache-Control', 'private, no-store');
 		if ($firstPaintImage !== null) {
 			$response->addHeader('Link', sprintf('<%s>; rel=preload; as=image', $firstPaintImage));
 		}
-		$response->setHeaderTitle($gallery->getTitle());
-		$response->setParams([
-			'pageTitle' => $gallery->getTitle(),
-			'lcpPreviewUrl' => $firstPaintImage,
-		]);
 		return $response;
 	}
 

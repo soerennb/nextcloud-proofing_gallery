@@ -274,7 +274,7 @@ onMounted(async () => {
 		dataSource: props.mediaItems.map(toSlideData),
 		index: props.initialIndex,
 		appendToEl: shell.value,
-		bgOpacity: 0.97,
+		bgOpacity: 1,
 		loop: loop.value,
 		wheelToZoom: false,
 		pinchToClose: false,
@@ -450,7 +450,7 @@ async function setGuestRating(rating: number, pick = activeGuestRating.value.pic
 		tabindex="-1"
 		@focusin="wakeChrome">
 		<PublicLightboxHeader
-			:name="activeItem.name"
+			:name="settings.presentation.showFilenames ? activeItem.name : ''"
 			:position="activeIndex + 1"
 			:count="mediaItems.length"
 			:is-image="activeItem.mimeType.startsWith('image/')"

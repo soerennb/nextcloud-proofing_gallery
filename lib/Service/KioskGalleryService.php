@@ -47,6 +47,8 @@ final class KioskGalleryService {
 			'capabilities' => $this->capabilities->effective(null, $ownerUid),
 			'sharingPolicy' => $this->coreSharing->status(),
 			'upload' => ['mimeTypes' => ['image/jpeg'], 'maxBytes' => $this->policies->get('maxUploadBytes'), 'perMinute' => 60],
+			// The kiosk may print a photo's link before uploading it; the gallery waits for the photo.
+			'photoLinks' => ['beforeUpload' => true],
 		];
 	}
 
@@ -143,9 +145,12 @@ final class KioskGalleryService {
 
 	/** @return array<string, mixed> */
 	private function connection(string $ownerUid, string $eventId, Gallery $gallery): array {
+		$galleryUrl = $this->links->galleryUrl($gallery);
 		return [
 			'schemaVersion' => 1, 'eventId' => $eventId, 'gallery' => $this->galleries->present($ownerUid, $gallery),
-			'galleryUrl' => $this->links->galleryUrl($gallery),
+			'galleryUrl' => $galleryUrl,
+			// Known before the upload, so a QR code can be shown and printed at once, also offline.
+			'photoLink' => ['urlTemplate' => $galleryUrl . '?kioskPhoto=PHOTO_ID', 'photoIdPlaceholder' => 'PHOTO_ID'],
 			'upload' => [
 				'urlTemplate' => $this->urls->linkToOCSRouteAbsolute('proofing_gallery.kiosk.upload', ['galleryId' => $gallery->getId(), 'photoId' => 'PHOTO_ID']) . '?format=json',
 				'photoIdPlaceholder' => 'PHOTO_ID', 'method' => 'PUT', 'authentication' => 'nextcloud-app-password',

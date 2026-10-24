@@ -18,6 +18,7 @@ import type { AdminDomain, AdminDomainPage, AdminSettingsState } from '../types/
 import AdminDocumentation from './AdminDocumentation.vue'
 import AdminGalleryRollout from './AdminGalleryRollout.vue'
 import SettingsSaveBar from './SettingsSaveBar.vue'
+import { formatDateTime } from '../domain/dateFormat.ts'
 
 const props = defineProps<{ initialState: AdminSettingsState }>()
 function clone<T>(value: T): T { return structuredClone(toRaw(value)) }
@@ -405,7 +406,7 @@ onBeforeUnmount(() => {
 						</NcButton>
 					</div>
 					<NcNoteCard :type="draft.health.cleanup.state === 'healthy' ? 'success' : 'warning'">
-						<strong>{{ t('proofing_gallery', 'Background cleanup') }}</strong><p>{{ draft.health.cleanup.state }} · {{ draft.health.cleanup.lastRunAt ? new Date(draft.health.cleanup.lastRunAt * 1000).toLocaleString() : t('proofing_gallery', 'Not run yet') }}</p>
+						<strong>{{ t('proofing_gallery', 'Background cleanup') }}</strong><p>{{ draft.health.cleanup.state }} · {{ draft.health.cleanup.lastRunAt ? formatDateTime(draft.health.cleanup.lastRunAt) : t('proofing_gallery', 'Not run yet') }}</p>
 					</NcNoteCard><NcNoteCard :type="draft.health.integrations.outbox.pending > 0 ? 'warning' : 'success'">
 						<strong>{{ t('proofing_gallery', 'Integration queue') }}</strong><p>{{ t('proofing_gallery', '{count} pending events', { count: draft.health.integrations.outbox.pending }) }}</p>
 					</NcNoteCard><NcNoteCard :type="draft.health.mediaIndex.stalled > 0 ? 'warning' : 'success'">

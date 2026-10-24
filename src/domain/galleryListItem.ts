@@ -16,5 +16,6 @@ export function toGalleryListItem(gallery: Gallery): GalleryListItem {
 		lifecycleNextAt: gallery.lifecycleNextAt ?? null,
 		mediaSummary: gallery.mediaSummary,
 		permissions: gallery.permissions,
+		attention: gallery.attention ?? null,
 	}
 }

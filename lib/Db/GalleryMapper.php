@@ -167,7 +167,8 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 		$qb->where($ownedOnly ? $owner : $qb->expr()->orX($owner, $qb->expr()->isNotNull('m.id')));
 		$archiveStatus = $qb->createNamedParameter('archived');
 		$qb->andWhere($archived ? $qb->expr()->eq('g.status', $archiveStatus) : $qb->expr()->neq('g.status', $archiveStatus));
-		if ($status !== null) $qb->andWhere($qb->expr()->eq('g.status', $qb->createNamedParameter($status)));
+		if ($status === 'attention') $qb->andWhere($this->attentionCondition($qb));
+		elseif ($status !== null) $qb->andWhere($qb->expr()->eq('g.status', $qb->createNamedParameter($status)));
 		if ($sourceType !== null) $qb->andWhere($qb->expr()->eq('g.source_type', $qb->createNamedParameter($sourceType)));
 		if ($mode !== null) $qb->andWhere($qb->expr()->eq('g.mode', $qb->createNamedParameter($mode)));
 		if ($purpose !== null) $qb->andWhere($qb->expr()->eq('g.purpose', $qb->createNamedParameter($purpose)));
@@ -176,6 +177,39 @@ final class GalleryMapper extends QBMapper implements CollectionAnchorReferences
 			$qb->andWhere($qb->expr()->iLike('g.title', $qb->createNamedParameter($needle)));
 		}
 		return $qb;
+	}
+
+	/**
+	 * Mirrors GalleryAttentionService: open client results, missed deadlines and
+	 * links that expire within a week, for projects that are not completed yet.
+	 */
+	private function attentionCondition(IQueryBuilder $qb): \OCP\DB\QueryBuilder\ICompositeExpression {
+		$exists = function (string $table, callable $filter) use ($qb): \OCP\DB\QueryBuilder\IQueryFunction {
+			$sub = $this->db->getQueryBuilder();
+			$sub->select('a.id')->from($table, 'a')->where($sub->expr()->eq('a.gallery_id', 'g.id'));
+			$filter($sub);
+			return $qb->createFunction('EXISTS (' . $sub->getSQL() . ')');
+		};
+		$now = new \DateTimeImmutable();
+		return $qb->expr()->andX(
+			$qb->expr()->neq('g.workflow_state', $qb->createNamedParameter('completed')),
+			$qb->expr()->orX(
+				$exists('proofing_selections', fn (IQueryBuilder $sub) => $sub->andWhere($sub->expr()->eq('a.status', $qb->createNamedParameter('open')))),
+				$exists('proofing_uploads', fn (IQueryBuilder $sub) => $sub->andWhere($sub->expr()->eq('a.status', $qb->createNamedParameter('awaiting_review')))),
+				$exists('proofing_review_rounds', fn (IQueryBuilder $sub) => $sub->andWhere($sub->expr()->eq('a.status', $qb->createNamedParameter('submitted')))),
+				$exists('proofing_review_rounds', fn (IQueryBuilder $sub) => $sub
+					->andWhere($sub->expr()->eq('a.status', $qb->createNamedParameter('awaiting_feedback')))
+					->andWhere($sub->expr()->isNotNull('a.due_date'))
+					->andWhere($sub->expr()->neq('a.due_date', $qb->createNamedParameter('')))
+					->andWhere($sub->expr()->lt('a.due_date', $qb->createNamedParameter($now->format('Y-m-d'))))),
+				$exists('proofing_public_links', fn (IQueryBuilder $sub) => $sub
+					->innerJoin('a', 'share', 's', $sub->expr()->eq('s.id', 'a.core_share_id'))
+					->andWhere($sub->expr()->eq('a.status', $qb->createNamedParameter('active')))
+					->andWhere($sub->expr()->isNotNull('s.expiration'))
+					->andWhere($sub->expr()->gte('s.expiration', $qb->createNamedParameter($now, IQueryBuilder::PARAM_DATETIME_IMMUTABLE)))
+					->andWhere($sub->expr()->lte('s.expiration', $qb->createNamedParameter($now->modify('+7 days'), IQueryBuilder::PARAM_DATETIME_IMMUTABLE)))),
+			),
+		);
 	}
 
 	public function slugExists(string $ownerUid, string $slug): bool {

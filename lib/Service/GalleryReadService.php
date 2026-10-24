@@ -23,6 +23,7 @@ final class GalleryReadService {
 		private RetentionHandoffService $retention,
 		private GalleryMediaCountService $mediaCounts,
 		private \OCA\ProofingGallery\Db\GalleryMediaCountRepository $countRows,
+		private GalleryAttentionService $attention,
 	) {
 	}
 
@@ -67,7 +68,7 @@ final class GalleryReadService {
 		$limit = max(1, min(100, $limit));
 		$search = mb_substr(trim($search), 0, 120);
 		if ($sourceType !== null && !in_array($sourceType, ['folder', 'collection'], true)) throw new InvalidArgumentException('Unknown gallery source type');
-		if ($status !== null && !in_array($status, ['draft', 'published', 'archived'], true)) throw new InvalidArgumentException('Unknown gallery status');
+		if ($status !== null && !in_array($status, ['draft', 'published', 'archived', 'attention'], true)) throw new InvalidArgumentException('Unknown gallery status');
 		if ($mode !== null && !in_array($mode, ['presentation', 'collaboration'], true)) throw new InvalidArgumentException('Unknown gallery mode');
 		if ($purpose !== null && GalleryPurpose::tryFrom($purpose) === null) throw new InvalidArgumentException('Unknown gallery purpose');
 		if (!in_array($sort, ['updated', 'created', 'title'], true)) throw new InvalidArgumentException('Unknown gallery sort');
@@ -80,7 +81,8 @@ final class GalleryReadService {
 		$ids = array_map(static fn (Gallery $gallery): int => (int)$gallery->getId(), $galleries);
 		$summaries = $this->summaryRows->findMany($ids);
 		$countRows = $this->countRows->findMany($ids);
-		$items = array_map(function (Gallery $gallery) use ($userUid, $page, $summaries, $countRows): array {
+		$attention = $this->attention->summaries($ids);
+		$items = array_map(function (Gallery $gallery) use ($userUid, $page, $summaries, $countRows, $attention): array {
 			$id = (int)$gallery->getId();
 			$role = $gallery->getOwnerUid() === $userUid ? 'owner' : ($page['roles'][$id] ?? 'viewer');
 			$summary = $summaries[$id] ?? null;
@@ -107,6 +109,7 @@ final class GalleryReadService {
 					'coverFileId' => isset($summary['cover_file_id']) ? (int)$summary['cover_file_id'] : null,
 					'coverMimeType' => $summary['cover_mime_type'] ?? null,
 				],
+				'attention' => $this->attentionFor($gallery, $attention[$id] ?? null),
 				'permissions' => [
 					'role' => $role,
 					'canEdit' => $role === 'owner' || $role === 'editor',
@@ -140,6 +143,7 @@ final class GalleryReadService {
 				'effectiveCapabilities' => $effectiveCapabilities,
 				'availableCapabilities' => $availableCapabilities,
 				'retention' => $this->retention->status($gallery),
+				'attention' => $this->attentionFor($gallery, $this->attention->summaries([(int)$gallery->getId()])[(int)$gallery->getId()] ?? null),
 			];
 		}
 		try {
@@ -179,7 +183,19 @@ final class GalleryReadService {
 			'effectiveCapabilities' => $effectiveCapabilities,
 			'availableCapabilities' => $availableCapabilities,
 			'retention' => $this->retention->status($gallery),
+			'attention' => $this->attentionFor($gallery, $this->attention->summaries([(int)$gallery->getId()])[(int)$gallery->getId()] ?? null),
 		];
+	}
+
+	/**
+	 * Completed and archived projects keep their counts but never ask for attention.
+	 * @param array<string, int|bool|null>|null $summary
+	 * @return array<string, int|bool|null>|null
+	 */
+	private function attentionFor(Gallery $gallery, ?array $summary): ?array {
+		if ($summary === null) return null;
+		if ($gallery->getWorkflowState() === 'completed' || $gallery->getStatus() === 'archived') $summary['needsAttention'] = false;
+		return $summary;
 	}
 
 	/** @return array{sortBy: string, sortDirection: string} */

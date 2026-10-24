@@ -91,6 +91,12 @@ Visible Fotobox galleries refresh every five seconds without changing the active
 
 Successful photo replays do not consume the new-photo rate limit. Queued captures need durable local storage across kiosk restarts, bounded retries with backoff and visible queue/error state. Do not generate a success QR until an upload acknowledgement supplies `photoUrl`. Store acknowledgement and QR source together; never derive a URL from the local filename. No kiosk executable or source change is supplied here.
 
+### Photo links before the upload
+
+A kiosk that wants to show or print a photo's QR code at once, also while offline, uses the gallery's **`photoLink.urlTemplate`** (`galleryUrl?kioskPhoto=PHOTO_ID`) with the same durable UUID it will upload the photo under. `GET kiosk/setup` reports the feature as `photoLinks.beforeUpload: true`; older versions omit it, and kiosks then wait for `photoUrl` as described above.
+
+The guest page asks `GET /apps/proofing_gallery/public/{token}/kiosk-photos/{photoId}` every five seconds while it is visible. The endpoint is bound to the public share and answers `202` with `Retry-After: 5` while the photo is missing, `200` with `fileId` once it is stored and visible, and `410` when it was removed afterwards. As soon as the photo arrives the page switches to its regular `?photo=` link and opens it. After ten minutes it tells the guest that the photo appears once the photo booth is online and keeps checking every 30 seconds. The UUID reveals nothing beyond what everybody with the gallery link can see; password-protected galleries still ask for the password.
+
 ## Curl examples
 
 Set `NEXTCLOUD_URL`, `NEXTCLOUD_USER` and `NEXTCLOUD_APP_PASSWORD` in your own environment. These examples require curl and jq. Save the request JSON and event ID before making the provisioning call.

@@ -33,8 +33,10 @@ export function publicLightboxSlide(item: MediaItem, index: number, options: {
 	const width = ratio >= 1 ? 2400 : Math.max(1, Math.round(2400 * ratio))
 	const height = ratio >= 1 ? Math.max(1, Math.round(2400 / ratio)) : 2400
 	const src = escapeHtml(options.previewUrl(item, 2400, 2400, 'fit'))
+	// The grid already loaded the 900px preview; show it until the large file paints over it.
+	const placeholder = escapeHtml(options.previewUrl(item, 900, 900, 'fit'))
 	return {
-		html: `<div class="proofing-zoom-surface"><img class="pswp__img proofing-zoom-image" src="${src}" alt="${escapeHtml(item.name)}"></div>`,
+		html: `<div class="proofing-zoom-surface"><img class="proofing-zoom-placeholder" src="${placeholder}" alt="" aria-hidden="true" decoding="async"><img class="pswp__img proofing-zoom-image" src="${src}" alt="${escapeHtml(item.name)}"></div>`,
 		width,
 		height,
 		element: index === options.initialIndex ? options.initialElement ?? undefined : undefined,

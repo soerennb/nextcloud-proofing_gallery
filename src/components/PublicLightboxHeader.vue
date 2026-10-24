@@ -47,7 +47,7 @@ const emit = defineEmits<{
 				</IonButton>
 			</IonButtons>
 			<IonTitle>
-				<span class="lightbox-bar__title">{{ name }}</span>
+				<span v-if="name" class="lightbox-bar__title">{{ name }}</span>
 				<small>{{ position }} / {{ count }}</small>
 			</IonTitle>
 			<IonButtons slot="end">

@@ -56,7 +56,7 @@ const titleMode = computed(() => galleryTitleMode(props.settings.presentation))
 
 .gallery-opener__large-title { position: relative; width: 100%; margin: 0; padding: 18px 16px 8px; color: var(--ion-text-color); font-size: clamp(30px, 6vw, 40px); font-weight: 700; letter-spacing: -.035em; line-height: 1.08; text-align: start; }
 
-.gallery-opener__large-title h1 { margin: 0; color: inherit; font: inherit; letter-spacing: inherit; line-height: inherit; }
+.gallery-opener__large-title h1 { margin: 0; color: inherit; font: inherit; letter-spacing: inherit; line-height: inherit; white-space: normal; overflow-wrap: anywhere; text-wrap: balance; }
 
 .gallery-opener__title--large { font-size: clamp(38px, 8vw, 58px); }
 

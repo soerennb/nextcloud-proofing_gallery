@@ -7,6 +7,8 @@ import ImageMultipleIcon from 'vue-material-design-icons/ImageMultiple.vue'
 import { ownerCoverPreviewUrl } from '../services/galleryCoverPreview.ts'
 import type { GalleryListItem } from '../types.ts'
 import GalleryActionsMenu from './GalleryActionsMenu.vue'
+import { formatDate } from '../domain/dateFormat.ts'
+import { attentionItems, clientActivityLabel, galleryPhase, galleryPhaseLabel } from '../domain/galleryPhase.ts'
 
 defineProps<{ galleries: GalleryListItem[]; archived: boolean; view: 'list' | 'grid' }>()
 const emit = defineEmits<{
@@ -20,7 +22,7 @@ const emit = defineEmits<{
 const failedPreviews = ref(new WeakSet<GalleryListItem>())
 
 function formattedDate(timestamp: number): string {
-	return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(timestamp * 1000))
+	return formatDate(timestamp)
 }
 
 function previewUrl(gallery: GalleryListItem): string {
@@ -48,18 +50,18 @@ function previewUrl(gallery: GalleryListItem): string {
 				<span class="gallery-row__identity">
 					<strong>{{ gallery.title }}</strong>
 					<small>
+						<span class="gallery-row__phase" :data-phase="galleryPhase(gallery)">{{ galleryPhaseLabel(galleryPhase(gallery)) }}</span>
+						·
 						{{ gallery.deliveryMode === 'event' ? t('proofing_gallery', 'Event delivery') + ' · ' : '' }}
 						{{ gallery.sourceType === 'collection' ? t('proofing_gallery', 'Collection') + ' · ' : '' }}
 						{{ gallery.mode === 'collaboration'
 							? t('proofing_gallery', 'Proofing')
 							: t('proofing_gallery', 'Presentation') }}
-						·
-						<span class="gallery-row__status" :data-status="gallery.status">{{ gallery.status === 'published'
-							? t('proofing_gallery', 'Published')
-							: gallery.status === 'archived'
-								? t('proofing_gallery', 'Archived')
-								: t('proofing_gallery', 'Draft') }}</span>
 					</small>
+					<span v-if="gallery.attention?.needsAttention" class="gallery-row__attention">
+						<span v-for="item in attentionItems(gallery.attention).slice(0, 2)" :key="item.key" :data-tone="item.tone">{{ item.label }}</span>
+					</span>
+					<small v-else-if="clientActivityLabel(gallery.attention)" class="gallery-row__activity">{{ clientActivityLabel(gallery.attention) }}</small>
 				</span>
 				<span class="gallery-row__date">{{ formattedDate(gallery.updatedAt) }}</span>
 			</button>
@@ -254,7 +256,7 @@ function previewUrl(gallery: GalleryListItem): string {
 	padding-inline: 16px 54px;
 }
 
-.gallery-list--grid .gallery-row__identity strong { font-size: 17px; font-weight: 700; line-height: 1.4; }
+.gallery-list--grid .gallery-row__identity strong { display: -webkit-box; overflow: hidden; font-size: 17px; font-weight: 700; line-height: 1.3; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; text-wrap: balance; }
 
 .gallery-list--grid .gallery-row__date { margin-top: -8px; }
 
@@ -265,9 +267,20 @@ function previewUrl(gallery: GalleryListItem): string {
 	padding: 0;
 }
 
-.gallery-row__status { color: var(--studio-ink); font-weight: 650; }
+.gallery-row__phase { color: var(--studio-ink); font-weight: 650; }
 
-.gallery-row__status[data-status='published'] { color: var(--studio-success); }
+.gallery-row__phase[data-phase='shared'],
+.gallery-row__phase[data-phase='completed'] { color: var(--studio-success); }
+
+.gallery-row__phase[data-phase='responded'] { color: var(--studio-accent, var(--color-primary-element)); }
+
+.gallery-row__attention { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+.gallery-row__attention span { padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--studio-accent, var(--color-primary-element)) 14%, transparent); color: var(--studio-ink, var(--color-main-text)); font-size: 12px; font-weight: 650; line-height: 1.6; }
+
+.gallery-row__attention span[data-tone='warning'] { background: color-mix(in srgb, var(--color-warning) 22%, transparent); }
+
+.gallery-row__activity { display: block; }
 @media (max-width: 760px) {
 	.gallery-list--grid { grid-template-columns: 1fr; }
 	.gallery-list--grid .gallery-row,
