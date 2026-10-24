@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- update frontend libraries and browser test tools; fix security findings in
+  markdown-it, follow-redirects, DOMPurify, and fast-uri
+- modernize the frontend toolchain with jsdom 30 and TypeScript 6
+- include displayed ratings and comment counts in review button labels for
+  assistive technologies and voice control
+- require PHP 8.2.35 or newer and update the PHP test tooling to PHPUnit 11;
+  upgrade PHP before updating the app on installations running an older version
+
 ## 0.12.0 — 2026-10-09
 
 - preserve separately configured primary-link download, upload, export, metadata

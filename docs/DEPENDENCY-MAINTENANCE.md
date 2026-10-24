@@ -15,6 +15,28 @@ before preparing a sanitized export, so an export cannot undo a merged update.
 For frontend runtime updates, verify gallery and culling layouts on desktop and
 at 390 px, including image reachability, filmstrips and reduced motion.
 
+## October 2026 maintenance
+
+The security refresh combines the markdown-it 15.0.3 and follow-redirects
+1.16.1 fixes with DOMPurify 3.4.17 and fast-uri 3.1.9. The latter packages
+remain transitive dependencies; their parents already allow these fixed
+versions. Keep the production audit free of findings and do not add advisory
+exceptions to the full audit.
+
+The frontend toolchain uses jsdom 30 on the retained Node 24.21.0 baseline and
+TypeScript 6.0.3. The unused `baseUrl` option was removed instead of suppressing
+its deprecation. Dependabot may update jsdom normally, while TypeScript 6.1 and
+later remain excluded until the Vue and lint tooling support them. The stable
+Nextcloud Vite configuration still requires Vite 7; do not adopt the Vite 8
+configuration while it is only available as a prerelease.
+
+The app requires PHP 8.2.35 or newer, with Composer resolving against that exact
+minimum. PHPUnit 11 is the newest major compatible with PHP 8.2. Keep the OCP
+stubs on `dev-stable31` and DBAL on 3.x to continue checking the oldest supported
+Nextcloud API. Refresh Roave advisories without ignoring its PHP conflicts.
+Installations with an older PHP version must upgrade PHP before updating the
+app; Nextcloud 31–34 remain supported.
+
 ## Guarded Braces development dependency
 
 The CSS tooling previously installed `braces` 3.0.3, affected by

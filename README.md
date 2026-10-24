@@ -74,8 +74,8 @@ existing links are not silently expanded by a later wave.
 
 ## Local development
 
-Requirements: Docker with Compose, Node.js 24.11 or newer, npm 11, PHP 8.1 or
-newer, and Composer 2.
+Requirements: Docker with Compose, Node.js 24.21 or newer within 24.x, npm 11,
+PHP 8.2.35 or newer, and Composer 2.
 
 ```bash
 cp .env.example .env
@@ -163,7 +163,7 @@ changes. Suspected vulnerabilities must be reported privately as described in
 ## Compatibility
 
 The automated container matrix covers Nextcloud 31–34 with SQLite, MariaDB, and
-PostgreSQL. PHP 8.1–8.6 is declared; CI runs the supported baseline and current
+PostgreSQL. PHP 8.2.35–8.6 is declared; CI runs the supported baseline and current
 PHP versions. Routine browser E2E coverage uses Chromium with Axe accessibility
 and desktop/mobile interaction and reachability checks. Weekly and explicit
 comprehensive runs also check the review viewer in Firefox and WebKit.
