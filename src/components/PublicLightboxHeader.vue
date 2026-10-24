@@ -66,7 +66,9 @@ const emit = defineEmits<{
 				<IonButton v-if="canLike" :aria-label="t('proofing_gallery', 'Like')" @click="emit('like')">
 					<IonIcon slot="icon-only" :icon="liked ? heart : heartOutline" aria-hidden="true" />
 				</IonButton>
-				<IonButton v-if="canFeedback" :aria-label="t('proofing_gallery', 'Feedback')" @click="emit('feedback')">
+				<IonButton v-if="canFeedback"
+					:aria-label="commentCount ? t('proofing_gallery', 'Feedback, {count}', { count: commentCount }) : t('proofing_gallery', 'Feedback')"
+					@click="emit('feedback')">
 					<IonIcon slot="icon-only" :icon="chatbubbleEllipsesOutline" aria-hidden="true" />
 					<span v-if="commentCount" class="lightbox-bar__count">{{ commentCount }}</span>
 				</IonButton>

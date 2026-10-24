@@ -40,7 +40,7 @@ for (const [name, engine] of Object.entries(engines)) {
 			expect(await page.locator('.annotation-composer').count()).toBe(0)
 			const marker = page.locator('.annotation-marker--selected')
 			// Select through Pins as well: coincident pins must remain individually reachable.
-			await page.getByRole('button', { name: 'Feedback', exact: true }).click()
+			await page.getByRole('button', { name: /^Feedback(?:, \d+)?$/ }).click()
 			await page.getByRole('tab', { name: 'Pins' }).click()
 			const thread = page.locator('.pin-thread').filter({ has: page.locator(`[aria-controls="pin-thread-${root}"]`) })
 			await thread.locator('.pin-thread__open').click()
@@ -62,7 +62,7 @@ for (const [name, engine] of Object.entries(engines)) {
 			expect(await marker.count()).toBe(1)
 			await page.screenshot({ path: `test-results/review-${name}.png` })
 			await page.setViewportSize({ width: 390, height: 560 })
-			await page.getByRole('button', { name: 'Feedback', exact: true }).click()
+			await page.getByRole('button', { name: /^Feedback(?:, \d+)?$/ }).click()
 			await page.getByRole('tab', { name: 'Pins' }).click()
 			await thread.locator('.pin-thread__open').click()
 			await expect(modal.locator('.annotation-reply-form textarea')).toBeVisible()

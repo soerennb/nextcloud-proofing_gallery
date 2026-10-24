@@ -45,6 +45,13 @@ function stateFor(fileId: number): MediaCull | undefined {
 	return props.states[fileId]
 }
 
+function focusLabel(item: IndexedMediaItem): string {
+	const rating = stateFor(item.id)?.rating
+	return rating
+		? t('proofing_gallery', 'Focus {name}, {rating} stars', { name: item.name, rating })
+		: t('proofing_gallery', 'Focus {name}', { name: item.name })
+}
+
 watch(() => props.activeId, async activeId => {
 	if (activeId === null) return
 	const index = props.items.findIndex(item => item.id === activeId)
@@ -87,7 +94,7 @@ onMounted(() => virtualizer.value.measure())
 					type="button"
 					class="filmstrip-item__focus"
 					:aria-current="activeId === items[virtualItem.index].id ? 'true' : undefined"
-					:aria-label="t('proofing_gallery', 'Focus {name}', { name: items[virtualItem.index].name })"
+					:aria-label="focusLabel(items[virtualItem.index])"
 					@click="emit('focus', items[virtualItem.index], $event.shiftKey)">
 					<ProgressiveImage :src="previewUrl(items[virtualItem.index].id)" :alt="items[virtualItem.index].name" />
 					<span v-if="stateFor(items[virtualItem.index].id)?.rating" class="filmstrip-rating"><StarIcon :size="10" /> {{ stateFor(items[virtualItem.index].id)?.rating }}</span>

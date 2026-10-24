@@ -37,9 +37,15 @@ $count = static function (string $table, array $batch) use ($db): int {
 	return (int)QueryResult::value($qb->select($qb->func()->count())->from($table)->where($qb->expr()->in('file_id', $qb->createNamedParameter($batch, IQueryBuilder::PARAM_INT_ARRAY)))->executeQuery());
 };
 try {
+	// Classify existing payloads before the write transaction. SQLite cannot
+	// upgrade a read snapshot after a concurrent deferred metadata write.
+	$existingPayloads = [];
+	foreach ([...$ids, $liveId] as $id) {
+		if ($count('files_metadata', [$id]) > 0) $existingPayloads[$id] = true;
+	}
 	$db->beginTransaction();
 	foreach ([...$ids, $liveId] as $id) {
-		if ($count('files_metadata', [$id]) === 0) {
+		if (!isset($existingPayloads[$id])) {
 			$qb = $db->getQueryBuilder();
 			$values = ['file_id' => $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT), 'json' => $qb->createNamedParameter('{}'), 'sync_token' => $qb->createNamedParameter('audit'), 'last_update' => $qb->createFunction('CURRENT_TIMESTAMP')];
 			$qb->insert('files_metadata')->values($values)->executeStatement();

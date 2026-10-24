@@ -8,7 +8,6 @@
   ],
   "compilerOptions": {
     "allowJs": false,
-    "baseUrl": ".",
     "isolatedModules": true,
     "lib": [
       "ES2023",
