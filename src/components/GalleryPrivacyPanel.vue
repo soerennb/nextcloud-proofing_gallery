@@ -7,6 +7,7 @@ import { onMounted, ref } from 'vue'
 
 import { cancelGalleryPurge, fetchGalleryPrivacy, galleryPrivacyExportUrl, scheduleGalleryPurge } from '../services/galleryApi.ts'
 import type { GalleryPrivacyPreview } from '../services/galleryApi.ts'
+import { formatDateTime } from '../domain/dateFormat.ts'
 
 const props = defineProps<{ galleryId: number }>()
 const preview = ref<GalleryPrivacyPreview | null>(null)
@@ -42,7 +43,7 @@ onMounted(load)
 				<span v-for="(count, category) in preview.categories" :key="category"><strong>{{ count }}</strong>{{ category }}</span>
 			</div>
 			<div v-if="preview.activeRequest" class="privacy-panel__scheduled">
-				<div><strong>{{ t('proofing_gallery', 'Deletion scheduled') }}</strong><span>{{ new Date(preview.activeRequest.executeAfter * 1000).toLocaleString() }}</span></div>
+				<div><strong>{{ t('proofing_gallery', 'Deletion scheduled') }}</strong><span>{{ formatDateTime(preview.activeRequest.executeAfter) }}</span></div>
 				<NcButton variant="tertiary" :disabled="working" @click="cancel">
 					{{ t('proofing_gallery', 'Cancel deletion') }}
 				</NcButton>

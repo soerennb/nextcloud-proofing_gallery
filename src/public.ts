@@ -5,6 +5,7 @@ import '@ionic/vue/css/core.css'
 import '@ionic/vue/css/normalize.css'
 import '@ionic/vue/css/structure.css'
 import '@ionic/vue/css/typography.css'
+import '@ionic/vue/css/padding.css'
 import '@ionic/vue/css/palettes/dark.system.css'
 import '@ionic/vue/css/palettes/dark.class.css'
 import '@fontsource-variable/geist/wght.css'
@@ -39,6 +40,8 @@ async function mount() {
 	document.body.classList.add('proofing-gallery-public-page')
 	document.documentElement.classList.add('proofing-gallery-public-page')
 	document.title = state.title
+	// The base layout wraps the app in a role="main" container; the app owns its own landmarks.
+	document.getElementById('content')?.removeAttribute('role')
 	const app = createApp(PublicApp, { gallery: state })
 	app.use(IonicVue)
 	app.mount('#proofing_gallery_public')

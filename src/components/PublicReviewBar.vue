@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { t } from '@nextcloud/l10n'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import type { PublicReviewState } from '../publicTypes.ts'
+import { formatDate, isOverdue } from '../domain/dateFormat.ts'
 
 const props = defineProps<{
 	review: PublicReviewState
@@ -14,6 +15,7 @@ const props = defineProps<{
 const emit = defineEmits<{ identify: []; updated: [state: PublicReviewState]; error: [message: string] }>()
 const submitting = ref(false)
 const awaitingIdentity = ref(false)
+const overdue = computed(() => (props.review.current?.status ?? 'awaiting_feedback') === 'awaiting_feedback' && isOverdue(props.review.dueDate))
 function label() {
 	return ({
 		awaiting_feedback: t('proofing_gallery', 'Review open'),
@@ -46,7 +48,7 @@ watch(() => props.dialogOpen, open => { if (!open && !props.guest) awaitingIdent
 
 <template>
 	<aside class="public-review-bar" :data-state="review.current?.status" aria-live="polite">
-		<div><span>{{ t('proofing_gallery', 'Round {round}', { round: review.current?.round ?? 1 }) }}</span><strong>{{ label() }}</strong><small v-if="review.rules.minimum || review.rules.maximum">{{ t('proofing_gallery', '{minimum}–{maximum} photos', { minimum: review.rules.minimum, maximum: review.rules.maximum || '∞' }) }}</small><small v-if="review.dueDate">{{ t('proofing_gallery', 'Due {date}', { date: review.dueDate }) }}</small></div><button v-if="review.current?.status === 'awaiting_feedback'"
+		<div><span>{{ t('proofing_gallery', 'Round {round}', { round: review.current?.round ?? 1 }) }}</span><strong>{{ label() }}</strong><small v-if="review.rules.minimum || review.rules.maximum">{{ t('proofing_gallery', '{minimum}–{maximum} photos', { minimum: review.rules.minimum, maximum: review.rules.maximum || '∞' }) }}</small><small v-if="review.dueDate" :class="{ 'public-review-bar__overdue': overdue }">{{ overdue ? t('proofing_gallery', 'Was due {date}', { date: formatDate(review.dueDate) }) : t('proofing_gallery', 'Due {date}', { date: formatDate(review.dueDate) }) }}</small></div><button v-if="review.current?.status === 'awaiting_feedback'"
 			type="button"
 			:disabled="submitting"
 			@click="submit">

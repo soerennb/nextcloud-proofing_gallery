@@ -125,6 +125,26 @@ test('visible empty gallery updates and preserves the QR-selected photo on deskt
 	} finally { await context.close(); await mobile.close() }
 })
 
+test('a photo link printed before the upload waits and then opens the photo', async ({ browser, request }) => {
+	test.setTimeout(45_000)
+	const { connection } = await create(request)
+	expect(connection.photoLink.urlTemplate).toBe(`${connection.galleryUrl}?kioskPhoto=PHOTO_ID`)
+	const photoId = randomUUID()
+	const context = await browser.newContext({ viewport: { width: 390, height: 844 } })
+	try {
+		const page = await context.newPage()
+		await page.goto(connection.photoLink.urlTemplate.replace('PHOTO_ID', photoId))
+		await expect(page.getByRole('status').filter({ hasText: 'Your photo is on its way' })).toBeVisible()
+		const pending = await request.get(`/index.php/apps/proofing_gallery/public/${new URL(connection.galleryUrl).pathname.split('/').at(-1)}/kiosk-photos/${photoId}`)
+		expect(pending.status()).toBe(202)
+		const receipt = (await (await upload(request, connection, photoId)).json()).ocs.data
+		await expect(page.getByRole('dialog', { name: `${photoId}.jpg`, exact: true })).toBeVisible({ timeout: 15_000 })
+		expect(new URL(page.url()).searchParams.get('photo')).toBe(String(receipt.fileId))
+		expect(new URL(page.url()).searchParams.has('kioskPhoto')).toBe(false)
+		await page.screenshot({ path: 'test-results/kiosk-photo-before-upload-mobile.png' })
+	} finally { await context.close() }
+})
+
 test('new-photo rate limit excludes replays and blocks revoked-gallery uploads', async ({ request }) => {
 	const { connection, payload } = await create(request)
 	const id = randomUUID()

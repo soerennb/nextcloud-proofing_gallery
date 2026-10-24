@@ -12,6 +12,7 @@ import {
 	fetchInboxPage,
 	rejectUpload} from '../services/galleryApi.ts'
 import type {GalleryActivity, InboxUpload} from '../services/galleryApi.ts'
+import { formatDateTime } from '../domain/dateFormat.ts'
 
 const props = withDefaults(defineProps<{
 	galleryId: number
@@ -194,7 +195,7 @@ onMounted(load)
 				<li v-for="event in events" :key="event.id">
 					<div>
 						<strong>{{ eventLabel(event.type) }}</strong>
-						<span>{{ event.actor }} · {{ new Date(event.createdAt * 1000).toLocaleString() }}</span>
+						<span>{{ event.actor }} · {{ formatDateTime(event.createdAt) }}</span>
 						<small v-if="event.payload.filename">{{ event.payload.filename }}</small>
 					</div>
 				</li>

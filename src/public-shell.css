@@ -23,6 +23,12 @@ body.proofing-gallery-public-page ion-button {
 	color: var(--ion-color-primary) !important;
 }
 
+/* Solid buttons sit on the accent; their label needs the accent's contrast color. */
+body.proofing-gallery-public-page ion-button.button-solid:not(.lightbox-nav, .lightbox-chrome-handle) {
+	--color: var(--proofing-public-accent-contrast, #fff);
+	color: var(--proofing-public-accent-contrast, #fff) !important;
+}
+
 body.proofing-gallery-public-page[data-proofing-public-theme='light'] {
 	--proofing-overlay-surface: #fff;
 	--proofing-overlay-raised: #f2f2f7;

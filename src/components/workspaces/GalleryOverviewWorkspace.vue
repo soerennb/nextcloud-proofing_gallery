@@ -4,11 +4,13 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 
 import GalleryCoverControl from '../GalleryCoverControl.vue'
+import GalleryStatusPanel from '../GalleryStatusPanel.vue'
 import { galleryMediaCountLabel } from '../../domain/galleryMediaCounts.ts'
 import type { GallerySettings } from '../../domain/gallerySettings.ts'
 import type { GalleryWorkspace } from '../../domain/gallerySettingsOptions.ts'
 import { ownerPreviewUrl } from '../../services/galleryApi.ts'
 import type { Gallery, MediaItem } from '../../types.ts'
+import { formatDateTime } from '../../domain/dateFormat.ts'
 
 const props = defineProps<{
 	gallery: Gallery
@@ -17,6 +19,7 @@ const props = defineProps<{
 	presets: Array<{ id: number; name: string }>
 	presetsLoading: boolean
 	presetSaving: boolean
+	nextStep: { label: string; tab: GalleryWorkspace }
 }>()
 const emit = defineEmits<{
 	'choose-source': []
@@ -26,6 +29,7 @@ const emit = defineEmits<{
 	'update-preset': []
 	'remove-preset': []
 	navigate: [workspace: GalleryWorkspace]
+	'open-sharing': []
 }>()
 const title = defineModel<string>('title', { required: true })
 const settings = defineModel<GallerySettings>('settings', { required: true })
@@ -38,6 +42,10 @@ function previewUrl(fileId: number): string {
 </script>
 
 <template>
+	<GalleryStatusPanel :gallery="gallery"
+		:next-step="nextStep"
+		@navigate="emit('navigate', $event)"
+		@open-sharing="emit('open-sharing')" />
 	<section class="settings-section">
 		<div class="section-heading">
 			<h2>{{ t('proofing_gallery', 'Gallery details') }}</h2><p>{{ t('proofing_gallery', 'Choose the purpose and the title your clients will recognize.') }}</p>
@@ -105,7 +113,7 @@ function previewUrl(fileId: number): string {
 				</dd>
 			</div>
 			<div><dt>{{ t('proofing_gallery', 'Gallery content') }}</dt><dd>{{ galleryMediaCountLabel(gallery.mediaSummary) }}</dd></div>
-			<div><dt>{{ t('proofing_gallery', 'Last changed') }}</dt><dd>{{ new Date(gallery.updatedAt * 1000).toLocaleString() }}</dd></div>
+			<div><dt>{{ t('proofing_gallery', 'Last changed') }}</dt><dd>{{ formatDateTime(gallery.updatedAt) }}</dd></div>
 		</dl>
 		<div v-if="previewMedia.length" class="contact-strip" :aria-label="t('proofing_gallery', 'Gallery preview')">
 			<img v-for="item in previewMedia"

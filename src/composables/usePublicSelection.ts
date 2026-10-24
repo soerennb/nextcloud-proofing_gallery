@@ -38,6 +38,12 @@ export function usePublicSelection(options: {
 		savingSelection.value = false
 	}
 
+	function prepareSave(defaultName: string): boolean {
+		if (selectedIds.value.length === 0) return false
+		if (!selectionName.value.trim()) selectionName.value = defaultName
+		return true
+	}
+
 	function toggleSelection(item: MediaItem) {
 		selectedIds.value = selectedIds.value.includes(item.id)
 			? selectedIds.value.filter(id => id !== item.id)
@@ -68,5 +74,5 @@ export function usePublicSelection(options: {
 			: compareIds.value.length < 4 ? [...compareIds.value, item.id] : compareIds.value
 		if (!options.preview) safelyStore(() => localStorage.setItem(`proofing-gallery-compare:${options.token}`, JSON.stringify(compareIds.value)))
 	}
-	return { selectedIds, selectionMode, compareIds, compareOpen, compareItems, selectionName, selectionMessage, savingSelection, saveSelection, toggleSelection, startSelectionMode, finishSelectionMode, openSelectionCompare, toggleCompare }
+	return { selectedIds, selectionMode, compareIds, compareOpen, compareItems, selectionName, selectionMessage, savingSelection, saveSelection, prepareSave, toggleSelection, startSelectionMode, finishSelectionMode, openSelectionCompare, toggleCompare }
 }

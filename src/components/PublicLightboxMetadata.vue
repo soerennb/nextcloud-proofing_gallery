@@ -5,6 +5,7 @@ import { t } from '@nextcloud/l10n'
 import CloseIcon from 'vue-material-design-icons/Close.vue'
 
 import type { MediaItem } from '../publicTypes.ts'
+import { formatDateTime } from '../domain/dateFormat.ts'
 
 defineProps<{ open: boolean; item: MediaItem }>()
 const emit = defineEmits<{ close: [] }>()
@@ -32,7 +33,7 @@ const emit = defineEmits<{ close: [] }>()
 				</p>
 				<dl>
 					<div v-if="item.metadata.capturedAt">
-						<dt>{{ t('proofing_gallery', 'Captured') }}</dt><dd>{{ new Date(item.metadata.capturedAt * 1000).toLocaleString() }}</dd>
+						<dt>{{ t('proofing_gallery', 'Captured') }}</dt><dd>{{ formatDateTime(item.metadata.capturedAt) }}</dd>
 					</div>
 					<div v-if="item.metadata.camera">
 						<dt>{{ t('proofing_gallery', 'Camera') }}</dt><dd>{{ item.metadata.camera }}</dd>

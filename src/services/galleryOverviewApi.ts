@@ -11,7 +11,7 @@ export interface GalleryCursorQuery {
 	limit?: number
 	cursor?: string | null
 	sourceType?: 'folder' | 'collection'
-	status?: 'draft' | 'published' | 'archived'
+	status?: 'draft' | 'published' | 'archived' | 'attention'
 	mode?: 'presentation' | 'collaboration'
 	purpose?: Gallery['purpose']
 	ownedOnly?: boolean

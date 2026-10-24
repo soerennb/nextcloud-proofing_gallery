@@ -9,6 +9,7 @@ import { computed, onMounted, ref } from 'vue'
 import { createReviewCalendarEvent, createReviewTalkConversation, deleteReviewTalkConversation, fetchReviewIntegrations, fetchReviewOverview, registerReviewDeckCard, transitionReview } from '../services/galleryApi.ts'
 import type { ReviewIntegrationStatus } from '../services/galleryApi.ts'
 import type { ReviewLinkOverview, ReviewOverview } from '../types.ts'
+import { formatDate, isOverdue } from '../domain/dateFormat.ts'
 
 const props = defineProps<{ galleryId: number }>()
 const overview = ref<ReviewOverview | null>(null)
@@ -102,10 +103,8 @@ async function transition(link: ReviewLinkOverview, action: 'approve' | 'request
 	} catch { showError(t('proofing_gallery', 'The review state changed. Reload and try again.')) } finally { busyLink.value = null }
 }
 
-function formatDate(value: string | number | null) {
-	if (!value) return ''
-	const date = typeof value === 'number' ? new Date(value * 1000) : new Date(`${value}T12:00:00`)
-	return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(date)
+function overdue(link: ReviewLinkOverview): boolean {
+	return (link.current?.status ?? 'awaiting_feedback') === 'awaiting_feedback' && isOverdue(link.dueDate)
 }
 
 onMounted(load)
@@ -142,15 +141,18 @@ onMounted(load)
 				<label v-if="integrations.deck.available"><span>{{ t('proofing_gallery', 'Deck board') }}</span><select v-model="selectedBoard" @change="selectFirstStack"><option v-for="board in deckBoards" :key="board.id" :value="board.id">{{ board.title }}</option></select></label>
 				<label v-if="integrations.deck.available"><span>{{ t('proofing_gallery', 'Deck stack') }}</span><select v-model="selectedStack"><option v-for="stack in deckBoards.find(board => board.id === selectedBoard)?.stacks ?? []" :key="stack.id" :value="stack.id">{{ stack.title }}</option></select></label>
 			</div>
-			<article v-for="link in enabledLinks" :key="link.linkId" :data-state="link.current?.status">
+			<article v-for="link in enabledLinks"
+				:key="link.linkId"
+				:data-state="link.current?.status"
+				:data-overdue="overdue(link) ? 'true' : undefined">
 				<div class="review-panel__state">
-					<span>{{ t('proofing_gallery', 'Round {round}', { round: link.current?.round ?? 1 }) }}</span><strong>{{ labels[link.current?.status ?? 'awaiting_feedback'] }}</strong>
+					<span>{{ t('proofing_gallery', 'Round {round}', { round: link.current?.round ?? 1 }) }}</span><strong>{{ overdue(link) ? t('proofing_gallery', 'Overdue') : labels[link.current?.status ?? 'awaiting_feedback'] }}</strong>
 				</div>
 				<div class="review-panel__main">
 					<h4>{{ link.name }}</h4><p v-if="link.current?.submittedBy">
 						{{ t('proofing_gallery', 'Submitted by {name}', { name: link.current.submittedBy }) }} · {{ t('proofing_gallery', '{count} photos', { count: link.progress?.count ?? 0 }) }}
 					</p><p v-else-if="link.dueDate">
-						{{ t('proofing_gallery', 'Due {date}', { date: formatDate(link.dueDate) }) }}
+						{{ overdue(link) ? t('proofing_gallery', 'Was due {date} · still waiting for the client', { date: formatDate(link.dueDate) }) : t('proofing_gallery', 'Due {date}', { date: formatDate(link.dueDate) }) }}
 					</p>
 				</div>
 				<div v-if="overview?.canEdit" class="review-panel__actions">

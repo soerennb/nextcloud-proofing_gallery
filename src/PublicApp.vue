@@ -2,7 +2,6 @@
 import { matchesInitialGalleryPage } from './composables/usePublicGallerySort.ts'
 import { n, t } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
-import type {Gesture, GestureDetail} from '@ionic/core'
 import { IonAlert, IonApp, IonContent, IonLoading, IonPage } from '@ionic/vue'
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
@@ -15,11 +14,13 @@ import { downloadQuery } from './domain/publicDownloadOptions.ts'
 import type { PublicDownloadPreset } from './domain/publicDownloadOptions.ts'
 import type { MediaItem, PublicGallery, PublicGalleryPage } from './publicTypes.ts'
 import { publicGalleryPageQuery } from './services/publicGalleryApi.ts'
+import { usePublicPageSwipe } from './composables/usePublicPageSwipe.ts'
 import { usePublicSelection } from './composables/usePublicSelection.ts'
 import { usePublicGalleryNavigation } from './composables/usePublicGalleryNavigation.ts'
 import { usePublicGalleryPage } from './composables/usePublicGalleryPage.ts'
 import { usePublicCollaboration } from './composables/usePublicCollaboration.ts'
 import { usePublicLiveUpdates } from './composables/usePublicLiveUpdates.ts'
+import PublicKioskPhotoNotice from './components/PublicKioskPhotoNotice.vue'
 import { usePublicAppearance } from './composables/usePublicAppearance.ts'
 const PublicGalleryControls = defineAsyncComponent(() => import('./components/PublicGalleryControls.vue'))
 const PublicLightbox = defineAsyncComponent(() => import('./components/PublicLightbox.vue'))
@@ -29,6 +30,7 @@ const PublicCompareLightTable = defineAsyncComponent(() => import('./components/
 const PublicStoryGallery = defineAsyncComponent(() => import('./components/PublicStoryGallery.vue'))
 const PublicGuestDialog = defineAsyncComponent(() => import('./components/PublicGuestDialog.vue'))
 const PublicCollaborationSheet = defineAsyncComponent(() => import('./components/PublicCollaborationSheet.vue'))
+const PublicSelectionBar = defineAsyncComponent(() => import('./components/PublicSelectionBar.vue'))
 const ProgressiveImage = defineAsyncComponent(() => import('./components/ProgressiveImage.vue'))
 const PublicMediaListDetails = defineAsyncComponent(() => import('./components/PublicMediaListDetails.vue'))
 const PublicEventAlbumGrid = defineAsyncComponent(() => import('./components/PublicEventAlbumGrid.vue')), virtualGridResolved = ref(false)
@@ -83,7 +85,7 @@ const activeOpener = ref<HTMLElement | null>(null)
 const { guest, collaboration, nonce, requestAsGuest, clearIdentity, joining, collaborationError, guestDialogOpen, initializeCollaboration, loadCollaboration, joinCollaboration, mutateCollaboration, cancelPendingMutation } = usePublicCollaboration({
 	token: props.gallery.token, enabled: !isStaticPreview, settings, mediaItems, endpoint: publicEndpoint, reloadPage: () => loadPage(currentPage.value),
 })
-const { selectedIds, selectionMode, compareOpen, compareItems, selectionName, selectionMessage, savingSelection, saveSelection, toggleSelection, startSelectionMode, finishSelectionMode, openSelectionCompare, toggleCompare } = usePublicSelection({
+const { selectedIds, selectionMode, compareOpen, compareItems, selectionName, selectionMessage, savingSelection, saveSelection, prepareSave, toggleSelection, startSelectionMode, finishSelectionMode, openSelectionCompare, toggleCompare } = usePublicSelection({
 	token: props.gallery.token, preview: isStaticPreview, settings, mediaItems, mutate: mutateCollaboration, closePanel: () => { activePanel.value = null },
 })
 const galleryDownloadBusy = ref(false)
@@ -118,7 +120,8 @@ const viewportWidth = ref(window.innerWidth)
 let scrollTimer: number | undefined
 const contentRef = ref<InstanceType<typeof IonContent> | null>(null)
 const scrollElement = ref<HTMLElement | null>(null)
-let pageSwipeGesture: Gesture | undefined
+const pageSwipe = usePublicPageSwipe({ page: currentPage, pageCount, blocked: () => loading.value || activeIndex.value !== null || compareOpen.value || activePanel.value !== null, navigate: page => void navigateToPage(page) })
+const selectionBar = computed(() => ({ selecting: selectionMode.value, selectedCount: selectedIds.value.length, canSave: settings.value.mode === 'collaboration' && settings.value.review?.selections !== false, canDownload: ['selection', 'all'].includes(downloadScope.value), saving: savingSelection.value, review: review.value }))
 const continuation = ref(isStaticPreview ? null : loadPublicGalleryContinuation(props.gallery.token))
 const continueVisible = ref(!!(continuation.value && continuation.value.scrollY > 240))
 const downloadScope = computed(() => settings.value.delivery.downloadScope)
@@ -166,20 +169,8 @@ onMounted(async () => {
 		mobileViewportQuery.addEventListener('change', onMobileViewportChange); window.addEventListener('resize', onViewportResize, { passive: true })
 		return
 	}
-	const { createGesture } = await import('@ionic/core')
+	await pageSwipe.attach(scrollElement.value, () => disposed)
 	if (disposed) return
-	if (scrollElement.value) {
-		pageSwipeGesture = createGesture({
-			el: scrollElement.value,
-			gestureName: 'public-gallery-page-swipe',
-			direction: 'x',
-			threshold: 24,
-			maxAngle: 25,
-			canStart: detail => canStartPageSwipe(detail),
-			onEnd: detail => finishPageSwipe(detail),
-		})
-		pageSwipeGesture.enable()
-	}
 	const initialMatches = matchesInitialGalleryPage(props.gallery.initialPage, { ...locationState(), photoId: initialLocation.photoId }, settings.value)
 	if (initialMatches) deferCollaborationInitialization()
 	else loadPage(currentPage.value, initialLocation.photoId).then(() => deferCollaborationInitialization())
@@ -192,21 +183,8 @@ onBeforeUnmount(() => {
 	mobileViewportQuery.removeEventListener('change', onMobileViewportChange)
 	window.removeEventListener('resize', onViewportResize)
 	window.clearTimeout(scrollTimer)
-	pageSwipeGesture?.destroy()
+	pageSwipe.destroy()
 })
-
-function canStartPageSwipe(detail: GestureDetail): boolean {
-	if (pageCount.value <= 1 || loading.value || activeIndex.value !== null || compareOpen.value || activePanel.value !== null) return false
-	const target = detail.event.target
-	if (!(target instanceof Element)) return true
-	return !target.closest('input, textarea, select, ion-searchbar, ion-segment, ion-range, [contenteditable="true"]')
-}
-
-function finishPageSwipe(detail: GestureDetail) {
-	if (Math.abs(detail.deltaX) < 72 && Math.abs(detail.velocityX) < 0.35) return
-	if (detail.deltaX < 0 && currentPage.value < pageCount.value) void navigateToPage(currentPage.value + 1)
-	if (detail.deltaX > 0 && currentPage.value > 1) void navigateToPage(currentPage.value - 1)
-}
 
 function onMobileViewportChange(event: MediaQueryListEvent) {
 	mobileViewport.value = event.matches
@@ -483,6 +461,7 @@ function groupLabel(group: string | undefined): string {
 						:total-label="openerTotalLabel"
 						:settings="settings"
 						:hero-url="headerHeroUrl" />
+					<PublicKioskPhotoNotice :endpoint="publicEndpoint" :enabled="!isStaticPreview" />
 					<div v-if="continueVisible" class="continuation-banner" role="status">
 						<span>{{ t('proofing_gallery', 'Continue where you left off?') }}</span>
 						<button type="button" @click="continueViewing">
@@ -695,6 +674,11 @@ function groupLabel(group: string | undefined): string {
 						@did-dismiss="galleryDownloadError = ''" />
 				</div>
 			</IonContent>
+			<PublicSelectionBar v-if="activeIndex === null && !compareOpen && !eventAlbumRoot"
+				v-bind="selectionBar"
+				@start="startSelectionMode"
+				@save="prepareSave(t('proofing_gallery', 'My selection')) && setPanel('selection')"
+				@download="startDownload(selectionUrl('download/selection'))" />
 		</IonPage>
 	</IonApp>
 </template>

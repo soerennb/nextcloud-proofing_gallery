@@ -64,10 +64,8 @@ final class FolderPublicPageReader {
 				$group = self::group($left) <=> self::group($right);
 				if ($group !== 0) return $group;
 			}
-			if ($sortBy !== 'name') {
-				$folderOrder = ($left instanceof Folder ? 0 : 1) <=> ($right instanceof Folder ? 0 : 1);
-				if ($folderOrder !== 0) return $folderOrder;
-			}
+			$folderOrder = ($left instanceof Folder ? 0 : 1) <=> ($right instanceof Folder ? 0 : 1);
+			if ($folderOrder !== 0) return $folderOrder;
 			$value = static fn (Node $node): array => [
 				'id' => $node->getId(), 'name' => $node->getName(), 'size' => $node->getSize(), 'modifiedAt' => $node->getMTime(),
 				'capturedAt' => $captureById[$node->getId()] ?? null,

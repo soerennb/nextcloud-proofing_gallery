@@ -11,13 +11,13 @@ import {
 } from '@ionic/vue'
 import { n, t } from '@nextcloud/l10n'
 import {
+	chatbubblesOutline,
 	chevronBackOutline,
 	chevronForwardOutline,
 	closeOutline,
 	downloadOutline,
 	ellipsisHorizontal,
 	gitCompareOutline,
-	personCircleOutline,
 	searchOutline,
 	shareOutline,
 } from 'ionicons/icons'
@@ -61,13 +61,13 @@ const emit = defineEmits<{
 
 <template>
 	<IonHeader class="gallery-app-header" translucent>
-		<IonToolbar v-if="selectionMode">
+		<IonToolbar v-if="selectionMode" class="gallery-app-header__selection">
 			<IonButtons slot="start">
 				<IonButton :aria-label="t('proofing_gallery', 'Cancel selection')" @click="emit('cancel-selection')">
 					<IonIcon slot="icon-only" :icon="closeOutline" />
 				</IonButton>
 			</IonButtons>
-			<IonTitle>{{ n('proofing_gallery', '%n item selected', '%n items selected', selectedCount) }}</IonTitle>
+			<IonTitle>{{ n('proofing_gallery', '%n selected', '%n selected', selectedCount) }}</IonTitle>
 			<IonButtons slot="end">
 				<IonButton v-if="canCompare" :aria-label="t('proofing_gallery', 'Compare')" @click="emit('compare')">
 					<IonIcon slot="icon-only" :icon="gitCompareOutline" />
@@ -122,7 +122,7 @@ const emit = defineEmits<{
 						class="gallery-app-header__secondary-action"
 						:aria-label="t('proofing_gallery', 'Review details')"
 						@click="emit('collaboration')">
-						<IonIcon slot="icon-only" :icon="personCircleOutline" />
+						<IonIcon slot="icon-only" :icon="chatbubblesOutline" />
 					</IonButton>
 					<IonButton :aria-label="t('proofing_gallery', 'More options')" @click="emit('more')">
 						<IonIcon slot="icon-only" :icon="ellipsisHorizontal" />

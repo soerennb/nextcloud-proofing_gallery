@@ -20,6 +20,12 @@ Die Galerie verwendet eine gemeinsame Standard-Auslieferung: Alle berechtigten G
 
 Beispiel für `photoUrl`: `https://cloud.example.test/s/SHARE_TOKEN?photo=12345`. Die Zahl ist die Nextcloud-Datei-ID. Der Link öffnet das Foto in der Galerie, nicht direkt die JPEG-Datei. Den zurückgegebenen Link unverändert verwenden. Ein gesetztes Galerie-Passwort wird weiterhin abgefragt und steht nicht im Link. Der QR-Code begrenzt den Zugang nicht auf dieses eine Foto.
 
+### Foto-Link schon vor dem Upload
+
+Soll der QR-Code sofort erscheinen oder gedruckt werden, auch ohne Internet, verwendet die Fotobox **`photoLink.urlTemplate`** (`galleryUrl?kioskPhoto=PHOTO_ID`) mit derselben UUID, unter der sie das Foto später hochlädt. `GET kiosk/setup` meldet die Fähigkeit als `photoLinks.beforeUpload: true`; ältere Versionen lassen das Feld weg.
+
+Die Gästeseite fragt alle fünf Sekunden nach dem Foto und zeigt „Ihr Foto ist unterwegs“. Sobald es da ist, wechselt sie auf den normalen `?photo=`-Link und öffnet es. Nach zehn Minuten weist sie darauf hin, dass das Foto erscheint, sobald die Fotobox wieder online ist, und prüft weiter. Die UUID verrät nichts, was Gäste mit dem Galerie-Link nicht ohnehin sehen; ein Galerie-Passwort wird weiterhin abgefragt.
+
 ## Parameter und Wiederholungen
 
 `eventId` ist pro Konto eindeutig: 1–128 Zeichen aus Buchstaben, Ziffern, Punkt, Unterstrich, Doppelpunkt und Bindestrich, mit alphanumerischem Anfang. Der Titel umfasst nach Entfernen äußerer Leerzeichen 1–255 Zeichen. Fehlende oder `null`-Werte für Ordner/Design verwenden die persönlichen Vorgaben; `designPresetId: 0` verwendet das Studio-Design, positive IDs ein eigenes gespeichertes Design. Ein beschreibbarer Zielordner ist erforderlich. Das Ablaufdatum verwendet ein zukünftiges `YYYY-MM-DD`; leer bedeutet Nextcloud-Standard. Nextcloud kann Passwort oder maximale Gültigkeit erzwingen.

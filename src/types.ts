@@ -29,6 +29,18 @@ export type CapabilityName = 'galleryCreation' | 'publicPublishing' | 'guestUplo
 
 export type EffectiveCapabilities = Record<CapabilityName, { allowed: boolean; reason: string | null }>
 
+export interface GalleryAttention {
+	openSelections: number
+	uploadsAwaitingReview: number
+	submittedReviews: number
+	overdueReviews: number
+	recentComments: number
+	expiringLinks: number
+	nextLinkExpiryAt: number | null
+	lastClientActivityAt: number | null
+	needsAttention: boolean
+}
+
 export interface Gallery {
 	id: number
 	ownerUid: string
@@ -46,6 +58,7 @@ export interface Gallery {
 	revision: number
 	purpose: GalleryPurpose
 	workflowState: 'preparing' | 'live' | 'response_received' | 'completed'
+	attention?: GalleryAttention | null
 	publishedAt: number | null
 	completedAt: number | null
 	revokedAt: number | null
@@ -351,6 +364,7 @@ export interface GalleryListItem {
 	lifecycleNextAt: number | null
 	mediaSummary: Gallery['mediaSummary']
 	permissions: Gallery['permissions']
+	attention?: GalleryAttention | null
 }
 
 export interface GalleryCursorPage {

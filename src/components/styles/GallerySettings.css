@@ -13,7 +13,7 @@
 .settings-page {
 	max-width: 1280px;
 	margin: 0 auto;
-	padding: 28px clamp(20px, 4vw, 48px) 100px;
+	padding: 14px clamp(20px, 4vw, 48px) 100px;
 	color: var(--studio-ink, var(--color-main-text));
 }
 
@@ -36,8 +36,7 @@
 	align-items: center;
 	justify-content: space-between;
 	gap: 16px;
-	padding: 10px 0 24px;
-	border-bottom: 1px solid var(--studio-line, var(--color-border));
+	padding: 4px 0 12px;
 }
 
 .settings-header__actions {
@@ -90,7 +89,7 @@
 .save-problem span { color: var(--color-text-maxcontrast); }
 
 .back-button {
-	margin: 0 0 8px;
+	margin: 0 0 4px;
 	padding: 0;
 	border: 0;
 	background: transparent;
@@ -101,10 +100,10 @@
 .settings-header h1 {
 	margin: 0;
 	font-family: inherit;
-	font-size: 32px;
+	font-size: 26px;
 	font-weight: 700;
-	letter-spacing: -.04em;
-	line-height: 1.02;
+	letter-spacing: -.03em;
+	line-height: 1.1;
 }
 
 .settings-header__identity { min-width: 0; }
@@ -114,7 +113,12 @@
 .project-status,
 .purpose-name { padding: 4px 8px; border-radius: 6px; background: var(--studio-surface-raised, var(--color-background-hover)); color: var(--studio-muted, var(--color-text-maxcontrast)); font-size: 11px; font-weight: 700; letter-spacing: .025em; }
 
-.project-status {  color: var(--color-main-text); }
+.project-status { color: var(--color-main-text); }
+
+.project-status[data-phase='responded'] { background: color-mix(in srgb, var(--studio-accent, var(--color-primary-element)) 16%, transparent); color: var(--studio-accent, var(--color-primary-element)); }
+
+.project-status[data-phase='shared'],
+.project-status[data-phase='completed'] { color: var(--studio-success); }
 
 .readiness-popover { position: relative; }
 
@@ -610,11 +614,8 @@
 	}
 }
 
-.guest-order-section { max-width: 1040px; margin-bottom: 20px; }
 
-.guest-order-section .settings-subsection { display: grid; gap: 12px; border: 0; padding: 0; }
 
-.guest-order-section h3, .guest-order-section p { margin: 0; }
 
 .settings-header__actions > *, .workflow-completion > .button-vue { flex-shrink: 0; }
 @media (max-width: 640px) { .settings-header__identity { padding-inline-start: 32px; } .settings-section { padding: 18px; } .workflow-completion { align-items: stretch; flex-direction: column; gap: 12px; } }

@@ -48,6 +48,7 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		private \OCA\ProofingGallery\Service\PublicGalleryDownloadService $galleryDownloads,
 		private \OCA\ProofingGallery\Service\WebJpegDerivativeService $webJpegs,
 		private \OCA\ProofingGallery\Service\GalleryArtworkService $artwork,
+		private \OCA\ProofingGallery\Service\PublicShareMetadataService $metadata,
 	) {
 		parent::__construct($request, $session, $contextResolver);
 	}
@@ -261,6 +262,26 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 			'Cache-Control' => 'private, no-store',
 			'Content-Security-Policy' => "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'",
 		]);
+	}
+
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/public/{token}/manifest.webmanifest')]
+	public function manifest(string $token): JSONResponse {
+		$context = $this->publicContext();
+		$presentation = $context->settings->presentation;
+		$response = new JSONResponse($this->metadata->manifest(
+			$token,
+			$context->gallery->getTitle(),
+			$presentation->welcomeMessage,
+			$presentation->accentColor,
+			$presentation->theme,
+			$this->artwork->publicHeroFileId($context) !== null,
+			$context->settings->publicLocale,
+		));
+		$response->addHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+		$response->addHeader('Cache-Control', 'private, no-cache');
+		return $response;
 	}
 
 	#[PublicPage]

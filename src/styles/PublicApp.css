@@ -1,4 +1,4 @@
-:global(#content.app-proofing_gallery > #proofing_gallery_public) {
+:global(#content > #proofing_gallery_public) {
 	min-width: 0;
 	min-height: 100dvh;
 	flex: 1 1 auto;
@@ -558,7 +558,8 @@
 	outline-offset: -1px;
 }
 
-.media-tile--selected {
+.media-tile--selected,
+.media-tile--selected:is(:hover, :focus-within) {
 	outline: 5px solid var(--gallery-accent);
 	outline-offset: -5px;
 }
@@ -665,6 +666,7 @@
 	padding: 4px 7px;
 	border-radius: 4px;
 	background: rgb(0 0 0 / 72%);
+	color: #fff;
 	font-size: 11px;
 }
 
@@ -684,12 +686,26 @@
 	cursor: pointer;
 }
 
-.media-tile__select--active {
+/* Nextcloud core restyles focused/hovered buttons; keep the selection state stable. */
+.media-tile__select:is(:hover, :focus, :active) {
+	border-color: #fff;
+	background: rgb(0 0 0 / 72%);
+	color: #fff;
+}
+
+.media-tile__select--active,
+.media-tile__select--active:is(:hover, :focus, :active) {
 	border-color: var(--gallery-accent);
 	background: var(--gallery-accent);
-	color: #080808;
+	color: var(--proofing-public-accent-contrast, #fff);
 	box-shadow: 0 0 0 2px rgb(0 0 0 / 35%);
 }
+
+.kiosk-photo-banner { position: sticky; z-index: 17; top: 8px; display: flex; align-items: center; gap: 10px; margin: 12px auto; width: min(640px, calc(100% - 24px)); padding: 12px 14px; border: 1px solid var(--gallery-border); border-radius: 8px; background: var(--gallery-surface); color: var(--gallery-text); box-shadow: 0 2px 8px rgb(0 0 0 / 14%); }
+
+.kiosk-photo-banner__spinner { flex: none; width: 18px; height: 18px; border: 2px solid var(--gallery-border); border-top-color: currentColor; border-radius: 50%; animation: kiosk-photo-spin 0.9s linear infinite; }
+@keyframes kiosk-photo-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .kiosk-photo-banner__spinner { animation: none; } }
 
 .continuation-banner { position: fixed; z-index: 18; inset-inline-end: 12px; bottom: max(12px, env(safe-area-inset-bottom)); display: flex; align-items: center; gap: 10px; max-width: calc(100vw - 24px); padding: 10px 12px; border: 1px solid var(--gallery-border); border-radius: 8px; background: var(--gallery-surface); color: var(--gallery-text); box-shadow: 0 2px 8px rgb(0 0 0 / 14%); }
 

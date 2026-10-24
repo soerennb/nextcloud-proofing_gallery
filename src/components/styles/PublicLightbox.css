@@ -23,7 +23,9 @@
 
 :global(.lightbox-shell .proofing-zoom-surface) { position: relative; width: 100%; height: 100%; transform-origin: 0 0; will-change: transform; }
 
-:global(.lightbox-shell .proofing-zoom-image) { display: block; width: 100%; height: 100%; max-width: none; max-height: none; touch-action: none; user-select: none; -webkit-user-drag: none; }
+:global(.lightbox-shell .proofing-zoom-image) { position: relative; z-index: 1; display: block; width: 100%; height: 100%; max-width: none; max-height: none; touch-action: none; user-select: none; -webkit-user-drag: none; }
+
+:global(.lightbox-shell .proofing-zoom-placeholder) { position: absolute; z-index: 0; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; pointer-events: none; user-select: none; }
 
 :global(.proofing-pswp-video) { width: min(100%, 1400px); height: min(100%, 900px); object-fit: contain; }
 

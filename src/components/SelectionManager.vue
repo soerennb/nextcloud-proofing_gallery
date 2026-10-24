@@ -7,8 +7,10 @@ import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { computed, onMounted, ref } from 'vue'
 
-import { deleteOwnerSelection, exportOwnerSelectionXmp, fetchOwnerSelectionExportPreview, fetchOwnerSelections, ownerSelectionExportUrl, updateOwnerSelection } from '../services/galleryApi.ts'
+import { deleteOwnerSelection, exportOwnerSelectionXmp, fetchOwnerSelectionExportPreview, fetchOwnerSelections, ownerPreviewUrl, ownerSelectionExportUrl, updateOwnerSelection } from '../services/galleryApi.ts'
 import type { OwnerSelection } from '../types.ts'
+import { formatDateTime } from '../domain/dateFormat.ts'
+import GalleryActionsMenu from './GalleryActionsMenu.vue'
 
 const props = defineProps<{ galleryId: number; editable: boolean; ratingsAvailable?: boolean }>()
 const items = ref<OwnerSelection[]>([])
@@ -19,6 +21,15 @@ const total = ref(0)
 const workingId = ref('')
 const loadFailed = ref(false)
 const composerId = ref('')
+const renamingId = ref('')
+const statusFilter = ref<'open' | 'completed' | 'all'>('open')
+const visibleItems = computed(() => statusFilter.value === 'all' ? items.value : items.value.filter(item => item.status === statusFilter.value))
+const counts = computed(() => ({
+	open: items.value.filter(item => item.status === 'open').length,
+	completed: items.value.filter(item => item.status === 'completed').length,
+	all: items.value.length,
+}))
+const THUMBNAILS = 8
 const exportFields = ref(['filename', 'path', 'ownerRating', 'ownerPick', 'guestAverage', 'guestCount'])
 const exportPreview = ref('')
 const exportWorking = ref(false)
@@ -54,12 +65,32 @@ async function save(selection: OwnerSelection) {
 	workingId.value = selection.id
 	try {
 		await updateOwnerSelection(props.galleryId, selection)
+		renamingId.value = ''
 		showSuccess(t('proofing_gallery', 'Selection updated.'))
 	} catch {
 		showError(t('proofing_gallery', 'The selection could not be updated.'))
 	} finally {
 		workingId.value = ''
 	}
+}
+
+async function setStatus(selection: OwnerSelection, status: OwnerSelection['status']) {
+	const previous = selection.status
+	selection.status = status
+	workingId.value = selection.id
+	try {
+		await updateOwnerSelection(props.galleryId, selection)
+		showSuccess(status === 'completed' ? t('proofing_gallery', 'Selection marked as completed.') : t('proofing_gallery', 'Selection reopened.'))
+	} catch {
+		selection.status = previous
+		showError(t('proofing_gallery', 'The selection could not be updated.'))
+	} finally {
+		workingId.value = ''
+	}
+}
+
+function thumbnailUrl(fileId: number): string {
+	return ownerPreviewUrl(props.galleryId, fileId, 160, 160)
 }
 
 async function remove(selection: OwnerSelection) {
@@ -145,55 +176,92 @@ onMounted(load)
 		<NcEmptyContent v-else-if="items.length === 0"
 			:name="t('proofing_gallery', 'No saved selections yet')"
 			:description="t('proofing_gallery', 'Client selections will appear here with their files and export options.')" />
-		<ul v-else>
-			<li v-for="selection in items" :key="selection.id">
-				<div class="selection-manager__fields">
-					<NcTextField v-model="selection.name"
-						:disabled="!editable || workingId === selection.id"
-						:label="t('proofing_gallery', 'Selection name')" />
-					<label>
-						<span>{{ t('proofing_gallery', 'Status') }}</span>
-						<select v-model="selection.status" :disabled="!editable || workingId === selection.id">
-							<option value="open">{{ t('proofing_gallery', 'Open') }}</option>
-							<option value="completed">{{ t('proofing_gallery', 'Completed') }}</option>
-						</select>
-					</label>
+		<template v-else>
+			<div class="selection-manager__filters" role="group" :aria-label="t('proofing_gallery', 'Show selections')">
+				<button v-for="filter in (['open', 'completed', 'all'] as const)"
+					:key="filter"
+					type="button"
+					:aria-pressed="statusFilter === filter"
+					@click="statusFilter = filter">
+					{{ filter === 'open' ? t('proofing_gallery', 'Open') : filter === 'completed' ? t('proofing_gallery', 'Completed') : t('proofing_gallery', 'All') }}
+					<span>{{ counts[filter] }}</span>
+				</button>
+			</div>
+			<p v-if="visibleItems.length === 0" class="selection-manager__none">
+				{{ statusFilter === 'open' ? t('proofing_gallery', 'No open selections. Completed selections stay available under “Completed”.') : t('proofing_gallery', 'No selections in this view.') }}
+			</p>
+		</template>
+		<ul v-if="!loading && !loadFailed && visibleItems.length">
+			<li v-for="selection in visibleItems" :key="selection.id" :data-status="selection.status">
+				<div class="selection-card__head">
+					<div class="selection-card__identity">
+						<form v-if="renamingId === selection.id" class="selection-card__rename" @submit.prevent="save(selection)">
+							<NcTextField v-model="selection.name"
+								:disabled="workingId === selection.id"
+								:label="t('proofing_gallery', 'Selection name')" />
+							<NcButton type="submit" :disabled="workingId === selection.id || !selection.name.trim()">
+								{{ t('proofing_gallery', 'Save') }}
+							</NcButton>
+						</form>
+						<h3 v-else>
+							{{ selection.name }}
+						</h3>
+						<p class="selection-manager__meta">
+							<span class="selection-card__status">{{ selection.status === 'open' ? t('proofing_gallery', 'Open') : t('proofing_gallery', 'Completed') }}</span>
+							{{ selection.author }} · {{ t('proofing_gallery', '{count} files', { count: selection.fileIds.length }) }} · {{ formatDateTime(selection.updatedAt) }}
+						</p>
+					</div>
+					<div class="selection-manager__actions">
+						<NcButton v-if="editable"
+							:variant="selection.status === 'open' ? 'primary' : 'secondary'"
+							:disabled="workingId === selection.id"
+							@click="setStatus(selection, selection.status === 'open' ? 'completed' : 'open')">
+							{{ selection.status === 'open' ? t('proofing_gallery', 'Mark completed') : t('proofing_gallery', 'Reopen') }}
+						</NcButton>
+						<NcButton :href="ownerSelectionExportUrl(galleryId, selection.id, 'csv')" variant="tertiary">
+							{{ t('proofing_gallery', 'CSV') }}
+						</NcButton>
+						<GalleryActionsMenu :label="t('proofing_gallery', 'More actions for {name}', { name: selection.name })">
+							<button v-if="editable"
+								role="menuitem"
+								type="button"
+								@click="renamingId = selection.id">
+								{{ t('proofing_gallery', 'Rename') }}
+							</button>
+							<button role="menuitem" type="button" @click="openComposer(selection)">
+								{{ t('proofing_gallery', 'Compose export') }}
+							</button>
+							<a role="menuitem" :href="ownerSelectionExportUrl(galleryId, selection.id, 'plain')">{{ t('proofing_gallery', 'File list') }}</a>
+							<a role="menuitem" :href="ownerSelectionExportUrl(galleryId, selection.id, 'search')">{{ t('proofing_gallery', 'Nextcloud search') }}</a>
+							<button v-if="editable"
+								role="menuitem"
+								type="button"
+								:disabled="workingId === selection.id || selection.fileIds.length === 0"
+								@click="exportXmp(selection)">
+								{{ t('proofing_gallery', 'Write XMP sidecars') }}
+							</button>
+							<button v-if="editable"
+								role="menuitem"
+								type="button"
+								class="selection-card__danger"
+								:disabled="workingId === selection.id"
+								@click="remove(selection)">
+								{{ t('proofing_gallery', 'Delete') }}
+							</button>
+						</GalleryActionsMenu>
+					</div>
 				</div>
-				<p class="selection-manager__meta">
-					{{ selection.author }} · {{ t('proofing_gallery', '{count} files', { count: selection.fileIds.length }) }} · {{ new Date(selection.updatedAt * 1000).toLocaleString() }}
-				</p>
+				<div v-if="selection.fileIds.length" class="selection-card__thumbs" :aria-label="t('proofing_gallery', 'Selected photos')">
+					<img v-for="fileId in selection.fileIds.slice(0, THUMBNAILS)"
+						:key="fileId"
+						:src="thumbnailUrl(fileId)"
+						alt=""
+						loading="lazy">
+					<span v-if="selection.fileIds.length > THUMBNAILS">+{{ selection.fileIds.length - THUMBNAILS }}</span>
+				</div>
 				<p v-if="selection.message" class="selection-manager__message">
 					{{ selection.message }}
 				</p>
-				<div class="selection-manager__actions">
-					<NcButton v-if="editable" :disabled="workingId === selection.id || !selection.name.trim()" @click="save(selection)">
-						{{ t('proofing_gallery', 'Save') }}
-					</NcButton>
-					<NcButton :href="ownerSelectionExportUrl(galleryId, selection.id, 'csv')" variant="tertiary">
-						{{ t('proofing_gallery', 'CSV') }}
-					</NcButton>
-					<NcButton variant="tertiary" :aria-expanded="composerId === selection.id" @click="openComposer(selection)">
-						{{ t('proofing_gallery', 'Compose export') }}
-					</NcButton>
-					<NcButton :href="ownerSelectionExportUrl(galleryId, selection.id, 'plain')" variant="tertiary">
-						{{ t('proofing_gallery', 'File list') }}
-					</NcButton>
-					<NcButton :href="ownerSelectionExportUrl(galleryId, selection.id, 'search')" variant="tertiary">
-						{{ t('proofing_gallery', 'Nextcloud search') }}
-					</NcButton>
-					<NcButton v-if="editable"
-						variant="primary"
-						:disabled="workingId === selection.id || selection.fileIds.length === 0"
-						@click="exportXmp(selection)">
-						{{ t('proofing_gallery', 'Write XMP sidecars') }}
-					</NcButton>
-					<NcButton v-if="editable"
-						variant="error"
-						:disabled="workingId === selection.id"
-						@click="remove(selection)">
-						{{ t('proofing_gallery', 'Delete') }}
-					</NcButton>
-				</div>
 				<section v-if="composerId === selection.id" class="export-composer" :aria-label="t('proofing_gallery', 'Export composer')">
 					<header><div><h3>{{ t('proofing_gallery', 'Export composer') }}</h3><p>{{ t('proofing_gallery', 'Choose exactly which fields leave the gallery, then inspect the UTF-8 CSV before downloading it.') }}</p></div></header>
 					<div class="export-composer__fields">
@@ -214,7 +282,7 @@ onMounted(load)
 				</section>
 			</li>
 		</ul>
-		<footer v-if="items.length" class="selection-manager__pagination">
+		<footer v-if="items.length && (nextCursor || statusFilter === 'all')" class="selection-manager__pagination">
 			<span>{{ t('proofing_gallery', '{visible} of {total} selections', { visible: items.length, total }) }}</span>
 			<NcButton v-if="nextCursor"
 				variant="tertiary"
@@ -243,19 +311,43 @@ onMounted(load)
 
 .selection-manager li { position: relative; padding: 20px; overflow: hidden; border: 1px solid var(--color-border); border-radius: 8px; background: color-mix(in srgb, var(--color-main-background) 92%, transparent);  transition: border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease; }
 
-.selection-manager li:hover { border-color: color-mix(in srgb, var(--color-primary-element) 40%, var(--color-border)); box-shadow: 0 18px 42px rgb(0 0 0 / 13%); transform: translateY(-2px); }
+.selection-manager li:hover { border-color: color-mix(in srgb, var(--color-primary-element) 40%, var(--color-border)); }
 
-.selection-manager__fields { display: grid; grid-template-columns: minmax(0, 1fr) 150px; gap: 10px; }
+.selection-manager__filters { display: flex; flex-wrap: wrap; gap: 6px; }
 
-.selection-manager__fields label { display: flex; flex-direction: column; gap: 4px; color: var(--color-text-maxcontrast); font-size: 13px; }
+.selection-manager__filters button { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; margin: 0; padding: 0 12px; border: 1px solid var(--studio-line, var(--color-border)); border-radius: 999px; background: transparent; color: var(--studio-ink, var(--color-main-text)); font: inherit; font-weight: 600; cursor: pointer; }
 
-.selection-manager__fields select { min-height: 44px; padding: 8px; border: 1px solid var(--color-border-maxcontrast); border-radius: 8px; background: var(--color-main-background); color: var(--color-main-text); }
+.selection-manager__filters button[aria-pressed="true"] { border-color: var(--studio-accent, var(--color-primary-element)); background: var(--studio-accent-soft, var(--color-primary-element-light)); color: var(--studio-accent, var(--color-primary-element)); }
 
-.selection-manager__meta { margin-block-start: 8px !important; font-size: 13px; }
+.selection-manager__filters span { color: var(--color-text-maxcontrast); font-size: 12px; }
+
+.selection-manager__none { color: var(--color-text-maxcontrast); }
+
+.selection-card__head { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+
+.selection-card__identity { min-width: 0; }
+
+.selection-card__identity h3 { margin: 0; font-size: 17px; }
+
+.selection-card__rename { display: flex; align-items: end; gap: 8px; }
+
+.selection-card__status { margin-inline-end: 6px; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--studio-accent, var(--color-primary-element)) 14%, transparent); color: var(--studio-ink, var(--color-main-text)); font-size: 12px; font-weight: 700; }
+
+li[data-status="completed"] .selection-card__status { background: color-mix(in srgb, var(--color-success) 18%, transparent); }
+
+.selection-card__thumbs { display: flex; gap: 6px; margin-block-start: 12px; overflow-x: auto; }
+
+.selection-card__thumbs img, .selection-card__thumbs span { flex: none; width: 72px; height: 72px; border-radius: 6px; background: var(--studio-surface-raised, var(--color-background-dark)); object-fit: cover; }
+
+.selection-card__thumbs span { display: grid; place-items: center; color: var(--color-text-maxcontrast); font-weight: 700; }
+
+.selection-card__danger { color: var(--color-error-text, var(--color-error)) !important; }
+
+.selection-manager__meta { margin-block-start: 6px !important; font-size: 13px; }
 
 .selection-manager__message { margin-block-start: 6px !important; white-space: pre-wrap; }
 
-.selection-manager__actions { display: flex; flex-wrap: wrap; gap: 6px; margin-block-start: 12px; }
+.selection-manager__actions { display: flex; flex: none; align-items: center; gap: 6px; }
 
 .selection-manager__loading { display: grid; min-height: 100px; place-items: center; }
 
@@ -279,7 +371,7 @@ onMounted(load)
 
 @media (max-width: 600px) { .selection-manager { padding: 20px 14px; border-radius: 8px; } .selection-manager header > .button-vue { flex: none; }
 
-.selection-manager header { align-items: stretch; flex-direction: column; } .selection-manager__fields { grid-template-columns: 1fr; } .selection-manager li { padding: 17px 15px 17px 19px; } }
+.selection-manager header { align-items: stretch; flex-direction: column; } .selection-card__head { flex-direction: column; } .selection-manager li { padding: 17px 15px 17px 19px; } }
 
 @media (prefers-reduced-motion: reduce) { .selection-manager li { transition: none; } }
 </style>

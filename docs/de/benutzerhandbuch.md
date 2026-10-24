@@ -37,8 +37,8 @@ separat am Kiosk eingerichtet. Die Referenz zur Fotobox-Anbindung beschreibt die
 
 ## Bilder sortieren
 
-Neue Galerien übernehmen eine Kopie der Instanz-Vorgabe. Unter **Teilen →
-Standardsortierung** stehen Dateiname, Aufnahmedatum, letztes Änderungsdatum und
+Neue Galerien übernehmen eine Kopie der Instanz-Vorgabe. Unter **Design →
+Reihenfolge für Gäste** stehen Dateiname, Aufnahmedatum, letztes Änderungsdatum und
 Dateigröße mit auf- oder absteigender Richtung zur Verfügung. **Aktuelle
 Instanz-Vorgabe übernehmen** kopiert die aktuelle Einstellung der Administration.
 Spätere Änderungen der Instanz-Vorgabe verändern vorhandene Galerien nicht.
@@ -103,7 +103,8 @@ Auslieferung einzeln wiederholt werden.
 
 Der Arbeitsbereich ist nach Aufgaben gegliedert:
 
-- **Übersicht** zeigt Quelle, Status, Zweck und Medienübersicht.
+- **Übersicht** beginnt mit der Projektphase, dem Kundenlink und den offenen
+  Kundenergebnissen, gefolgt von Quelle, Zweck und Medienübersicht.
 - **Fotos** verwaltet Ordnerinhalt, Uploads, Metadaten und Sammlungen.
 - **Auswahl** bietet Bewertungen, Picks, Ablehnungen, Farblabel, gespeicherte
   Ansichten und eine ausdrücklich ausgelöste XMP-Synchronisation.
@@ -114,6 +115,13 @@ Der Arbeitsbereich ist nach Aufgaben gegliedert:
 - **Teilen** erzeugt voneinander unabhängige öffentliche Links.
 - **Prüfung** enthält Feedback, Kundenauswahlen, Exporte und Upload-Prüfung.
 - **Verlauf** protokolliert relevante Galerieereignisse.
+
+Galeriekarten zeigen die Projektphase (Entwurf, In Vorbereitung, Beim Kunden,
+Kunde hat geantwortet, Abgeschlossen) und was auf dich wartet: offene
+Auswahlen, zu prüfende Uploads, eingereichte oder überfällige Prüfrunden und
+Links, die innerhalb einer Woche ablaufen. **Braucht Aufmerksamkeit** in der
+Navigation listet genau diese Projekte; das Badge zählt sie. Abgeschlossene und
+archivierte Projekte erscheinen dort nie.
 
 Galeriekarten und **Übersicht → Galerieinhalt** zeigen getrennte Bild- und
 Videozahlen einschließlich aller Unterordner. Es zählen nur unterstützte, lesbare
@@ -207,7 +215,10 @@ Zielgruppe, ohne andere Links oder Quelldateien anzutasten.
 
 Im Abstimmungsmodus können Gäste sich benennen und – sofern freigegeben – Likes,
 Bewertungen, Picks, Ablehnungen, Farben, Kommentare, Markierungen und benannte
-Auswahlen speichern. Ein Nextcloud-Konto ist nicht nötig. Identität und
+Auswahlen speichern. Eine Leiste am unteren Rand bietet **Fotos auswählen**;
+während der Auswahl zeigt sie Anzahl, Auswahlregeln und Frist, und **Auswahl
+senden** speichert die Fotos unter einem vorbelegten Namen. Ein Nextcloud-Konto
+ist nicht nötig. Identität und
 Änderungstoken liegen in einer privaten Browsersitzung; gelöschte Website-Daten
 beenden den Zugriff auf privates Feedback.
 
