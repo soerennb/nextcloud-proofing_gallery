@@ -23,7 +23,7 @@ export function classifyCiChanges(files) {
 			selected.web = true
 			selected.workflow = true
 		}
-		if (match(file, [/^tooling\//, /^scripts\/(check-guarded-braces|check-node-version|audit-npm)\.mjs$/, /^scripts\/lib\/npm-audit/])) {
+		if (match(file, [/^\.nvmrc$/, /^tooling\//, /^scripts\/(check-guarded-braces|check-node-version|audit-npm)\.mjs$/, /^scripts\/lib\/(npm-audit|node-version)/])) {
 			selected.web = true
 			selected.dependencies = true
 			selected.browser = true

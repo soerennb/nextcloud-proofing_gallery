@@ -74,7 +74,7 @@ existing links are not silently expanded by a later wave.
 
 ## Local development
 
-Requirements: Docker with Compose, Node.js 24.21 or newer within 24.x, npm 11,
+Requirements: Docker with Compose, Node.js 24.22.1 or newer within 24.x, npm 11,
 PHP 8.2.35 or newer, and Composer 2.
 
 ```bash

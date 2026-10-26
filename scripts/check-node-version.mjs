@@ -1,6 +1,6 @@
-const [major, minor] = process.versions.node.split('.').map(Number)
+import { minimumNodeVersion, supportsNodeVersion } from './lib/node-version.mjs'
 
-if (major !== 24 || minor < 21) {
-	console.error(`Proofing Gallery requires Node.js 24.21 or newer within the Node 24 line; found ${process.versions.node}. Run: nvm use`)
+if (!supportsNodeVersion(process.versions.node)) {
+	console.error(`Proofing Gallery requires Node.js ${minimumNodeVersion} or newer within the Node 24 line; found ${process.versions.node}. Run: nvm use`)
 	process.exit(1)
 }
