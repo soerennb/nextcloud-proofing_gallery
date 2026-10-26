@@ -3,7 +3,7 @@ import test from 'node:test'
 import { classifyCiChanges } from './ci-changes.mjs'
 
 test('cannot bypass dependency and consumer checks with vendored or audit tooling changes', () => {
-	for (const path of ['tooling/vendor/braces.tgz', 'tooling/braces-compat/index.cjs', 'scripts/check-guarded-braces.mjs', 'scripts/check-node-version.mjs', 'scripts/audit-npm.mjs', 'scripts/lib/npm-audit.mjs']) {
+	for (const path of ['.nvmrc', 'scripts/lib/node-version.mjs', 'scripts/lib/node-version.test.mjs', 'tooling/vendor/braces.tgz', 'tooling/braces-compat/index.cjs', 'scripts/check-guarded-braces.mjs', 'scripts/check-node-version.mjs', 'scripts/audit-npm.mjs', 'scripts/lib/npm-audit.mjs']) {
 		const result = classifyCiChanges([path])
 		assert.equal(result.web, true)
 		assert.equal(result.dependencies, true)

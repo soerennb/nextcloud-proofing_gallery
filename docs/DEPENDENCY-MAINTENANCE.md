@@ -23,7 +23,7 @@ remain transitive dependencies; their parents already allow these fixed
 versions. Keep the production audit free of findings and do not add advisory
 exceptions to the full audit.
 
-The frontend toolchain uses jsdom 30 on the retained Node 24.21.0 baseline and
+The frontend toolchain uses jsdom 30 on the retained Node 24.22.1 baseline and
 TypeScript 6.0.3. The unused `baseUrl` option was removed instead of suppressing
 its deprecation. Dependabot may update jsdom normally, while TypeScript 6.1 and
 later remain excluded until the Vue and lint tooling support them. The stable
