@@ -14,10 +14,10 @@ use PHPUnit\Framework\TestCase;
 final class NormalizeBackgroundJobsTest extends TestCase {
 	public function testKeepsTheMostRecentlyRunJobAndRemovesLegacyDuplicates(): void {
 		$older = $this->createMock(IJob::class);
-		$older->method('getId')->willReturn(10);
+		$older->method('getId')->willReturn('10');
 		$older->method('getLastRun')->willReturn(100);
 		$newer = $this->createMock(IJob::class);
-		$newer->method('getId')->willReturn(11);
+		$newer->method('getId')->willReturn('11');
 		$newer->method('getLastRun')->willReturn(200);
 		$jobs = $this->createMock(IJobList::class);
 		$first = BackgroundMaintenanceHealthService::PERIODIC_JOBS[0];

@@ -81,7 +81,7 @@ final class ReviewIntegrationService {
 		if (!$this->talkAvailable($user)) throw new \InvalidArgumentException('Talk is unavailable');
 		if ($this->resources->find($galleryId, $linkId, $userUid, 'talk') !== null) return $this->status($userUid, $galleryId);
 		$options = $this->talk->newConversationOptions()->setPublic(false);
-		if ($link->getReviewDueDate() !== null && method_exists($options, 'setMeetingDate')) {
+		if ($link->getReviewDueDate() !== null) {
 			$start = new \DateTimeImmutable($link->getReviewDueDate() . ' 09:00:00');
 			$options->setMeetingDate($start, $start->modify('+1 hour'));
 		}

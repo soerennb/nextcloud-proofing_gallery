@@ -5,7 +5,7 @@ set -Eeuo pipefail
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 app_source="${APP_SOURCE:-${repo_dir}}"
 compose_file="${repo_dir}/tests/compat/compose.yaml"
-versions="${NEXTCLOUD_VERSIONS:-31 32 33 34}"
+versions="${NEXTCLOUD_VERSIONS:-33 34 35}"
 databases="${DATABASES:-sqlite mariadb postgres}"
 audit_repetitions="${AUDIT_SMOKE_REPETITIONS:-1}"
 if [[ ! "${audit_repetitions}" =~ ^[1-9][0-9]?$|^100$ ]]; then
@@ -75,7 +75,6 @@ for version in ${versions}; do
 		COMPOSE_PROJECT_NAME="${project_name}" APP_SOURCE="${app_source}" NEXTCLOUD_VERSION="${version}" \
 			"${compose[@]}" exec -T --user www-data "${service}" php -r \
 			'require "/var/www/html/lib/base.php"; foreach ([\OCA\Files\Event\LoadAdditionalScriptsEvent::class, \OCP\FilesMetadata\Event\MetadataLiveEvent::class] as $class) { if (!class_exists($class)) { fwrite(STDERR, "Missing integration API: {$class}\n"); exit(1); } } $capabilities=\OC::$server->get(\OCA\ProofingGallery\Capabilities::class)->getCapabilities(); if (($capabilities["proofing_gallery"]["agent_api_version"] ?? null) !== 2) { exit(1); }'
-		test -f "${app_source}/js/proofing_gallery-files-legacy.mjs"
 		test -f "${app_source}/js/proofing_gallery-files-modern.mjs"
 
 		cleanup

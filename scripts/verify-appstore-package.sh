@@ -32,7 +32,7 @@ fi
 tar -xzf "${archive}" -C "${temporary_dir}"
 
 APP_SOURCE="${temporary_dir}/proofing_gallery" \
-	NEXTCLOUD_VERSIONS="${NEXTCLOUD_VERSIONS:-34}" \
+	NEXTCLOUD_VERSIONS="${NEXTCLOUD_VERSIONS:-35}" \
 	DATABASES="${DATABASES:-sqlite}" \
 	"${repo_dir}/scripts/compatibility-matrix.sh"
 

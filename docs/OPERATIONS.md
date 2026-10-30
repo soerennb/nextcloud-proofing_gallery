@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Nextcloud 31–34
+- Nextcloud 33–35
 - PHP 8.2.35–8.6 with the extensions required by Nextcloud; GD is required for
   watermarked previews and contact sheets
 - SQLite, MariaDB/MySQL, or PostgreSQL
@@ -309,7 +309,7 @@ Run `make test-compat` to exercise the full supported server/database matrix.
 Run `UPGRADE_DATABASE=sqlite|mariadb|postgres make test-upgrade` for an explicit
 schema-and-sentinel-data upgrade on each database family.
 Run `make verify-package` to build the release archive and install it on a fresh
-Nextcloud 34 SQLite instance.
+Nextcloud 35 SQLite instance.
 
 ## Bounded orphan file-metadata maintenance
 
@@ -327,7 +327,7 @@ NEXTCLOUD_ROOT=/var/www/html php scripts/cleanup-orphan-metadata.php \
 The JSON result reports requested/unique IDs, existing files, eligible metadata
 and cleaned or missing records. Add `--execute` only for the reviewed orphan
 scope. Before each call it rechecks live file-cache entries and sends at most
-500 IDs to Nextcloud's public metadata API. Nextcloud 31 uses its single-file
+500 IDs to Nextcloud's public metadata API. Older servers used the single-file
 API. File contents are never deleted. Database failures logged internally by
 Nextcloud are detected by checking the remaining metadata/index records; rerun
 with the same list to resume an interrupted cleanup. Each batch commits
@@ -345,3 +345,5 @@ For repeated transaction diagnostics, run the compatibility script with
 must pass; this is repetition, not a retry policy. Materialized query helpers
 close their owned cursors; the legacy streaming row helper still leaves cursor
 ownership with its caller. The original sporadic CI lock remains unconfirmed.
+
+Nextcloud 35 requires PHP 8.3 or later. Nextcloud 31/32 no longer receive app updates. Upgrade the server one major version at a time to at least 33 before updating the app. Only PHP versions supported by the installed server are supported.

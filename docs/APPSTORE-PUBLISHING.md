@@ -137,7 +137,7 @@ APP_PUBLIC_CRT_FILE="$HOME/.nextcloud/certificates/proofing_gallery.crt" \
 make verify-signed-package
 ```
 
-Signing runs in an isolated Nextcloud 34/SQLite Compose project, writes only the
+Signing runs in an isolated Nextcloud 35/SQLite Compose project, writes only the
 generated `signature.json` back to the staging directory, verifies the installed
 package, and removes its own containers and volumes. The resulting archive must
 contain one `proofing_gallery` directory, remain below 20 MiB, and contain both
@@ -156,7 +156,7 @@ contain one `proofing_gallery` directory, remain below 20 MiB, and contain both
    compatibility matrix, latest-stable upgrades on all three databases with
    absent/disabled/enabled administrative rating choices, and recovery pass.
 5. The workflow builds the signed archive twice, checks reproducibility,
-   installs it on Nextcloud 34, creates its checksum, SBOM and attestation,
+   installs it on Nextcloud 35, creates its checksum, SBOM and attestation,
    publishes the GitHub release, then submits the same HTTPS asset to the App
    Store as a stable release.
 6. Verify the version, supported Nextcloud releases, metadata, screenshots, and

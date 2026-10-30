@@ -248,6 +248,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
+      NEXTCLOUD_IMAGE: nextcloud:${{ matrix.nextcloud || '35' }}-apache
       E2E_CROSS_BROWSER: ${{ matrix.suite == 'ui' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '1' || '0' }}
     strategy:
       fail-fast: false
@@ -256,6 +257,12 @@ jobs:
         include:
           - suite: ui
             specs: tests/e2e/collection.spec.ts tests/e2e/event.spec.ts tests/e2e/gallery-counts.spec.ts tests/e2e/gallery-cover.spec.ts tests/e2e/gallery.spec.ts tests/e2e/owner-studio.spec.ts tests/e2e/review-viewer.spec.ts tests/e2e/sorting.spec.ts
+          - suite: compatibility-33
+            nextcloud: '33'
+            specs: tests/e2e/ecosystem.spec.ts tests/e2e/gallery.spec.ts tests/e2e/review-viewer.spec.ts
+          - suite: compatibility-34
+            nextcloud: '34'
+            specs: tests/e2e/ecosystem.spec.ts tests/e2e/gallery.spec.ts tests/e2e/review-viewer.spec.ts
           - suite: api
             specs: tests/e2e/ecosystem.spec.ts tests/e2e/regression.spec.ts tests/e2e/security.spec.ts tests/e2e/review-identity.spec.ts tests/e2e/share-recovery.spec.ts tests/e2e/source-rebinding.spec.ts tests/e2e/kiosk.spec.ts tests/e2e/feedback-permissions.spec.ts tests/e2e/link-inheritance.spec.ts tests/e2e/mutation-recovery.spec.ts
     steps:
@@ -314,7 +321,7 @@ jobs:
       fail-fast: false
       max-parallel: 4
       matrix:
-        nextcloud: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '["31","32","33","34"]' || '["31","34"]') }}
+        nextcloud: ${{ fromJSON((github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '["33","34","35"]' || '["33","35"]') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -327,7 +334,7 @@ jobs:
           path: .
       - env:
           NEXTCLOUD_VERSIONS: ${{ matrix.nextcloud }}
-          DATABASES: sqlite
+          DATABASES: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'sqlite mariadb postgres' || 'sqlite' }}
         run: ./scripts/compatibility-matrix.sh
 
   package:
@@ -397,10 +404,28 @@ jobs:
           UPGRADE_FROM_ARCHIVE_URL: ${{ needs.package.outputs.use_release_baseline == 'true' && 'https://github.com/soerennb/nextcloud-proofing_gallery/releases/download/v0.7.0/proofing_gallery.tar.gz' || '' }}
           UPGRADE_FROM_CHECKSUMS_URL: ${{ needs.package.outputs.use_release_baseline == 'true' && 'https://github.com/soerennb/nextcloud-proofing_gallery/releases/download/v0.7.0/SHA256SUMS' || '' }}
 
+  server-upgrade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [sqlite, mariadb, postgres]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-node
+      - run: npm run build
+      - run: ./scripts/test-server-upgrade.sh
+        env:
+          UPGRADE_DATABASE: ${{ matrix.database }}
+
   ci-gate:
     name: CI Gate
     if: always()
-    needs: [classify, workflow, docs, web, main_web_smoke, php, main_php_smoke, dependency-review, secret-scan, secret-history, codeql, e2e, compatibility, package, upgrade]
+    needs: [classify, workflow, docs, web, main_web_smoke, php, main_php_smoke, dependency-review, secret-scan, secret-history, codeql, e2e, compatibility, package, upgrade, server-upgrade]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -419,6 +444,7 @@ jobs:
           EXPECT_COMPATIBILITY: ${{ needs.classify.outputs.compatibility }}
           EXPECT_PACKAGE: ${{ needs.classify.outputs.upgrade }}
           EXPECT_UPGRADE: ${{ needs.classify.outputs.upgrade }}
+          EXPECT_SERVER_UPGRADE: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
           WORKFLOW_RESULT: ${{ needs.workflow.result }}
           DOCS_RESULT: ${{ needs.docs.result }}
           WEB_RESULT: ${{ needs.web.result }}
@@ -433,6 +459,7 @@ jobs:
           COMPATIBILITY_RESULT: ${{ needs.compatibility.result }}
           PACKAGE_RESULT: ${{ needs.package.result }}
           UPGRADE_RESULT: ${{ needs.upgrade.result }}
+          SERVER_UPGRADE_RESULT: ${{ needs.server-upgrade.result }}
         run: |
           set -euo pipefail
           for result in ${RESULTS}; do
@@ -469,4 +496,5 @@ jobs:
           require_success compatibility "${EXPECT_COMPATIBILITY}" "${COMPATIBILITY_RESULT}"
           require_success package "${EXPECT_PACKAGE}" "${PACKAGE_RESULT}"
           require_success upgrade "${EXPECT_UPGRADE}" "${UPGRADE_RESULT}"
+          require_success server-upgrade "${EXPECT_SERVER_UPGRADE}" "${SERVER_UPGRADE_RESULT}"
           echo "All selected CI checks passed."

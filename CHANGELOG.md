@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- support Nextcloud 33–35; Nextcloud 31/32 no longer receive app updates
+- use the modern Files integration throughout; new local instances use Nextcloud 35
+
 - update frontend libraries and browser test tools; fix security findings in
   markdown-it, follow-redirects, DOMPurify, and fast-uri
 - modernize the frontend toolchain with jsdom 30 and TypeScript 6
