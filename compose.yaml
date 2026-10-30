@@ -34,7 +34,7 @@ services:
       - "127.0.0.1:${MAILPIT_PORT:-8026}:8025"
 
   nextcloud:
-    image: ${NEXTCLOUD_IMAGE:-nextcloud:34-apache}
+    image: ${NEXTCLOUD_IMAGE:-nextcloud:35-apache}
     restart: unless-stopped
     depends_on:
       db:
@@ -61,7 +61,7 @@ services:
       - ./:/var/www/html/custom_apps/proofing_gallery
 
   cron:
-    image: ${NEXTCLOUD_IMAGE:-nextcloud:34-apache}
+    image: ${NEXTCLOUD_IMAGE:-nextcloud:35-apache}
     restart: unless-stopped
     entrypoint: /cron.sh
     depends_on:

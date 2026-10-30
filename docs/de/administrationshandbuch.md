@@ -6,11 +6,13 @@ Die Vorgaben für neue Galerien enthalten Dateiname, Aufnahmedatum, letztes Änd
 
 ## Voraussetzungen und Installation
 
-- Nextcloud 31–34
+- Nextcloud 33–35
 - PHP 8.2.35–8.6 mit den von Nextcloud benötigten Erweiterungen; GD wird für
   Wasserzeichen-Vorschauen und Kontaktbögen benötigt
 - SQLite, MariaDB/MySQL oder PostgreSQL
 - Nextcloud-Cron sowie ein Mailtransport für Einladungen oder E-Mail-Hinweise
+
+Nextcloud 35 benötigt mindestens PHP 8.3. Für Nextcloud 31/32 gibt es keine neuen App-Versionen. Aktualisiere Nextcloud schrittweise auf mindestens 33, bevor du die App aktualisierst.
 
 Prüfe `proofing_gallery.tar.gz` gegen `SHA256SUMS` und die GitHub-Artefakt-
 Attestierung. Entpacke das Archiv als `custom_apps/proofing_gallery` und führe aus:

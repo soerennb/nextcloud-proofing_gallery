@@ -104,7 +104,7 @@ After the sanitized history is public and all `main` workflows are green:
    changelog section all contain the same stable version.
 2. Confirm the release commit is on sanitized public `main`, then create and
    push an annotated tag such as `v0.5.0`. Never publish the internal tag object.
-3. Approve the protected `release` environment after the full 12-combination
+3. Approve the protected `release` environment after the full nine-combination
    compatibility matrix succeeds.
 4. Verify the GitHub release contains the tarball, checksum, SPDX SBOM, and
    artifact attestation. Download the release assets, run

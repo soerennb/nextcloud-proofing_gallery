@@ -162,9 +162,11 @@ changes. Suspected vulnerabilities must be reported privately as described in
 
 ## Compatibility
 
-The automated container matrix covers Nextcloud 31–34 with SQLite, MariaDB, and
+The automated container matrix covers Nextcloud 33–35 with SQLite, MariaDB, and
 PostgreSQL. PHP 8.2.35–8.6 is declared; CI runs the supported baseline and current
-PHP versions. Routine browser E2E coverage uses Chromium with Axe accessibility
+PHP versions. Nextcloud 35 requires PHP 8.3 or later; use only PHP versions
+supported by the installed server. The PHP 8.6 job is a forward compatibility
+check. Routine browser E2E coverage uses Chromium with Axe accessibility
 and desktop/mobile interaction and reachability checks. Weekly and explicit
 comprehensive runs also check the review viewer in Firefox and WebKit.
 

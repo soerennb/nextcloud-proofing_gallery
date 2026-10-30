@@ -6,12 +6,14 @@ New-gallery defaults include filename, capture date, last modified date and file
 
 ## Requirements and installation
 
-- Nextcloud 31–34
+- Nextcloud 33–35
 - PHP 8.2.35–8.6 and the extensions required by Nextcloud; GD is needed for
   watermarked previews and contact sheets
 - SQLite, MariaDB/MySQL, or PostgreSQL
 - Nextcloud cron, plus a configured mail transport when invitations or email
   notifications are enabled
+
+Nextcloud 35 requires PHP 8.3 or later. Nextcloud 31/32 no longer receive app updates. Upgrade the server one major version at a time to at least 33 before updating the app. Only PHP versions supported by the installed server are supported.
 
 Verify the downloaded `proofing_gallery.tar.gz` against `SHA256SUMS` and its
 GitHub artifact attestation. Extract it so the final directory is

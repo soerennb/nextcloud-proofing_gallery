@@ -32,10 +32,10 @@ configuration while it is only available as a prerelease.
 
 The app requires PHP 8.2.35 or newer, with Composer resolving against that exact
 minimum. PHPUnit 11 is the newest major compatible with PHP 8.2. Keep the OCP
-stubs on `dev-stable31` and DBAL on 3.x to continue checking the oldest supported
+stubs on `dev-stable33` and DBAL on 3.x to continue checking the oldest supported
 Nextcloud API. Refresh Roave advisories without ignoring its PHP conflicts.
 Installations with an older PHP version must upgrade PHP before updating the
-app; Nextcloud 31–34 remain supported.
+app; Nextcloud 33–35 remain supported.
 
 ## Guarded Braces development dependency
 
@@ -92,3 +92,10 @@ The remaining Elliptic low advisory is inherited through the Vite configuration'
 browser polyfills. Monitor a compatible upstream replacement without forced
 major overrides. Production dependencies must continue to pass the audit without
 findings. The development-only `pbkdf2` dependency is patched to 3.1.7.
+
+## Server support policy
+
+Support regularly maintained Nextcloud community releases. After upstream EOL,
+raise the minimum in the next feature release and announce it in the changelog.
+No separate legacy maintenance branch is planned. Review Nextcloud 33 support
+in February 2027. Existing published packages remain available.

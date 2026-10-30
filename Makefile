@@ -27,6 +27,10 @@ verify-signed-package:
 test-upgrade:
 	./scripts/test-upgrade.sh
 
+.PHONY: test-server-upgrade
+test-server-upgrade:
+	./scripts/test-server-upgrade.sh
+
 public-history-check:
 	./scripts/test-public-history-sanitizer.sh
 

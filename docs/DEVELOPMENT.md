@@ -3,7 +3,7 @@
 ## Setup
 
 Copy `.env.example`, install Node and Composer dependencies, then run
-`make dev-up`. Compose starts Nextcloud 34, MariaDB, Redis, cron, and Mailpit.
+`make dev-up`. Compose starts Nextcloud 35, MariaDB, Redis, cron, and Mailpit.
 The repository is mounted as `custom_apps/proofing_gallery`.
 
 Build assets after changing Vue or CSS:
@@ -173,8 +173,8 @@ E2E_SECURITY_PROTECTIONS=1 npm run test:e2e
 
 CI uses Chromium for pull requests and runs the additional review engines in
 the weekly and manually dispatched workflows. Ordinary compatibility checks
-cover Nextcloud 31 and 34 with SQLite; the weekly/manual checks cover 31–34.
-Release installation coverage remains 31–34 on SQLite, MariaDB and PostgreSQL,
+cover Nextcloud 33 and 35 with SQLite; the weekly/manual checks cover 33–35 on all three databases.
+Release installation coverage remains 33–35 on SQLite, MariaDB and PostgreSQL,
 and upgrade checks retain all three database families.
 
 ### Browser diagnosis
@@ -221,7 +221,7 @@ example, `NEXTCLOUD_VERSIONS=34 DATABASES=sqlite`.
 ### Nextcloud integration compatibility
 
 The optional ecosystem adapters must remain load-safe on every supported
-Nextcloud release. Run the compatibility harness across Nextcloud 31–34 before
+Nextcloud release. Run the compatibility harness across Nextcloud 33–35 before
 changing registration code, and cover the current server with Docker-backed
 tests for Files actions/sidebar, capabilities, OCS response envelopes, Search,
 Dashboard, Projects, Flow, and optional Context Chat registration. The
@@ -315,3 +315,24 @@ unsigned build. Once the official certificate is available, use
 Metadata changes must retain the public allowlist boundary, source-ETag binding,
 1 MiB sidecar limit, DTD/network rejection, and preservation of unknown XMP
 namespaces. Test both clean sidecar creation and merges with third-party fields.
+
+### Supported server versions
+
+Proofing Gallery supports Nextcloud 33–35. PHP 8.2.35 remains the app minimum;
+Nextcloud 35 itself requires PHP 8.3 or later. Use only PHP versions supported
+by the installed Nextcloud release; the PHP 8.6 unit job is a forward check,
+not a claim that every server supports it.
+
+New development instances use Nextcloud 35. Before starting an existing 34
+instance with the new defaults, set `NEXTCLOUD_IMAGE=nextcloud:34-apache` in
+its ignored `.env` (or `.env.studio` for Studio). Upgrade persistent servers
+separately with backups; never reset volumes to change server versions.
+
+Run `UPGRADE_DATABASE=sqlite ./scripts/test-server-upgrade.sh` to test a real
+34 → 35 server upgrade. The script owns and removes its isolated volumes.
+It preserves original files, galleries, public links and feedback. Existing
+`make test-upgrade` tests remain on 34 so released app baselines can install.
+
+PR compatibility checks cover 33/35 with SQLite; weekly/manual and release
+checks cover 33/34/35 with SQLite, MariaDB and PostgreSQL. Browser suites use
+35, with focused integration and gallery checks on 33/34.

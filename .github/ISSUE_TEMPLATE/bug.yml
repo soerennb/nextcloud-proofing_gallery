@@ -17,7 +17,7 @@ body:
     id: nextcloud-version
     attributes:
       label: Nextcloud and PHP versions
-      placeholder: Nextcloud 34.0.0, PHP 8.4
+      placeholder: Nextcloud 35.0.2, PHP 8.4
     validations:
       required: true
   - type: dropdown

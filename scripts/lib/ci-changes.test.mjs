@@ -76,3 +76,12 @@ test('validates dependency updates with their relevant application baseline', ()
 		integration: false, compatibility: false, upgrade: false, codeql: false, browser: true,
 	})
 })
+
+test('server upgrade harness changes require upgrade and application validation', () => {
+	for (const file of ['scripts/test-server-upgrade.sh', 'tests/smoke/ServerUpgrade.php']) {
+		const selected = classifyCiChanges([file])
+		assert.equal(selected.upgrade, true)
+		assert.equal(selected.web, true)
+		assert.equal(selected.php, true)
+	}
+})
