@@ -152,7 +152,7 @@ contain one `proofing_gallery` directory, remain below 20 MiB, and contain both
    changelog and run all release gates.
 3. Create the annotated tag from sanitized public `main` and push it to the
    public repository.
-4. Approve the protected environment only after validation, the 12-target
+4. Approve the protected environment only after validation, the nine-target
    compatibility matrix, latest-stable upgrades on all three databases with
    absent/disabled/enabled administrative rating choices, and recovery pass.
 5. The workflow builds the signed archive twice, checks reproducibility,
@@ -171,6 +171,10 @@ settings, standard public galleries, proofing controls, downloads, uploads,
 and event delivery. It exercises representative behavioral and visual
 equivalence classes rather than every possible boolean setting, with desktop
 and mobile checks for the public workflows.
+
+After seeding an isolated Studio and completing its background media counts,
+run `node scripts/capture-studio-screenshots.mjs --appstore` to capture only
+the six listing views. Receiving galleries do not need demo feedback mutations.
 
 Run `make studio-screenshots` to rebuild the complete local candidate matrix
 under `.local/screenshot-candidates/`. The reviewed App Store selection is

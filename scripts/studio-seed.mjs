@@ -341,7 +341,7 @@ for (const definition of definitions) {
 		await api(`/galleries/${gallery.id}/media/index`, { method: 'POST', body: '{}' })
 		const current = await api(`/galleries/${gallery.id}/media/cull?${media.map((item) => `fileIds[]=${item.fileId}`).join('&')}`)
 		const revisions = new Map(current.items.map((item) => [item.fileId, item.revision]))
-		await api(`/galleries/${gallery.id}/media/cull`, { method: 'PUT', body: JSON.stringify({ items: media.map((item, index) => ({ fileId: item.fileId, expectedRevision: revisions.get(item.fileId) ?? 0, rating: [5, 4, 2, 3, 0][index % 5], color: ['green', 'blue', 'red', 'yellow', 'none'][index % 5], pick: index % 5 === 2 ? 'reject' : index % 3 === 0 ? 'pick' : 'none' })) }) })
+		await api(`/galleries/${gallery.id}/media/cull/batch`, { method: 'POST', body: JSON.stringify({ items: media.map((item, index) => ({ fileId: item.fileId, expectedRevision: revisions.get(item.fileId) ?? 0, rating: [5, 4, 2, 3, 0][index % 5], color: ['green', 'blue', 'red', 'yellow', 'none'][index % 5], pick: index % 5 === 2 ? 'reject' : index % 3 === 0 ? 'pick' : 'none' })) }) })
 	}
 	if (definition.event) await api(`/galleries/${gallery.id}/media/index`, { method: 'POST', body: '{}' })
 	if (definition.publish && !gallery.shareToken) {

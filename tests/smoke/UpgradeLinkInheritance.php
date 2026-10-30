@@ -62,6 +62,12 @@ if ($mode === 'seed') {
 			'permissions_policy_mode' => in_array($case, ['permissions-only', 'custom', 'secondary', 'event'], true) || $unclear ? 'custom' : 'inherit',
 			'navigation_policy_mode' => in_array($case, ['navigation-only', 'custom', 'auto', 'secondary', 'event', 'multi'], true) || $unclear ? 'custom' : 'inherit'];
 	}
+	if (version_compare($config->getAppValue('proofing_gallery', 'installed_version', '0'), '0.12.0', '>=')) {
+		$q = $db->getQueryBuilder();
+		$rows = QueryResult::rows($q->select('token', 'policy', 'view_mode', 'group_depth', 'permissions_policy_mode', 'navigation_policy_mode')->from('proofing_public_links')->where($q->expr()->like('token', $q->createNamedParameter('upgrade-inheritance-%')))->executeQuery());
+		$expected = [];
+		foreach ($rows as $row) { $token = $row['token']; unset($row['token']); $row['group_depth'] = (int)$row['group_depth']; $expected[$token] = $row; }
+	}
 	$config->setAppValue('proofing_gallery', 'upgradeInheritanceFixtures', json_encode($expected, JSON_THROW_ON_ERROR));
 	echo 'Seeded ' . count($expected) . " independent inheritance fixtures with legacy automatic depths and invalid data.\n";
 	exit(0);

@@ -119,14 +119,14 @@ jobs:
         with:
           name: release-inputs
           path: release-inputs
-      - name: Upgrade the verified 0.11.0 package to the candidate
+      - name: Upgrade the verified 0.12.0 package to the candidate
         env:
           UPGRADE_DATABASE: ${{ matrix.database }}
           UPGRADE_FEEDBACK_ADMIN_CHOICE: ${{ matrix.ratings }}
           UPGRADE_NEXTCLOUD_VERSION: 34.0.3
           UPGRADE_CURRENT_ARCHIVE: ${{ github.workspace }}/release-inputs/proofing_gallery-unsigned.tar.gz
-          UPGRADE_FROM_ARCHIVE_URL: https://github.com/soerennb/nextcloud-proofing_gallery/releases/download/v0.11.0/proofing_gallery.tar.gz
-          UPGRADE_FROM_CHECKSUMS_URL: https://github.com/soerennb/nextcloud-proofing_gallery/releases/download/v0.11.0/SHA256SUMS
+          UPGRADE_FROM_ARCHIVE_URL: https://github.com/soerennb/nextcloud-proofing_gallery/releases/download/v0.12.0/proofing_gallery.tar.gz
+          UPGRADE_FROM_CHECKSUMS_URL: https://github.com/soerennb/nextcloud-proofing_gallery/releases/download/v0.12.0/SHA256SUMS
         run: make test-upgrade
 
   recovery:

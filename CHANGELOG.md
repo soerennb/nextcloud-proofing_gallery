@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.13.0 — 2026-10-30
+
 - support Nextcloud 33–35; Nextcloud 31/32 no longer receive app updates
 - use the modern Files integration throughout; new local instances use Nextcloud 35
 
@@ -36,6 +38,17 @@
   lightbox backdrop and hide file names there unless the gallery shows them
 - fix invisible like badges and solid button labels, missing Ionic spacing,
   clipped titles on phones and inconsistent selected-tile states
+
+Upgrade note: Nextcloud 33–35 is required; installations on 31/32 must upgrade
+Nextcloud before updating the app. PHP 8.2.35 remains the app minimum; Nextcloud
+35 requires PHP 8.3 or newer. Back up the database, configuration and data before
+upgrading. Existing gallery covers, link restrictions and feedback are preserved;
+media counts continue rebuilding through background jobs after the upgrade.
+
+- fix recursive media counts, cover previews and favicons; preserve custom heroes
+- harden access checks, private guest uploads, recoverable review delivery and
+  event publication; retain original media and scoped links during recovery
+- add bounded orphan metadata maintenance and reliably release database cursors
 
 ## 0.12.0 — 2026-10-09
 

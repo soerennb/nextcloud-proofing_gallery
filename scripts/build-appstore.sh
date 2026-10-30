@@ -50,6 +50,8 @@ for file in CHANGELOG.md LICENSE README.md composer.json; do
 	cp -a "${repo_dir}/${file}" "${stage_app}/${file}"
 done
 
+# Website screenshots are served by Pages, not by the installed app.
+rm -rf "${stage_app}/docs/public"
 rm -f "${stage_app}/appinfo/signature.json"
 if [[ "${mode}" == "--signed" ]]; then
 	"${repo_dir}/scripts/sign-appstore-stage.sh" "${stage_app}"
