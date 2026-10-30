@@ -64,10 +64,24 @@ if ($mode === 'seed') {
 			$insert('proofing_public_links', $link);
 		}
 	}
+	if (version_compare($config->getAppValue('proofing_gallery', 'installed_version', '0'), '0.12.0', '>=')) {
+		$q = $db->getQueryBuilder();
+		$rows = QueryResult::rows($q->select('token', 'policy', 'feedback_policy_mode')->from('proofing_public_links')->where($q->expr()->like('token', $q->createNamedParameter('upgrade-feedback-%')))->orderBy('token')->executeQuery());
+		$config->setAppValue('proofing_gallery', 'upgradeFeedbackModernSnapshot', json_encode(['document' => json_decode($config->getAppValue('proofing_gallery', 'instanceSettingsV2', '{}'), true, flags: JSON_THROW_ON_ERROR), 'fallback' => $config->getAppValue('proofing_gallery', 'guestRatingsDefault', ''), 'enabled' => $policies->feature('guestRatings'), 'links' => $rows], JSON_THROW_ON_ERROR));
+	}
 	echo "Seeded feedback inheritance, custom restrictions, supported event cases and administrative choice {$choice}.\n";
 	exit(0);
 }
 
+$modern = $config->getAppValue('proofing_gallery', 'upgradeFeedbackModernSnapshot', '');
+if ($modern !== '') {
+	$q = $db->getQueryBuilder();
+	$rows = QueryResult::rows($q->select('token', 'policy', 'feedback_policy_mode')->from('proofing_public_links')->where($q->expr()->like('token', $q->createNamedParameter('upgrade-feedback-%')))->orderBy('token')->executeQuery());
+	$actual = ['document' => json_decode($config->getAppValue('proofing_gallery', 'instanceSettingsV2', '{}'), true, flags: JSON_THROW_ON_ERROR), 'fallback' => $config->getAppValue('proofing_gallery', 'guestRatingsDefault', ''), 'enabled' => $policies->feature('guestRatings'), 'links' => $rows];
+	if (json_decode($modern, true, flags: JSON_THROW_ON_ERROR) !== $actual) throw new RuntimeException('Upgrade changed existing feedback policies or administrative rating choice');
+	echo "Current-release feedback defaults and link restrictions preserved.\n";
+	exit(0);
+}
 if ($config->getAppValue('proofing_gallery', 'guestRatingsDefault', '') !== '0') throw new RuntimeException('Upgrade did not preserve the old implicit rating default');
 if ($policies->feature('guestRatings') !== ($choice === 'true')) throw new RuntimeException('Upgrade changed the administrative rating choice');
 $document = json_decode($config->getAppValue('proofing_gallery', 'instanceSettingsV2', '{}'), true, flags: JSON_THROW_ON_ERROR);

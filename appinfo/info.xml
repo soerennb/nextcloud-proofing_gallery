@@ -102,7 +102,7 @@ Vorlagen und Nextcloud-Integrationen, sofern aktiviert. Administrations-,
 Galerie-, Link- und Event-Wellen-Regeln werden gemeinsam ausgewertet, sodass
 ein öffentlicher Link nur erlauben kann, was alle geltenden Regeln zulassen.
 	]]></description>
-	<version>0.12.0</version>
+	<version>0.13.0</version>
 	<licence>AGPL-3.0-or-later</licence>
 	<author>soerennb</author>
 	<namespace>ProofingGallery</namespace>
@@ -117,12 +117,12 @@ ein öffentlicher Link nur erlauben kann, was alle geltenden Regeln zulassen.
 		<admin>https://soerennb.github.io/nextcloud-proofing_gallery/en/admin-guide/</admin>
 		<developer>https://soerennb.github.io/nextcloud-proofing_gallery/en/development/</developer>
 	</documentation>
-	<screenshot small-thumbnail="https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/ff67a2164ad0-owner-dashboard-desktop-small.png">https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/ff67a2164ad0-owner-dashboard-desktop.png</screenshot>
+	<screenshot small-thumbnail="https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/a7cea91f0cd5-owner-dashboard-desktop-small.png">https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/a7cea91f0cd5-owner-dashboard-desktop.png</screenshot>
 	<screenshot small-thumbnail="https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/1d93c30370e6-public-showcase-desktop-small.png">https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/1d93c30370e6-public-showcase-desktop.png</screenshot>
-	<screenshot small-thumbnail="https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/19c05a97a25c-public-collaboration-desktop-small.png">https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/19c05a97a25c-public-collaboration-desktop.png</screenshot>
-	<screenshot small-thumbnail="https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/23095cc6e2b0-public-event-albums-desktop-small.png">https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/23095cc6e2b0-public-event-albums-desktop.png</screenshot>
-	<screenshot small-thumbnail="https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/68de47264858-event-release-desktop-small.png">https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/68de47264858-event-release-desktop.png</screenshot>
-	<screenshot small-thumbnail="https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/60ee3b6a7712-public-showcase-mobile-small.png">https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/60ee3b6a7712-public-showcase-mobile.png</screenshot>
+	<screenshot small-thumbnail="https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/db7b1fbee446-public-collaboration-desktop-small.png">https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/db7b1fbee446-public-collaboration-desktop.png</screenshot>
+	<screenshot small-thumbnail="https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/fb0e7a25af0f-public-event-albums-desktop-small.png">https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/fb0e7a25af0f-public-event-albums-desktop.png</screenshot>
+	<screenshot small-thumbnail="https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/18c7026aac0c-event-release-desktop-small.png">https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/18c7026aac0c-event-release-desktop.png</screenshot>
+	<screenshot small-thumbnail="https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/967b52d033fd-public-showcase-mobile-small.png">https://soerennb.github.io/nextcloud-proofing_gallery/screenshots/967b52d033fd-public-showcase-mobile.png</screenshot>
 	<dependencies>
 		<php min-version="8.2.35" max-version="8.6"/>
 		<database>sqlite</database>
