@@ -35,10 +35,11 @@
     "@nextcloud/vite-config": {
       "vite-plugin-dts": "5.1.2"
     },
-    "webdav": {
-      "minimatch": "10.2.6"
-    },
-    "braces": "$braces"
+    "braces": "$braces",
+    "minimatch": "11.0.4",
+    "js-beautify": {
+      "glob": "14.0.3"
+    }
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
