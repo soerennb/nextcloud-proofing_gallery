@@ -15,6 +15,23 @@ before preparing a sanitized export, so an export cannot undo a merged update.
 For frontend runtime updates, verify gallery and culling layouts on desktop and
 at 390 px, including image reachability, filmstrips and reduced motion.
 
+## November 2026 maintenance
+
+The follow-redirects 1.16.2 update resolves GHSA-mrwp-f3q8-3g9p.
+Minimatch 11.0.4 resolves GHSA-g3hv-75wg-m249 across runtime and development
+consumers. A global exact override replaces the earlier WebDAV-only 10.2.6
+override so nested copies cannot retain the vulnerable implementation.
+
+Minimatch 11 changes its parsed matcher representation and removes legacy APIs
+including `makeRe`. The scoped js-beautify override therefore selects Glob
+14.0.3, which supports Minimatch 11; forcing Glob 13 onto the new matcher is
+not supported. Node 24.22.1 satisfies both packages' engine requirements.
+Remove these overrides once the parent packages support the fixed versions.
+The dependency compatibility tests cover each consumer's resolution, bounded
+level-two preprocessing, WebDAV basename filtering, Glob file discovery and
+EditorConfig matching. Full frontend gates additionally exercise ESLint and
+the TypeScript tooling. No advisory exemptions are added.
+
 ## October 2026 maintenance
 
 The security refresh combines the markdown-it 15.0.3 and follow-redirects
