@@ -211,6 +211,48 @@ test('owner can move through the focused gallery workspace', async ({ browser, b
 	await context.close()
 })
 
+test('upload feedback remains accessible with Dialogs 8 on desktop and mobile', async ({ page, request, baseURL }) => {
+	await login(page, baseURL)
+	await page.locator('.gallery-row').filter({ has: page.locator('strong', { hasText: /^E2E Gallery$/ }) }).locator('.gallery-row__main').click()
+	await page.getByRole('button', { name: 'Photos', exact: true }).click()
+	const upload = page.getByLabel('Choose files to upload')
+	const uploadedNames: string[] = []
+	try {
+		for (const width of [1280, 390]) {
+			await page.setViewportSize({ width, height: 844 })
+			const file = { name: `toast-${width}-${Date.now()}.png`, mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64') }
+			uploadedNames.push(file.name)
+			await upload.setInputFiles(file)
+			const success = page.getByRole('status').filter({ hasText: '1 files uploaded' }).last()
+			await expect(success).toBeVisible()
+			await expect(success).toHaveCSS('opacity', '1')
+			await page.screenshot({ path: `test-results/dialogs8-success-${width}.png` })
+			await success.getByRole('button', { name: 'Close', exact: true }).focus()
+			await page.keyboard.press('Enter')
+			await expect(success).toHaveCount(0)
+			await page.route('**/owner-upload-conflicts*', route => route.fulfill({ status: 500, contentType: 'application/json', body: '{}' }))
+			await upload.setInputFiles({ ...file, name: `failed-${file.name}` })
+			const failure = page.getByRole('alert').filter({ hasText: 'File conflicts could not be checked.' }).last()
+			await expect(failure).toBeVisible()
+			await expect(failure).toHaveCSS('opacity', '1')
+			await page.screenshot({ path: `test-results/dialogs8-error-${width}.png` })
+			const bounds = await failure.boundingBox()
+			expect(bounds).not.toBeNull()
+			expect(bounds!.x).toBeGreaterThanOrEqual(0)
+			expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width)
+			await failure.getByRole('button', { name: 'Close', exact: true }).focus()
+			await page.keyboard.press('Enter')
+			await expect(failure).toHaveCount(0)
+			await page.unroute('**/owner-upload-conflicts*')
+		}
+	} finally {
+		await page.unroute('**/owner-upload-conflicts*')
+		for (const name of uploadedNames) {
+			await request.delete(`${baseURL}/remote.php/dav/files/admin/ProofingGalleryE2E/${encodeURIComponent(name)}`, { headers: { Authorization: `Basic ${Buffer.from('admin:admin').toString('base64')}` } })
+		}
+	}
+})
+
 test('owner duplicate uploads open the native conflict dialog on desktop and mobile', async ({ browser, baseURL }) => {
 	const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
 	const page = await context.newPage()
@@ -237,7 +279,7 @@ test('owner duplicate uploads open the native conflict dialog on desktop and mob
 	await expect(dialog).toBeVisible()
 	expect(await dialog.evaluate(element => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(1)
 	await settleVisualState(page)
-	// @nextcloud/dialogs 7.5 renders the picker form with overflow:auto but
+	// @nextcloud/dialogs 8 still renders the picker form with overflow:auto but
 	// without a tabindex. Keep the dialog-wide audit while excluding this
 	// upstream component limitation from the app's accessibility assertion.
 	const accessibility = await new AxeBuilder({ page }).include('[role="dialog"]').disableRules(['color-contrast', 'scrollable-region-focusable']).analyze()
@@ -1061,4 +1103,44 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 	await expect(page.getByRole('navigation', { name: 'Photo filmstrip' })
 		.getByRole('button', { name: `Open ${lastName}` })).toHaveAttribute('aria-current', 'true')
 	await context.close()
+})
+
+test('native upload picker applies rename, replacement and skip decisions', async ({ page, request, baseURL }) => {
+	const headers = { Authorization: `Basic ${Buffer.from('admin:admin').toString('base64')}`, 'OCS-APIRequest': 'true' }
+	const dav = `${baseURL}/remote.php/dav/files/admin/Dialogs8-${Date.now()}`
+	const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+	let galleryId: number | undefined
+	try {
+		expect((await request.fetch(dav, { method: 'MKCOL', headers })).ok()).toBeTruthy()
+		for (const name of ['first.png', 'second.png']) expect((await request.put(`${dav}/${name}`, { headers: { ...headers, 'Content-Type': 'image/png' }, data: png })).ok()).toBeTruthy()
+		const properties = await request.fetch(dav, { method: 'PROPFIND', headers: { ...headers, Depth: '0' }, data: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/></d:prop></d:propfind>' })
+		const folderId = Number((await properties.text()).match(/<(?:oc:)?fileid>(\d+)<\/(?:oc:)?fileid>/)?.[1])
+		const created = await request.post(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries?format=json`, { headers, data: { folderId, title: 'E2E Dialogs 8 conflicts' } })
+		expect(created.ok()).toBeTruthy()
+		galleryId = (await created.json() as { id: number }).id
+		await login(page, baseURL)
+		await page.goto(`${baseURL}/apps/proofing_gallery/#gallery/${galleryId}/content`)
+		await page.getByRole('button', { name: 'Photos', exact: true }).click()
+		const upload = page.getByLabel('Choose files to upload')
+		const first = { name: 'first.png', mimeType: 'image/png', buffer: png }
+		for (const [button, strategy] of [['Keep both', 'rename'], ['Replace', 'overwrite']]) {
+			await upload.setInputFiles(first)
+			const dialog = page.getByRole('dialog', { name: 'Select file to keep' })
+			await expect(dialog).toBeVisible()
+			const prepared = page.waitForRequest(req => req.method() === 'POST' && req.url().includes('/owner-uploads'))
+			await dialog.getByRole('button', { name: button, exact: true }).click()
+			expect((await prepared).postDataJSON().uploads[0].conflict).toBe(strategy)
+			await expectSuccessToast(page, '1 files uploaded')
+			await page.getByRole('status').filter({ hasText: '1 files uploaded' }).last().getByRole('button', { name: 'Close', exact: true }).click()
+		}
+		await upload.setInputFiles([first, { ...first, name: 'second.png' }])
+		const dialog = page.getByRole('dialog', { name: 'Select files to keep' })
+		await expect(dialog).toBeVisible()
+		await dialog.getByRole('button', { name: 'Skip 2 files', exact: true }).click()
+		await expect(dialog).toHaveCount(0)
+		await expect(page.getByRole('status').filter({ hasText: '2 files skipped.' }).last()).toBeVisible()
+	} finally {
+		if (galleryId) await request.delete(`${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries/${galleryId}?format=json`, { headers })
+		await request.delete(dav, { headers })
+	}
 })

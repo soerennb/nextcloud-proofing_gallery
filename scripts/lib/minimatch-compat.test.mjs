@@ -13,7 +13,7 @@ const consumers = ['webdav', 'glob', 'editorconfig', 'eslint', '@eslint/config-a
 test('each legacy consumer resolves the reviewed minimatch implementation', () => {
 	for (const consumer of consumers) {
 		const fromConsumer = createRequire(require.resolve(consumer))
-		assert.equal(fromConsumer('minimatch/package.json').version, '11.0.4', consumer)
+		assert.equal(fromConsumer('minimatch/package.json').version, '11.0.5', consumer)
 		const { Minimatch } = fromConsumer('minimatch')
 		assert.equal(new Minimatch('**/*.{jpg,png}', { dot: true }).match('album/.hidden/photo.jpg'), true, consumer)
 		assert.equal(new Minimatch('**/*.jpg').match('album/photo.png'), false, consumer)
@@ -24,8 +24,7 @@ test('optimization level 2 bounds amplification and retains ordinary matches', (
 	const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
 		import assert from 'node:assert/strict'
 		import { Minimatch } from 'minimatch'
-		const mm = new Minimatch(Array(30).fill('**/../a/b').join('/'), { optimizationLevel: 2, braceExpandMax: 64 })
-		assert.equal(mm.set.length, 64)
+		assert.throws(() => new Minimatch(Array(30).fill('**/../a/b').join('/'), { optimizationLevel: 2, braceExpandMax: 64 }), /too many patterns/)
 		assert.equal(new Minimatch('**/../a/b/**/../c/d', { optimizationLevel: 2 }).match('x/a/b/y/c/d'), true)
 	`], { timeout: 5000, encoding: 'utf8' })
 	assert.ifError(result.error)

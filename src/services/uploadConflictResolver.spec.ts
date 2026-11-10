@@ -55,6 +55,14 @@ describe('uploadConflictResolver', () => {
 		expect(result?.get(skip)).toEqual({ conflict: 'skip' })
 	})
 
+	it('cancelling the native picker cancels the complete upload selection', async () => {
+		const file = new File(['new'], 'proof.jpg', { type: 'image/jpeg' })
+		vi.mocked(fetchOwnerUploadConflicts).mockResolvedValue({ 'proof.jpg': existing('proof.jpg', 1) })
+		vi.mocked(openConflictPicker).mockResolvedValue(null)
+
+		expect(await resolveOwnerUploadSelection(gallery, '', [file])).toBeNull()
+	})
+
 	it('never offers replacement when the conflicting node is a folder', async () => {
 		const file = new File(['new'], 'proofs', { type: 'image/jpeg' })
 		vi.mocked(fetchOwnerUploadConflicts).mockResolvedValue({ proofs: existing('proofs', 2, true) })

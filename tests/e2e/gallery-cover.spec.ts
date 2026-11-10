@@ -63,7 +63,7 @@ test('nested card covers can be picked after page 60, reset and saved with confl
 		await login(page)
 		const card = page.locator('.gallery-row').filter({ hasText: gallery.title })
 		await expect(card.locator('img')).toBeVisible()
-		expect(await card.locator('img').evaluate(img => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
+		await expect.poll(() => card.locator('img').evaluate(img => (img as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
 		for (const width of [1440, 390]) {
 			await page.setViewportSize({ width, height: 900 })
 			await card.getByRole('button', { name: `Actions for ${gallery.title}`, exact: true }).click()
