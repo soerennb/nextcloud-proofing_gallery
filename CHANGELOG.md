@@ -2,8 +2,19 @@
 
 ## Unreleased
 
-- require PHP 8.2.36 or newer. Installations on PHP 8.2.35 must upgrade PHP
-  before updating the app.
+## 0.13.1 — 2026-11-25
+
+Upgrade note: installations on PHP 8.2.35 must upgrade to PHP 8.2.36 or newer
+before updating the app. Nextcloud 33–35 remain supported.
+
+- improve photo selection in shared galleries with stable selection controls,
+  visible keyboard focus, and selection outlines in high-contrast mode
+- keep the final grid row consistent for equal-format photos and preserve the
+  target size for mixed formats; improve foreground contrast on gallery accents
+- update runtime and development dependencies, including security fixes for
+  follow-redirects and minimatch
+- integrate Nextcloud Dialogs 8 and verify upload feedback and file conflict
+  handling on desktop and mobile
 
 ## 0.13.0 — 2026-10-30
 

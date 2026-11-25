@@ -7,10 +7,12 @@ require '/var/www/html/lib/base.php';
 set_exception_handler(static function (Throwable $error): void { fwrite(STDERR, $error->getMessage() . "\n"); exit(1); });
 
 use OCA\ProofingGallery\Db\QueryResult;
+use OCA\ProofingGallery\Migration\Version000145Date20261010;
 
 $db = \OCP\Server::get(\OCP\IDBConnection::class);
 $config = \OCP\Server::get(\OCP\IConfig::class);
 if (($argv[1] ?? 'verify') === 'seed') {
+	$baselineHasArtwork = class_exists(Version000145Date20261010::class);
 	$q = $db->getQueryBuilder();
 	$gallery = QueryResult::rows($q->select('*')->from('proofing_galleries')->where($q->expr()->eq('slug', $q->createNamedParameter('upgrade-existing')))->executeQuery())[0];
 	unset($gallery['id']);
@@ -18,12 +20,19 @@ if (($argv[1] ?? 'verify') === 'seed') {
 		$gallery['slug'] = 'upgrade-artwork-' . $name;
 		$gallery['share_token'] = null;
 		$gallery['status'] = 'draft';
-		$gallery['settings'] = json_encode(['schemaVersion' => 13, 'presentation' => $presentation], JSON_THROW_ON_ERROR);
+		if ($baselineHasArtwork) {
+			$presentation['coverFileId'] = $presentation['heroFileId'];
+			$presentation['heroSource'] = $name === 'hero' ? 'custom' : 'cover';
+		}
+		$gallery['settings'] = json_encode(['schemaVersion' => $baselineHasArtwork ? 14 : 13, 'presentation' => $presentation], JSON_THROW_ON_ERROR);
 		$q = $db->getQueryBuilder();
 		$q->insert('proofing_galleries')->values(array_map(static fn ($value) => $q->createNamedParameter($value), $gallery))->executeStatement();
 	}
-	$config->setAppValue('proofing_gallery', 'galleryDefaults', json_encode(['presentation' => ['heroFileId' => 42]], JSON_THROW_ON_ERROR));
-	echo "Seeded legacy gallery artwork.\n";
+	$defaults = $baselineHasArtwork
+		? ['coverFileId' => null, 'heroFileId' => null, 'heroSource' => 'cover']
+		: ['heroFileId' => 42];
+	$config->setAppValue('proofing_gallery', 'galleryDefaults', json_encode(['presentation' => $defaults], JSON_THROW_ON_ERROR));
+	echo "Seeded gallery artwork for the installed baseline.\n";
 	exit(0);
 }
 $q = $db->getQueryBuilder();
