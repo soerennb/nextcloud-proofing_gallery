@@ -11,7 +11,9 @@ import 'photoswipe/style.css'
 import { usePublicLightboxComments } from '../composables/usePublicLightboxComments.ts'
 import { useLightboxFeedbackModal } from '../composables/useLightboxFeedbackModal.ts'
 import { publicLightboxSlide } from '../domain/publicLightboxSlide.ts'
+import { handlePublicLightboxShortcut } from '../domain/publicLightboxShortcuts.ts'
 import { usePublicLightboxChrome } from '../composables/usePublicLightboxChrome.ts'
+import { usePublicLightboxLayout } from '../composables/usePublicLightboxLayout.ts'
 import { usePublicLightboxPlayback } from '../composables/usePublicLightboxPlayback.ts'
 import { usePublicLightboxLiveMedia } from '../composables/usePublicLightboxLiveMedia.ts'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -61,27 +63,36 @@ const activeGuestRating = computed(() => props.collaboration?.ratings?.find(valu
 
 const shell = ref<HTMLElement | null>(null), feedbackOpen = ref(false), metadataOpen = ref(props.previewScene === 'metadata'), shortcutsOpen = ref(false), actionMenuOpen = ref(false)
 const touchHint = ref(false)
+const overlayOpen = computed(() => actionMenuOpen.value || feedbackOpen.value || metadataOpen.value || shortcutsOpen.value)
 const filmstripSessionKey = `proofing-gallery-filmstrip:${window.location.pathname}`
 const guestFilmstripHidden = ref(!props.previewScene && readBrowserStorage('session', filmstripSessionKey) === 'hidden')
-const viewportWidth = ref(window.innerWidth), viewportHeight = ref(window.visualViewport?.height ?? window.innerHeight)
-const viewportTop = ref(window.visualViewport?.offsetTop ?? 0), viewportBottom = ref(0)
+const { controls, compactLayout, viewportWidth, viewportHeight, viewportTop, viewportBottom, observe, updateCompactPadding, compactPadding, fitImageSlide, trapFocus }
+	= usePublicLightboxLayout(shell, () => annotations.updateAnchor(), () => pswp?.updateSize(true))
 const feedbackTab = ref<'comments' | 'pins'>('comments')
 const guestExportFields = ref(['filename', 'rating', 'pick'])
 const reduceMotion = useReducedMotion()
 const motionPreset = computed(() => reduceMotion.value ? 'off' : props.settings.presentation?.motionPreset ?? 'expressive')
 const configuredFilmstripPlacement = computed(() => resolvedFilmstripPlacement(props.settings.presentation?.lightboxFilmstripPlacement ?? 'auto', viewportWidth.value))
 const filmstripAllowed = computed(() => props.mediaItems.length > 1 && configuredFilmstripPlacement.value !== 'hidden')
-const filmstripPlacement = computed<'side' | 'bottom' | 'hidden'>(() => guestFilmstripHidden.value
-	? 'hidden'
-	: configuredFilmstripPlacement.value)
+const filmstripPlacement = computed(() => {
+	if (!filmstripAllowed.value || (!compactLayout.value && guestFilmstripHidden.value)) return 'hidden'
+	return compactLayout.value ? 'bottom' : configuredFilmstripPlacement.value
+})
 const autoHideChrome = computed(() => shouldAutoHideLightboxChrome(
 	props.settings.mode,
 	props.settings.presentation?.lightboxChromeBehavior ?? 'autoHide',
 ))
-const chromeAutoHideDelay = computed(() => viewportWidth.value <= 760 ? 4500 : 2200)
-const { chromeVisible, wakeChrome, toggleChrome } = usePublicLightboxChrome({ autoHide: autoHideChrome, delay: chromeAutoHideDelay, blocked: () => feedbackOpen.value || metadataOpen.value || shortcutsOpen.value })
-const actionSheetClass = computed(() => ['proofing-public-overlay', 'lightbox-action-sheet'])
+const { chromeHidden, wakeChrome, toggleChrome, showChrome, setZoomFocus } = usePublicLightboxChrome({
+	autoHide: autoHideChrome, compact: compactLayout,
+	delay: computed(() => compactLayout.value ? 4500 : 2200),
+	blocked: () => overlayOpen.value
+		|| !!shell.value?.querySelector('.lightbox-bar :focus-visible, .lightbox-controls :focus-visible'),
+})
 const hasPublicMetadata = computed(() => hasReadyPublicMetadata(activeItem.value?.metadata))
+const navigationButtons = computed(() => [
+	{ position: 'previous', text: t('proofing_gallery', 'Previous photo'), icon: chevronBackOutline, disabled: !canStepPrevious.value, handler: () => step(-1) },
+	{ position: 'next', text: t('proofing_gallery', 'Next photo'), icon: chevronForwardOutline, disabled: !canStepNext.value, handler: () => step(1) },
+])
 const actionSheetButtons = computed(() => [
 	...(canDownloadIndividual.value
 		? [{
@@ -90,7 +101,7 @@ const actionSheetButtons = computed(() => [
 				handler: downloadActive,
 			}]
 		: []),
-	...(filmstripAllowed.value
+	...(!compactLayout.value && filmstripAllowed.value
 		? [{
 				text: guestFilmstripHidden.value ? t('proofing_gallery', 'Show thumbnails') : t('proofing_gallery', 'Hide thumbnails'),
 				icon: gridOutline,
@@ -102,16 +113,20 @@ const actionSheetButtons = computed(() => [
 		icon: slideshow.value ? pauseOutline : playOutline,
 		handler: () => setSlideshow(!slideshow.value),
 	},
-	{
-		text: fullscreen.value ? t('proofing_gallery', 'Exit full screen') : t('proofing_gallery', 'Full screen'),
-		icon: fullscreen.value ? contractOutline : expandOutline,
-		handler: toggleFullscreen,
-	},
-	{
-		text: t('proofing_gallery', 'Keyboard shortcuts'),
-		icon: helpCircleOutline,
-		handler: () => { shortcutsOpen.value = true },
-	},
+	...(document.fullscreenEnabled
+		? [{
+				text: fullscreen.value ? t('proofing_gallery', 'Exit full screen') : t('proofing_gallery', 'Full screen'),
+				icon: fullscreen.value ? contractOutline : expandOutline,
+				handler: toggleFullscreen,
+			}]
+		: []),
+	...(!compactLayout.value
+		? [{
+				text: t('proofing_gallery', 'Keyboard shortcuts'),
+				icon: helpCircleOutline,
+				handler: () => { shortcutsOpen.value = true },
+			}]
+		: []),
 	{
 		text: t('proofing_gallery', 'Cancel'),
 		role: 'cancel',
@@ -121,13 +136,14 @@ const actionSheetButtons = computed(() => [
 let pswp: PhotoSwipe | null = null
 const { loop, canStepPrevious, canStepNext, step, startTouch, endTouch, waitingForPhoto, retryDirection } = usePublicLightboxNavigation({
 	items: () => props.mediaItems, paging: () => props.paging, activeIndex, viewer: () => pswp,
+	isZoomed: () => (zoomSurface?.markerScale() ?? 1) < 1,
 })
 const displayPosition = computed(() => activeIndex.value + (props.paging?.offset ?? 0) + 1)
 const displayCount = computed(() => props.paging && (props.paging.before || props.paging.after) ? props.paging.total : props.mediaItems.length)
 const { slideshow, slideshowSuspended, slideshowCycle, slideshowDuration, fullscreen, scheduleSlideshow, setSlideshow, toggleFullscreen } = usePublicLightboxPlayback({
 	shell, preview: () => !!props.previewScene, initialSlideshow: props.previewScene === 'slideshow',
 	interval: () => props.settings.presentation.slideshowInterval,
-	busy: () => actionMenuOpen.value || feedbackOpen.value || metadataOpen.value || shortcutsOpen.value,
+	busy: () => overlayOpen.value,
 	canNext: () => canStepNext.value, next: async () => { await step(1); scheduleSlideshow() },
 })
 const mediaUpdates = usePublicLightboxLiveMedia({
@@ -158,7 +174,7 @@ const feedbackModal = useLightboxFeedbackModal({ open: feedbackOpen, keyboardPos
 zoomSurface = usePublicLightboxZoomSurface(() => pswp, () => {
 	annotations.syncMarkerScale()
 	annotations.scheduleGeometry(false)
-}, () => annotations.syncHost())
+}, () => annotations.syncHost(), setZoomFocus)
 const {
 	host: annotationHost,
 	imageBounds: annotationImageBounds,
@@ -204,6 +220,9 @@ function openFeedback() { showAllFeedback(); feedbackOpen.value = true; metadata
 
 function bindPhotoSwipeEvents() {
 	if (!pswp) return
+	pswp.on('beforeResize', updateCompactPadding)
+	// The Vue dialog owns Tab focus, including the first Tab after opening.
+	pswp.on('keydown', event => { if (event.originalEvent.key === 'Tab') event.preventDefault() })
 	pswp.on('change', () => {
 		if (!pswp || mediaUpdates.syncing) return
 		activeIndex.value = pswp.currIndex
@@ -213,11 +232,11 @@ function bindPhotoSwipeEvents() {
 		annotations.cancel(false)
 		selectedCommentId.value = null
 		if (slideshow.value) scheduleSlideshow()
-		wakeChrome()
+		if (!chromeHidden.value) wakeChrome()
 		nextTick(() => { zoomSurface?.mount(); annotations.syncHost() })
 	})
 	pswp.on('pointerMove', ({ originalEvent }) => {
-		if (originalEvent.pointerType === 'mouse' || originalEvent.pointerType === 'pen') wakeChrome()
+		if (!chromeHidden.value && (originalEvent.pointerType === 'mouse' || originalEvent.pointerType === 'pen')) wakeChrome()
 	})
 	pswp.on('pointerDown', ({ originalEvent }) => startTouch(originalEvent))
 	pswp.on('pointerUp', ({ originalEvent }) => {
@@ -240,6 +259,7 @@ function bindPhotoSwipeEvents() {
 			if (props.settings.mode === 'presentation') toggleChrome()
 		}
 	})
+	pswp.on('slideLoad', ({ slide }) => fitImageSlide(slide))
 	pswp.on('afterSetContent', ({ slide }) => {
 		if (slide === pswp?.currSlide) nextTick(() => { zoomSurface?.mount(); annotations.syncHost() })
 	})
@@ -269,13 +289,10 @@ function bindPhotoSwipeEvents() {
 }
 
 onMounted(async () => {
-	window.visualViewport?.addEventListener('resize', updateViewport)
-	window.visualViewport?.addEventListener('scroll', updateViewport)
 	previouslyFocused = document.activeElement as HTMLElement | null
 	previousBodyOverflow = document.body.style.overflow
 	document.body.style.overflow = 'hidden'
 	window.addEventListener('keydown', onKeydown, true)
-	window.addEventListener('resize', updateViewport, { passive: true })
 
 	const { default: PhotoSwipeConstructor } = await import('photoswipe')
 	if (unmounting || !shell.value) return
@@ -307,15 +324,18 @@ onMounted(async () => {
 		counter: false,
 		arrowPrev: false,
 		arrowNext: false,
-		paddingFn: () => ({
-			top: 64,
-			bottom: window.innerWidth <= 760 ? (props.mediaItems.length > 1 && filmstripPlacement.value === 'bottom' ? 154 : 70) : props.mediaItems.length > 1 && filmstripPlacement.value === 'bottom' ? 108 : 18,
-			left: window.innerWidth <= 640 ? 8 : 72,
-			right: window.innerWidth > 760 && metadataOpen.value
-				? 392
-				: filmstripPlacement.value === 'side' ? 104 : window.innerWidth <= 640 ? 8 : 72,
-		}),
+		paddingFn: () => compactLayout.value
+			? compactPadding()
+			: {
+					top: 64,
+					bottom: filmstripPlacement.value === 'bottom' ? 108 : 18,
+					left: window.innerWidth <= 640 ? 8 : 72,
+					right: window.innerWidth > 760 && metadataOpen.value
+						? 392
+						: filmstripPlacement.value === 'side' ? 104 : window.innerWidth <= 640 ? 8 : 72,
+				},
 	})
+	observe()
 	bindPhotoSwipeEvents()
 	pswp.init()
 	wakeChrome()
@@ -323,10 +343,8 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-	window.visualViewport?.removeEventListener('resize', updateViewport)
-	window.visualViewport?.removeEventListener('scroll', updateViewport)
 	unmounting = true
-	window.removeEventListener('keydown', onKeydown, true); window.removeEventListener('resize', updateViewport)
+	window.removeEventListener('keydown', onKeydown, true)
 	window.clearTimeout(hintTimer)
 	annotations.destroy(); unbindZoomSurface?.(); unbindZoomSurface = null; pswp?.destroy()
 	pswp = null
@@ -342,7 +360,7 @@ watch(selectedCommentId, () => { annotationReplyBody.value = '' })
 watch([actionMenuOpen, feedbackOpen, metadataOpen, shortcutsOpen], () => {
 	if (slideshow.value) scheduleSlideshow()
 })
-watch(filmstripPlacement, () => nextTick(() => pswp?.updateSize(true)))
+watch([filmstripPlacement, compactLayout], () => pswp?.updateSize(true), { flush: 'post' })
 watch(() => props.previewScene, scene => {
 	metadataOpen.value = scene === 'metadata'
 	setSlideshow(scene === 'slideshow')
@@ -354,19 +372,19 @@ function close() { setSlideshow(false); emit('close') }
 
 function downloadActive() { if (activeItem.value) window.location.assign(props.downloadUrl(activeItem.value)) }
 
-function updateViewport() {
-	viewportWidth.value = window.innerWidth
-	viewportHeight.value = window.visualViewport?.height ?? window.innerHeight
-	viewportTop.value = window.visualViewport?.offsetTop ?? 0
-	viewportBottom.value = Math.max(0, window.innerHeight - viewportHeight.value - viewportTop.value)
-	annotations.updateAnchor()
-}
-
 function toggleFilmstrip() {
 	guestFilmstripHidden.value = !guestFilmstripHidden.value
 	if (!props.previewScene) safelyStore(() => sessionStorage.setItem(filmstripSessionKey, guestFilmstripHidden.value ? 'hidden' : 'visible'))
 	wakeChrome()
-	nextTick(() => pswp?.updateSize(true))
+}
+
+function onViewerFocus(event: FocusEvent) {
+	if (event.target instanceof HTMLElement && event.target.closest('.lightbox-bar, .lightbox-controls')) wakeChrome()
+}
+
+function revealChrome() {
+	showChrome()
+	nextTick(() => shell.value?.focus())
 }
 
 function goTo(index: number) {
@@ -378,47 +396,32 @@ function zoom(direction: number) {
 }
 
 function onKeydown(event: KeyboardEvent) {
+	if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
 	if (annotations.handleKeyboard(event)) {
 		event.preventDefault()
 		return
 	}
+	if (event.key === 'Escape' && annotationDraft.value) {
+		event.preventDefault()
+		annotations.cancel()
+		return
+	}
+	// The active Ionic overlay owns its focus and keyboard events.
+	if (overlayOpen.value) return
 	if (event.key === 'Escape') {
 		event.preventDefault()
-		if (annotationDraft.value) annotations.cancel()
-		else if (shortcutsOpen.value) shortcutsOpen.value = false
-		else if (feedbackOpen.value) feedbackOpen.value = false
-		else close()
+		if (!event.repeat) close()
 		return
 	}
 	if (event.key === 'Tab') {
 		trapFocus(event)
 		return
 	}
-	const target = event.target as HTMLElement | null
-	if (target?.matches('input, textarea, select, [contenteditable="true"]')) return
-	if (event.key === 'ArrowLeft') step(-1)
-	if (event.key === 'ArrowRight') step(1)
-	if (event.key === '?' || (event.key === '/' && event.shiftKey)) shortcutsOpen.value = !shortcutsOpen.value
-	if (event.key === ' ') {
-		event.preventDefault()
-		setSlideshow(!slideshow.value)
-	}
-}
-
-function trapFocus(event: KeyboardEvent) {
-	const focusable = Array.from(shell.value?.querySelectorAll<HTMLElement>(
-		'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-	) ?? []).filter(element => element.offsetParent !== null)
-	if (focusable.length === 0) return
-	const first = focusable[0]
-	const last = focusable[focusable.length - 1]
-	if (event.shiftKey && document.activeElement === first) {
-		event.preventDefault()
-		last?.focus()
-	} else if (!event.shiftKey && document.activeElement === last) {
-		event.preventDefault()
-		first?.focus()
-	}
+	handlePublicLightboxShortcut(event, {
+		step,
+		toggleShortcuts: () => { shortcutsOpen.value = !shortcutsOpen.value },
+		toggleSlideshow: () => setSlideshow(!slideshow.value),
+	})
 }
 
 async function toggleLike() {
@@ -447,13 +450,15 @@ async function setGuestRating(rating: number, pick = activeGuestRating.value.pic
 	<div v-if="activeItem"
 		ref="shell"
 		class="lightbox-shell"
-		:class="{ 'lightbox-shell--chrome-hidden': autoHideChrome && !chromeVisible, 'lightbox-shell--filmstrip-side': filmstripPlacement === 'side', 'lightbox-shell--annotatable': canAnnotate }"
+		:class="{ 'lightbox-shell--compact': compactLayout, 'lightbox-shell--motion-off': motionPreset === 'off', 'lightbox-shell--chrome-hidden': chromeHidden, 'lightbox-shell--filmstrip-side': filmstripPlacement === 'side', 'lightbox-shell--annotatable': canAnnotate }"
 		role="dialog"
 		aria-modal="true"
 		:aria-label="activeItem.name"
 		tabindex="-1"
-		@focusin="wakeChrome">
+		@focusin="onViewerFocus">
 		<PublicLightboxHeader
+			:compact="compactLayout"
+			:inert="chromeHidden"
 			:name="settings.presentation.showFilenames ? activeItem.name : ''"
 			:position="displayPosition"
 			:count="displayCount"
@@ -480,35 +485,38 @@ async function setGuestRating(rating: number, pick = activeGuestRating.value.pic
 		</div>
 		<IonActionSheet
 			:is-open="actionMenuOpen"
-			:css-class="actionSheetClass"
+			:css-class="['proofing-public-overlay', 'lightbox-action-sheet']"
 			:header="activeItem.name"
 			:sub-header="`${displayPosition} / ${displayCount ?? '…'}`"
 			:buttons="actionSheetButtons"
 			@did-dismiss="actionMenuOpen = false" />
-		<IonButton v-if="autoHideChrome && !chromeVisible"
+		<button v-if="chromeHidden"
+			type="button"
 			class="lightbox-chrome-handle"
-			fill="solid"
-			:aria-label="t('proofing_gallery', 'Show photo controls')"
-			@click="wakeChrome">
-			<IonIcon slot="icon-only" :icon="chevronBackOutline" aria-hidden="true" />
-		</IonButton>
+			@click="revealChrome">
+			{{ t('proofing_gallery', 'Show photo controls') }}
+		</button>
 
-		<IonButton v-if="mediaItems.length > 1 || paging?.before"
-			class="lightbox-nav lightbox-nav--previous"
-			fill="solid"
-			:disabled="!canStepPrevious"
-			:aria-label="t('proofing_gallery', 'Previous')"
-			@click="step(-1)">
-			<IonIcon slot="icon-only" :icon="chevronBackOutline" aria-hidden="true" />
-		</IonButton>
-		<IonButton v-if="mediaItems.length > 1 || paging?.after"
-			class="lightbox-nav lightbox-nav--next"
-			fill="solid"
-			:disabled="!canStepNext"
-			:aria-label="t('proofing_gallery', 'Next')"
-			@click="step(1)">
-			<IonIcon slot="icon-only" :icon="chevronForwardOutline" aria-hidden="true" />
-		</IonButton>
+		<div ref="controls" class="lightbox-controls" :inert="compactLayout && chromeHidden">
+			<IonButton v-for="button in (mediaItems.length > 1 || paging?.before || paging?.after) ? navigationButtons : []"
+				:key="button.position"
+				class="lightbox-nav"
+				:class="`lightbox-nav--${button.position}`"
+				fill="solid"
+				:disabled="button.disabled"
+				:aria-label="button.text"
+				@click="button.handler">
+				<IonIcon slot="icon-only" :icon="button.icon" aria-hidden="true" />
+			</IonButton>
+			<PublicLightboxFilmstrip
+				v-if="filmstripPlacement !== 'hidden'"
+				:items="mediaItems"
+				:active-index="activeIndex"
+				:placement="filmstripPlacement"
+				:inert="chromeHidden"
+				:preview-url="previewUrl"
+				@select="goTo" />
+		</div>
 
 		<p v-if="waitingForPhoto" class="lightbox-touch-hint" role="status">
 			{{ t('proofing_gallery', 'Loading…') }}
@@ -520,18 +528,10 @@ async function setGuestRating(rating: number, pick = activeGuestRating.value.pic
 			{{ t('proofing_gallery', 'Try again') }}
 		</button>
 		<Transition v-else name="touch-hint">
-			<p v-if="touchHint" class="lightbox-touch-hint" role="status">
+			<p v-if="touchHint && !chromeHidden" class="lightbox-touch-hint" role="status">
 				{{ t('proofing_gallery', 'Swipe to browse · pinch to zoom · pull down to close') }}
 			</p>
 		</Transition>
-
-		<PublicLightboxFilmstrip
-			v-if="mediaItems.length > 1 && filmstripPlacement !== 'hidden'"
-			:items="mediaItems"
-			:active-index="activeIndex"
-			:placement="filmstripPlacement"
-			:preview-url="previewUrl"
-			@select="goTo" />
 
 		<PublicLightboxAnnotations
 			:host="annotationHost"

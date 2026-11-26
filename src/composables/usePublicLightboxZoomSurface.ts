@@ -30,8 +30,9 @@ const DRAG_THRESHOLD = 3
  * @param photoSwipe - Current PhotoSwipe viewer.
  * @param onUpdate - Synchronize markers after a transform.
  * @param onImageChange - Attach annotations when the active image changes.
+ * @param onZoomChange - Report whether the image is magnified after each zoom change.
  */
-export function usePublicLightboxZoomSurface(photoSwipe: () => PhotoSwipe | null, onUpdate: () => void, onImageChange: () => void = () => {}) {
+export function usePublicLightboxZoomSurface(photoSwipe: () => PhotoSwipe | null, onUpdate: () => void, onImageChange: () => void = () => {}, onZoomChange: (zoomed: boolean) => void = () => {}) {
 	let state: ZoomState = { scale: 1, panX: 0, panY: 0 }
 	let surface: HTMLElement | null = null
 	let image: HTMLImageElement | null = null
@@ -41,7 +42,9 @@ export function usePublicLightboxZoomSurface(photoSwipe: () => PhotoSwipe | null
 	function activeImage() { return image }
 	function markerScale() { return 1 / state.scale }
 	function reset() {
+		const wasZoomed = state.scale > MIN_SCALE
 		state = { scale: 1, panX: 0, panY: 0 }
+		if (wasZoomed) onZoomChange(false)
 		apply()
 	}
 	function clampPan() {
@@ -54,6 +57,7 @@ export function usePublicLightboxZoomSurface(photoSwipe: () => PhotoSwipe | null
 	function apply() {
 		if (!surface) return
 		clampPan()
+		surface.classList.toggle('proofing-zoom-surface--pannable', state.scale > MIN_SCALE)
 		surface.style.transform = `translate3d(${state.panX}px, ${state.panY}px, 0) scale(${state.scale})`
 		onUpdate()
 	}
@@ -67,7 +71,10 @@ export function usePublicLightboxZoomSurface(photoSwipe: () => PhotoSwipe | null
 			state.panX += localX * (state.scale - nextScale)
 			state.panY += localY * (state.scale - nextScale)
 		}
+		const zoomed = nextScale > MIN_SCALE
+		const zoomChanged = nextScale !== state.scale
 		state.scale = nextScale
+		if (zoomChanged) onZoomChange(zoomed)
 		apply()
 	}
 	function zoom(direction: number) {
@@ -86,6 +93,7 @@ export function usePublicLightboxZoomSurface(photoSwipe: () => PhotoSwipe | null
 		if (!nextImage || !nextSurface) {
 			surface = null
 			image = null
+			reset()
 			onImageChange()
 			return
 		}
@@ -118,6 +126,23 @@ export function usePublicLightboxZoomSurface(photoSwipe: () => PhotoSwipe | null
 	}
 	return { activeImage, markerScale, mount, refresh, zoom, zoomTo, bind, suppressTap: () => suppressTap() }
 }
+function getPinchGeometry(touches: Map<number, { x: number; y: number }>) {
+	const [first, second] = [...touches.values()]
+	return {
+		center: { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 },
+		distance: Math.hypot(second.x - first.x, second.y - first.y),
+	}
+}
+
+function isZoomTouchTarget(target: EventTarget | null): boolean {
+	return target instanceof Element && target.closest('.pswp__scroll-wrap') !== null
+		&& target.closest('button, a, input, textarea, select') === null
+}
+
+function releasePanCapture(image: HTMLImageElement | null, pointerId: number) {
+	if (image?.hasPointerCapture(pointerId)) image.releasePointerCapture(pointerId)
+}
+
 function bindZoomInput(
 	element: HTMLElement,
 	activeImage: () => HTMLImageElement | null,
@@ -127,17 +152,14 @@ function bindZoomInput(
 ) {
 	let drag: ActiveDrag | null = null
 	const touches = new Map<number, { x: number; y: number }>()
-	let pinchDistance = 0
-	let pinchScale = 1
+	let pinch: (ReturnType<typeof getPinchGeometry> & { scale: number }) | null = null
 	let suppressContextMenuUntil = 0
 	let suppressTapUntil = 0
-	let pinchCenter: { x: number; y: number } | null = null
-	const handlesGesture = () => touches.size > 1 || (touches.size > 0 && zoomState().scale > MIN_SCALE)
+	const handlesGesture = () => drag !== null || touches.size > 1
 	const suppressTap = () => Date.now() < suppressTapUntil || touches.size > 1 || drag?.moved === true
 	function reset() {
 		touches.clear()
-		pinchDistance = 0
-		pinchCenter = null
+		pinch = null
 		drag = null
 	}
 	function onWheel(event: WheelEvent) {
@@ -148,9 +170,14 @@ function bindZoomInput(
 			zoomTo(zoomState().scale * Math.exp(-event.deltaY * 0.0025), { x: event.clientX, y: event.clientY })
 		}
 	}
+	function startPinch() {
+		pinch = { ...getPinchGeometry(touches), scale: zoomState().scale }
+	}
 	function onPointerDown(event: PointerEvent) {
 		const image = activeImage()
-		if (event.pointerType === 'touch' && event.target === image) {
+		if (event.pointerType === 'touch') {
+			if (touches.size === 0) suppressTapUntil = 0
+			if (!image || !isZoomTouchTarget(event.target)) return
 			touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
 			if (touches.size === 1 && zoomState().scale > MIN_SCALE) {
 				drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, startPanX: zoomState().panX, startPanY: zoomState().panY, moved: false }
@@ -158,44 +185,45 @@ function bindZoomInput(
 			if (touches.size === 2) {
 				drag = null
 				suppressTapUntil = Date.now() + 750
-				const [first, second] = [...touches.values()]
-				pinchCenter = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 }
-				pinchDistance = Math.hypot(second.x - first.x, second.y - first.y)
-				pinchScale = zoomState().scale
-				image?.setPointerCapture?.(event.pointerId)
+				startPinch()
+				image.setPointerCapture?.(event.pointerId)
 			}
 			return
 		}
-		if (event.pointerType !== 'mouse' || event.button !== 2 || event.target !== image || zoomState().scale <= MIN_SCALE) return
+		if (event.pointerType !== 'mouse' || (event.button !== 0 && event.button !== 2)
+			|| event.target !== image || zoomState().scale <= MIN_SCALE) return
 		drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, startPanX: zoomState().panX, startPanY: zoomState().panY, moved: false }
 		image?.setPointerCapture?.(event.pointerId)
 	}
 	function finishDrag(event: PointerEvent) {
-		const image = activeImage()
-		if (touches.size > 1 || drag?.moved) suppressTapUntil = Date.now() + 750
-		touches.delete(event.pointerId)
-		if (touches.size < 2) { pinchDistance = 0; pinchCenter = null }
-		if (event.pointerType === 'touch' && touches.size === 1 && zoomState().scale > MIN_SCALE) {
+		const isTouch = event.pointerType === 'touch'
+		if (isTouch && !touches.delete(event.pointerId)) return
+		if (touches.size > 0 || drag?.moved) suppressTapUntil = Date.now() + 750
+		if (touches.size >= 2) {
+			if (touches.size === 2) startPinch()
+			return
+		}
+		pinch = null
+		if (isTouch && touches.size === 1 && zoomState().scale > MIN_SCALE) {
 			const [pointerId, point] = [...touches.entries()][0]
 			drag = { pointerId, startX: point.x, startY: point.y, startPanX: zoomState().panX, startPanY: zoomState().panY, moved: true }
 			return
 		}
-		if (!drag || drag.pointerId !== event.pointerId) return
-		if (drag.moved) suppressContextMenuUntil = Date.now() + 750
-		if (image?.hasPointerCapture?.(drag.pointerId)) image.releasePointerCapture?.(drag.pointerId)
+		if (drag?.pointerId !== event.pointerId) return
+		if (drag.moved && (isTouch || event.button === 2)) suppressContextMenuUntil = Date.now() + 750
+		releasePanCapture(activeImage(), drag.pointerId)
 		drag = null
 	}
 	function onPointerMove(event: PointerEvent) {
 		if (event.pointerType === 'touch' && touches.has(event.pointerId)) {
 			touches.set(event.pointerId, { x: event.clientX, y: event.clientY })
-			if (touches.size === 2 && pinchDistance > 0) {
-				const [first, second] = [...touches.values()]
+			if (touches.size === 2 && pinch && pinch.distance > 0) {
 				event.preventDefault()
-				const center = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 }
-				zoomTo(pinchScale * Math.hypot(second.x - first.x, second.y - first.y) / pinchDistance, pinchCenter ?? center)
-				zoomState().panX += center.x - (pinchCenter?.x ?? center.x)
-				zoomState().panY += center.y - (pinchCenter?.y ?? center.y)
-				pinchCenter = center
+				const { center, distance } = getPinchGeometry(touches)
+				zoomTo(pinch.scale * distance / pinch.distance, pinch.center)
+				zoomState().panX += center.x - pinch.center.x
+				zoomState().panY += center.y - pinch.center.y
+				pinch.center = center
 				apply()
 				return
 			}
@@ -211,9 +239,7 @@ function bindZoomInput(
 		zoomState().panY = drag.startPanY + deltaY
 		apply()
 	}
-	function onContextMenu(event: MouseEvent) {
-		if (Date.now() <= suppressContextMenuUntil) event.preventDefault()
-	}
+	function onContextMenu(event: MouseEvent) { if (Date.now() <= suppressContextMenuUntil) event.preventDefault() }
 	const unbind = listenForZoomInput(element, { wheel: onWheel, pointerdown: onPointerDown, pointermove: onPointerMove, pointerup: finishDrag, pointercancel: finishDrag, contextmenu: onContextMenu })
 	return { destroy: () => { unbind(); reset() }, reset, handlesGesture, suppressTap }
 }

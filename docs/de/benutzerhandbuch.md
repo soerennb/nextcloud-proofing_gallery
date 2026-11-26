@@ -247,9 +247,15 @@ Jeder Punkt hat ein eigenes Gespräch, auch bei identischen Bildkoordinaten.
 Antworten bleiben beim Löschen des ursprünglichen Kommentars erhalten; dessen
 Text wird durch einen Löschhinweis ersetzt.
 
+Wische im mobilen Viewer über das Foto oder tippe auf eine Miniatur. **Schließen**
+führt auch bei einem direkten Fotolink zur Galerieübersicht. In Präsentationsgalerien
+mit automatischem Ausblenden verschwinden Werkzeugleiste und Filmstreifen beim
+Hineinzoomen. Ein Tipp aufs Foto zeigt beide wieder an und erhält den Bildausschnitt.
+Beim Wischen zum nächsten Foto bleiben ausgeblendete Bedienelemente verborgen.
+
 Zoome über die Bedienelemente, das Mausrad oder eine Zwei-Finger-Geste. Am Desktop
-kannst du das vergrößerte Bild mit gedrückter rechter Maustaste verschieben.
-Ein Rechtsklick ohne Ziehen öffnet weiterhin das Browser-Kontextmenü. Punkte
+kannst du das vergrößerte Bild mit gedrückter linker oder rechter Maustaste
+verschieben. Ein Rechtsklick ohne Ziehen öffnet das Browser-Kontextmenü. Punkte
 bleiben beim Zoomen und Verschieben an derselben bildrelativen Position.
 Auf Touchscreens kannst du nach dem Zoomen mit einem Finger bis zu den
 Bildrändern verschieben. Dabei wird kein neuer Punkt gesetzt.

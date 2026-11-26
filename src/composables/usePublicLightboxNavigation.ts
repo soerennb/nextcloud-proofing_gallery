@@ -18,6 +18,7 @@ export interface PublicLightboxPaging {
 
 export function usePublicLightboxNavigation(options: {
 	items: () => MediaItem[]
+	isZoomed(): boolean
 	paging: () => PublicLightboxPaging | undefined
 	activeIndex: Ref<number>
 	viewer: () => PhotoSwipe | null
@@ -76,7 +77,7 @@ export function usePublicLightboxNavigation(options: {
 
 	let touch: { x: number; y: number; fileId: number | undefined } | null = null
 	function startTouch(event: PointerEvent) {
-		touch = event.pointerType === 'touch' && event.isPrimary && options.paging()
+		touch = event.pointerType === 'touch' && event.isPrimary && !options.isZoomed() && options.paging()
 			? { x: event.clientX, y: event.clientY, fileId: options.items()[activeIndex.value]?.id }
 			: null
 	}
@@ -84,7 +85,7 @@ export function usePublicLightboxNavigation(options: {
 		const start = touch
 		touch = null
 		const slide = options.viewer()?.currSlide
-		if (!start || !slide || !event.isPrimary || slide.currZoomLevel > slide.zoomLevels.initial * 1.01) return
+		if (!start || !slide || !event.isPrimary || options.isZoomed() || slide.currZoomLevel > slide.zoomLevels.initial * 1.01) return
 		const horizontal = event.clientX - start.x
 		const vertical = event.clientY - start.y
 		if (Math.abs(horizontal) < 48 || Math.abs(horizontal) <= Math.abs(vertical) * 1.5) return

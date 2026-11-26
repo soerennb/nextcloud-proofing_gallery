@@ -3,7 +3,7 @@ name: ${COMPOSE_PROJECT_NAME:-proofing-gallery}
 services:
   db:
     image: ${MARIADB_IMAGE:-mariadb:11.4}
-    restart: unless-stopped
+    restart: ${COMPOSE_RESTART_POLICY:-unless-stopped}
     command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
     environment:
       MARIADB_DATABASE: ${MYSQL_DATABASE:-nextcloud}
@@ -20,7 +20,7 @@ services:
 
   redis:
     image: ${REDIS_IMAGE:-redis:7.4-alpine}
-    restart: unless-stopped
+    restart: ${COMPOSE_RESTART_POLICY:-unless-stopped}
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -29,13 +29,13 @@ services:
 
   mailpit:
     image: ${MAILPIT_IMAGE:-axllent/mailpit:v1.30}
-    restart: unless-stopped
+    restart: ${COMPOSE_RESTART_POLICY:-unless-stopped}
     ports:
       - "127.0.0.1:${MAILPIT_PORT:-8026}:8025"
 
   nextcloud:
     image: ${NEXTCLOUD_IMAGE:-nextcloud:35-apache}
-    restart: unless-stopped
+    restart: ${COMPOSE_RESTART_POLICY:-unless-stopped}
     depends_on:
       db:
         condition: service_healthy
@@ -62,7 +62,7 @@ services:
 
   cron:
     image: ${NEXTCLOUD_IMAGE:-nextcloud:35-apache}
-    restart: unless-stopped
+    restart: ${COMPOSE_RESTART_POLICY:-unless-stopped}
     entrypoint: /cron.sh
     depends_on:
       - nextcloud

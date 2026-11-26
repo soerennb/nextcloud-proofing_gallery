@@ -941,6 +941,8 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 	await desktopPage.goto(`${baseURL}/s/${publish.gallery.shareToken}`)
 	await waitForGalleryImages(desktopPage)
 	await desktopPage.getByRole('button', { name: `Open ${firstName}` }).click()
+	const directPhotoUrl = new URL(desktopPage.url())
+	expect(directPhotoUrl.searchParams.has('photo')).toBe(true)
 	await expect(desktopPage.getByRole('button', { name: 'Previous' })).toBeVisible()
 	await expect(desktopPage.getByRole('button', { name: 'Next' })).toBeVisible()
 	const desktopNavigation = await desktopPage.evaluate(() => {
@@ -961,10 +963,41 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 	await desktopPage.getByRole('button', { name: 'Next' }).click()
 	await expect(desktopPage.getByRole('dialog', { name: secondName })).toBeVisible()
 	await desktopPage.getByRole('button', { name: 'Previous' }).click()
-	await expect(desktopPage.getByRole('dialog', { name: firstName })).toBeVisible()
+	const desktopViewer = desktopPage.getByRole('dialog', { name: firstName })
+	await expect(desktopViewer).toBeVisible()
+	await desktopViewer.locator('.pswp__item[aria-hidden="false"] img.proofing-zoom-image').evaluate(image => (image as HTMLImageElement).decode())
+	await desktopViewer.getByRole('button', { name: 'Zoom in', exact: true }).click()
+	const zoomedPhoto = desktopViewer.locator('.pswp__item[aria-hidden="false"] .proofing-zoom-surface--pannable img.pswp__img')
+	await expect(zoomedPhoto).toBeVisible()
+	const beforeMousePan = (await zoomedPhoto.boundingBox())!
+	const desktopPanX = beforeMousePan.x + beforeMousePan.width / 2
+	const desktopPanY = beforeMousePan.y + beforeMousePan.height / 2
+	await desktopPage.mouse.move(desktopPanX, desktopPanY)
+	await desktopPage.mouse.down()
+	await desktopPage.mouse.move(desktopPanX, desktopPanY + 200, { steps: 12 })
+	await desktopPage.mouse.up()
+	await expect.poll(async () => (await zoomedPhoto.boundingBox())?.y ?? -Infinity).toBeGreaterThan(beforeMousePan.y + 16)
+	await expect(desktopViewer).toBeVisible()
 	await desktopPage.setViewportSize({ width: 768, height: 900 })
 	await expect(desktopPage.getByRole('button', { name: 'Previous' })).toBeVisible()
 	await expect(desktopPage.getByRole('button', { name: 'Next' })).toBeVisible()
+	await desktopPage.goto(`${baseURL}/status.php`)
+	await desktopPage.goto(directPhotoUrl.href)
+	await expect(desktopPage.getByRole('dialog', { name: firstName, exact: true })).toBeVisible()
+	await desktopPage.getByRole('button', { name: 'Next photo', exact: true }).click()
+	const linkedViewer = desktopPage.getByRole('dialog', { name: secondName, exact: true })
+	await linkedViewer.getByRole('button', { name: 'More options', exact: true }).click()
+	const viewerMenu = desktopPage.locator('ion-action-sheet.lightbox-action-sheet')
+	await expect(viewerMenu).toBeVisible()
+	await desktopPage.keyboard.press('ArrowRight')
+	await expect(linkedViewer).toBeVisible()
+	await desktopPage.keyboard.press('Escape')
+	await expect(viewerMenu).toBeHidden()
+	await expect(linkedViewer).toBeVisible()
+	await linkedViewer.getByRole('button', { name: 'Close', exact: true }).press('Space')
+	await expect(desktopPage).toHaveURL(url => url.pathname === directPhotoUrl.pathname && !url.searchParams.has('photo'))
+	await expect(desktopPage.getByRole('dialog')).toHaveCount(0)
+	await expect(desktopPage.getByRole('button', { name: `Open ${firstName}` })).toBeVisible()
 	await desktopContext.close()
 
 	const context = await browser.newContext({
@@ -982,9 +1015,7 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 	const tapLightboxControl = async (name: string) => {
 		const control = page.getByRole('button', { name, exact: true }).last()
 		await expect(control).toBeVisible()
-		const box = await control.boundingBox()
-		expect(box).not.toBeNull()
-		await page.touchscreen.tap(box!.x + box!.width / 2, box!.y + box!.height / 2)
+		await control.tap()
 	}
 	await page.goto(`${baseURL}/s/${publish.gallery.shareToken}`)
 	await expect(page.locator('#proofing_gallery_public').getByRole('heading', { name: 'E2E Mobile Gallery' })).toBeVisible()
@@ -1014,15 +1045,37 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 	await page.getByRole('button', { name: `Open ${firstName}` }).click()
 	const shell = page.getByRole('dialog', { name: firstName, exact: true })
 	await expect(shell).toBeVisible()
-	await expect(page.getByRole('navigation', { name: 'Photo filmstrip' })).toBeVisible()
-	await expect(page.getByRole('button', { name: 'Previous' })).toBeVisible()
-	await expect(page.getByRole('button', { name: 'Next' })).toBeVisible()
+	const mobileFilmstrip = page.getByRole('navigation', { name: 'Photo filmstrip' })
+	await expect(mobileFilmstrip).toBeVisible()
+	// Arrows are visually hidden on phones but stay focusable for keyboard and screen-reader users.
+	await expect(shell.locator('.lightbox-nav')).toHaveCount(2)
+	await expect(shell.getByRole('button', { name: 'Next photo', exact: true })).toBeAttached()
+	await expect.poll(async () => (await shell.locator('.lightbox-nav--next').boundingBox())?.width ?? 0).toBeLessThanOrEqual(1)
+	await expect.poll(async () => (await mobileFilmstrip.boundingBox())?.width ?? 0).toBeGreaterThan(360)
+	const activeImage = page.locator(`.pswp__img[alt="${firstName}"]`)
+	const lightboxActions = page.locator('ion-action-sheet.lightbox-action-sheet').last()
+	await activeImage.tap()
+	await expect(shell).toHaveClass(/lightbox-shell--chrome-hidden/)
+	await expect(shell.locator('.lightbox-controls')).toHaveAttribute('inert', '')
+	await expect(shell.locator('.lightbox-controls')).toHaveCSS('opacity', '0')
+	await activeImage.tap()
+	await expect(shell).not.toHaveClass(/lightbox-shell--chrome-hidden/)
+	await mobileFilmstrip.getByRole('button', { name: `Open ${secondName}`, exact: true }).tap()
+	await expect(page.getByRole('dialog', { name: secondName, exact: true })).toBeVisible()
+	await mobileFilmstrip.getByRole('button', { name: `Open ${firstName}`, exact: true }).tap()
+	await expect(shell).toBeVisible()
 	await expect(shell).toHaveClass(/lightbox-shell--chrome-hidden/, { timeout: 7000 })
-	await page.getByRole('button', { name: 'Show photo controls' }).evaluate(button => button.click())
+	const showControls = shell.getByRole('button', { name: 'Show photo controls', exact: true })
+	await expect(showControls).toHaveCSS('opacity', '0')
+	await shell.focus()
+	await page.keyboard.press('Tab')
+	await expect(showControls).toBeFocused()
+	await expect(showControls).toHaveCSS('opacity', '1')
+	await page.keyboard.press('Enter')
 	await expect(shell).not.toHaveClass(/lightbox-shell--chrome-hidden/)
 	await shell.getByRole('button', { name: 'More options' }).click()
-	const lightboxActions = page.locator('ion-action-sheet.lightbox-action-sheet').last()
 	await expect(lightboxActions).toBeVisible()
+	await expect(lightboxActions.getByRole('button', { name: /^(Previous photo|Next photo|Zoom in|Zoom out|Hide thumbnails|Show thumbnails|Keyboard shortcuts)$/ })).toHaveCount(0)
 	await lightboxActions.getByRole('button', { name: 'Slideshow' }).click()
 	await expect(lightboxActions).toBeHidden()
 	const slideshowProgress = page.locator('.lightbox-slideshow-progress')
@@ -1033,22 +1086,7 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 	await lightboxActions.getByRole('button', { name: 'Pause' }).click()
 	await expect(lightboxActions).toBeHidden()
 	await expect(slideshowProgress).toHaveCount(0)
-	await shell.getByRole('button', { name: 'More options' }).click()
-	await expect(lightboxActions).toBeVisible()
-	await lightboxActions.getByRole('button', { name: 'Hide thumbnails' }).click()
-	await expect(lightboxActions).toBeHidden()
-	await expect(page.getByRole('navigation', { name: 'Photo filmstrip' })).toHaveCount(0)
-	await shell.getByRole('button', { name: 'Close' }).click()
-	await page.getByRole('button', { name: `Open ${firstName}` }).click()
-	await expect(page.getByRole('navigation', { name: 'Photo filmstrip' })).toHaveCount(0)
-	await shell.getByRole('button', { name: 'More options' }).click()
-	await expect(lightboxActions.getByRole('button', { name: 'Show thumbnails' })).toBeVisible()
-	await lightboxActions.getByRole('button', { name: 'Show thumbnails' }).click()
-	// The filmstrip changes before Ionic finishes dismissing its dialog.
-	await expect(lightboxActions).toBeHidden()
-	await expect(page.getByRole('navigation', { name: 'Photo filmstrip' })).toBeVisible()
 
-	const activeImage = page.locator(`.pswp__img[alt="${firstName}"]`)
 	const beforePinch = await activeImage.boundingBox()
 	expect(beforePinch).not.toBeNull()
 	const touch = await context.newCDPSession(page)
@@ -1069,39 +1107,56 @@ test('large mobile masonry stays reachable and responds to a touch swipe', async
 	expect(beforePinch).not.toBeNull()
 	expect(afterPinch).not.toBeNull()
 	expect(afterPinch!.width).toBeGreaterThan(beforePinch!.width * 1.1)
+	await expect(shell).toHaveClass(/lightbox-shell--chrome-hidden/)
+	await expect(shell.locator('.lightbox-bar')).toHaveAttribute('inert', '')
+	await expect(shell.locator('.lightbox-bar')).toHaveCSS('opacity', '0')
+	await expect(shell.locator('.lightbox-controls')).toHaveAttribute('inert', '')
+	await expect(shell.locator('.lightbox-controls')).toHaveCSS('opacity', '0')
+	await activeImage.tap()
+	await expect(shell).not.toHaveClass(/lightbox-shell--chrome-hidden/)
+	await expect(shell.locator('.lightbox-bar')).not.toHaveAttribute('inert', '')
+	await expect(shell.locator('.lightbox-bar')).toHaveCSS('opacity', '1')
+	await expect(shell.locator('.lightbox-controls')).toHaveCSS('opacity', '1')
+	const afterReveal = (await activeImage.boundingBox())!
+	expect(afterReveal.x).toBeCloseTo(afterPinch!.x)
+	expect(afterReveal.y).toBeCloseTo(afterPinch!.y)
+	expect(afterReveal.width).toBeCloseTo(afterPinch!.width)
 	await tapLightboxControl('Close')
 	await expect(page.getByRole('dialog')).toHaveCount(0)
 	await page.getByRole('button', { name: `Open ${firstName}` }).click()
 	await expect(shell).toBeVisible()
 	await page.waitForTimeout(900)
 
+	const swipeInput = await context.newCDPSession(page)
 	const swipe = async (fromX: number, toX: number) => {
-		const points = Array.from({ length: 5 }, (_, index) => fromX + (toX - fromX) * ((index + 1) / 5))
-		await page.evaluate(({ fromX }) => {
-			const target = document.querySelector('.pswp__scroll-wrap')
-			target?.dispatchEvent(new PointerEvent('pointerdown', {
-				bubbles: true,
-				cancelable: true,
-				clientX: fromX,
-				clientY: 420,
-				isPrimary: true,
-				pointerId: 1,
-				pointerType: 'touch',
-				buttons: 1,
-			}))
-		}, { fromX })
-		for (const x of points) {
-			await page.evaluate(({ x }) => window.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, cancelable: true, clientX: x, clientY: 420, isPrimary: true, pointerId: 1, pointerType: 'touch', buttons: 1 })), { x })
-			await page.waitForTimeout(35)
+		await swipeInput.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: fromX, y: 420, id: 1 }] })
+		for (let step = 1; step <= 8; step++) {
+			const x = fromX + (toX - fromX) * step / 8
+			await swipeInput.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: 420, id: 1 }] })
 		}
-		await page.evaluate(({ toX }) => window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, clientX: toX, clientY: 420, isPrimary: true, pointerId: 1, pointerType: 'touch', buttons: 0 })), { toX })
+		await swipeInput.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
 	}
+	await activeImage.tap()
+	await expect(shell).toHaveClass(/lightbox-shell--chrome-hidden/)
 	await swipe(340, 70)
-	await expect(page.getByRole('dialog', { name: secondName })).toBeVisible()
+	const nextViewer = page.getByRole('dialog', { name: secondName, exact: true })
+	await expect(nextViewer).toHaveClass(/lightbox-shell--chrome-hidden/)
 	await swipe(70, 340)
-	await expect(page.getByRole('dialog', { name: firstName })).toBeVisible()
+	await expect(shell).toHaveClass(/lightbox-shell--chrome-hidden/)
+	await page.touchscreen.tap(20, 30)
+	await expect(shell).not.toHaveClass(/lightbox-shell--chrome-hidden/)
 	await tapLightboxControl('Close')
 	await expect(page.getByRole('dialog')).toHaveCount(0)
+
+	await page.getByRole('button', { name: `Open ${firstName}` }).tap()
+	await expect(shell.locator('.pswp__item').nth(2).locator('.proofing-zoom-image')).toBeAttached()
+	const closeBounds = (await shell.getByRole('button', { name: 'Close', exact: true }).boundingBox())!
+	await swipe(340, 70)
+	await expect(nextViewer).toBeVisible()
+	await page.touchscreen.tap(closeBounds.x + closeBounds.width / 2, closeBounds.y + closeBounds.height / 2)
+	await expect(page.getByRole('dialog')).toHaveCount(0)
+	await expect(page).toHaveURL((url) => !url.searchParams.has('photo'))
+	await swipeInput.detach()
 
 	await page.locator('.public-gallery-app > .ion-page > ion-content').evaluate(async (content: HTMLElement & { scrollToBottom(duration?: number): Promise<void> }) => content.scrollToBottom(0))
 	const lastMedia = page.getByRole('button', { name: `Open ${lastName}` })
@@ -1164,6 +1219,51 @@ test('continuous scrolling keeps the public link and lightbox across gallery pag
 		await page.keyboard.press('ArrowRight')
 		await expect(page.getByRole('dialog', { name: 'photo-49.png' })).toBeVisible()
 		await expect(page.locator('.lightbox-bar small')).toHaveText('49 / 50')
+	} finally {
+		if (galleryId) await request.delete(`${galleries}/${galleryId}?format=json`, { headers })
+		await request.delete(dav, { headers })
+	}
+})
+
+test('continuous scrolling shows files added after an earlier batch was cached', async ({ request, baseURL }) => {
+	test.setTimeout(90_000)
+	const headers = { Authorization: `Basic ${Buffer.from('admin:admin').toString('base64')}`, 'OCS-APIRequest': 'true' }
+	const dav = `${baseURL}/remote.php/dav/files/admin/ContinuousCache-${Date.now()}`
+	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
+	const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEdR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64')
+	let galleryId: number | undefined
+	try {
+		expect((await request.fetch(dav, { method: 'MKCOL', headers })).status()).toBe(201)
+		for (const name of ['b-01.png', 'b-02.png', 'b-03.png']) {
+			expect((await request.put(`${dav}/${name}`, { headers: { ...headers, 'Content-Type': 'image/png' }, data: png })).status()).toBe(201)
+		}
+		const properties = await request.fetch(dav, {
+			method: 'PROPFIND',
+			headers: { ...headers, Depth: '0' },
+			data: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/></d:prop></d:propfind>',
+		})
+		const folderId = Number((await properties.text()).match(/<(?:oc:)?fileid>(\d+)<\/(?:oc:)?fileid>/)?.[1])
+		expect(folderId).toBeGreaterThan(0)
+		const created = await request.post(`${galleries}?format=json`, {
+			headers, data: { folderId, title: 'Continuous cache test', purpose: 'showcase', settings: { publicLocale: 'en' } },
+		})
+		expect(created.ok()).toBe(true)
+		galleryId = (await created.json() as { id: number }).id
+		const published = await request.post(`${galleries}/${galleryId}/publish?format=json`, { headers, data: {} })
+		expect(published.ok()).toBe(true)
+		const { gallery } = await published.json() as { gallery: { revision: number; shareToken: string } }
+		const updated = await request.put(`${galleries}/${galleryId}?format=json`, {
+			headers, data: { expectedRevision: gallery.revision, settings: { navigation: { browsingMode: 'scroll' } } },
+		})
+		expect(updated.ok()).toBe(true)
+		const firstBatch = `${baseURL}/apps/proofing_gallery/public/${gallery.shareToken}/gallery?limit=48&page=1`
+		const cached = await (await request.get(firstBatch)).json() as { items: Array<{ name: string }> }
+		expect(cached.items.map(item => item.name)).toEqual(['b-01.png', 'b-02.png', 'b-03.png'])
+
+		expect((await request.put(`${dav}/a-new.png`, { headers: { ...headers, 'Content-Type': 'image/png' }, data: png })).status()).toBe(201)
+		const refreshed = await (await request.get(firstBatch)).json() as { items: Array<{ name: string }>; total: number }
+		expect(refreshed.total).toBe(4)
+		expect(refreshed.items[0]?.name).toBe('a-new.png')
 	} finally {
 		if (galleryId) await request.delete(`${galleries}/${galleryId}?format=json`, { headers })
 		await request.delete(dav, { headers })

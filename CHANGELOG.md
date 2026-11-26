@@ -7,6 +7,12 @@
   continuous galleries
 - browse across gallery batches in the guest lightbox while keeping the photo
   counter tied to the current folder and filters
+- use swipe and full-width thumbnails in the mobile lightbox, and hide the
+  toolbar and filmstrip together when zooming with auto-hide enabled
+- keep the lightbox controls hidden while swiping and reveal them with a tap
+- allow left-button dragging to pan a zoomed photo without closing the viewer
+- return to the gallery with one tap, including after swiping or opening a
+  direct photo link
 
 ## 0.13.1 — 2026-11-25
 
