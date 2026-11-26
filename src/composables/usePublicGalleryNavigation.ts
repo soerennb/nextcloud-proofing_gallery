@@ -43,16 +43,16 @@ export function usePublicGalleryNavigation(options: {
 		}
 	}
 
-	const { applyingHistory, updateLocation } = usePublicGalleryHistory({ enabled: !options.preview, settings, override: sortOverride, state: locationState, apply: applyHistory })
+	const { applyingHistory, updateLocation, closePhotoEntry } = usePublicGalleryHistory({ enabled: !options.preview, settings, override: sortOverride, state: locationState, apply: applyHistory })
 	async function applyHistory(location: PublicGalleryLocation) {
 		options.closePanel()
 		const previous = locationState()
 		const reload = (['page', 'path', 'search', 'sortBy', 'sortDirection', 'groupBy'] as const).some(key => previous[key] !== location[key])
 		currentPage.value = location.page; currentPath.value = location.path; search.value = location.search
 		sortBy.value = location.sortBy; sortDirection.value = location.sortDirection; groupBy.value = location.groupBy; layout.value = location.layout
+		if (location.photoId === null) options.closePhoto()
 		if (reload) await loadPage(location.page, location.photoId)
-		else if (location.photoId) options.openPhoto(location.photoId)
-		else options.closePhoto()
+		else if (location.photoId !== null) options.openPhoto(location.photoId)
 	}
 
 	function applyView() {
@@ -111,5 +111,5 @@ export function usePublicGalleryNavigation(options: {
 		if (page.view) { sortBy.value = page.view.sortBy; sortDirection.value = page.view.sortDirection; groupBy.value = page.view.groupBy }
 	}
 	onBeforeUnmount(() => { window.clearTimeout(searchTimer) })
-	return { currentPath, currentPage, search, sortBy, sortDirection, sortOverride, groupBy, layout, initialView, initialLocation, applyingHistory, synchronize, updateLocation, changeSort, resetSort, queueSearch, navigateToPage, upOneLevel, applyView, locationState }
+	return { currentPath, currentPage, search, sortBy, sortDirection, sortOverride, groupBy, layout, initialView, initialLocation, applyingHistory, synchronize, updateLocation, closePhotoEntry, changeSort, resetSort, queueSearch, navigateToPage, upOneLevel, applyView, locationState }
 }

@@ -6,6 +6,19 @@ Copy `.env.example`, install Node and Composer dependencies, then run
 `make dev-up`. Compose starts Nextcloud 35, MariaDB, Redis, cron, and Mailpit.
 The repository is mounted as `custom_apps/proofing_gallery`.
 
+To start local stacks only when needed, set `COMPOSE_RESTART_POLICY=on-failure`
+in the ignored `.env` and `.env.studio` files. Without this setting the Compose
+default remains `unless-stopped`. `on-failure` restarts crashed containers while
+Docker is running, but does not start them when Docker or WSL starts.
+
+Start development with `make dev-up` and the persistent studio with
+`make studio-up`. Stop them without removing containers or volumes using
+`docker compose -p proofing-gallery stop` and
+`docker compose -p proofing-gallery-studio stop`, respectively, from this
+repository. Changing the Compose setting alone does not update existing
+containers; apply the matching restart policy to them with `docker update`, or
+let the next explicit Compose start recreate them.
+
 Build assets after changing Vue or CSS:
 
 ```bash

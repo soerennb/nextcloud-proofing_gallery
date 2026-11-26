@@ -14,7 +14,8 @@ import {
 	removeOutline,
 } from 'ionicons/icons'
 
-defineProps<{
+const props = defineProps<{
+	compact: boolean
 	name: string
 	position: number
 	count: number | null
@@ -36,19 +37,40 @@ const emit = defineEmits<{
 	info: []
 	more: []
 }>()
+
+let closeTouch: Touch | null = null
+
+function startCloseTouch(event: TouchEvent) {
+	closeTouch = props.compact && event.touches.length === 1 ? event.touches.item(0) : null
+}
+
+function finishCloseTouch(event: TouchEvent) {
+	const start = closeTouch
+	closeTouch = null
+	const end = event.changedTouches.item(0)
+	if (!start || !end || end.identifier !== start.identifier || event.touches.length > 0) return
+	if (Math.hypot(end.clientX - start.clientX, end.clientY - start.clientY) > 12) return
+	// A browser may suppress the synthesized click just after an image swipe.
+	if (event.cancelable) event.preventDefault()
+	emit('close')
+}
 </script>
 
 <template>
-	<IonHeader class="lightbox-bar" role="presentation">
+	<IonHeader class="lightbox-bar" :class="{ 'lightbox-bar--compact': compact }" role="presentation">
 		<IonToolbar>
 			<IonButtons slot="start">
-				<IonButton :aria-label="t('proofing_gallery', 'Close')" @click="emit('close')">
+				<IonButton :aria-label="t('proofing_gallery', 'Close')"
+					@touchstart.passive="startCloseTouch"
+					@touchend="finishCloseTouch"
+					@touchcancel="closeTouch = null"
+					@click="emit('close')">
 					<IonIcon slot="icon-only" :icon="closeOutline" aria-hidden="true" />
 				</IonButton>
 			</IonButtons>
 			<IonTitle>
 				<span v-if="name" class="lightbox-bar__title">{{ name }}</span>
-				<small>{{ position }} / {{ count ?? '…' }}</small>
+				<small aria-live="polite" aria-atomic="true">{{ position }} / {{ count ?? '…' }}</small>
 			</IonTitle>
 			<IonButtons slot="end">
 				<IonButton v-if="isImage"
@@ -107,17 +129,17 @@ ion-button { --color: #fff; --border-radius: 999px; width: 44px; height: 44px; m
 
 ion-title { padding-inline: 8px; text-align: start; }
 
-ion-title small { display: block; margin-top: 1px; color: rgb(255 255 255 / 56%); font-size: 11px; font-weight: 500; line-height: 1.2; }
+ion-title small { display: block; margin-top: 1px; color: rgb(255 255 255 / 72%); font-size: 12px; font-variant-numeric: tabular-nums; font-weight: 500; line-height: 1.2; }
 
 .lightbox-bar__title { display: block; overflow: hidden; font-size: 14px; font-weight: 620; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
 
 .lightbox-bar__count { position: absolute; inset: 1px 0 auto auto; display: grid; min-width: 17px; height: 17px; place-items: center; padding-inline: 4px; border: 2px solid #141416; border-radius: 9px; background: var(--gallery-accent); color: var(--proofing-public-accent-contrast, #000); font-size: 9px; font-weight: 700; }
 
-@media (max-width: 760px) {
-	ion-toolbar { --min-height: calc(54px + env(safe-area-inset-top)); --padding-top: env(safe-area-inset-top); }
-	.lightbox-bar__desktop-action { display: none; }
-	ion-title { max-width: none; }
-}
+.lightbox-bar--compact ion-toolbar { --min-height: calc(54px + env(safe-area-inset-top)); --padding-top: env(safe-area-inset-top); }
+
+.lightbox-bar--compact .lightbox-bar__desktop-action { display: none; }
+
+.lightbox-bar--compact ion-title { max-width: none; }
 
 @media (max-width: 430px) {
 	ion-title { padding-inline: 2px; }

@@ -229,9 +229,15 @@ Each pin has its own conversation, even when two pins share the same position.
 Replies remain available when the original comment is deleted; its text is
 replaced with a deletion notice.
 
-Zoom with the viewer controls, mouse wheel, or a touch pinch. On desktop, hold
-the right mouse button and drag the zoomed image to pan. A right-click without
-dragging keeps the browser context menu. Pins retain their image-relative
+In the mobile viewer, swipe the photo or tap a thumbnail to browse. **Close**
+returns to the gallery overview from a direct photo link. In presentation
+galleries with auto-hide enabled, zooming hides the toolbar and filmstrip.
+Tap the photo to restore both without changing the zoom. Swiping to another
+photo keeps hidden controls hidden.
+
+Zoom with the viewer controls, mouse wheel, or a touch pinch. On desktop, drag
+the zoomed image with the left or right mouse button to pan. A right-click
+without dragging opens the browser context menu. Pins retain their image-relative
 positions while zooming and panning. On touchscreens, drag with one finger
 after zooming to reach the image edges. Dragging does not create a new pin.
 

@@ -21,6 +21,8 @@ Automation, Privacy, and History workspaces.
 - responsive image/video gallery with nested folders, previews, lightbox,
   slideshow, zoom, pan, and byte-range video streaming
 - per-gallery choice of pages or continuous scrolling for public links
+- mobile lightbox with swipe navigation, full-width thumbnails, and
+  tap-to-toggle controls in presentation galleries
 - bounded FFmpeg background transcoding for camera formats, with browser-ready
   H.264/AAC MP4 derivatives, generated posters, and administrator controls
 - optional owner search over local filenames and metadata, plus scene search

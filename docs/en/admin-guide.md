@@ -2,6 +2,10 @@
 
 This guide covers installation and operation of Proofing Gallery.
 
+On phones, the public lightbox uses swipe navigation and a full-width filmstrip.
+In presentation galleries with auto-hide enabled, zooming hides the toolbar and filmstrip.
+The gallery's control visibility and thumbnail settings still apply.
+
 New-gallery defaults include filename, capture date, last modified date and file size, plus direction. These settings are copied on creation; existing galleries change only through an explicit owner action or rollout. The health view reports ready, pending and failed capture-date projections. The recoverable metadata background job processes at most `metadataBatchSize` files per invocation and obeys `metadataMaxBytes`. A media-index rebuild requeues failed projections. No public request extracts image bytes for sorting.
 
 ## Requirements and installation

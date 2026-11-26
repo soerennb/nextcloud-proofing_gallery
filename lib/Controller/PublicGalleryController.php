@@ -69,10 +69,14 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		?int $focusId = null,
 	): JSONResponse {
 		try {
-			$result = $this->galleryData->page($this->publicContext(), new PublicGalleryQuery(
+			$context = $this->publicContext();
+			$result = $this->galleryData->page($context, new PublicGalleryQuery(
 				$limit, $offset, $path, $search, $sortBy, $sortDirection, $groupBy, $cursor, $page, $focusId,
 			));
-			$this->shareAudit->record($this->resolvedPublicLink(), 'view');
+			// Continuous scrolling requests further batches of the same visit; record the visit once.
+			$continuation = $context->settings->navigation->browsingMode === 'scroll'
+				&& (($page ?? 1) > 1 || $offset > 0 || $cursor !== null);
+			if (!$continuation) $this->shareAudit->record($this->resolvedPublicLink(), 'view');
 			return new JSONResponse($result);
 		} catch (\InvalidArgumentException $exception) {
 			return new JSONResponse(['message' => $exception->getMessage()], Http::STATUS_UNPROCESSABLE_ENTITY);

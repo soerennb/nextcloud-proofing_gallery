@@ -26,10 +26,10 @@ export function publicLightboxSlide(item: MediaItem, index: number, options: {
 			height: 1080,
 		}
 	}
-	const source = options.dimensions[item.id]
-	const ratio = source && source.width > 0 && source.height > 0
-		? source.width / source.height
-		: 3 / 2
+	const source = options.dimensions[item.id] ?? item
+	const sourceWidth = source.width ?? 0
+	const sourceHeight = source.height ?? 0
+	const ratio = sourceWidth > 0 && sourceHeight > 0 ? sourceWidth / sourceHeight : 3 / 2
 	const width = ratio >= 1 ? 2400 : Math.max(1, Math.round(2400 * ratio))
 	const height = ratio >= 1 ? Math.max(1, Math.round(2400 / ratio)) : 2400
 	const src = escapeHtml(options.previewUrl(item, 2400, 2400, 'fit'))

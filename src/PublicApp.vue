@@ -396,7 +396,7 @@ function openItem(item: MediaItem, event?: MouseEvent) {
 		activeIndex.value = lightboxMediaItems.value.findIndex(media => media.id === item.id)
 		rememberPosition(scrollElement.value?.scrollTop ?? 0, item.id)
 		if (!isStaticPreview) {
-			updateLocation('push', item.id, { proofingGalleryPhoto: true })
+			updateLocation('push', item.id)
 		}
 		return
 	}
@@ -413,15 +413,13 @@ function openPhotoFromLocation(fileId: number) {
 }
 
 function onLightboxActive(item: MediaItem) {
+	if (activeIndex.value === null) return
 	activeIndex.value = lightboxMediaItems.value.findIndex(media => media.id === item.id)
-	if (!navigation.applyingHistory.value) updateLocation('replace', item.id, { proofingGalleryPhoto: true })
+	if (!navigation.applyingHistory.value) updateLocation('replace', item.id)
 }
 
 function closeLightbox() {
-	if (!navigation.applyingHistory.value && new URL(window.location.href).searchParams.has('photo')) {
-		window.history.back()
-		return
-	}
+	navigation.closePhotoEntry()
 	activeIndex.value = null
 	activeOpener.value = null
 }

@@ -8,6 +8,18 @@ import type { MediaItem } from '../publicTypes.ts'
 const item = { id: 7, name: 'portrait.jpg', mimeType: 'image/jpeg' } as MediaItem
 
 describe('public lightbox slides', () => {
+	it('uses media dimensions when the visitor opens a photo before the grid loads', () => {
+		const slide = publicLightboxSlide({ ...item, width: 800, height: 1600 }, 0, {
+			dimensions: {},
+			initialIndex: 0,
+			previewUrl: () => '/preview',
+			streamUrl: () => '',
+		})
+
+		expect(slide.width).toBe(1200)
+		expect(slide.height).toBe(2400)
+	})
+
 	it('paints the cached grid preview beneath the large image', () => {
 		const slide = publicLightboxSlide(item, 0, {
 			dimensions: { 7: { width: 2000, height: 3000 } },

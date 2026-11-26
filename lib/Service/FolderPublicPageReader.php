@@ -9,45 +9,81 @@ use OCA\ProofingGallery\Dto\PublicShareContext;
 use OCA\ProofingGallery\Dto\PublicGalleryQuery;
 use OCA\ProofingGallery\Dto\PublicGalleryPage;
 use OCA\ProofingGallery\Domain\MediaSort;
+use OCA\ProofingGallery\Domain\PublicPagePagination;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\Node;
+use OCP\ICache;
+use OCP\ICacheFactory;
 
 final class FolderPublicPageReader {
-	public function __construct(private MediaIndexService $mediaIndex, private MediaMetadataService $metadata, private MediaTypePolicy $mediaTypes, private PolicyService $policies) {}
+	private const ORDER_TTL = 300;
+	private readonly ICache $orders;
+
+	public function __construct(private MediaIndexService $mediaIndex, private MediaMetadataService $metadata, private MediaTypePolicy $mediaTypes, private PolicyService $policies, ICacheFactory $cacheFactory) {
+		$this->orders = $cacheFactory->createDistributed('proofing_gallery_order');
+	}
 
 	public function read(PublicShareContext $context, PublicGalleryQuery $query): PublicGalleryPage {
-		$gallery = $context->gallery; $settings = $context->settings;
-		$limit = $query->limit; $offset = $query->offset; $path = $query->path; $search = $query->search;
-		$sortBy = $query->sortBy; $sortDirection = $query->sortDirection; $groupBy = $query->groupBy;
-		$focusId = $query->focusId;
-		$link = $context->link; $cursor = $query->cursor; $multiRoot = $context->scope->multiRoot;
-		$startPath = $context->scope->startPath; $scopedRoot = $context->root;
-		$groupDepth = max(1, min(8, $link->getGroupDepth() ?: $settings->navigation->groupDepth));
+		$gallery = $context->gallery;
+		$path = $query->path;
+		$multiRoot = $context->scope->multiRoot;
+		$scopedRoot = $context->root;
+		$groupDepth = max(1, min(8, $context->link->getGroupDepth() ?: $context->settings->navigation->groupDepth));
 
 		$eventAlbums = $gallery->getDeliveryMode() === 'event' && $path === '' && $multiRoot;
 		$rootDetails = $gallery->getDeliveryMode() === 'event' && $multiRoot ? $context->scope->details : [];
-		$eventRoots = [];
 		if ($eventAlbums) {
 			$nodes = [];
+			$eventRoots = [];
 			foreach ($rootDetails as $detail) {
 				try { $node = $scopedRoot->get($detail['path']); } catch (\Throwable) { continue; }
 				if (!$node instanceof Folder || !$node->isReadable() || !$scopedRoot->isSubNode($node)) continue;
 				$nodes[] = $node;
 				$eventRoots[$node->getId()] = $detail;
 			}
-		} else {
-			$currentFolder = $this->folderAt($scopedRoot, $path);
-			$nodes = array_values(array_filter(
-				$currentFolder->getDirectoryListing(),
-				fn (Node $node): bool => $node->isReadable() && !str_starts_with($node->getName(), '.')
-					&& ($node instanceof Folder || ($node instanceof File && $this->mediaTypes->supports($node)))
-					&& (!$multiRoot || $context->scope->visiblePath(ltrim($path . '/' . $node->getName(), '/'))),
-			));
+			$ordered = $this->orderNodes($context, $query, $nodes, true, $eventRoots);
+			return $this->page($context, $query, self::entries($ordered), self::nodeMap($ordered), $eventRoots, true, $rootDetails, $groupDepth)
+				?? throw new \LogicException('Gallery page unavailable');
 		}
+
+		// The sorted order is cached per folder etag, so scrolling through many batches
+		// does not list and sort the whole folder again for every request.
+		$currentFolder = $this->folderAt($scopedRoot, $path);
+		$key = $this->orderKey($context, $query, $currentFolder, $groupDepth);
+		$cached = $this->orders->get($key);
+		if (is_array($cached)) {
+			$page = $this->page($context, $query, $cached, fn (array $entry): ?Node => $this->childNode($currentFolder, $entry), [], false, $rootDetails, $groupDepth);
+			if ($page !== null) return $page;
+		}
+
+		$nodes = array_values(array_filter(
+			$currentFolder->getDirectoryListing(),
+			fn (Node $node): bool => $node->isReadable() && !str_starts_with($node->getName(), '.')
+				&& ($node instanceof Folder || ($node instanceof File && $this->mediaTypes->supports($node)))
+				&& (!$multiRoot || $context->scope->visiblePath(ltrim($path . '/' . $node->getName(), '/'))),
+		));
+		$ordered = $this->orderNodes($context, $query, $nodes, false, []);
+		$entries = self::entries($ordered);
+		$this->orders->set($key, $entries, self::ORDER_TTL);
+		return $this->page($context, $query, $entries, self::nodeMap($ordered), [], false, $rootDetails, $groupDepth)
+			?? throw new \LogicException('Gallery page unavailable');
+	}
+
+	/**
+	 * @param list<Node> $nodes
+	 * @param array<int, array<string, mixed>> $eventRoots
+	 * @return list<Node>
+	 */
+	private function orderNodes(PublicShareContext $context, PublicGalleryQuery $query, array $nodes, bool $eventAlbums, array $eventRoots): array {
+		$foldersVisible = $context->scope->multiRoot || $context->settings->navigation->folders;
+		$search = $query->search;
+		$sortBy = $query->sortBy;
+		$sortDirection = $query->sortDirection;
+		$groupBy = $query->groupBy;
 		$nodes = array_values(array_filter(
 			$nodes,
-			static fn (Node $node): bool => ($multiRoot || $settings->navigation->folders || !($node instanceof Folder))
+			static fn (Node $node): bool => ($foldersVisible || !($node instanceof Folder))
 				&& ($search === '' || mb_stripos($node->getName(), $search) !== false),
 		));
 		$captureById = [];
@@ -72,10 +108,32 @@ final class FolderPublicPageReader {
 			];
 			return MediaSort::compare($value($left), $value($right), $sortBy, $sortDirection);
 		});
-		$focusIndex = $focusId === null ? null : \OCA\ProofingGallery\Domain\PublicPagePagination::nodePosition($nodes, $focusId);
-		if ($focusId !== null && $focusIndex === null) throw new \OCP\Files\NotFoundException('Gallery media not found');
-		$offset = \OCA\ProofingGallery\Domain\PublicPagePagination::offset(count($nodes), $limit, $offset, $focusIndex);
+		return $nodes;
+	}
 
+	/**
+	 * @param list<array{id: int, name: string, folder: bool, group: string}> $entries
+	 * @param callable(array{id: int, name: string, folder: bool, group: string}): ?Node $nodeFor
+	 * @param array<int, array<string, mixed>> $eventRoots
+	 * @param list<array<string, mixed>> $rootDetails
+	 */
+	private function page(PublicShareContext $context, PublicGalleryQuery $query, array $entries, callable $nodeFor, array $eventRoots, bool $eventAlbums, array $rootDetails, int $groupDepth): ?PublicGalleryPage {
+		$gallery = $context->gallery;
+		$settings = $context->settings;
+		$focusIndex = null;
+		if ($query->focusId !== null) {
+			$position = array_search($query->focusId, array_column($entries, 'id'), true);
+			if ($position === false) throw new \OCP\Files\NotFoundException('Gallery media not found');
+			$focusIndex = $position;
+		}
+		$offset = PublicPagePagination::offset(count($entries), $query->limit, $query->offset, $focusIndex);
+
+		$nodes = [];
+		foreach (array_slice($entries, $offset, $query->limit) as $entry) {
+			$node = $nodeFor($entry);
+			if ($node === null) return null;
+			$nodes[] = $node;
+		}
 		$items = array_map(function (Node $node) use ($settings, $gallery, $eventAlbums, $eventRoots): array {
 			$eventRoot = $eventRoots[$node->getId()] ?? null;
 			$item = [
@@ -96,22 +154,60 @@ final class FolderPublicPageReader {
 				$item['album'] = $this->eventAlbumSummary($gallery, $node, (string)$eventRoot['path'], (string)$eventRoot['role']);
 			}
 			return $node instanceof File ? [...$item, ...$this->metadata->publicGeometry($node)] : $item;
-		}, array_slice($nodes, $offset, $limit));
+		}, $nodes);
 
 		$groups = [];
 		$mediaTotal = $mediaOffset = 0;
-		foreach ($nodes as $index => $node) {
-			if (!($node instanceof Folder)) {
+		foreach ($entries as $index => $entry) {
+			if (!$entry['folder']) {
 				$mediaTotal++;
 				if ($index < $offset) $mediaOffset++;
 			}
-			$key = $groupBy === 'none' ? 'all' : self::group($node);
+			$key = $query->groupBy === 'none' ? 'all' : $entry['group'];
 			$groups[$key] = ($groups[$key] ?? 0) + 1;
 		}
-		return new PublicGalleryPage($items, count($nodes), $query, $offset,
+		return new PublicGalleryPage($items, count($entries), $query, $offset,
 			nextCursor: null, previousCursor: null, groups: $groups,
-			indexState: ['indexed' => count($nodes), 'limit' => $this->policies->get('maxIndexedMedia'), 'limitReached' => false, 'complete' => true], scope: ['startPath' => $startPath, 'allowedRoots' => $context->scope->roots, 'roots' => $rootDetails, 'viewMode' => 'folder', 'groupDepth' => $groupDepth], focusIndex: $focusIndex, mediaTotal: $mediaTotal, mediaOffset: $mediaOffset,
+			indexState: ['indexed' => count($entries), 'limit' => $this->policies->get('maxIndexedMedia'), 'limitReached' => false, 'complete' => true], scope: ['startPath' => $context->scope->startPath, 'allowedRoots' => $context->scope->roots, 'roots' => $rootDetails, 'viewMode' => 'folder', 'groupDepth' => $groupDepth], focusIndex: $focusIndex, mediaTotal: $mediaTotal, mediaOffset: $mediaOffset,
 		);
+	}
+
+	/** Cache key: any change to the folder listing, scope, sort or gallery revision starts a new order. */
+	private function orderKey(PublicShareContext $context, PublicGalleryQuery $query, Folder $folder, int $groupDepth): string {
+		return hash('sha256', json_encode([
+			$context->gallery->getId(), $context->gallery->getRevision(), $context->link->getId(), $context->root->getId(),
+			$context->scope->multiRoot, $context->scope->roots, $query->path, $query->search, $query->sortBy, $query->sortDirection, $query->groupBy,
+			$groupDepth, $context->settings->navigation->folders, $folder->getId(), $folder->getEtag(),
+		], JSON_THROW_ON_ERROR));
+	}
+
+	/**
+	 * @param list<Node> $nodes
+	 * @return list<array{id: int, name: string, folder: bool, group: string}>
+	 */
+	private static function entries(array $nodes): array {
+		$entries = [];
+		foreach ($nodes as $node) {
+			$entries[] = ['id' => $node->getId(), 'name' => $node->getName(), 'folder' => $node instanceof Folder, 'group' => self::group($node)];
+		}
+		return $entries;
+	}
+
+	/** @param list<Node> $nodes @return callable(array{id: int, name: string, folder: bool, group: string}): ?Node */
+	private static function nodeMap(array $nodes): callable {
+		$byId = [];
+		foreach ($nodes as $node) $byId[$node->getId()] = $node;
+		return static fn (array $entry): ?Node => $byId[$entry['id']] ?? null;
+	}
+
+	/** @param array{id: int, name: string, folder: bool, group: string} $entry */
+	private function childNode(Folder $folder, array $entry): ?Node {
+		try {
+			$node = $folder->get($entry['name']);
+		} catch (\Throwable) {
+			return null;
+		}
+		return $node->getId() === $entry['id'] && $node->isReadable() ? $node : null;
 	}
 
 	/** @return array{role: string, mediaCount: int, folderCount: int, covers: list<array{id: int, name: string, mimeType: string, etag: string}>} */
