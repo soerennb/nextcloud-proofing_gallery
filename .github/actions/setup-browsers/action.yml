@@ -7,6 +7,9 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        # Chromium needs only Ubuntu packages. The runner's Microsoft apt source
+        # can return 403 and fails the whole apt update, so disable it here.
+        sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list /etc/apt/sources.list.d/microsoft-prod.sources
         # Avoid the Azure mirror that has stalled dependency installation.
         if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
           sudo sed -i 's@azure.archive.ubuntu.com@archive.ubuntu.com@g' /etc/apt/sources.list.d/ubuntu.sources
