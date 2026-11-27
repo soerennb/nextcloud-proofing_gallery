@@ -47,7 +47,11 @@ final class FolderService {
 	}
 
 	public function resolveMedia(string $userId, int $folderId, int $fileId): File {
-		$folder = $this->resolveFolder($userId, $folderId);
+		return $this->resolveMediaIn($this->resolveFolder($userId, $folderId), $fileId);
+	}
+
+	/** Resolves a file in an already validated gallery folder; collection listings reuse the folder per source. */
+	public function resolveMediaIn(Folder $folder, int $fileId): File {
 		foreach ($folder->getById($fileId) as $node) {
 			if ($node instanceof File && $this->mediaTypes->visibleFile($folder, $node)) {
 				return $node;

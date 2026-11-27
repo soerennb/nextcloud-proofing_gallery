@@ -19,7 +19,25 @@ final class MediaMetadataService {
 
 	/** @return array{width?: int, height?: int} */
 	public function publicGeometry(File $file): array {
+		return self::geometryFromSummary($this->summary($file));
+	}
+
+	/**
+	 * Public metadata and geometry for one file from a single summary read.
+	 * Grid pages call this once per item instead of reading the summary twice.
+	 *
+	 * @param list<string> $fields
+	 * @return array{metadata: array<string, mixed>, geometry: array{width?: int, height?: int}}
+	 */
+	public function publicItem(File $file, array $fields): array {
 		$summary = $this->summary($file);
+		return ['metadata' => self::publicFromSummary($summary, $fields), 'geometry' => self::geometryFromSummary($summary)];
+	}
+
+	/** @param array<string, mixed> $summary
+	 * @return array{width?: int, height?: int}
+	 */
+	private static function geometryFromSummary(array $summary): array {
 		$width = (int)($summary['width'] ?? 0);
 		$height = (int)($summary['height'] ?? 0);
 		return $width > 0 && $height > 0 ? compact('width', 'height') : [];
@@ -93,7 +111,15 @@ final class MediaMetadataService {
 	 * @return array<string, mixed>
 	 */
 	public function publicSummary(File $file, array $fields): array {
-		$summary = $this->summary($file);
+		return self::publicFromSummary($this->summary($file), $fields);
+	}
+
+	/**
+	 * @param array<string, mixed> $summary
+	 * @param list<string> $fields
+	 * @return array<string, mixed>
+	 */
+	private static function publicFromSummary(array $summary, array $fields): array {
 		if (($summary['state'] ?? '') !== 'ready' || $fields === []) return ['state' => $summary['state'] ?? 'pending'];
 		$allowed = ['state' => 'ready'];
 		foreach (array_intersect($fields, self::PUBLIC_FIELDS) as $field) {

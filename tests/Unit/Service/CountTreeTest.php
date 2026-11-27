@@ -64,4 +64,31 @@ final class CountTreeTest extends TestCase {
 		$result = CountTree::fold($rows, 1);
 		self::assertSame(1, $result['images']);
 	}
+
+	/** @return array{parent_id: int, generation: string, hit: bool} */
+	private function stored(int $parent, string $generation, bool $hit = false): array {
+		return ['parent_id' => $parent, 'generation' => $generation, 'hit' => $hit];
+	}
+
+	public function testRowsBelowACacheHitAreKeptForLaterWalks(): void {
+		// Folder 2 was taken from the cache; its older descendants 3 and 4 are reused once 2 changes.
+		$rows = [1 => $this->stored(0, 'new'), 2 => $this->stored(1, 'new', true), 3 => $this->stored(2, 'old'), 4 => $this->stored(3, 'old')];
+		self::assertSame([], CountTree::orphans($rows, 'new'));
+	}
+
+	public function testOlderRowsBelowAWalkedFolderAreOrphans(): void {
+		// Folder 2 was walked in this generation, so folder 3 no longer exists there; 4 sat below 3.
+		$rows = [1 => $this->stored(0, 'new'), 2 => $this->stored(1, 'new'), 3 => $this->stored(2, 'old'), 4 => $this->stored(3, 'old'), 5 => $this->stored(2, 'new')];
+		self::assertSame([3, 4], CountTree::orphans($rows, 'new'));
+	}
+
+	public function testRowsOfAnOldRootAreOrphansAfterARebind(): void {
+		$rows = [1 => $this->stored(0, 'old'), 2 => $this->stored(1, 'old', true), 3 => $this->stored(2, 'old'), 9 => $this->stored(0, 'new')];
+		self::assertSame([1, 2, 3], CountTree::orphans($rows, 'new'));
+	}
+
+	public function testOrphanDetectionSurvivesCyclesInCorruptParentLinks(): void {
+		$rows = [1 => $this->stored(0, 'new'), 2 => $this->stored(3, 'old'), 3 => $this->stored(2, 'old')];
+		self::assertSame([2, 3], CountTree::orphans($rows, 'new'));
+	}
 }

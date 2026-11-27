@@ -26,4 +26,14 @@ final class GalleryMediaCountServiceTest extends TestCase {
 		self::assertNull($summary['imageCount']);
 		self::assertNull($summary['videoCount']);
 	}
+
+	public function testInlineCountingAdvancesOnlyWaitingOrRunningCounts(): void {
+		self::assertTrue(GalleryMediaCountService::needsInlineCount(null));
+		self::assertTrue(GalleryMediaCountService::needsInlineCount(['state' => 'pending']));
+		self::assertTrue(GalleryMediaCountService::needsInlineCount(['state' => 'updating']));
+		self::assertFalse(GalleryMediaCountService::needsInlineCount(['state' => 'ready']));
+		self::assertFalse(GalleryMediaCountService::needsInlineCount(['state' => 'unavailable']));
+		// A failing count is retried by the background job, not by every owner poll.
+		self::assertFalse(GalleryMediaCountService::needsInlineCount(['state' => 'error']));
+	}
 }
