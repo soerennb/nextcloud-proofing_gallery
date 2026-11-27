@@ -140,6 +140,39 @@ test('application boot does not reset periodic background-job timestamps', async
 	expect(after!.last_run).toBe(before!.last_run)
 })
 
+test('archiving a published gallery whose folder was deleted still succeeds', async ({ request, baseURL }) => {
+	const stamp = Date.now()
+	const folderName = `RegressionArchive-${stamp}`
+	const davRoot = `${baseURL}/remote.php/dav/files/admin`
+	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
+	const jsonHeaders = { ...apiHeaders, 'Content-Type': 'application/json' }
+	expect((await request.fetch(`${davRoot}/${folderName}/`, { method: 'MKCOL', headers: apiHeaders })).status()).toBe(201)
+	const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAAFklEQVQImWP8z8DAwMDAxMDAwMDAAAANHQEDDMfniQAAAABJRU5ErkJggg==', 'base64')
+	expect((await request.put(`${davRoot}/${folderName}/archive-check.png`, { headers: apiHeaders, data: png })).status()).toBeLessThan(300)
+	const propfind = await request.fetch(`${davRoot}/${folderName}/`, {
+		method: 'PROPFIND',
+		headers: { ...apiHeaders, Depth: '0', 'Content-Type': 'application/xml' },
+		data: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:oc="http://owncloud.org/ns"><d:prop><oc:fileid/></d:prop></d:propfind>',
+	})
+	const folderId = Number(/<oc:fileid>(\d+)<\/oc:fileid>/.exec(await propfind.text())?.[1])
+	expect(folderId).toBeGreaterThan(0)
+	const created = await request.post(`${galleries}?format=json`, { headers: jsonHeaders, data: { folderId, title: `E2E Archive Missing ${stamp}` } })
+	expect(created.status()).toBe(201)
+	const galleryId = (await created.json() as { id: number }).id
+	expect((await request.post(`${galleries}/${galleryId}/media/index?format=json`, { headers: jsonHeaders, data: {} })).status()).toBeLessThan(300)
+	const published = await request.post(`${galleries}/${galleryId}/publish?format=json`, { headers: jsonHeaders, data: { allowDownloads: true } })
+	expect(published.status()).toBe(200)
+
+	// The shared item disappears while the native share still exists.
+	expect((await request.delete(`${davRoot}/${folderName}/`, { headers: apiHeaders })).status()).toBe(204)
+	const archived = await request.delete(`${galleries}/${galleryId}?format=json`, { headers: apiHeaders })
+	expect(archived.status()).toBe(200)
+	expect((await archived.json() as { status: string }).status).toBe('archived')
+	// Schedule the purge so the test gallery is removed by the normal privacy job.
+	const scheduled = await request.post(`${galleries}/${galleryId}/privacy/purge?format=json`, { headers: apiHeaders })
+	expect(scheduled.status()).toBe(201)
+})
+
 test('archiving suspends native and app access and restore keeps the token', async ({ request, baseURL }) => {
 	const stable = await state()
 	const galleries = `${baseURL}/ocs/v2.php/apps/proofing_gallery/api/v1/galleries`
