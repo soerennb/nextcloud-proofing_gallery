@@ -13,6 +13,9 @@
 - allow left-button dragging to pan a zoomed photo without closing the viewer
 - return to the gallery with one tap, including after swiping or opening a
   direct photo link
+- keep Previous and Next photo reachable by keyboard and screen reader when
+  the mobile lightbox hides its controls, and show the controls when one of
+  them receives focus
 
 ## 0.13.1 — 2026-11-25
 

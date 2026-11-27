@@ -497,7 +497,7 @@ async function setGuestRating(rating: number, pick = activeGuestRating.value.pic
 			{{ t('proofing_gallery', 'Show photo controls') }}
 		</button>
 
-		<div ref="controls" class="lightbox-controls" :inert="compactLayout && chromeHidden">
+		<div ref="controls" class="lightbox-controls">
 			<IonButton v-for="button in (mediaItems.length > 1 || paging?.before || paging?.after) ? navigationButtons : []"
 				:key="button.position"
 				class="lightbox-nav"

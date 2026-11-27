@@ -236,10 +236,14 @@
 	transition: opacity 160ms ease, transform 220ms cubic-bezier(.32, .72, 0, 1);
 }
 
+/* Previous/Next stay focusable while hidden; focusing one reveals the chrome. */
 .lightbox-shell--compact.lightbox-shell--chrome-hidden .lightbox-controls {
 	opacity: 0;
 	transform: translateY(100%);
+	pointer-events: none;
 }
+
+.lightbox-shell--compact.lightbox-shell--chrome-hidden .lightbox-nav { pointer-events: none; }
 
 .lightbox-shell--compact :deep(.public-filmstrip--bottom) {
 	position: relative;
