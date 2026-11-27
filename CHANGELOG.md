@@ -16,6 +16,8 @@
 - keep Previous and Next photo reachable by keyboard and screen reader when
   the mobile lightbox hides its controls, and show the controls when one of
   them receives focus
+- count photos and videos in the owner gallery list much faster, and after a
+  change recount only the folders that changed
 
 ## 0.13.1 — 2026-11-25
 
