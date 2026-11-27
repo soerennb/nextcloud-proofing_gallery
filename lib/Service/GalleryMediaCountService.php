@@ -8,17 +8,26 @@ use OCA\ProofingGallery\BackgroundJob\RebuildGalleryMediaCountsJob;
 use OCA\ProofingGallery\Db\CollectionRepository;
 use OCA\ProofingGallery\Db\Gallery;
 use OCA\ProofingGallery\Db\GalleryMapper;
+use OCA\ProofingGallery\Db\FolderCountRepository;
 use OCA\ProofingGallery\Db\GalleryMediaCountRepository;
+use OCA\ProofingGallery\Exception\FolderAccessException;
+use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\Files\File;
+use OCP\Files\Folder;
 use OCP\Files\NotFoundException;
 use OCP\Files\NotPermittedException;
 use OCP\IDBConnection;
 use OCP\Lock\ILockingProvider;
+use OCP\Lock\LockedException;
+use Psr\Log\LoggerInterface;
 
 /** Completed snapshots are never replaced by partial or superseded generations. */
 final class GalleryMediaCountService {
+	/** Upper bound for one job step; the job re-queues itself if the generation is still incomplete. */
+	public const JOB_BUDGET_SECONDS = 45.0;
+
 	public function __construct(
 		private GalleryMediaCountRepository $counts,
 		private FolderService $folders,
@@ -30,6 +39,8 @@ final class GalleryMediaCountService {
 		private ILockingProvider $locks,
 		private IDBConnection $db,
 		private GalleryMapper $galleries,
+		private LoggerInterface $logger,
+		private FolderCountRepository $folderCounts,
 	) {
 	}
 
@@ -50,18 +61,52 @@ final class GalleryMediaCountService {
 		return self::present($row);
 	}
 
+	/**
+	 * Advances a few unfinished counts while the owner view polls them, so the number grows during
+	 * the visit instead of waiting for the next cron tick. Bounded work keeps the poll responsive;
+	 * the background job continues whatever remains.
+	 *
+	 * @param list<int> $galleryIds
+	 */
+	public function countInline(array $galleryIds, int $maxGalleries = 2, float $budgetSeconds = 2.0): void {
+		$attempted = 0;
+		foreach ($galleryIds as $id) {
+			if ($attempted >= $maxGalleries) break;
+			$row = $this->counts->find($id);
+			if ($row !== null && in_array($row['state'], ['ready', 'unavailable'], true)) continue;
+			$attempted++;
+			try {
+				$this->run($this->galleries->find($id), $budgetSeconds);
+			} catch (LockedException|DoesNotExistException|FolderAccessException|NotFoundException) {
+				// The queued job retries; the poll still answers with the stored state.
+			} catch (\Throwable $error) {
+				$this->logger->warning('Inline gallery media count failed', ['galleryId' => $id, 'exception' => $error]);
+			}
+		}
+	}
+
 	public function queue(int $id): void {
 		$this->counts->ensure($id, $this->clock->getTime());
 		$this->jobs->add(RebuildGalleryMediaCountsJob::class, ['galleryId' => $id]);
 	}
 
-	/** @return bool Whether this generation is complete. */
-	public function run(Gallery $gallery): bool {
+	/**
+	 * Works through batches until the generation completes or the time budget is spent.
+	 * Batches within one run are not re-queued: each queued job step would otherwise wait for the next cron tick.
+	 *
+	 * @return bool Whether this generation is complete.
+	 */
+	public function run(Gallery $gallery, float $budgetSeconds = self::JOB_BUDGET_SECONDS): bool {
 		$id = (int)$gallery->getId();
 		$lock = 'proofing-gallery/media-counts/' . $id;
 		$this->locks->acquireLock($lock, ILockingProvider::LOCK_EXCLUSIVE, 'Proofing Gallery media counts');
-		try { return $this->runLocked($gallery); }
-		finally { $this->locks->releaseLock($lock, ILockingProvider::LOCK_EXCLUSIVE); }
+		try {
+			$deadline = microtime(true) + $budgetSeconds;
+			do {
+				$complete = $this->runLocked($gallery);
+			} while (!$complete && microtime(true) < $deadline);
+			return $complete;
+		} finally { $this->locks->releaseLock($lock, ILockingProvider::LOCK_EXCLUSIVE); }
 	}
 
 	private function runLocked(Gallery $gallery): bool {
@@ -94,23 +139,74 @@ final class GalleryMediaCountService {
 			$cursor = (int)$row['collection_cursor'];
 			if ($root !== null) {
 				$budget = 500;
-				while ($budget > 1 && ($folder = $this->counts->next($id, (string)$row['generation'])) !== null) {
+				$generation = (string)$row['generation'];
+				$mountPaths = $this->reader->mountPaths($root);
+				$rootStorage = $root->getStorage()->getId();
+				while ($budget > 1 && ($folder = $this->counts->next($id, $generation)) !== null) {
 					$budget--;
-					try { $page = $this->reader->page($root, (string)$folder['relative_path'], (int)$folder['after_file_id'], $budget); }
+					$path = (string)$folder['relative_path'];
+					$folderId = (int)$folder['file_id'];
+					$after = (int)$folder['after_file_id'];
+					try { $node = $path === '' ? $root : $root->get($path); }
+					catch (NotFoundException|NotPermittedException) { $this->counts->advance((int)$folder['id'], 0, true); continue; }
+					$isFolder = $node instanceof Folder;
+					$parentId = $path === '' ? 0 : (int)$node->getParent()->getId();
+					// Only subtrees that stay in this storage and hold no mounts keep their etag in sync with their content.
+					$cacheable = $isFolder && $node->getStorage()->getId() === $rootStorage && !self::holdsMountBelow($path, $mountPaths);
+					if ($after === 0 && $cacheable) {
+						$cached = $this->folderCounts->findMany($id, [$folderId])[$folderId] ?? null;
+						if ($cached !== null && $cached['sub_etag'] !== null && (string)$cached['sub_etag'] === (string)$node->getEtag()) {
+							// Unchanged subtree: carry its stored totals and do not walk it again.
+							$this->folderCounts->markHit($id, $folderId, $parentId, $generation);
+							$this->counts->advance((int)$folder['id'], 0, true);
+							continue;
+						}
+					}
+					if ($after === 0) $this->folderCounts->visit($id, $folderId, $parentId, $generation, $isFolder ? (string)$node->getEtag() : '', $cacheable);
+					try { $page = $this->reader->page($root, $path, $after, $budget); }
 					catch (NotFoundException|NotPermittedException) { $this->counts->advance((int)$folder['id'], 0, true); continue; }
 					$budget -= $page['examined'];
+					// Plain files are reachable from exactly one listing, so they are counted directly. Mount
+					// points are queued: the same file can be reachable through a mount and its parent listing.
+					$relatives = [];
+					foreach ($page['items'] as $node) $relatives[(int)$node->getId()] = $this->reader->relativePath($root, $node);
+					$pending = [];
+					foreach ($page['items'] as $node) {
+						if ($node instanceof File && $folderId === (int)$node->getId()) continue;
+						if ($node instanceof File && !in_array($relatives[(int)$node->getId()], $mountPaths, true)) continue;
+						$pending[] = ['file_id' => (int)$node->getId(), 'path' => $relatives[(int)$node->getId()], 'done' => $node instanceof File];
+					}
+					$queued = $this->counts->enqueueMany($id, $generation, $pending);
+					$pageImages = 0; $pageVideos = 0; $pageWitness = null;
 					foreach ($page['items'] as $node) {
 						$isFile = $node instanceof File;
-						// A file mount is already the current queued node.
-						$isCurrent = $isFile && (int)$folder['file_id'] === (int)$node->getId();
-						if (!$isCurrent && !$this->counts->enqueue($id, (string)$row['generation'], (int)$node->getId(), $this->reader->relativePath($root, $node), $isFile)) continue;
+						$isCurrent = $isFile && $folderId === (int)$node->getId();
+						$isPlainFile = $isFile && !in_array($relatives[(int)$node->getId()], $mountPaths, true);
+						if (!$isPlainFile && !$isCurrent && !isset($queued[(int)$node->getId()])) continue;
+						// A duplicate listing entry must not count the same file twice.
+						unset($queued[(int)$node->getId()]);
 						if (!$isFile) continue;
-						if (str_starts_with($node->getMimeType(), 'video/')) $videos++; else $images++;
+						if (str_starts_with($node->getMimeType(), 'video/')) { $videos++; $pageVideos++; } else { $images++; $pageImages++; }
 						$witness ??= (int)$node->getId();
+						$pageWitness ??= (int)$node->getId();
 					}
+					$this->folderCounts->addDirect($id, $folderId, $pageImages, $pageVideos, $pageWitness);
 					$this->counts->advance((int)$folder['id'], $page['after'], $page['done']);
 				}
-				$complete = $this->counts->next($id, (string)$row['generation']) === null;
+				$complete = $this->counts->next($id, $generation) === null;
+				if ($complete) {
+					// Totals are folded from the walk: cache hits contribute stored subtrees, visited folders their direct files.
+					$rows = $this->folderCounts->generation($id, $generation);
+					$tree = CountTree::fold(array_map(self::treeRow(...), $rows), (int)$root->getId());
+					foreach ($tree['visited'] as $folderRowId => $sub) {
+						$visitedRow = $rows[$folderRowId] ?? null;
+						if ($visitedRow === null || !self::flag($visitedRow['cacheable']) || (string)$visitedRow['etag'] === '') continue;
+						$this->folderCounts->storeSubtotals($id, $folderRowId, (string)$visitedRow['etag'], $sub['images'], $sub['videos'], $sub['witness']);
+					}
+					$images = $tree['images'];
+					$videos = $tree['videos'];
+					$witness = $tree['witness'];
+				}
 			} else {
 				$items = $this->members->page($id, $cursor, 500);
 				foreach ($items as $item) {
@@ -131,6 +227,33 @@ final class GalleryMediaCountService {
 			$this->db->commit();
 			return $complete;
 		} catch (\Throwable $error) { $this->db->rollBack(); throw $error; }
+	}
+
+	/** @param list<string> $mountPaths */
+	private static function holdsMountBelow(string $path, array $mountPaths): bool {
+		if ($path === '') return $mountPaths !== [];
+		foreach ($mountPaths as $mountPath) {
+			if ($mountPath === $path || str_starts_with($mountPath, $path . '/')) return true;
+		}
+		return false;
+	}
+
+	/** @param array<string, mixed> $row
+	 * @return array{parent_id: int, hit: bool, direct_images: int, direct_videos: int, direct_witness: ?int, sub_images: int, sub_videos: int, sub_witness: ?int}
+	 */
+	private static function treeRow(array $row): array {
+		return [
+			'parent_id' => (int)$row['parent_id'], 'hit' => self::flag($row['hit']),
+			'direct_images' => (int)$row['direct_images'], 'direct_videos' => (int)$row['direct_videos'],
+			'direct_witness' => $row['direct_witness'] === null ? null : (int)$row['direct_witness'],
+			'sub_images' => (int)$row['sub_images'], 'sub_videos' => (int)$row['sub_videos'],
+			'sub_witness' => $row['sub_witness'] === null ? null : (int)$row['sub_witness'],
+		];
+	}
+
+	/** Database drivers differ in how they return booleans. */
+	private static function flag(mixed $value): bool {
+		return $value === true || $value === 1 || $value === '1' || $value === 't' || $value === 'true';
 	}
 
 	public function hasMedia(Gallery $gallery): bool {

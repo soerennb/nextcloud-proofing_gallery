@@ -14,7 +14,13 @@ use OCP\Files\NotPermittedException;
 
 /** Bounded cache pages resolved through the owner's actual file tree. */
 final class FolderMediaReader {
-	public function __construct(private MediaIndexScanRepository $cache, private MediaTypePolicy $types, private IMountManager $mounts) {
+	/** Folders up to this size are resolved from one listing (about 2 KB per child); larger ones per child. */
+	public const LISTING_LIMIT = 5000;
+
+	/** @var array{key: string, nodes: array<string, Node>}|null */
+	private ?array $listing = null;
+
+	public function __construct(private MediaIndexScanRepository $cache, private MediaTypePolicy $types, private IMountManager $mounts, private int $listingLimit = self::LISTING_LIMIT) {
 	}
 
 	/** @return array{items: list<Node>, after: int, examined: int, done: bool} */
@@ -24,19 +30,43 @@ final class FolderMediaReader {
 		if (!$node->isReadable() || ($node !== $root && !$root->isSubNode($node))) return ['items' => [], 'after' => $after, 'examined' => 0, 'done' => true];
 		if ($node instanceof File) return ['items' => $this->types->supports($node) && $after === 0 ? [$node] : [], 'after' => (int)$node->getId(), 'examined' => 1, 'done' => true];
 		if (!$node instanceof Folder) return ['items' => [], 'after' => $after, 'examined' => 0, 'done' => true];
-		$rows = $this->cache->children((int)$node->getStorage()->getCache()->getNumericStorageId(), (int)$node->getId(), $after, $limit);
+		$storageId = (int)$node->getStorage()->getCache()->getNumericStorageId();
+		$rows = $this->cache->children($storageId, (int)$node->getId(), $after, $limit);
+		$done = count($rows) < $limit;
+		$listed = $this->listed($node, $storageId, $rows, $after === 0 && $done && count($rows) <= $this->listingLimit);
 		$items = [];
 		foreach ($rows as $row) {
 			$after = $row['file_id'];
 			if (str_starts_with($row['name'], '.')) continue;
 			try {
-				$child = $node->get($row['name']);
+				// A name missing from the listing was added after it was taken; resolve it directly.
+				$child = $listed[$row['name']] ?? $node->get($row['name']);
 				if ($child->isReadable() && ($child instanceof Folder || ($child instanceof File && $this->types->supports($child)))) $items[] = $child;
 			} catch (NotFoundException|NotPermittedException) {
 				// Deletion races are repaired by the next source generation.
 			}
 		}
-		return ['items' => $items, 'after' => $after, 'examined' => count($rows), 'done' => count($rows) < $limit];
+		if ($done) $this->listing = null;
+		return ['items' => $items, 'after' => $after, 'examined' => count($rows), 'done' => $done];
+	}
+
+	/**
+	 * One listing replaces a filesystem lookup per child. It is kept for the following pages of the same
+	 * folder state and skipped for folders too large to hold in memory.
+	 *
+	 * @param list<array{name: string}> $rows
+	 * @return array<string, Node>
+	 */
+	private function listed(Folder $folder, int $storageId, array $rows, bool $whole): array {
+		if (count($rows) < 2) return [];
+		$key = $storageId . ':' . $folder->getId() . ':' . $folder->getEtag();
+		if ($this->listing !== null && $this->listing['key'] === $key) return $this->listing['nodes'];
+		$this->listing = null;
+		if (!$whole && $this->cache->hasMoreChildrenThan($storageId, (int)$folder->getId(), $this->listingLimit)) return [];
+		$nodes = [];
+		foreach ($folder->getDirectoryListing() as $child) $nodes[$child->getName()] = $child;
+		$this->listing = ['key' => $key, 'nodes' => $nodes];
+		return $nodes;
 	}
 
 	/** @return list<string> */

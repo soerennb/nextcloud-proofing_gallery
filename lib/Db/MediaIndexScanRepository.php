@@ -74,6 +74,16 @@ final class MediaIndexScanRepository {
 		return $row === false ? null : $row;
 	}
 
+	/** Bounded check: reads at most one row past $count instead of counting the whole folder. */
+	public function hasMoreChildrenThan(int $storageId, int $parentFileId, int $count): bool {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('f.fileid')->from('filecache', 'f')
+			->where($qb->expr()->eq('f.storage', $qb->createNamedParameter($storageId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('f.parent', $qb->createNamedParameter($parentFileId, IQueryBuilder::PARAM_INT)))
+			->setFirstResult($count)->setMaxResults(1);
+		return QueryResult::firstRow($qb->executeQuery()) !== false;
+	}
+
 	/** @return list<array{file_id:int, parent:int, name:string, mime_type:string, size:int, mtime:int, etag:string}> */
 	public function children(int $storageId, int $parentFileId, int $afterFileId, int $limit): array {
 		$qb = $this->db->getQueryBuilder();

@@ -20,7 +20,7 @@ final class PurgeRepository {
 		'proofing_semantic_idx', 'proofing_sem_candidates', 'proofing_versions', 'proofing_ext_resources',
 		'proofing_collection_items', 'proofing_collections', 'proofing_pin_handoffs', 'proofing_event_audit', 'proofing_event_roots', 'proofing_event_recipients', 'proofing_event_waves', 'proofing_event_setups', 'proofing_summaries', 'proofing_guests',
 		'proofing_kiosk_photos', 'proofing_kiosk_events', 'proofing_managers',
-		'proofing_count_queue', 'proofing_media_counts', 'proofing_galleries',
+		'proofing_count_queue', 'proofing_count_folders', 'proofing_media_counts', 'proofing_galleries',
 	];
 
 	public function __construct(private IDBConnection $db) {
