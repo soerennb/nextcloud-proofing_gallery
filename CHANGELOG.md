@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.13.2 — 2026-11-27
+
+Upgrade note: this release adds a per-folder table for media counts. The first
+count after the update walks each gallery once; later changes recount only the
+folders that changed.
+
 - choose pages or continuous scrolling for each gallery's public links
 - request the next file block earlier and show decoded tiles immediately in
   continuous galleries
@@ -20,6 +26,9 @@
   change recount only the folders that changed
 - load public folder and collection pages with far fewer database queries,
   and keep large folders cached when the server uses Memcached
+- archive and purge galleries whose shared folder or file was deleted
+- record one share-audit view per visit in continuous galleries instead of
+  one per loaded batch
 
 ## 0.13.1 — 2026-11-25
 
