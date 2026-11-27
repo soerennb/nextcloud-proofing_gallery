@@ -29,6 +29,9 @@ use OCP\IRequest;
 use OCP\ISession;
 
 final class PublicGalleryController extends ResolvedPublicShareController {
+	/** Sizes used by the public client, contact sheets and hero images. */
+	private const PREVIEW_BUCKETS = [140, 160, 180, 256, 400, 520, 720, 900, 1200, 1400, 1800, 2200, 2400];
+
 	public function __construct(
 		IRequest $request,
 		ISession $session,
@@ -349,8 +352,9 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		bool $applyWatermark = true,
 		string $mode = 'cover',
 	): DataDisplayResponse {
-		$x = max(64, min(2400, $x));
-		$y = max(64, min(2400, $y));
+		// Each dimension is snapped to a size bucket, so arbitrary URLs cannot create unbounded derivative variants.
+		$x = self::previewBucket($x);
+		$y = self::previewBucket($y);
 		if (!in_array($mode, ['cover', 'fit'], true)) {
 			return new DataDisplayResponse('', Http::STATUS_BAD_REQUEST);
 		}
@@ -380,6 +384,14 @@ final class PublicGalleryController extends ResolvedPublicShareController {
 		} catch (\OCP\Files\NotFoundException|\InvalidArgumentException) {
 			return new DataDisplayResponse('', Http::STATUS_NOT_FOUND);
 		}
+	}
+
+	/** Smallest bucket that covers the requested dimension; the largest bucket caps it. */
+	private static function previewBucket(int $value): int {
+		foreach (self::PREVIEW_BUCKETS as $bucket) {
+			if ($value <= $bucket) return $bucket;
+		}
+		return self::PREVIEW_BUCKETS[array_key_last(self::PREVIEW_BUCKETS)];
 	}
 
 	private function downloadAllowed(string $kind): bool {

@@ -72,17 +72,30 @@ final class GalleryMediaCountService {
 		$attempted = 0;
 		foreach ($galleryIds as $id) {
 			if ($attempted >= $maxGalleries) break;
-			$row = $this->counts->find($id);
-			if ($row !== null && in_array($row['state'], ['ready', 'unavailable'], true)) continue;
+			if (!self::needsInlineCount($this->counts->find($id))) continue;
 			$attempted++;
 			try {
 				$this->run($this->galleries->find($id), $budgetSeconds);
 			} catch (LockedException|DoesNotExistException|FolderAccessException|NotFoundException) {
 				// The queued job retries; the poll still answers with the stored state.
 			} catch (\Throwable $error) {
+				// Like the job, mark the failure so later polls leave the retry to the background job.
+				$this->counts->update($id, ['state' => 'error', 'updated_at' => $this->clock->getTime()]);
+				$this->queue($id);
 				$this->logger->warning('Inline gallery media count failed', ['galleryId' => $id, 'exception' => $error]);
 			}
 		}
+	}
+
+	/**
+	 * Only counts that are waiting or in progress are advanced inline. A failed count is left to the
+	 * background job and its retry delay; the owner list polls every few seconds and would otherwise
+	 * restart a failing count, and log its failure, on every poll.
+	 *
+	 * @param array<string, mixed>|null $row
+	 */
+	public static function needsInlineCount(?array $row): bool {
+		return $row === null || in_array($row['state'], ['pending', 'updating'], true);
 	}
 
 	public function queue(int $id): void {
@@ -222,7 +235,12 @@ final class GalleryMediaCountService {
 			$this->counts->update($id, ['state' => 'updating', 'generation' => (string)$row['generation'], 'scan_revision' => (int)$row['scan_revision'], 'source_signature' => $signature, 'working_images' => $images, 'working_videos' => $videos, 'working_witness' => $witness, 'collection_cursor' => $cursor, 'updated_at' => $now]);
 			if ($complete) {
 				$complete = $this->counts->publish($id, (string)$row['generation'], (int)$row['scan_revision'], $images, $videos, $witness, $now);
-				if ($complete) $this->counts->clearQueue($id);
+				if ($complete) {
+					$this->counts->clearQueue($id);
+					// Rows of deleted, moved-out or rebound folders are no longer reachable from this walk.
+					$orphans = CountTree::orphans(array_map(static fn (array $folderRow): array => [...$folderRow, 'hit' => self::flag($folderRow['hit'])], $this->folderCounts->all($id)), (string)$row['generation']);
+					if ($orphans !== []) $this->folderCounts->deleteMany($id, $orphans);
+				}
 			}
 			$this->db->commit();
 			return $complete;

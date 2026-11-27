@@ -127,12 +127,29 @@ final class CollectionService {
 
 	/** @return \Generator<int, array<string, mixed>> */
 	public function availableItemStream(Gallery $collection): \Generator {
+		foreach ($this->availableFileStream($collection) as ['item' => $item]) {
+			yield $item;
+		}
+	}
+
+	/**
+	 * Available items together with their resolved files, so public pages can read metadata
+	 * without resolving every reference a second time.
+	 *
+	 * @return \Generator<int, array{item: array<string, mixed>, file: File}>
+	 */
+	public function availableFileStream(Gallery $collection): \Generator {
 		$this->assertCollection($collection);
+		// Each source gallery and its folder are resolved once per listing, not once per item.
+		$sources = [];
+		$folders = [];
 		foreach ($this->collectionRows($collection) as $row) {
 			try {
-				$source = $this->ownedFolderGallery($collection, (int)$row['source_gallery_id']);
-				$file = $this->folders->resolveMedia($source->getOwnerUid(), $source->getFolderId(), (int)$row['file_id']);
-				yield [
+				$sourceId = (int)$row['source_gallery_id'];
+				$source = $sources[$sourceId] ??= $this->ownedFolderGallery($collection, $sourceId);
+				$folder = $folders[$sourceId] ??= $this->folders->resolveFolder($source->getOwnerUid(), $source->getFolderId());
+				$file = $this->folders->resolveMediaIn($folder, (int)$row['file_id']);
+				yield ['item' => [
 					'id' => $file->getId(),
 					'name' => $file->getName(),
 					'mimeType' => $file->getMimeType(),
@@ -142,11 +159,36 @@ final class CollectionService {
 					'folder' => false,
 					'sourceGalleryId' => $source->getId(),
 					'sourceGalleryTitle' => $source->getTitle(),
-				];
+				], 'file' => $file];
 			} catch (DoesNotExistException|FolderAccessException) {
 				// Unavailable references remain visible to the owner, but never to guests.
 			}
 		}
+	}
+
+	/**
+	 * Fingerprint of everything a collection listing depends on: membership revision, each source
+	 * gallery revision and the etag of each source folder. Nextcloud propagates file changes and
+	 * deletions to the folder etag, so a changed fingerprint means the listing must be rebuilt.
+	 * Returns null when a source cannot be fingerprinted; callers must then skip the cache.
+	 */
+	public function listingFingerprint(Gallery $collection): ?string {
+		$this->assertCollection($collection);
+		$revision = $this->repository->revision((int)$collection->getId());
+		if ($revision === null) return null;
+		$sourceIds = [];
+		foreach ($this->collectionRows($collection) as $row) $sourceIds[(int)$row['source_gallery_id']] = true;
+		$sources = [];
+		try {
+			foreach (array_keys($sourceIds) as $sourceId) {
+				$source = $this->ownedFolderGallery($collection, $sourceId);
+				$folder = $this->folders->resolveFolder($source->getOwnerUid(), $source->getFolderId());
+				$sources[] = [$sourceId, $source->getRevision(), $folder->getId(), $folder->getEtag()];
+			}
+		} catch (\Throwable) {
+			return null;
+		}
+		return hash('sha256', json_encode([(int)$collection->getId(), $revision, $sources], JSON_THROW_ON_ERROR));
 	}
 
 	/** @return \Generator<int, array<string, mixed>> */

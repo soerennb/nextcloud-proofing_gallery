@@ -56,4 +56,32 @@ final class CountTree {
 		$visited[$id] = $result;
 		return $result;
 	}
+
+	/**
+	 * Folder rows no walk can reach again. A row of the current generation stays. An older row stays
+	 * only below a cache hit (directly or through other older rows): those subtrees were not walked
+	 * and their rows are reused once the subtree changes. Below a folder walked in this generation,
+	 * every existing child was visited or carried over, so older rows there belong to deleted or moved
+	 * folders. Rows under an old root after a rebind do not reach the current generation either.
+	 *
+	 * @param array<int, array{parent_id: int, generation: string, hit: bool}> $rows all rows of a gallery keyed by folder ID
+	 * @return list<int> folder IDs to delete
+	 */
+	public static function orphans(array $rows, string $generation): array {
+		$kept = [];
+		$keep = static function (int $id, array $path) use (&$keep, &$kept, $rows, $generation): bool {
+			if (isset($kept[$id])) return $kept[$id];
+			$row = $rows[$id];
+			if ($row['generation'] === $generation) return $kept[$id] = true;
+			$parentId = $row['parent_id'];
+			if (!isset($rows[$parentId]) || isset($path[$id])) return $kept[$id] = false;
+			$parent = $rows[$parentId];
+			$path[$id] = true;
+			$underCache = $parent['generation'] !== $generation || $parent['hit'];
+			return $kept[$id] = $underCache && $keep($parentId, $path);
+		};
+		$orphans = [];
+		foreach (array_keys($rows) as $id) if (!$keep($id, [])) $orphans[] = $id;
+		return $orphans;
+	}
 }

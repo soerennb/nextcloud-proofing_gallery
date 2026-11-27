@@ -18,6 +18,8 @@
   them receives focus
 - count photos and videos in the owner gallery list much faster, and after a
   change recount only the folders that changed
+- load public folder and collection pages with far fewer database queries,
+  and keep large folders cached when the server uses Memcached
 
 ## 0.13.1 — 2026-11-25
 

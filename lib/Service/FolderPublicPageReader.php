@@ -13,15 +13,14 @@ use OCA\ProofingGallery\Domain\PublicPagePagination;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\Node;
-use OCP\ICache;
 use OCP\ICacheFactory;
 
 final class FolderPublicPageReader {
 	private const ORDER_TTL = 300;
-	private readonly ICache $orders;
+	private readonly CompressedListCache $orders;
 
 	public function __construct(private MediaIndexService $mediaIndex, private MediaMetadataService $metadata, private MediaTypePolicy $mediaTypes, private PolicyService $policies, ICacheFactory $cacheFactory) {
-		$this->orders = $cacheFactory->createDistributed('proofing_gallery_order');
+		$this->orders = new CompressedListCache($cacheFactory->createDistributed('proofing_gallery_order'));
 	}
 
 	public function read(PublicShareContext $context, PublicGalleryQuery $query): PublicGalleryPage {
@@ -43,7 +42,7 @@ final class FolderPublicPageReader {
 				$eventRoots[$node->getId()] = $detail;
 			}
 			$ordered = $this->orderNodes($context, $query, $nodes, true, $eventRoots);
-			return $this->page($context, $query, self::entries($ordered), self::nodeMap($ordered), $eventRoots, true, $rootDetails, $groupDepth)
+			return $this->page($context, $query, self::matching(self::entries($ordered), $query->search), self::nodeMap($ordered), $eventRoots, true, $rootDetails, $groupDepth)
 				?? throw new \LogicException('Gallery page unavailable');
 		}
 
@@ -53,7 +52,7 @@ final class FolderPublicPageReader {
 		$key = $this->orderKey($context, $query, $currentFolder, $groupDepth);
 		$cached = $this->orders->get($key);
 		if (is_array($cached)) {
-			$page = $this->page($context, $query, $cached, fn (array $entry): ?Node => $this->childNode($currentFolder, $entry), [], false, $rootDetails, $groupDepth);
+			$page = $this->page($context, $query, self::matching($cached, $query->search), fn (array $entry): ?Node => $this->childNode($currentFolder, $entry), [], false, $rootDetails, $groupDepth);
 			if ($page !== null) return $page;
 		}
 
@@ -66,7 +65,7 @@ final class FolderPublicPageReader {
 		$ordered = $this->orderNodes($context, $query, $nodes, false, []);
 		$entries = self::entries($ordered);
 		$this->orders->set($key, $entries, self::ORDER_TTL);
-		return $this->page($context, $query, $entries, self::nodeMap($ordered), [], false, $rootDetails, $groupDepth)
+		return $this->page($context, $query, self::matching($entries, $query->search), self::nodeMap($ordered), [], false, $rootDetails, $groupDepth)
 			?? throw new \LogicException('Gallery page unavailable');
 	}
 
@@ -77,14 +76,12 @@ final class FolderPublicPageReader {
 	 */
 	private function orderNodes(PublicShareContext $context, PublicGalleryQuery $query, array $nodes, bool $eventAlbums, array $eventRoots): array {
 		$foldersVisible = $context->scope->multiRoot || $context->settings->navigation->folders;
-		$search = $query->search;
 		$sortBy = $query->sortBy;
 		$sortDirection = $query->sortDirection;
 		$groupBy = $query->groupBy;
 		$nodes = array_values(array_filter(
 			$nodes,
-			static fn (Node $node): bool => ($foldersVisible || !($node instanceof Folder))
-				&& ($search === '' || mb_stripos($node->getName(), $search) !== false),
+			static fn (Node $node): bool => $foldersVisible || !($node instanceof Folder),
 		));
 		$captureById = [];
 		if ($sortBy === 'capturedAt') foreach ($nodes as $node) {
@@ -136,6 +133,8 @@ final class FolderPublicPageReader {
 		}
 		$items = array_map(function (Node $node) use ($settings, $gallery, $eventAlbums, $eventRoots): array {
 			$eventRoot = $eventRoots[$node->getId()] ?? null;
+			// One summary read per file serves both the metadata and the geometry.
+			$public = $node instanceof File ? $this->metadata->publicItem($node, $settings->metadata->publicFields) : null;
 			$item = [
 				'id' => $node->getId(),
 				'name' => $node->getName(),
@@ -145,15 +144,13 @@ final class FolderPublicPageReader {
 				'etag' => $node->getEtag(),
 				'folder' => $node instanceof Folder,
 				'group' => self::group($node),
-				'metadata' => $node instanceof File
-					? $this->metadata->publicSummary($node, $settings->metadata->publicFields)
-					: ['state' => 'unavailable'],
+				'metadata' => $public['metadata'] ?? ['state' => 'unavailable'],
 			];
 			if ($eventRoot !== null) $item['relativePath'] = $eventRoot['path'];
 			if ($eventAlbums && $node instanceof Folder) {
 				$item['album'] = $this->eventAlbumSummary($gallery, $node, (string)$eventRoot['path'], (string)$eventRoot['role']);
 			}
-			return $node instanceof File ? [...$item, ...$this->metadata->publicGeometry($node)] : $item;
+			return $public === null ? $item : [...$item, ...$public['geometry']];
 		}, $nodes);
 
 		$groups = [];
@@ -176,9 +173,20 @@ final class FolderPublicPageReader {
 	private function orderKey(PublicShareContext $context, PublicGalleryQuery $query, Folder $folder, int $groupDepth): string {
 		return hash('sha256', json_encode([
 			$context->gallery->getId(), $context->gallery->getRevision(), $context->link->getId(), $context->root->getId(),
-			$context->scope->multiRoot, $context->scope->roots, $query->path, $query->search, $query->sortBy, $query->sortDirection, $query->groupBy,
+			$context->scope->multiRoot, $context->scope->roots, $query->path, $query->sortBy, $query->sortDirection, $query->groupBy,
 			$groupDepth, $context->settings->navigation->folders, $folder->getId(), $folder->getEtag(),
 		], JSON_THROW_ON_ERROR));
+	}
+
+	/**
+	 * Search filters the ordered entries, so one cached folder order serves every search term.
+	 *
+	 * @param list<array{id: int, name: string, folder: bool, group: string}> $entries
+	 * @return list<array{id: int, name: string, folder: bool, group: string}>
+	 */
+	private static function matching(array $entries, string $search): array {
+		if ($search === '') return $entries;
+		return array_values(array_filter($entries, static fn (array $entry): bool => mb_stripos($entry['name'], $search) !== false));
 	}
 
 	/**

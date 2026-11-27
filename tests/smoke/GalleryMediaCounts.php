@@ -42,12 +42,13 @@ try {
 	$folder->newFile('notes.txt', 'unsupported');
 	$gallery = $galleries->create('admin', 'Bounded media count test', (int)$folder->getId());
 	$created[] = $gallery;
-	$assert(!$service->run($gallery), 'A 551-media source must require more than one batch');
+	// A zero time budget runs exactly one batch, so the batch boundary stays observable.
+	$assert(!$service->run($gallery, 0.0), 'A 551-media source must require more than one batch');
 	$partial = $rows->find((int)$gallery->getId());
 	$assert($partial['image_count'] === null && (int)$partial['working_images'] < 500, 'Partial counts must not become final numbers');
 	$generation = (string)$partial['generation'];
 	$invalidator->invalidate((int)$gallery->getId());
-	$assert(!$service->run($gallery), 'An invalidated partial generation must restart');
+	$assert(!$service->run($gallery, 0.0), 'An invalidated partial generation must restart');
 	$assert($rows->find((int)$gallery->getId())['generation'] !== $generation, 'Invalidation reused an obsolete generation');
 	$finish($gallery);
 	$summary = $service->summary((int)$gallery->getId());

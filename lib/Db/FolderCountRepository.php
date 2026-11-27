@@ -97,6 +97,28 @@ final class FolderCountRepository {
 			->executeStatement();
 	}
 
+	/** @return array<int, array{parent_id: int, generation: string, hit: mixed}> Every row of a gallery, keyed by folder ID. */
+	public function all(int $galleryId): array {
+		$qb = $this->db->getQueryBuilder();
+		$rows = QueryResult::rows($qb->select('folder_id', 'parent_id', 'generation', 'hit')->from('proofing_count_folders')
+			->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+			->executeQuery());
+		$result = [];
+		foreach ($rows as $row) $result[(int)$row['folder_id']] = ['parent_id' => (int)$row['parent_id'], 'generation' => (string)$row['generation'], 'hit' => $row['hit']];
+		return $result;
+	}
+
+	/** @param list<int> $folderIds */
+	public function deleteMany(int $galleryId, array $folderIds): void {
+		foreach (array_chunk($folderIds, 500) as $chunk) {
+			$qb = $this->db->getQueryBuilder();
+			$qb->delete('proofing_count_folders')
+				->where($qb->expr()->eq('gallery_id', $qb->createNamedParameter($galleryId, IQueryBuilder::PARAM_INT)))
+				->andWhere($qb->expr()->in('folder_id', $qb->createNamedParameter($chunk, IQueryBuilder::PARAM_INT_ARRAY)))
+				->executeStatement();
+		}
+	}
+
 	/** @param array<string, mixed> $values */
 	private function upsert(int $galleryId, int $folderId, array $values): void {
 		$existing = $this->findMany($galleryId, [$folderId]);
