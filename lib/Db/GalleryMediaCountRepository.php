@@ -101,6 +101,45 @@ final class GalleryMediaCountRepository {
 		}
 	}
 
+	/**
+	 * Queues a whole page in one existence query instead of one query per entry.
+	 * The gallery lock serializes writers, so the check and the inserts cannot race.
+	 *
+	 * @param list<array{file_id: int, path: string, done: bool}> $entries
+	 * @return array<int, true> File IDs that were newly queued by this call.
+	 */
+	public function enqueueMany(int $id, string $generation, array $entries): array {
+		$candidates = [];
+		foreach ($entries as $entry) $candidates[$entry['file_id']] ??= $entry;
+		if ($candidates === []) return [];
+
+		$known = $this->db->getQueryBuilder();
+		$existing = array_flip(array_map(
+			static fn (array $row): int => (int)$row['file_id'],
+			QueryResult::rows($known->select('file_id')->from('proofing_count_queue')
+				->where($known->expr()->eq('gallery_id', $known->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
+				->andWhere($known->expr()->eq('generation', $known->createNamedParameter($generation)))
+				->andWhere($known->expr()->in('file_id', $known->createNamedParameter(array_keys($candidates), IQueryBuilder::PARAM_INT_ARRAY)))
+				->executeQuery()),
+		));
+
+		$queued = [];
+		foreach ($candidates as $fileId => $entry) {
+			if (isset($existing[$fileId])) continue;
+			$qb = $this->db->getQueryBuilder();
+			try {
+				$qb->insert('proofing_count_queue')->values([
+					'gallery_id' => $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT), 'generation' => $qb->createNamedParameter($generation),
+					'file_id' => $qb->createNamedParameter((int)$fileId, IQueryBuilder::PARAM_INT), 'relative_path' => $qb->createNamedParameter($entry['path']),
+					'done' => $qb->createNamedParameter($entry['done'], IQueryBuilder::PARAM_BOOL),
+				])->executeStatement();
+				$queued[(int)$fileId] = true;
+			} catch (UniqueConstraintViolationException) {
+			}
+		}
+		return $queued;
+	}
+
 	/** @return array<string, mixed>|null */
 	public function next(int $id, string $generation): ?array {
 		$qb = $this->db->getQueryBuilder();

@@ -10,7 +10,7 @@ use OCP\IDBConnection;
 final class LifecycleRepository {
 	private const ORPHAN_TABLES = [
 		'proofing_events', 'proofing_uploads', 'proofing_collections', 'proofing_notify_subs',
-		'proofing_native_notify', 'proofing_media_index', 'proofing_media_scans', 'proofing_count_queue', 'proofing_media_scan_queue', 'proofing_public_links',
+		'proofing_native_notify', 'proofing_media_index', 'proofing_media_scans', 'proofing_count_queue', 'proofing_count_folders', 'proofing_media_scan_queue', 'proofing_public_links',
 		'proofing_guest_ratings', 'proofing_share_audit', 'proofing_live_push', 'proofing_domains',
 		'proofing_feedback', 'proofing_comments', 'proofing_annotations', 'proofing_selections',
 		'proofing_managers', 'proofing_semantic_idx', 'proofing_sem_candidates', 'proofing_media_counts', 'proofing_summaries', 'proofing_versions',

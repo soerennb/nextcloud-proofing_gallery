@@ -36,6 +36,7 @@ final class GalleryMediaCountController extends Controller {
 			try { $this->access->view($user->getUID(), $id); $allowed[] = $id; }
 			catch (DoesNotExistException|AuthorizationException) {}
 		}
+		$this->service->countInline($allowed);
 		$rows = $this->counts->findMany($allowed);
 		$items = [];
 		foreach ($allowed as $id) {
