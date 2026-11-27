@@ -13,6 +13,7 @@ use OCA\ProofingGallery\Domain\GalleryStatus;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\AppFramework\Db\TTransactional;
 use OCP\Constants;
+use OCP\Files\NotFoundException;
 use OCP\Share\IManager;
 use OCP\Share\IShare;
 use OCP\Share\Exceptions\ShareNotFound;
@@ -221,6 +222,13 @@ final class PublicShareService {
 				}
 				$permissions = (int)$share->getPermissions();
 				if ($permissions === 0) continue;
+				try {
+					$share->getNode();
+				} catch (NotFoundException) {
+					// The shared item was deleted, so the link is already inaccessible. Nextcloud
+					// rejects updating such a share, so skip it; suspending the link below still applies.
+					continue;
+				}
 				$share->setPermissions(0);
 				$this->shareManager->updateShare($share);
 				$changed[] = ['share' => $share, 'permissions' => $permissions];
