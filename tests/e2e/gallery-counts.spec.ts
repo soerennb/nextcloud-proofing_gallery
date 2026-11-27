@@ -72,11 +72,11 @@ test('recursive image and video counts update in cards and the editor without re
 		await page.setViewportSize({ width: 1440, height: 900 })
 		await request.delete(`${fixture.dav}/Album/second.jpg`, { headers })
 		expect((await get(request, id)).mediaSummary.countState).toBe('pending')
-		// Reload sees pending state and keeps the completed snapshot until polling.
+		// Reload sees the pending state; the list's count poll recounts small galleries inline.
 		await page.reload()
-		await expect(card).toContainText('2 images · 1 video')
-		await finish(request, id, baseURL)
 		await expect(card).toContainText('1 image · 1 video', { timeout: 12_000 })
+		await finish(request, id, baseURL)
+		await expect(card).toContainText('1 image · 1 video')
 		await request.put(`${fixture.dav}/Album/second.jpg`, { headers, data: await readFile('tests/e2e/fixtures/kiosk.jpg') })
 		await page.goto(`/apps/proofing_gallery/#gallery/${id}/overview`)
 		await expect(page.getByRole('textbox', { name: 'Gallery title', exact: true })).toBeVisible()
